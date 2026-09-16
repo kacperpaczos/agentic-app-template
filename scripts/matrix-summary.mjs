@@ -8,14 +8,15 @@
  * so the totals are now computed, and `--check` fails the build on drift.
  *
  *   node scripts/matrix-summary.mjs           # print the summary
- *   node scripts/matrix-summary.mjs --check   # verify FEEDBACK.md agrees
+ *   node scripts/matrix-summary.mjs --check   # verify docs/archive/agenticapp-2026-09/FEEDBACK.md agrees
  */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const file = resolve(root, 'FEEDBACK.md');
+// Historyczna macierz AgenticApp (95 kryteriów) — zarchiwizowany dziennik, nie dziennik szablonu.
+const file = resolve(root, 'docs/archive/agenticapp-2026-09/FEEDBACK.md');
 const source = readFileSync(file, 'utf8');
 
 const ROW = /^\|\s*(L(\d+)\.\d+)\s*\|.*?\|\s*\*\*([A-ZĄĆĘŁŃÓŚŹŻ-]+)\*\*\s*\|/gm;

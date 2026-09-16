@@ -12,6 +12,17 @@
  * Check 2 also scans for domain vocabulary, so an accidental "offer" or
  * "supplier" leaking into the platform core fails the build even if it arrived
  * as a string literal rather than an import.
+ *
+ * Nothing here names a particular business module. Platform packages are the
+ * `packages/platform-*` directories, business modules are `packages/module-*`,
+ * and each module declares the words that must never leak into the platform in
+ * its own package.json:
+ *
+ *   "agenticApp": { "domainVocabulary": ["supplier", "oferta", ...] }
+ *
+ * Replacing the example module therefore needs no edit to this script — the new
+ * module brings its own vocabulary, and the check refuses to pass silently when
+ * no module declares any.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -32,11 +43,17 @@ const walk = (dir, acc = []) => {
 
 /* ---------------------------- 1. declared deps ---------------------------- */
 
-const platformPackages = ['platform-contracts', 'platform-server', 'platform-ui'];
+const packageDirs = readdirSync(join(root, 'packages')).filter((d) =>
+  statSync(join(root, 'packages', d)).isDirectory(),
+);
+const platformPackages = packageDirs.filter((d) => d.startsWith('platform-')).sort();
+const modulePackages = packageDirs.filter((d) => d.startsWith('module-')).sort();
+const readManifest = (dir) => JSON.parse(readFileSync(join(root, 'packages', dir, 'package.json'), 'utf8'));
+
+if (platformPackages.length === 0) failures.push('[pakiety] nie znaleziono zadnego packages/platform-*');
 
 for (const pkg of platformPackages) {
-  const manifestPath = join(root, 'packages', pkg, 'package.json');
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  const manifest = readManifest(pkg);
   const deps = { ...manifest.dependencies, ...manifest.devDependencies, ...manifest.peerDependencies };
   for (const name of Object.keys(deps)) {
     if (name.startsWith('@module/')) {
@@ -51,22 +68,25 @@ const IMPORT_RE = /(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g;
 
 /**
  * Business vocabulary that must never appear in the platform core. Checked as
- * whole words, case-insensitively, against identifiers and string literals.
+ * whole-word prefixes, case-insensitively, against identifiers and string
+ * literals. Collected from every module's `agenticApp.domainVocabulary`.
  */
-const DOMAIN_WORDS = [
-  'supplier',
-  'dostawc',
-  'offerItem',
-  'oferta',
-  'ofert',
-  'procurement',
-  'unitPrice',
-  'priceBasis',
-  'invoice',
-  'faktur',
-  'pc_cases',
-  'pc_offers',
-];
+const vocabularyOwners = new Map();
+for (const dir of modulePackages) {
+  const words = readManifest(dir).agenticApp?.domainVocabulary;
+  if (words === undefined) continue;
+  if (!Array.isArray(words) || words.some((w) => typeof w !== 'string' || w.trim() === '')) {
+    failures.push(`[slownik] packages/${dir}/package.json: agenticApp.domainVocabulary musi byc lista niepustych napisow`);
+    continue;
+  }
+  for (const word of words) vocabularyOwners.set(word, dir);
+}
+const DOMAIN_WORDS = [...vocabularyOwners.keys()];
+if (DOMAIN_WORDS.length === 0) {
+  failures.push(
+    '[slownik] zaden modul nie deklaruje agenticApp.domainVocabulary — kontrola slownika nie mialaby czego sprawdzac',
+  );
+}
 
 // The platform legitimately talks about its own generic concepts; these lines
 // are exempted so the vocabulary scan does not produce noise.
@@ -108,14 +128,14 @@ for (const pkg of platformPackages) {
   }
 }
 
-/* ------------------- 3. module may depend on platform --------------------- */
+/* ------------------- 3. modules depend on the platform --------------------- */
 
-const moduleManifest = JSON.parse(
-  readFileSync(join(root, 'packages', 'module-procurement', 'package.json'), 'utf8'),
-);
-const moduleDeps = Object.keys(moduleManifest.dependencies ?? {});
-if (!moduleDeps.some((d) => d.startsWith('@platform/'))) {
-  failures.push('[deps] modul biznesowy nie zalezy od zadnego pakietu platformy - to podejrzane');
+for (const dir of modulePackages) {
+  const manifest = readManifest(dir);
+  const moduleDeps = Object.keys(manifest.dependencies ?? {});
+  if (!moduleDeps.some((d) => d.startsWith('@platform/'))) {
+    failures.push(`[deps] modul ${manifest.name} nie zalezy od zadnego pakietu platformy - to podejrzane`);
+  }
 }
 
 /* -------------------------------- report ---------------------------------- */
@@ -128,7 +148,8 @@ if (failures.length) {
 }
 
 console.log('Granica platforma-domena zachowana:');
+console.log(`  - pakiety platformy: ${platformPackages.join(', ')}; moduly: ${modulePackages.join(', ') || '(brak)'}`);
 console.log('  - zaden pakiet @platform/* nie deklaruje zaleznosci od @module/*');
 console.log('  - zaden plik platformy nie importuje z @module/*');
-console.log(`  - zaden plik platformy nie uzywa slownika domenowego (${DOMAIN_WORDS.length} pojec)`);
-console.log('  - modul biznesowy zalezy od platformy (kierunek prawidlowy)');
+console.log(`  - zaden plik platformy nie uzywa slownika domenowego (${DOMAIN_WORDS.length} pojec z manifestow modulow)`);
+console.log('  - kazdy modul zalezy od platformy (kierunek prawidlowy)');

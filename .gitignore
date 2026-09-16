@@ -19,3 +19,8 @@ backups/
 
 .env
 .env.*
+
+# Lokalne ustawienia narzędzi agentowych i logi
+.claude/settings.local.json
+*.log
+.swap-data/

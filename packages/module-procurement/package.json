@@ -3,6 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "agenticApp": {
+    "domainVocabulary": [
+      "supplier",
+      "dostawc",
+      "offerItem",
+      "oferta",
+      "ofert",
+      "procurement",
+      "unitPrice",
+      "priceBasis",
+      "invoice",
+      "faktur",
+      "pc_cases",
+      "pc_offers"
+    ]
+  },
   "exports": {
     "./server": "./src/server/index.ts",
     "./ui": "./src/ui/index.tsx",

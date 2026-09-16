@@ -1,5 +1,5 @@
 {
-  "name": "agentic-stack",
+  "name": "agentic-app-template",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -19,6 +19,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "check:boundaries": "node scripts/check-boundaries.mjs",
+    "check:module-swap": "node scripts/check-module-swap.mjs",
     "verify": "pnpm check:boundaries && pnpm check:matrix && pnpm check:closure && pnpm typecheck && pnpm test && pnpm build",
     "diag": "pnpm --filter @app/server diag",
     "acceptance": "node scripts/acceptance-agent.mjs",

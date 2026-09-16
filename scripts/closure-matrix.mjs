@@ -2,7 +2,7 @@
 /**
  * DIAGNOSTIC (closure 2026-09-15) — renders the acceptance matrix of RAPORT-DOMKNIECIA-PLATFORMY.md.
  *
- * Requirements are read from stack-agentowy-ustalenia-i-materialy.md, never
+ * Requirements are read from docs/archive/agenticapp-2026-09/stack-agentowy-ustalenia-i-materialy-95-kryteriow.md, never
  * retyped, so a criterion cannot be silently dropped or reworded. The per-
  * criterion assessment below is the auditor's; totals, coverage and duplicate
  * checks are computed.
@@ -130,7 +130,9 @@ Object.assign(A, {
 
 /* ------------------------------- renderer -------------------------------- */
 
-const doc = readFileSync('stack-agentowy-ustalenia-i-materialy.md', 'utf8');
+// Historyczna macierz 95 kryteriów: wersja specyfikacji, wobec której ją oceniano.
+// Obowiązująca specyfikacja (200 kryteriów) to docs/ARCHITECTURE.md.
+const doc = readFileSync(new URL('../docs/archive/agenticapp-2026-09/stack-agentowy-ustalenia-i-materialy-95-kryteriow.md', import.meta.url), 'utf8');
 const parts = doc.split(/^### (\d+)\. (.+)$/m);
 const layers = [];
 for (let i = 1; i < parts.length; i += 3) {
