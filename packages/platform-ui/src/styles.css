@@ -1,0 +1,561 @@
+/* Platform shell styles. Deliberately plain: layout, states and legibility. */
+
+:root {
+  --pf-bg: #f6f7f9;
+  --pf-panel: #ffffff;
+  --pf-border: #d9dee5;
+  --pf-text: #16202c;
+  --pf-muted: #667383;
+  --pf-accent: #1f5fd0;
+  --pf-ok: #19863f;
+  --pf-warn: #b8860b;
+  --pf-error: #c02525;
+  --pf-nav-width: 248px;
+  --pf-chat-width: 560px;
+  --pf-radius: 8px;
+  --pf-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  font-family: var(--pf-font);
+  color: var(--pf-text);
+  background: var(--pf-bg);
+  font-size: 14px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--pf-accent);
+  outline-offset: 2px;
+}
+
+/* ------------------------------- layout --------------------------------- */
+
+.pf-shell {
+  display: grid;
+  grid-template-columns: var(--pf-nav-width) minmax(0, 1fr) var(--pf-chat-width);
+  height: 100vh;
+  overflow: hidden;
+}
+
+.pf-shell--nav-collapsed { grid-template-columns: 52px minmax(0, 1fr) var(--pf-chat-width); }
+
+@media (max-width: 1100px) {
+  .pf-shell, .pf-shell--nav-collapsed {
+    grid-template-columns: 52px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) 45vh;
+  }
+  .pf-chat { grid-column: 1 / -1; border-left: none; border-top: 1px solid var(--pf-border); }
+}
+
+/* --------------------------------- nav ----------------------------------- */
+
+.pf-nav {
+  background: var(--pf-panel);
+  border-right: 1px solid var(--pf-border);
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.pf-nav__toggle {
+  width: 36px; height: 36px;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius);
+  background: var(--pf-panel);
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.pf-nav__sections { margin-top: 12px; }
+.pf-nav__section { margin-bottom: 18px; }
+
+.pf-nav__heading {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--pf-muted);
+  margin: 0 0 6px 6px;
+  font-weight: 600;
+}
+
+.pf-nav__list { list-style: none; margin: 0; padding: 0; }
+
+.pf-nav__link {
+  display: block;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--pf-text);
+  text-decoration: none;
+}
+.pf-nav__link:hover { background: #eef2f7; }
+.pf-nav__link--active { background: #e3ecfb; color: var(--pf-accent); font-weight: 600; }
+
+/* -------------------------------- main ----------------------------------- */
+
+.pf-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
+.pf-statusbar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--pf-border);
+  background: var(--pf-panel);
+  font-size: 12px;
+  color: var(--pf-muted);
+  flex-wrap: wrap;
+}
+.pf-statusbar__sep { opacity: .5; }
+
+.pf-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.pf-dot--ok { background: var(--pf-ok); }
+.pf-dot--warn { background: var(--pf-warn); }
+
+.pf-surface { flex: 1; min-height: 0; position: relative; overflow: auto; }
+
+/* -------------------------------- cards ---------------------------------- */
+
+.pf-card {
+  background: var(--pf-panel);
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, .06);
+}
+.pf-card--selected { border-color: var(--pf-accent); box-shadow: 0 0 0 2px rgba(31, 95, 208, .18); }
+
+.pf-card__head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 6px 8px;
+  border-bottom: 1px solid var(--pf-border);
+  background: #fbfcfe;
+  cursor: grab;
+}
+
+.pf-card__title {
+  background: none; border: none; padding: 2px 4px;
+  font: inherit; font-weight: 600; text-align: left;
+  cursor: pointer; color: var(--pf-text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.pf-card__close {
+  background: none; border: none; cursor: pointer;
+  font-size: 18px; line-height: 1; color: var(--pf-muted); padding: 0 4px;
+}
+.pf-card__close:hover { color: var(--pf-error); }
+
+.pf-card__body { flex: 1; overflow: auto; padding: 10px; min-height: 0; }
+
+/* ------------------------------- states ---------------------------------- */
+
+.pf-state { padding: 12px; color: var(--pf-muted); font-size: 13px; }
+.pf-state--empty { font-style: italic; }
+.pf-state--error { color: var(--pf-error); background: #fdf1f1; border-radius: 6px; }
+.pf-state--overlay {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: var(--pf-panel); border: 1px dashed var(--pf-border); border-radius: var(--pf-radius);
+  z-index: 5;
+}
+
+/* ------------------------------- tables ---------------------------------- */
+
+.pf-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pf-table th, .pf-table td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--pf-border); vertical-align: top; }
+.pf-table th { color: var(--pf-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.pf-table tbody tr:hover { background: #f8fafc; }
+.pf-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pf-row--best { background: #eefaf1; }
+.pf-row--excluded { background: #fbf6ec; }
+
+.pf-muted { color: var(--pf-muted); }
+.pf-missing { color: var(--pf-error); font-style: italic; }
+.pf-link { color: var(--pf-accent); }
+
+.pf-badge {
+  display: inline-block; padding: 1px 6px; border-radius: 10px;
+  background: #eef2f7; color: var(--pf-muted); font-size: 11px;
+}
+.pf-badge--warn { background: #fdf3e2; color: #8a5b00; }
+.pf-badge--ok { background: #e6f6ea; color: var(--pf-ok); }
+
+.pf-pre, .pf-prose pre {
+  background: #f4f6f8; padding: 8px; border-radius: 6px;
+  font-size: 12px; overflow: auto; margin: 0;
+}
+
+/* ------------------------------- buttons --------------------------------- */
+
+.pf-btn {
+  border: 1px solid var(--pf-border); background: var(--pf-panel);
+  border-radius: 6px; padding: 4px 10px; cursor: pointer; font: inherit;
+}
+.pf-btn:hover { background: #f1f4f8; }
+.pf-btn--primary { background: var(--pf-accent); color: #fff; border-color: var(--pf-accent); }
+.pf-btn--primary:hover { background: #1a53b8; }
+.pf-btn--tiny { padding: 1px 6px; font-size: 11px; }
+.pf-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+/* -------------------------------- forms ---------------------------------- */
+
+.pf-field { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+.pf-field label { font-size: 12px; color: var(--pf-muted); font-weight: 600; }
+.pf-field input, .pf-field select, .pf-field textarea {
+  border: 1px solid var(--pf-border); border-radius: 6px; padding: 5px 7px; font: inherit;
+}
+.pf-field--dirty input { border-color: var(--pf-warn); background: #fffdf5; }
+
+/* --------------------------------- chat ---------------------------------- */
+
+.pf-chat {
+  display: flex; flex-direction: column;
+  border-left: 1px solid var(--pf-border);
+  background: var(--pf-panel);
+  min-width: 0; min-height: 0;
+  /* Own stacking context, so anything the chat overlays sits above the canvas. */
+  position: relative;
+  z-index: 20;
+}
+.pf-chat__body { flex: 1; min-height: 0; overflow: hidden; position: relative; }
+
+/*
+  Two views of the panel: the conversation and its artifacts.
+
+  The artifact browser is the library's own reserved `artifacts/` route; this
+  strip is how it becomes reachable at a width where the library's sidebar is an
+  off-canvas drawer. Underline rather than a filled pill, so the active tab is
+  legible without competing with the composer's send button for attention.
+*/
+.pf-chat__tabs {
+  display: flex; gap: 2px;
+  padding: 0 8px; border-bottom: 1px solid var(--pf-border); background: var(--pf-panel);
+}
+.pf-chat__tab {
+  padding: 8px 10px 6px;
+  border: 0; border-bottom: 2px solid transparent; background: none;
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--pf-muted);
+  cursor: pointer;
+}
+.pf-chat__tab:hover { color: var(--pf-text); }
+.pf-chat__tab[aria-selected='true'] {
+  color: var(--pf-text);
+  border-bottom-color: var(--pf-accent);
+}
+.pf-chat__tab:focus-visible { outline: 2px solid; outline-offset: -2px; }
+
+/*
+  Where components inside the chat put a notice.
+
+  Empty by default and collapsed when empty, so an always-rendered host costs no
+  space. See `chatSlots.ts` for why the notice cannot simply be rendered where
+  it is decided.
+*/
+.pf-chat__notice:empty { display: none; }
+
+/* Holds floating pieces that position themselves; contributes no box of its own. */
+.pf-chat__overlay { position: absolute; }
+
+/*
+  Focus belongs to the composer, not to the textarea inside it.
+
+  The shell's global `:focus-visible` ring drew a hard rectangle inside the
+  composer's rounded pill — the library sets `outline: none` on its textarea
+  precisely because the wrapper is the control the user sees. So the ring is
+  moved out to the wrapper and the textarea keeps the library's intent.
+*/
+.pf-chat .openui-agent-thread-composer__input:focus-visible { outline: none; }
+.pf-chat
+  .openui-agent-thread-composer__input-wrapper:has(
+    .openui-agent-thread-composer__input:focus-visible
+  ) {
+  outline: 2px solid var(--pf-accent);
+  outline-offset: 1px;
+}
+
+/*
+  `AgentInterface` sizes itself to the viewport (its container measured
+  1680x1000 inside a 560px column), so the thread and composer rendered off
+  screen to the right. Pinning it to this panel is the only change we make to
+  the ready-made chat's own layout.
+*/
+.pf-chat__body > .openui-agent-container {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+}
+
+/*
+  Conversation drawer: restore the library's own close control.
+
+  `AgentInterface` picks its layout from the width it measures for itself, not
+  from anything we pass: under 768px it switches to its mobile arrangement, in
+  which the conversation list is an off-canvas drawer (`left: -294px` when
+  closed) opened by the "Open sidebar" button in its mobile header. At 560px
+  this panel is always in that arrangement, and it is the right one — a drawer
+  is what a side panel needs.
+
+  The one thing that arrangement lacks here is a way to close the drawer without
+  picking a conversation: the library hides the sidebar's own collapse button on
+  mobile, where the backdrop is the intended gesture. A backdrop is a `div` with
+  an onClick — no focus, no keyboard. So we re-show the library's own button,
+  which already carries the right `aria-label` and the right action. This is a
+  visibility change to a ready-made control, not a replacement for it.
+
+  Scoped to the *open* drawer: while it is closed the drawer sits off-canvas at
+  `left: -294px`, and a control inside it must not be reachable there.
+
+  What used to be here — `left: 0 !important` — was the actual cause of the
+  drawer covering the thread with no way out: it cancelled the off-canvas
+  position, pinning the *closed* drawer on top of the conversation, in a layout
+  whose close button is hidden. Both halves of that bug were ours.
+*/
+.pf-chat__body
+  .openui-agent-container--mobile
+  .openui-agent-sidebar-container:not(.openui-agent-sidebar-container--collapsed)
+  .openui-agent-sidebar-header__toggle-button {
+  display: inline-flex;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.pf-context {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 10px; border-bottom: 1px solid var(--pf-border);
+  font-size: 12px; background: #fbfcfe;
+}
+.pf-context__label { color: var(--pf-muted); text-transform: uppercase; font-size: 10px; letter-spacing: .05em; }
+.pf-context__value { font-weight: 600; }
+
+.pf-permission {
+  margin: 8px; padding: 10px;
+  border: 1px solid var(--pf-warn); border-radius: var(--pf-radius);
+  background: #fffbf0;
+}
+.pf-permission__title { font-weight: 600; margin-bottom: 6px; }
+.pf-permission__input { font-size: 11px; max-height: 90px; overflow: auto; background: #fff; padding: 6px; border-radius: 4px; }
+.pf-permission__actions { display: flex; gap: 8px; margin-top: 8px; }
+
+/* --------------------------------- pages --------------------------------- */
+
+.pf-page { padding: 16px 20px; max-width: 1100px; }
+.pf-page h1 { font-size: 20px; margin: 0 0 4px; }
+.pf-page h2 { font-size: 15px; margin: 20px 0 8px; }
+.pf-page__lead { color: var(--pf-muted); margin: 0 0 16px; }
+
+.pf-cards-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.pf-tile {
+  border: 1px solid var(--pf-border); border-radius: var(--pf-radius);
+  background: var(--pf-panel); padding: 12px; text-decoration: none; color: inherit; display: block;
+}
+.pf-tile:hover { border-color: var(--pf-accent); }
+
+.pf-kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: 13px; }
+.pf-kv dt { color: var(--pf-muted); }
+.pf-kv dd { margin: 0; }
+
+/* React Flow overrides: the node is our card, not a flow node. */
+.react-flow__node { padding: 0; border: none; background: transparent; border-radius: 0; width: auto; }
+.react-flow__node.selected .pf-card { border-color: var(--pf-accent); }
+.react-flow__handle { display: none; }
+
+/* Run lifecycle strip in the chat: queue, execution, consent, outcome. */
+.pf-runstate {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 4px 10px; border-bottom: 1px solid var(--pf-border);
+  font-size: 12px; background: #fbfcfe;
+}
+.pf-runstate__error { color: var(--pf-err, #b00020); }
+.pf-badge--err { background: #fdeaea; color: #b00020; border-color: #f3c2c2; }
+.pf-hint { color: var(--pf-muted); font-size: 11px; }
+
+/* A resource that is not ours to see is a different state from a failure. */
+.pf-state--denied {
+  border: 1px solid var(--pf-warn, #c98a00);
+  background: #fffbf0;
+  padding: 12px;
+  border-radius: var(--pf-radius);
+}
+.pf-state--denied strong { display: block; margin-bottom: 4px; }
+
+/* Answer text while the turn is still open; the thread commits it at the end. */
+.pf-runstate__stream {
+  flex-basis: 100%;
+  white-space: pre-wrap;
+  color: var(--pf-text);
+  font-size: 13px;
+  line-height: 1.45;
+  max-height: 9em;
+  overflow-y: auto;
+  padding-top: 4px;
+}
+
+/*
+ * Notice shown when the conversation named in the URL is gone — deleted, or
+ * belonging to another owner. A readable replacement state rather than a silent
+ * jump into an unrelated conversation.
+ */
+.pf-conv-missing {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--pf-warn-border, #d9a441);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: var(--pf-warn-bg, #fdf6e7);
+  color: var(--pf-warn-fg, #5a4409);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.pf-conv-missing code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+.pf-conv-missing .pf-btn {
+  align-self: flex-start;
+}
+.pf-conv-missing__actions {
+  display: flex;
+  gap: 8px;
+}
+
+/*
+  Background tasks indicator in the status bar.
+
+  Deliberately small and non-modal: a task finishing elsewhere is announced,
+  never allowed to take over the current view.
+*/
+.pf-tasks { position: relative; margin-left: auto; }
+.pf-tasks__toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 8px; border: 1px solid var(--pf-border); border-radius: 999px;
+  background: #fff; font: inherit; font-size: 11px; cursor: pointer;
+}
+.pf-dot--busy { background: #d9a441; animation: pf-pulse 1.2s ease-in-out infinite; }
+@keyframes pf-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .pf-dot--busy { animation: none; } }
+.pf-tasks__list {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 40;
+  min-width: 280px; margin: 0; padding: 6px; list-style: none;
+  background: #fff; border: 1px solid var(--pf-border); border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+}
+.pf-tasks__item { display: flex; align-items: center; gap: 8px; padding: 4px 6px; font-size: 12px; }
+.pf-tasks__open {
+  flex: 1; text-align: left; background: none; border: 0; padding: 0;
+  font: inherit; color: var(--pf-link, #1a4b8c); cursor: pointer; text-decoration: underline;
+}
+.pf-tasks__phase { font-size: 11px; color: var(--pf-muted, #666); }
+
+/*
+  Attaching a file, inside the ready-made composer.
+
+  Both pieces are portalled into the library's own markup (see
+  `ComposerAttachments.tsx`), so they inherit its box and need no positioning of
+  their own:
+
+   - `__action-bar` is `display:flex; align-items:center` with the submit button
+     on `margin-left:auto`, so the clip sits on the left and send stays right;
+   - `__input-wrapper` is a flex column holding the textarea, so the chips row
+     sits above the text being typed.
+
+  The clip is sized to the library's own `extra-small` icon button (28px) so the
+  two controls read as one row rather than as ours next to theirs.
+*/
+.pf-attach { position: relative; display: flex; align-items: center; }
+.pf-attach__button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0;
+  border: 0; border-radius: var(--openui-radius-full, 999px);
+  background: transparent; color: var(--openui-text-neutral-secondary, #5a6472);
+  cursor: pointer;
+}
+.pf-attach__button:hover:not(:disabled) { background: var(--openui-elevated, #eef1f5); color: inherit; }
+.pf-attach__button:disabled { opacity: .5; cursor: default; }
+.pf-attach__button[aria-expanded='true'] { background: var(--openui-elevated, #eef1f5); color: inherit; }
+
+/*
+  Visually hidden, not `display:none`: a file input has to stay focusable for
+  the keyboard path, and settable by the browser test that drives it.
+*/
+.pf-attach__input {
+  position: absolute; width: 1px; height: 1px;
+  opacity: 0; pointer-events: none;
+}
+.pf-attach__input:focus-visible + .pf-attach__button { outline: 2px solid; outline-offset: 2px; }
+
+/*
+  Fixed, and outside the composer.
+
+  Not `position: absolute` inside the control: the library's
+  `__input-wrapper` is `overflow: clip`, which cut the menu off at the
+  composer's edge — the upload button was not on screen at all. The component
+  portals the menu to the panel's overlay slot and gives it the button's own
+  coordinates, so it opens upward over the conversation.
+*/
+.pf-attach__menu {
+  position: fixed; z-index: 40;
+  min-width: 210px; max-width: min(280px, 70vw);
+  padding: 6px; border: 1px solid var(--pf-border); border-radius: 10px;
+  background: #fff; box-shadow: 0 10px 28px rgb(0 0 0 / 14%);
+  font-size: 12px;
+}
+.pf-attach__menu-item {
+  display: block; width: 100%; padding: 6px 8px;
+  border: 0; border-radius: 6px; background: none;
+  font: inherit; text-align: left; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pf-attach__menu-item:hover { background: #f1f4f9; }
+.pf-attach__menu-hint { margin: 2px 8px 6px; color: var(--pf-muted); font-size: 11px; }
+.pf-attach__menu-label {
+  margin: 6px 8px 2px; padding-top: 6px; border-top: 1px solid var(--pf-border);
+  color: var(--pf-muted); font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
+}
+.pf-attach__picker { list-style: none; margin: 0; padding: 0; max-height: 180px; overflow-y: auto; }
+
+.pf-attach__list { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.pf-attach__chip {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  padding: 3px 4px 3px 9px; border-radius: 999px;
+  background: var(--openui-elevated, #eef1f5); font-size: 11px;
+}
+.pf-attach__chip--busy { padding-right: 9px; color: var(--pf-muted); }
+.pf-attach__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-attach__chip button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; flex: none;
+  border: 0; border-radius: 50%; background: none;
+  font-size: 13px; line-height: 1; cursor: pointer; color: var(--pf-muted);
+}
+.pf-attach__chip button:hover { background: rgb(0 0 0 / 8%); color: inherit; }
+.pf-attach__error {
+  display: flex; align-items: center; gap: 6px;
+  margin: 0; color: var(--pf-error); font-size: 11px;
+}
+.pf-attach__error button { border: 0; background: none; cursor: pointer; font-size: 13px; line-height: 1; color: inherit; }
+
+/*
+  Temporary highlight of an element the agent was asked to point at.
+
+  Time-limited and purely visual: it marks where to look, and changes nothing
+  about the control itself. Honoured by `prefers-reduced-motion`.
+*/
+[data-ui-highlight='true'] {
+  outline: 3px solid var(--pf-accent, #1a4b8c);
+  outline-offset: 3px;
+  border-radius: 4px;
+  animation: pf-highlight 1.1s ease-in-out 2;
+}
+@keyframes pf-highlight {
+  0%, 100% { outline-color: var(--pf-accent, #1a4b8c); }
+  50% { outline-color: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-ui-highlight='true'] { animation: none; }
+}

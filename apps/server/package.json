@@ -1,0 +1,28 @@
+{
+  "name": "@app/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --experimental-transform-types --no-warnings=ExperimentalWarning --env-file-if-exists=../../.env src/main.ts",
+    "start": "node dist/server.js",
+    "build": "node build.mjs",
+    "migrate": "node --experimental-transform-types --no-warnings=ExperimentalWarning src/cli/migrate.ts",
+    "seed": "node --experimental-transform-types --no-warnings=ExperimentalWarning src/cli/seed.ts",
+    "diag": "node --experimental-transform-types --no-warnings=ExperimentalWarning src/cli/diag-agent.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.270",
+    "@hono/node-server": "1.19.7",
+    "@mastra/claude": "0.3.1",
+    "@mastra/core": "1.66.0",
+    "@module/devkit-probe": "workspace:*",
+    "@module/procurement": "workspace:*",
+    "@platform/contracts": "workspace:*",
+    "@platform/server": "workspace:*",
+    "better-sqlite3": "13.0.3",
+    "drizzle-orm": "0.45.2",
+    "hono": "4.13.7",
+    "zod": "4.6.5"
+  }
+}

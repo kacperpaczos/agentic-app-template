@@ -1,0 +1,51 @@
+{
+  "name": "agentic-stack",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,green \"pnpm --filter @app/server dev\" \"pnpm --filter @app/web dev\"",
+    "build": "pnpm --filter @app/web build && pnpm --filter @app/server build",
+    "start": "pnpm --filter @app/server start",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "migrate": "pnpm --filter @app/server migrate",
+    "seed": "pnpm --filter @app/server seed",
+    "reset": "rm -rf data && pnpm migrate && pnpm seed",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "check:boundaries": "node scripts/check-boundaries.mjs",
+    "verify": "pnpm check:boundaries && pnpm check:matrix && pnpm check:closure && pnpm typecheck && pnpm test && pnpm build",
+    "diag": "pnpm --filter @app/server diag",
+    "acceptance": "node scripts/acceptance-agent.mjs",
+    "check:matrix": "node scripts/matrix-summary.mjs --check",
+    "check:closure": "node scripts/closure-matrix.mjs --summary > /dev/null",
+    "backup": "node scripts/backup-state.mjs",
+    "backup:verify": "node scripts/backup-state.mjs --verify",
+    "migration:rehearsal": "node scripts/migration-rehearsal.mjs"
+  },
+  "devDependencies": {
+    "@app/server": "workspace:*",
+    "@hono/node-server": "1.19.7",
+    "@mastra/core": "1.66.0",
+    "@module/devkit-probe": "workspace:*",
+    "@module/procurement": "workspace:*",
+    "@openuidev/react-headless": "0.9.13",
+    "@platform/contracts": "workspace:*",
+    "@platform/server": "workspace:*",
+    "@platform/ui": "workspace:*",
+    "@playwright/test": "1.63.0",
+    "@tanstack/react-query": "5.102.8",
+    "@types/node": "24.10.2",
+    "concurrently": "9.2.1",
+    "esbuild": "0.27.3",
+    "typescript": "7.0.2",
+    "vite": "8.3.0",
+    "vitest": "5.0.0",
+    "zod": "4.6.5"
+  }
+}

@@ -1,0 +1,57 @@
+# Uruchomienie obrazu produkcyjnego AgenticApp.
+#
+#     docker compose build --no-cache      # obraz wyłącznie ze źródeł
+#     docker compose up -d                 # http://localhost:8791
+#     docker compose down                  # zatrzymanie; dane zostają w wolumenie
+#
+# Stan aplikacji żyje w nazwanym wolumenie, nie w obrazie. `docker compose down`
+# go nie usuwa; `docker compose down -v` usuwa — i to jest jedyny sposób, w jaki
+# ten plik może skasować dane.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: agenticapp:czysty
+    ports:
+      - "8791:8791"
+    environment:
+      PORT: "8791"
+      APP_DATA_DIR: /data
+      APP_WEB_DIST: /app/web
+      # Backend wpuszcza tylko originy z tej listy; adres musi zgadzać się z tym,
+      # pod którym otwierasz aplikację w przeglądarce.
+      APP_ALLOWED_ORIGINS: "http://localhost:8791,http://127.0.0.1:8791"
+    volumes:
+      - agenticapp-data:/data
+
+      # ----------------------------------------------------------------------
+      # Dostęp agenta do subskrypcji Claude — świadomie wyłączony domyślnie.
+      #
+      # Claude Agent SDK czyta poświadczenie subskrypcji z katalogu `~/.claude`
+      # na hoście. W kontenerze tego katalogu nie ma, więc aplikacja wstanie i
+      # będzie w pełni używalna (canvas, dane, pliki, rozmowy), ale **agent nie
+      # wykona żadnego polecenia** — ekran Ustawienia pokaże „brak logowania".
+      #
+      # Poświadczenie nie jest wbudowywane w obraz i nie powinno być: obraz to
+      # artefakt do przenoszenia, a to jest sekret. Jeżeli świadomie chcesz dać
+      # kontenerowi dostęp do swojej subskrypcji, odkomentuj poniższą linię.
+      # Montowanie jest tylko do odczytu, ale to nadal wystawienie działającego
+      # poświadczenia procesowi w kontenerze — decyzja należy do Ciebie.
+      #
+      # - ${HOME}/.claude:/home/node/.claude:ro
+      # ----------------------------------------------------------------------
+
+    restart: unless-stopped
+    healthcheck:
+      # Ten sam endpoint, którego używa suita przeglądarkowa do potwierdzenia,
+      # że odpowiada właściwa instancja.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8791/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  agenticapp-data:
