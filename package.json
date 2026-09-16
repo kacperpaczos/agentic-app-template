@@ -20,7 +20,7 @@
     "test:e2e": "playwright test",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "check:module-swap": "node scripts/check-module-swap.mjs",
-    "verify": "pnpm check:boundaries && pnpm check:matrix && pnpm check:closure && pnpm typecheck && pnpm test && pnpm build",
+    "verify": "pnpm check:boundaries && pnpm check:matrix && pnpm check:closure && pnpm typecheck && pnpm build && pnpm test",
     "diag": "pnpm --filter @app/server diag",
     "acceptance": "node scripts/acceptance-agent.mjs",
     "check:matrix": "node scripts/matrix-summary.mjs --check",

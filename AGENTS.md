@@ -88,8 +88,9 @@ Rodzaj dowodu nie jest statusem. W raporcie i w `assessment.json` rozróżniaj: 
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm verify          # granica, macierz 200, macierze historyczne, typy, testy, build
-pnpm test:e2e        # przeglądarka na buildzie produkcyjnym; trzy testy zużywają tury subskrypcji
+pnpm verify          # granica, macierz 200, macierze historyczne, typy, build, testy
+pnpm test:e2e        # przeglądarka na istniejącym buildzie produkcyjnym (po verify/build — inaczej testuje stary bundle);
+                     # trzy testy zużywają tury subskrypcji
 pnpm check:module-swap   # przy zmianach kontraktu modułu lub warstwy składania
 ```
 

@@ -94,9 +94,10 @@ Szczegóły, ograniczenia i procedura odtworzenia: [`docs/odzyskiwanie-stanu.md`
 
 ```bash
 pnpm verify              # granica platforma–domena, macierz 200 kryteriów, macierze historyczne,
-                         # typecheck (TypeScript 7), testy Vitest, build frontendu i backendu
-pnpm test:e2e            # Playwright na buildzie produkcyjnym; własne porty 8795–8799 i katalogi .e2e*;
-                         # trzy testy zużywają tury subskrypcji Claude
+                         # typecheck (TypeScript 7), build frontendu i backendu, testy Vitest
+                         # (tests/durability.test.ts skanuje zbudowane pakiety, dlatego build jest przed testami)
+pnpm test:e2e            # Playwright na ISTNIEJĄCYM buildzie produkcyjnym — najpierw pnpm build lub pnpm verify;
+                         # własne porty 8795–8799 i katalogi .e2e*; trzy testy zużywają tury subskrypcji Claude
 pnpm check:module-swap   # próba wymiany modułu przykładowego na kontrolny, na kopii repozytorium
 pnpm diag                # prawdziwa sesja Claude: czy narzędzia MCP są widoczne
 pnpm acceptance          # scenariusze odbiorowe z prawdziwym modelem (zużywa tury)
