@@ -91,3 +91,70 @@ usunięcie `module-procurement` i słownik w module kontrolnym → kod 0 bez edy
   uruchamiany w czasie konsolidacji.
 - Komentarz w `packages/platform-ui/src/catalog/registry.tsx` powołuje się na
   `tests/catalog-parity.test.ts`, którego nie ma w repozytorium.
+
+### Regresja w czystej kopii — pierwszy przebieg oblał
+
+Czysta kopia commita `bf83bb6` (`git clone` poza repozytorium, `pnpm install --frozen-lockfile`):
+`pnpm verify` = 1 (2 z 257 testów w `tests/durability.test.ts` wymagają zbudowanych pakietów, a
+`verify` uruchamiał testy przed buildem), `pnpm test:e2e` = 1 (brak `apps/server/dist/server.js`).
+To wada odtwarzalności obecna już w AgenticApp, ukryta przez `dist/` pozostający po wcześniejszych
+buildach — tamtejsza „czysta instalacja” uruchamiała `pnpm build` przed `pnpm verify`. Poprawka
+`7d6bd78`: build przed testami, dokumentacja wymagania buildu dla e2e. Żadnej kontroli nie wyłączono.
+
+Czysta kopia `7d6bd78`: install 0, `verify` 0 (257/257), `test:e2e` 0 (63/63, 5,0 min, trzy tury
+na prawdziwym modelu), `check:module-swap` 0, start produkcyjny z danymi startowymi, restart, `seed`,
+`seed --force`, `APP_SKIP_BASE_DATA`. `docker build --no-cache --pull` 0; aplikacja w kontenerze
+sprawdzona od wewnątrz. **Dostęp z hosta przez opublikowany port nie zadziałał** — ani dla obrazu
+szablonu, ani dla kontrolnego minimalnego kontenera `node:22-alpine`, przy działającym wcześniej
+uruchomionym kontenerze użytkownika. Uznane za ograniczenie tego demona rootless Docker; nie
+ingerowano w konfigurację Dockera użytkownika.
+
+Suita e2e zapisuje pomiary do `docs/evidence/closure-2026-09-15/` (nazwa po dawnych pracach) i tym
+samym brudzi drzewo robocze. Pomiary z przebiegu skopiowano do dowodów; zmiana katalogu jest w backlogu.
+
+### Ocena 200 kryteriów — historyczne „95/95” nie przeniosło się
+
+Oceny przygotowano analizą kodu i testów szablonu wobec treści kryteriów (cztery równoległe
+przeglądy warstw, tylko do odczytu), z historyczną oceną wykonawcy jako punktem wyjścia; potem
+skorygowano je o wynik regresji. Zasada: „potwierdzone” wymaga dowodu wykonanego lub
+przeanalizowanego na kodzie szablonu.
+
+Wynik: 58 potwierdzonych, 117 częściowych, 17 niespełnionych, 8 niesprawdzonych, 0 z 12 warstw
+zamkniętych. Z dawnych 95 kryteriów potwierdzonych w szablonie jest 35. Powody spadku, poza
+wymogiem dowodu z szablonu: asercje testów nie pokrywają pełnej treści części kryteriów (np. próba
+„praca w rozmowie B” restartuje serwer, więc zadanie A już nie trwa; test nawigacji wywołuje
+`requestUi` z pominięciem modelu; test „widoczny fokus” sprawdza tylko fokus) oraz wady wykryte
+analizą kodu. Najważniejsze sprawdziłem bezpośrednio:
+
+- `get_context` zwraca kontekst ze startu wykonania (L6.3, L6.9 — niespełnione);
+- `IdempotencyStore.once` nie porównuje treści żądania i nie rezerwuje klucza (L9.14);
+- `saveComparisonArtifact` przyjmuje `operationId`, ale go nie używa (L9.7);
+- `answerPermission` rozstrzyga zgodę po samym `requestId` (L11.13);
+- `pnpm acceptance` i `scripts/run-agent.mjs` domyślnie kierują zmieniające dane scenariusze na
+  `127.0.0.1:8791` — port, na którym zwykle działa instancja użytkownika (L1.8);
+- `denyRead` sandboxu obejmuje tylko katalog danych aplikacji, a narzędzia plikowe są
+  auto-zatwierdzane — dostęp kodu agenta do katalogu konfiguracji Claude wymaga próby (L11.4, L11.11).
+
+Pełne oceny: `docs/ACCEPTANCE.md`; pakiety prac: `docs/BACKLOG.md`.
+
+### Poprawki dokumentacji po ocenie
+
+- README podawało porty e2e 8795–8799 (przeniesione z AgenticApp); suita używa 8793–8799.
+- README skracało opis odczytu poświadczeń do „czyta wyłącznie dwa pola” — w rzeczywistości plik jest
+  parsowany w całości, a kopiowane są dwa pola. Przywrócono dokładny opis.
+- Dodano ostrzeżenie o `pnpm acceptance`/`run-agent.mjs` (README, `AGENTS.md`) i krok instalacji
+  Chromium dla Playwright.
+
+### Macierz jako kontrola w `pnpm verify`
+
+`scripts/acceptance-matrix.mjs` generuje `docs/ACCEPTANCE.md` i `docs/BACKLOG.md` z
+`docs/ARCHITECTURE.md` i `docs/acceptance/assessment.json`; `pnpm check:acceptance` (w `verify`)
+oblewa przy braku oceny, dowodzie historycznym oznaczonym jako potwierdzenie, otwartym kryterium bez
+pakietu, próbie spoza warstwy, ręcznej zmianie sum, zmianie brzmienia wymagań bez regeneracji i
+duplikacie identyfikatora — `docs/evidence/template-consolidation/kontrole-negatywne-macierzy.txt`.
+
+### Co zostało otwarte
+
+Wszystko, co wymienia `docs/BACKLOG.md` (142 kryteria w 12 pakietach), oraz: mapowanie portu
+kontenera z hosta (niesprawdzone w tym środowisku), `pnpm dev` (nieuruchamiany — proxy na 8791),
+instalacja przeglądarek Playwright na nowej maszynie, licencja kodu (decyzja właściciela).

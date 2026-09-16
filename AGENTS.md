@@ -60,6 +60,9 @@ Mapa wszystkich dokumentów: [`docs/DOCUMENTATION-MAP.md`](docs/DOCUMENTATION-MA
   katalogi tymczasowe) i własnych procesów. Nie podłączaj się do instancji, której test nie
   uruchomił; nie zabijaj procesów po nazwie; nie czyść portów globalnie. Nie uruchamiaj migracji na
   cudzych danych bez wyraźnej zgody — najpierw kopia i próba (`docs/odzyskiwanie-stanu.md`).
+- `pnpm acceptance` i `scripts/run-agent.mjs` zapisują dane w instancji pod `APP_BASE` (domyślnie
+  port 8791) i nie sprawdzają etykiety instancji testowej — kieruj je wyłącznie na własną instancję
+  z osobnym katalogiem danych. `pnpm dev` ma proxy na stały port 8791.
 - Zależności instaluj z lockfile (`pnpm install --frozen-lockfile`). Aktualizacja zależności to
   zmiana wymagająca regresji, nie skutek uboczny.
 - Nie wyłączaj kontroli (`check:*`, testów, asercji), żeby przeszedł build. Jeśli kontrola jest

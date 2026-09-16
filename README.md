@@ -34,6 +34,8 @@ granica platforma–domena, wymagane dowody).
 ## Wymagania
 
 - Node.js ≥ 22.12 (sprawdzone na 24.19.0), pnpm 9.15.9 (`corepack enable`).
+- Do testów przeglądarkowych: Chromium dla Playwright — `pnpm exec playwright install chromium`
+  (w konsolidacji użyto przeglądarki z lokalnego cache; instalacja na nowej maszynie nie była sprawdzana).
 - System z obsługą sandboxu Claude Agent SDK. Sprawdzone wyłącznie na Linuksie (Fedora 44);
   inne systemy nie były testowane.
 - Do pracy agenta: konto Claude **z subskrypcją**, zalogowane lokalnie w CLI `claude` (`/login`;
@@ -97,11 +99,17 @@ pnpm verify              # granica platforma–domena, macierz 200 kryteriów, m
                          # typecheck (TypeScript 7), build frontendu i backendu, testy Vitest
                          # (tests/durability.test.ts skanuje zbudowane pakiety, dlatego build jest przed testami)
 pnpm test:e2e            # Playwright na ISTNIEJĄCYM buildzie produkcyjnym — najpierw pnpm build lub pnpm verify;
-                         # własne porty 8795–8799 i katalogi .e2e*; trzy testy zużywają tury subskrypcji Claude
+                         # własne porty 8793–8799 i katalogi .e2e*; trzy testy zużywają tury subskrypcji Claude
 pnpm check:module-swap   # próba wymiany modułu przykładowego na kontrolny, na kopii repozytorium
 pnpm diag                # prawdziwa sesja Claude: czy narzędzia MCP są widoczne
-pnpm acceptance          # scenariusze odbiorowe z prawdziwym modelem (zużywa tury)
 ```
+
+> **Uwaga — `pnpm acceptance` i `scripts/run-agent.mjs`** wykonują scenariusze z prawdziwym modelem
+> przeciw **działającej** instancji pod `APP_BASE` (domyślnie `http://127.0.0.1:8791`) i **zmieniają
+> jej dane** (pozycje ofert, karty, pliki). Nie sprawdzają etykiety instancji testowej. Uruchamiaj je
+> wyłącznie przeciw osobnej instancji z własnym katalogiem danych, np.
+> `APP_BASE=http://127.0.0.1:8790 pnpm acceptance` przy serwerze wystartowanym z `PORT=8790
+> APP_DATA_DIR=/ścieżka/do/kopii`.
 
 Wyniki ostatniej regresji i czystej instalacji: [`docs/CONSOLIDATION-REPORT.md`](docs/CONSOLIDATION-REPORT.md).
 
@@ -120,11 +128,14 @@ Wyniki ostatniej regresji i czystej instalacji: [`docs/CONSOLIDATION-REPORT.md`]
 | `APP_INSTANCE_LABEL` | brak | **tylko testy**: wymusza port 8792–8799 i katalog danych `.e2e*`, podaje etykietę w `/api/health` |
 
 Dostęp do aplikacji to osobna, lokalna sesja (podpisane HMAC ciasteczko, sekret w
-`data/session.secret`); token subskrypcji nigdy nie pełni tej roli. Aplikacja czyta z pliku
-poświadczeń wyłącznie `subscriptionType` i `expiresAt` do ekranu Ustawień; odświeżanie tokena należy
-do SDK.
+`data/session.secret`); token subskrypcji nigdy nie pełni tej roli. Do ekranu Ustawień aplikacja
+**czyta i parsuje cały** plik `~/.claude/.credentials.json` (więc tokeny przejściowo trafiają do
+pamięci procesu), ale kopiuje z niego wyłącznie `subscriptionType` i `expiresAt` — tokenów nie
+używa, nie zapisuje, nie loguje i nie przesyła. Odświeżanie tokena należy do SDK.
 
 ## Co pokazuje aplikacja przykładowa
+
+Opis funkcji nie jest dowodem ich działania — stan i dowód każdego zachowania: [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md).
 
 - porównanie ofert liczone przez backend (oferta niekompletna lub w innej walucie nie wygrywa),
   tabela i wykres na canvasie, pochodzenie ceny aż do wiersza pliku źródłowego;

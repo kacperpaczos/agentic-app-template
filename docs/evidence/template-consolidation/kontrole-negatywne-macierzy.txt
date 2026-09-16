@@ -1,0 +1,37 @@
+Kontrole negatywne scripts/acceptance-matrix.mjs --check (pnpm check:acceptance), kopia w katalogu tymczasowym, 2026-09-16
+
+## 0. stan zatwierdzony
+exit=0
+pakiety backlogu: 12
+spójność: OK
+
+## 1. brak oceny kryterium L5.3
+exit=1
+brak oceny L5.3
+DRYF: docs/ACCEPTANCE.md nie odpowiada ocenom — uruchom node scripts/acceptance-matrix.mjs
+DRYF: docs/BACKLOG.md nie odpowiada ocenom — uruchom node scripts/acceptance-matrix.mjs
+
+## 2. „potwierdzone” z dowodem historycznym (L11.3)
+exit=1
+L11.3: „potwierdzone” wymaga dowodu z szablonu, nie historycznego
+
+## 3. otwarte kryterium bez pakietu backlogu (L6.3)
+exit=1
+L6.3: otwarte kryterium bez pakietu backlogu
+
+## 4. próba spoza warstwy kryterium (L1.1 → T10)
+exit=1
+L1.1: próba T10 nie obejmuje warstwy L1
+
+## 5. ręcznie wpisana suma w ACCEPTANCE.md (58 → 95)
+exit=1
+DRYF: docs/ACCEPTANCE.md nie odpowiada ocenom 
+
+## 6. zmiana brzmienia kryterium L5.3 w specyfikacji bez ponownego wygenerowania
+exit=1
+DRYF: docs/ACCEPTANCE.md nie odpowiada ocenom 
+
+## 7. zduplikowany identyfikator L1.13 w specyfikacji
+exit=1
+specyfikacja: L1.13 na pozycji L1.14
+specyfikacja: duplikat L1.13

@@ -1,0 +1,12 @@
+build (z cache warstw po buildzie --no-cache): 0
+w kontenerze: health ok; moduly=["procurement"]; auth.method=subscription; credential=absent; apiKeyDetected=false; dane startowe=["PC-2026-01"]; uzytkownik procesu=undefined/1000
+docker port: 8791/tcp -> 127.0.0.1:44349 
+z hosta przez -p 127.0.0.1:44349:8791: curl: (7) Failed to connect to 127.0.0.1 port 44349 after 0 ms: Could not connect to server
+node
+ls: cannot access '/home/node/.claude': No such file or directory
+sprzątanie: kontener, wolumen, obraz usunięte
+wariant z README/compose (-p 54261:8791, wszystkie interfejsy, kontener aktywny ok. 30 s): /api/health z hosta → curl: (7) Failed to connect to localhost port 54261 after 0 ms: Could not connect to server
+frontend z hosta: GET / → curl: (7) Failed to connect to localhost port 54261 after 0 ms: Could not connect to server
+000 
+sprzątanie po wariancie 2: kontener, wolumen, obraz usunięte
+kontrola środowiska: minimalny serwer HTTP w node:22-alpine z -p 127.0.0.1:39909:8000 → z hosta: curl: (7) Failed to connect to 127.0.0.1 port 39909 after 0 ms: Could not connect to server (po ok. 15 s)

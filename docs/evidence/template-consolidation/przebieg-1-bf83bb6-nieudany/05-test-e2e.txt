@@ -1,0 +1,29 @@
+
+> agentic-app-template@0.1.0 test:e2e <czysta-kopia>
+> playwright test
+
+[WebServer] No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+[WebServer] No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+[WebServer] node:internal/modules/esm/resolve:271
+[WebServer]     throw new ERR_MODULE_NOT_FOUND(
+[WebServer]           ^
+[WebServer] 
+[WebServer] Error [ERR_MODULE_NOT_FOUND]: Cannot find module '<czysta-kopia>/apps/server/dist/server.js' imported from <czysta-kopia>/e2e/support/boot-server.ts
+[WebServer]     at finalizeResolution (node:internal/modules/esm/resolve:271:11)
+[WebServer]     at moduleResolve (node:internal/modules/esm/resolve:865:10)
+[WebServer]     at defaultResolve (node:internal/modules/esm/resolve:992:11)
+[WebServer]     at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+[WebServer]     at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+[WebServer]     at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+[WebServer]     at #resolve (node:internal/modules/esm/loader:683:17)
+[WebServer]     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+[WebServer]     at node:internal/modules/esm/loader:632:32
+[WebServer]     at TracingChannel.tracePromise (node:diagnostics_channel:362:14) {
+[WebServer]   code: 'ERR_MODULE_NOT_FOUND',
+[WebServer]   url: 'file://<czysta-kopia>/apps/server/dist/server.js'
+[WebServer] }
+[WebServer] 
+[WebServer] Node.js v24.19.0
+Error: Process from config.webServer was not able to start. Exit code: 1
+
+ ELIFECYCLE  Command failed with exit code 1.

@@ -1,0 +1,32 @@
+{
+  "at": "2026-09-16T08:48:04.166Z",
+  "scenariusze": {
+    "text-only": {
+      "streamed": true,
+      "powod": "odpowiedz przyrastala w trakcie wykonania: 4 roznych dlugosci, 28 → 107, koncowa 107",
+      "probekWTrakcie": 4,
+      "roznychDlugosci": 4,
+      "pierwszaDlugosc": 28,
+      "ostatniaDlugosc": 107,
+      "koncowaDlugosc": 107
+    },
+    "burst-at-end": {
+      "streamed": false,
+      "powod": "w trakcie wykonania odpowiedz pojawila sie tylko raz (dlugosc 107) — to nie jest przyrost, tylko pojedyncze wyswietlenie",
+      "probekWTrakcie": 1,
+      "roznychDlugosci": 1,
+      "pierwszaDlugosc": 107,
+      "ostatniaDlugosc": 107,
+      "koncowaDlugosc": 107
+    },
+    "tool-only-silent": {
+      "streamed": false,
+      "powod": "w trakcie wykonania nie zaobserwowano zadnej tresci odpowiedzi",
+      "probekWTrakcie": 0,
+      "roznychDlugosci": 0,
+      "pierwszaDlugosc": null,
+      "ostatniaDlugosc": null,
+      "koncowaDlugosc": 0
+    }
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "ok": true,
+  "steps": [
+    {
+      "name": "lista plików repozytorium",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "kopia robocza",
+      "ok": true,
+      "detail": "206 plików → <katalog-tymczasowy>"
+    },
+    {
+      "name": "warstwa składania przełączona na moduł kontrolny",
+      "ok": true,
+      "detail": "usunięte trasy: casesRoute, caseDetailRoute, dataRoute, itemProvenanceRoute"
+    },
+    {
+      "name": "połówka UI modułu przykładowego usunięta z kopii",
+      "ok": true,
+      "detail": "packages/module-procurement/src/ui, eksport ./ui"
+    },
+    {
+      "name": "pakiety platformy bez zmian",
+      "ok": true,
+      "detail": "platform-contracts:fecfd5c95a78 platform-server:7619a7fea78a platform-ui:2b0bad7fed1d"
+    },
+    {
+      "name": "zmienione pliki ograniczone do warstwy składania i modułu przykładowego",
+      "ok": true,
+      "detail": "apps/server/src/compose.ts, apps/web/src/compose.tsx, apps/web/src/router.tsx; moduł przykładowy: 4 plików"
+    },
+    {
+      "name": "pnpm install --frozen-lockfile",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "kontrola granicy platforma–domena",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "typecheck",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "build frontendu i backendu",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "serwer wystartował",
+      "ok": true,
+      "detail": "http://127.0.0.1:43649; [server] modules: probe"
+    },
+    {
+      "name": "rejestr: wyłącznie moduł kontrolny",
+      "ok": true,
+      "detail": "moduły=[\"probe\"]"
+    },
+    {
+      "name": "narzędzia modułu kontrolnego zarejestrowane",
+      "ok": true,
+      "detail": "probe_add_note, probe_list_notes"
+    },
+    {
+      "name": "komponent modułu w katalogu, bez komponentów przykładu",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "trasa modułu /api/m/probe/notes",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "kompozycja domyślna modułu walidowana katalogiem",
+      "ok": true,
+      "detail": "HTTP 200, karta=probe.noteList"
+    },
+    {
+      "name": "zakres modułu przykładowego nie daje kart",
+      "ok": true,
+      "detail": "HTTP 200, karty=0"
+    },
+    {
+      "name": "baza: tabela modułu kontrolnego, brak tabel przykładu",
+      "ok": true,
+      "detail": "tabele=15"
+    },
+    {
+      "name": "powłoka w przeglądarce: menu platformy bez ekranów przykładu",
+      "ok": true,
+      "detail": "☰Przestrzen pracyCanvasZapisane kompozycjePliki i raportyPliki i raportyUstawieniaUstawienia"
+    },
+    {
+      "name": "ekrany platformy /files i /settings bez błędów strony",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "próba zakończona",
+      "ok": true,
+      "detail": "7 s"
+    }
+  ],
+  "keptWorkDir": null
+}

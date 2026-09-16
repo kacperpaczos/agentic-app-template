@@ -1,0 +1,30 @@
+Scope: all 8 workspace projects
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +625
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 625, reused 625, downloaded 0, added 316
+Progress: resolved 625, reused 625, downloaded 0, added 406
+Progress: resolved 625, reused 625, downloaded 0, added 625, done
+
+devDependencies:
++ @app/server 0.1.0 <- apps/server
++ @hono/node-server 1.19.7
++ @mastra/core 1.66.0
++ @module/devkit-probe 0.1.0 <- packages/module-devkit-probe
++ @module/procurement 0.1.0 <- packages/module-procurement
++ @openuidev/react-headless 0.9.13
++ @platform/contracts 0.1.0 <- packages/platform-contracts
++ @platform/server 0.1.0 <- packages/platform-server
++ @platform/ui 0.1.0 <- packages/platform-ui
++ @playwright/test 1.63.0
++ @tanstack/react-query 5.102.8
++ @types/node 24.10.2
++ concurrently 9.2.1
++ esbuild 0.27.3
++ typescript 7.0.2
++ vite 8.3.0
++ vitest 5.0.0
++ zod 4.6.5
+
+Done in 3s using pnpm v9.15.9

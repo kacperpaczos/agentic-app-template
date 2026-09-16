@@ -1,0 +1,37 @@
+# Izolacja od instancji i danych użytkownika aplikacji źródłowej
+
+## Początek (przed regresją)
+czas: 2026-09-16T08:50:10Z
+instancja użytkownika (port 8791):
+LISTEN 0      511                *:8791             *:*    pid=2785270
+    PID                  STARTED COMMAND
+2785270 Wed Sep 16 10:12:54 2026 node apps/server/dist/server.js
+procesy trzymające AgenticApp/data/app.db*:
+ <AgenticApp>/data/app.db:  2785270
+ <AgenticApp>/data/app.db-wal:  2785270
+stat plików bazy AgenticApp:
+  <AgenticApp>/data/app.db 356352 B mtime=2026-09-16 10:12:53.752629768 +0200
+  <AgenticApp>/data/app.db-shm 32768 B mtime=2026-09-16 10:12:55.828446492 +0200
+  <AgenticApp>/data/app.db-wal 0 B mtime=2026-09-16 10:12:55.828017955 +0200
+
+## Koniec (po regresji, próbach i przed publikacją)
+czas: 2026-09-16T09:06:38Z
+instancja użytkownika (port 8791):
+LISTEN 0      511                *:8791             *:*    pid=2785270
+    PID                  STARTED COMMAND
+2785270 Wed Sep 16 10:12:54 2026 node apps/server/dist/server.js
+procesy trzymające AgenticApp/data/app.db*:
+ <AgenticApp>/data/app.db:  2785270
+ <AgenticApp>/data/app.db-wal:  2785270
+stat plików bazy AgenticApp:
+  <AgenticApp>/data/app.db 356352 B mtime=2026-09-16 10:12:53.752629768 +0200
+  <AgenticApp>/data/app.db-shm 32768 B mtime=2026-09-16 10:12:55.828446492 +0200
+  <AgenticApp>/data/app.db-wal 0 B mtime=2026-09-16 10:12:55.828017955 +0200
+
+## Wniosek
+Ten sam proces (pid 2785270, start 10:12:54) działał przez cały czas i jako jedyny trzymał pliki bazy. Porównanie rozmiarów i czasów modyfikacji plików bazy między początkiem a końcem: patrz wyżej. Źródła AgenticApp: zmiany wyłącznie z części A konsolidacji (dokumentacja i dwa skrypty historycznej macierzy).
+
+manifest końcowy: 256 plików, sha256 134cc4bdf8aa955872e55f220f0cf190aad295e960b91974c1a6db7e2edc5584
+dodane: docs/ARCHITECTURE.md, docs/DOCUMENTATION-MAP.md, docs/archive/stack-agentowy-ustalenia-i-materialy-95-kryteriow.md
+usunięte: —
+zmienione: README.md, scripts/audit-matrix.mjs, scripts/closure-matrix.mjs, stack-agentowy-ustalenia-i-materialy.md

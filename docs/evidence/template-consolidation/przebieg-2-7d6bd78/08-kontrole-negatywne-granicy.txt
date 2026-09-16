@@ -1,0 +1,36 @@
+Kontrole negatywne scripts/check-boundaries.mjs — commit 7d6bd78, kopia w katalogu tymczasowym
+
+## 0. stan zatwierdzony
+exit=0
+Granica platforma-domena zachowana:
+  - pakiety platformy: platform-contracts, platform-server, platform-ui; moduly: module-devkit-probe, module-procurement
+  - zaden pakiet @platform/* nie deklaruje zaleznosci od @module/*
+  - zaden plik platformy nie importuje z @module/*
+  - zaden plik platformy nie uzywa slownika domenowego (12 pojec z manifestow modulow)
+  - kazdy modul zalezy od platformy (kierunek prawidlowy)
+
+## 1. import @module/* w pliku platformy
+exit=1
+  - [import] packages/platform-server/src/util/id.ts importuje z modulu biznesowego: @module/procurement/shared
+  - [slownik] packages/platform-server/src/util/id.ts:15 zawiera pojecie domenowe "procurement": import { x } from '@module/procurement/shared';
+
+## 2. slowo domenowe w platformie
+exit=1
+  - [slownik] packages/platform-ui/src/index.ts:23 zawiera pojecie domenowe "dostawc": export const label = 'dostawca';
+
+## 3. zaleznosc @module/* zadeklarowana w manifeście platformy
+exit=1
+  - [deps] @platform/contracts deklaruje zaleznosc od modulu biznesowego: @module/procurement
+
+## 4. zaden modul nie deklaruje slownika
+exit=1
+  - [slownik] zaden modul nie deklaruje agenticApp.domainVocabulary — kontrola slownika nie mialaby czego sprawdzac
+
+## 5. modul przykladowy usuniety, slownik w module kontrolnym — skrypt bez edycji
+exit=0
+Granica platforma-domena zachowana:
+  - pakiety platformy: platform-contracts, platform-server, platform-ui; moduly: module-devkit-probe
+  - zaden pakiet @platform/* nie deklaruje zaleznosci od @module/*
+  - zaden plik platformy nie importuje z @module/*
+  - zaden plik platformy nie uzywa slownika domenowego (1 pojec z manifestow modulow)
+  - kazdy modul zalezy od platformy (kierunek prawidlowy)

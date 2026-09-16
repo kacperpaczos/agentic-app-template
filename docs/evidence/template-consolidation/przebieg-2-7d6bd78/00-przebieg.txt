@@ -1,0 +1,9 @@
+[2026-09-16T08:43:37Z] START 02-clone
+[2026-09-16T08:43:37Z] END   02-clone exit=0 czas=0s
+[2026-09-16T08:43:37Z] START 03-install
+[2026-09-16T08:43:39Z] END   03-install exit=0 czas=2s
+[2026-09-16T08:43:39Z] START 04-verify
+[2026-09-16T08:43:51Z] END   04-verify exit=0 czas=12s
+[2026-09-16T08:43:51Z] START 05-test-e2e
+[2026-09-16T08:48:49Z] END   05-test-e2e exit=0 czas=298s
+verify=0 e2e=0

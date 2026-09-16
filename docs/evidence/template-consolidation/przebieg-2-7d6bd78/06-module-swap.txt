@@ -1,0 +1,22 @@
+OK   lista plików repozytorium
+OK   kopia robocza — 206 plików → <katalog-tymczasowy>
+OK   warstwa składania przełączona na moduł kontrolny — usunięte trasy: casesRoute, caseDetailRoute, dataRoute, itemProvenanceRoute
+OK   połówka UI modułu przykładowego usunięta z kopii — packages/module-procurement/src/ui, eksport ./ui
+OK   pakiety platformy bez zmian — platform-contracts:fecfd5c95a78 platform-server:7619a7fea78a platform-ui:2b0bad7fed1d
+OK   zmienione pliki ograniczone do warstwy składania i modułu przykładowego — apps/server/src/compose.ts, apps/web/src/compose.tsx, apps/web/src/router.tsx; moduł przykładowy: 4 plików
+OK   pnpm install --frozen-lockfile
+OK   kontrola granicy platforma–domena
+OK   typecheck
+OK   build frontendu i backendu
+OK   serwer wystartował — http://127.0.0.1:43649; [server] modules: probe
+OK   rejestr: wyłącznie moduł kontrolny — moduły=["probe"]
+OK   narzędzia modułu kontrolnego zarejestrowane — probe_add_note, probe_list_notes
+OK   komponent modułu w katalogu, bez komponentów przykładu
+OK   trasa modułu /api/m/probe/notes — HTTP 200
+OK   kompozycja domyślna modułu walidowana katalogiem — HTTP 200, karta=probe.noteList
+OK   zakres modułu przykładowego nie daje kart — HTTP 200, karty=0
+OK   baza: tabela modułu kontrolnego, brak tabel przykładu — tabele=15
+OK   powłoka w przeglądarce: menu platformy bez ekranów przykładu — ☰Przestrzen pracyCanvasZapisane kompozycjePliki i raportyPliki i raportyUstawieniaUstawienia
+OK   ekrany platformy /files i /settings bez błędów strony
+OK   próba zakończona — 7 s
+exit=0

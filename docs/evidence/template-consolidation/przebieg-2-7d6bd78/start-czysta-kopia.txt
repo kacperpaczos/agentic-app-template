@@ -1,0 +1,21 @@
+kopia: <czysta kopia>; port: 45209; data: <kopia>/data (domyślny)
+OK   pnpm start: /api/health 200
+[server] dane bazowe: procurement, przestrzenie robocze: 1
+[server] http://localhost:45209
+[server] node=24.19.0 hono=4.13.7 sdk=0.3.270 mastra=1.66.0/0.3.1
+[server] modules: procurement
+[server] static: <kopia>/apps/web/dist
+OK   /api/status 200: moduły=["procurement"], narzędzia modułów=9, narzędzia platformy=25, komponenty=10
+     wersje: {"node":"24.19.0","hono":"4.13.7","drizzle":"0.45.2","mastraCore":"1.66.0","mastraClaude":"0.3.1","claudeAgentSdk":"0.3.270","zod":"4.6.5"}
+     auth (bez tokenów): metoda=subscription, poświadczenie=valid, dostęp=unverified
+OK   dane startowe: sprawy=["PC-2026-01"]
+     porównanie PC-2026-01: ["AV Technika Sp. z o.o.: suma=4983000 kompletność=100% ranking=2","MediaPro Systemy: suma=4927000 kompletność=100% ranking=1","Konferencje24: suma=2690000 kompletność=50% ranking=null","NordAV OY: suma=1112000 kompletność=100% ranking=null"]; wykluczone z rankingu: ["Konferencje24","NordAV OY"]
+OK   przestrzenie canvas po pierwszym starcie: 1
+     pliki: HTTP 200, 5
+OK   przeglądarka: menu="☰Przestrzen pracyCanvasZapisane kompozycjeSprawy zakupoweWszystkie sprawyDaneDostawcyPliki i raportyPliki i raportyUstawieniaUstawienia", błędy strony=0
+OK   zatrzymanie: proces zakończony
+OK   restart: sprawy=1, przestrzenie=1, ponowne zasiewanie w logu=false
+OK   pnpm seed: exit=0; [seed] modul procurement: juz zasiany (uzyj --force) | [seed] przestrzenie canvas: 1 | [seed] pliki: 5
+OK   pnpm seed --force: exit=0; [seed] modul procurement: gotowe | [seed] przestrzenie canvas: 1 | [seed] pliki: 5
+OK   po seed --force: sprawy=1 (bez duplikatów)
+OK   APP_SKIP_BASE_DATA=1: sprawy=0

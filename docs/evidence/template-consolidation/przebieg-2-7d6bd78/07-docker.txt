@@ -1,0 +1,44 @@
+docker build --no-cache --pull: exit=0 czas=129s
+#21 5.488 Progress: resolved 689, reused 616, downloaded 0, added 432
+#21 6.021 Progress: resolved 689, reused 616, downloaded 0, added 545, done
+rozmiar obrazu: 2834379266 bajtów; użytkownik: node; wolumeny: {"/data":{}}
+kontener na porcie hosta 50823: health=0
+<anonymous_script>:1
+
+
+SyntaxError: Unexpected end of JSON input
+    at JSON.parse (<anonymous>)
+    at Socket.<anonymous> ([eval]:1:70)
+    at Socket.emit (node:events:521:24)
+    at endReadableNT (node:internal/streams/readable:1736:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+Node.js v24.19.0
+<anonymous_script>:1
+
+
+SyntaxError: Unexpected end of JSON input
+    at JSON.parse (<anonymous>)
+    at Socket.<anonymous> ([eval]:1:70)
+    at Socket.emit (node:events:521:24)
+    at endReadableNT (node:internal/streams/readable:1736:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+Node.js v24.19.0
+ls: cannot access '/home/node/.claude': No such file or directory
+dist
+node_modules
+web
+app.db
+app.db-shm
+app.db-wal
+files
+session.secret
+workspaces
+[server] dane bazowe: procurement, przestrzenie robocze: 1
+[server] http://localhost:8791
+[server] node=24.21.0 hono=4.13.7 sdk=0.3.270 mastra=1.66.0/0.3.1
+[server] modules: procurement
+[server] static: /app/web
+sprzątanie: kontener, wolumen i obraz weryfikacyjny usunięte
+docker-check exit=0
