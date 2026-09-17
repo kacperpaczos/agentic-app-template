@@ -1,8 +1,8 @@
 import { AppError } from './errors.ts';
+import type { DataSort } from './ui.ts';
 import {
   NUMERIC_FIELD_TYPES,
   ROUTE_PLACEHOLDER,
-  type DataSort,
   type ReadResultDescriptor,
   type RecordField,
 } from './views.ts';

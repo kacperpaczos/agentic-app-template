@@ -48,6 +48,8 @@ export type Step =
       label?: string;
       /** Narrowing to apply; `null` restores the full view. */
       filter?: { predicates: Array<{ field: string; op: string; value: unknown }>; label: string } | null;
+      /** Order to apply; `null` restores the view's own order. */
+      sort?: { field: string; direction: 'asc' | 'desc' } | null;
     }
   | { kind: 'fail'; message: string };
 
@@ -160,6 +162,7 @@ export function scriptedAgent(steps: Step[], opts: ScriptedAgentOptions = {}): M
               spaceId?: string;
               label?: string;
               filter?: { predicates: unknown[]; label: string } | null;
+              sort?: { field: string; direction: 'asc' | 'desc' } | null;
             };
             const ctx = options?.toolContext;
             let outcome: Record<string, unknown> = { executed: false, reason: 'no_tool_context' };
@@ -176,16 +179,21 @@ export function scriptedAgent(steps: Step[], opts: ScriptedAgentOptions = {}): M
                           : { targetId: step.targetId, ...step.filter },
                     }
                   : {}),
+                ...(step.sort !== undefined ? { sort: step.sort } : {}),
               })) as Record<string, unknown>;
             }
             const counted = outcome.filtered as { matched: number; total: number } | undefined;
+            const sorted = outcome.sorted as { field: string; direction: string } | null | undefined;
+            const paged = outcome.page as { index: number; count: number } | undefined;
             yield {
               type: 'text-delta',
               payload: {
                 text:
                   `[ui:${step.label ?? step.targetId}] executed=${outcome.executed} ` +
                   `reason=${outcome.reason ?? '-'} ` +
-                  (counted ? `pokazane=${counted.matched}/${counted.total} ` : ''),
+                  (counted ? `pokazane=${counted.matched}/${counted.total} ` : '') +
+                  (sorted !== undefined ? `sortowanie=${sorted ? `${sorted.field}:${sorted.direction}` : '-'} ` : '') +
+                  (paged ? `strona=${paged.index}/${paged.count} ` : ''),
               },
             };
             continue;

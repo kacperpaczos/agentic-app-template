@@ -6,6 +6,7 @@ import {
   type ModuleToolDefinition,
   type ToolCallContext,
 } from '@platform/contracts';
+import { sortableFieldsOfTarget } from '../../registry/view-sorting.ts';
 import type { PlatformServices } from '../../services/index.ts';
 
 /**
@@ -40,6 +41,15 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
             field: f.field,
             label: f.label,
             values: f.values,
+          })),
+          /*
+           * Present only for a view whose records can be ordered: the declared,
+           * sortable fields of its primary read. `ui_sort` refuses anything else.
+           */
+          sortableFields: sortableFieldsOfTarget(services.modules, t.id)?.map((f) => ({
+            field: f.field,
+            label: f.label,
+            type: f.type,
           })),
         })),
         spaces: services.canvas.listSpaces(ctx.ownerId).map((sp) => ({
@@ -116,7 +126,8 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
         'filterableFields; pole spoza tej listy jest odrzucane. Zawsze podaj label — krotkie zdanie ' +
         'po polsku, ktore uzytkownik zobaczy nad widokiem. Przekaz clear=true, zeby przywrocic ' +
         'pelny widok. Zwraca to, co KLIENT faktycznie pokazal, razem z liczba wierszy ' +
-        '(filtered.matched z filtered.total) — podaj te liczby uzytkownikowi zamiast zgadywac.',
+        '(filtered.matched z filtered.total) i strona (page) — podaj te liczby uzytkownikowi zamiast ' +
+        'zgadywac. Zawezenie zmienia tylko prezentacje, nie dane.',
       effect: 'read',
       alwaysLoad: true,
       inputSchema: z.object({
@@ -215,6 +226,8 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
           url: result.url,
           cleared: clearing && result.executed,
           filtered: result.filtered,
+          // A narrowing returns to the first page; the view says how many there are.
+          page: result.page,
         };
       },
     },

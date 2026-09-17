@@ -18,7 +18,8 @@ export const supplierRecords: ReadResultDescriptor = {
     { field: 'name', label: 'Nazwa', type: 'text', sortable: true },
     { field: 'taxId', label: 'NIP', type: 'text' },
     { field: 'country', label: 'Kraj', type: 'text', sortable: true },
-    { field: 'contactEmail', label: 'Kontakt', type: 'text' },
+    // An address is a way to reach somebody, not a thing to put suppliers in order by.
+    { field: 'contactEmail', label: 'Kontakt', type: 'text', sortable: false },
   ],
 };
 
@@ -91,7 +92,7 @@ export const requirementRecords: ReadResultDescriptor = {
     { field: 'quantityMilli', label: 'Ilosc', type: 'quantity_milli', unitField: 'unit' },
     { field: 'unit', label: 'Jednostka', type: 'text' },
     { field: 'sku', label: 'Indeks', type: 'text' },
-    { field: 'spec', label: 'Specyfikacja', type: 'text' },
+    { field: 'spec', label: 'Specyfikacja', type: 'text', sortable: false },
   ],
 };
 
@@ -102,8 +103,12 @@ const op = (name: string) => `${MODULE_ID}.${name}`;
  * table is the platform's `DataTable`, bound to a registered read, so it holds
  * no data of its own and shows exactly what `POST /api/read` returns for the
  * signed-in owner. Positional arguments follow `dataTablePropsSchema`:
- * `DataTable(source, columns, title, pageSize, filter, sort)`.
+ * `DataTable(source, columns, title, pageSize, filter, sort)`; `null` skips an
+ * optional one (here the title — the page has its own heading).
  */
+
+/** Rows per page of a list screen; its narrowing, order and page live in the address. */
+const LIST_PAGE_SIZE = 10;
 export const procurementViews: ViewDefinition[] = [
   {
     id: 'procurement.data',
@@ -112,7 +117,7 @@ export const procurementViews: ViewDefinition[] = [
     composition: [
       'root = Stack([lead, suppliers])',
       'lead = TextContent("Dostawcy zarejestrowani w aplikacji.")',
-      `suppliers = DataTable({operation: "${op('suppliers')}"}, ["name", "taxId", "country", "contactEmail"])`,
+      `suppliers = DataTable({operation: "${op('suppliers')}"}, ["name", "taxId", "country", "contactEmail"], null, ${LIST_PAGE_SIZE})`,
     ].join('\n'),
   },
   {
@@ -122,7 +127,7 @@ export const procurementViews: ViewDefinition[] = [
     composition: [
       'root = Stack([lead, cases])',
       'lead = TextContent("Kazda sprawa ustala podstawe porownania: walute i to, czy ceny sa netto czy brutto.")',
-      `cases = DataTable({operation: "${op('cases')}"}, ["code", "title", "status", "currency", "priceBasis", "offerCount", "requirementCount"])`,
+      `cases = DataTable({operation: "${op('cases')}"}, ["code", "title", "status", "currency", "priceBasis", "offerCount", "requirementCount"], null, ${LIST_PAGE_SIZE})`,
     ].join('\n'),
   },
 ];

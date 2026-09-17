@@ -4,6 +4,7 @@ import { artifactTools } from './artifacts.ts';
 import { canvasTools } from './canvas.ts';
 import { contextTools } from './context.ts';
 import { fileTools } from './files.ts';
+import { uiSortTools } from './ui-sort.ts';
 import { uiTools } from './ui.ts';
 
 export { stageFileIntoWorkspace } from './files.ts';
@@ -25,6 +26,7 @@ export function platformTools(services: PlatformServices): ModuleToolDefinition<
     ...contextTools(services),
     ...canvasTools(services),
     ...uiTools(services),
+    ...uiSortTools(services),
     ...fileTools(services),
     ...artifactTools(services),
   ];
