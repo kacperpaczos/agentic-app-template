@@ -20,6 +20,7 @@ import {
 import {
   AgentRuntime,
   RunEventStream,
+  UiSnapshotStore,
   assertMcpCompatibleShape,
   buildSystemPrompt,
   collectToolEntries,
@@ -349,9 +350,27 @@ describe('sesja karty: wersje i publikacja', () => {
     expect(published?.version).toBe(2);
     expect(s.contextMarker()).toEqual({ version: 2, clientId: s.clientId, viewId: 'procurement.data', url: '/data?country=FI' });
 
-    // Nothing changed: flushing again sends nothing and answers with the same version.
-    expect((await s.flush())?.version).toBe(2);
+    // A debounced change that changes nothing sends nothing…
+    s.changed();
+    await new Promise((r) => setTimeout(r, 60));
     expect(order).toEqual([1, 2]);
+    // …while a flush sends the same version again (the backend may have restarted).
+    expect((await s.flush())?.version).toBe(2);
+    expect(order).toEqual([1, 2, 2]);
+  });
+
+  it('po restarcie backendu (pusty magazyn) flush przed poleceniem publikuje ekran ponownie, bez nowej wersji', async () => {
+    let store = new UiSnapshotStore();
+    const { s } = session({ send: async (snap) => store.publish(h.ownerId, snap) });
+    const first = await s.flush();
+    expect(store.evaluate(h.ownerId, 'cnv_a').version).toBe(first!.version);
+
+    store = new UiSnapshotStore(); // the backend restarted: descriptions live in memory
+    expect(store.evaluate(h.ownerId, 'cnv_a').reason).toBe('no_client');
+
+    const again = await s.flush();
+    expect(again!.version).toBe(first!.version);
+    expect(store.evaluate(h.ownerId, 'cnv_a')).toMatchObject({ stale: false, version: first!.version });
   });
 
   it('flush nie czeka dluzej niz timeout, gdy backend nie odpowiada', async () => {

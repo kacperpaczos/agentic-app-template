@@ -299,6 +299,12 @@ export class UiSnapshotSession {
   /**
    * Captures and publishes now, and resolves with the description the backend
    * accepted — or null when it did not within `timeoutMs`.
+   *
+   * Sent even when this version was accepted before: the backend keeps
+   * descriptions in memory, so after its restart it has none, and a tab whose
+   * screen has not changed would otherwise leave the agent at `no_client` for
+   * as long as the user keeps looking at it. Re-sending the same version is
+   * accepted without change.
    */
   async flush(opts: UiSnapshotFlushOptions = {}): Promise<UiSnapshot | null> {
     const settleMs = opts.settleMs ?? 0;
@@ -318,7 +324,7 @@ export class UiSnapshotSession {
       this.#timer = null;
     }
     this.capture();
-    const publication = this.#publishCurrent();
+    const publication = this.#publishCurrent(true);
     const timeoutMs = opts.timeoutMs ?? 2000;
     return Promise.race([publication, sleep(timeoutMs).then(() => null)]);
   }
@@ -327,12 +333,14 @@ export class UiSnapshotSession {
    * Publishes the current description, one publication at a time, so the
    * backend receives this tab's versions in order.
    */
-  #publishCurrent(): Promise<UiSnapshot | null> {
+  #publishCurrent(resend = false): Promise<UiSnapshot | null> {
     const run = this.#chain.then(async () => {
       const snapshot = this.#current;
       if (!snapshot) return null;
       const done = this.#published;
-      if (done && done.clientId === snapshot.clientId && done.version === snapshot.version) return snapshot;
+      if (!resend && done && done.clientId === snapshot.clientId && done.version === snapshot.version) {
+        return snapshot;
+      }
       try {
         await this.#send(snapshot);
         this.#published = snapshot;
