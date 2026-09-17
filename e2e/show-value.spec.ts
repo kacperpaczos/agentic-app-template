@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { expect, test } from './support/fixtures.ts';
 import { ScriptedInstance } from './support/scripted.ts';
 import { type Page } from '@playwright/test';
-import { recordsOf, type ReadResponse } from '@platform/contracts';
+import { formatFieldValue, recordsOf, type ReadResponse } from '@platform/contracts';
 
 /**
  * Showing the value of one record's field on screen (L2.16, L6.16; proba T25).
@@ -594,10 +594,11 @@ test.describe('wskazanie wartosci w tabeli z akcjami rekordu', () => {
     await expect(table).toHaveAttribute('data-state', 'ready');
     await watchHighlights(page);
 
-    /* The user opens the price form on a row of the first page and leaves it open. */
+    /* The user opens the price form on a row of the first page, types into it and leaves it open. */
     await table.locator(`tr[data-record-id="${onFirstPage.id}"] [data-record-action="${ACTION}"]`).click();
     const form = table.getByTestId('record-action-form');
     await expect(form).toHaveAttribute('data-record-id', String(onFirstPage.id));
+    await form.getByLabel('Nowa cena jednostkowa').fill('1 234,50');
 
     const { runId } = await sendForRun(page, `Pokaz cene tej pozycji [pozycja-sprawy] pozycja=${wanted.id}`);
     await settled(page);
@@ -622,17 +623,20 @@ test.describe('wskazanie wartosci w tabeli z akcjami rekordu', () => {
     ).toHaveCount(1);
 
     /*
-     * The form of the row that left the page is gone with its row, and the
-     * banner says the page was changed and by whom — the change is not silent,
-     * but the text typed into that form (nothing was typed here) would be lost.
+     * The form went off screen with its row — and the banner says the page was
+     * changed and by whom, so the change is not silent. What the turn does cost
+     * is the text typed into that form: the row unmounts, the action stays
+     * open, and the field comes back empty (the same as when the user pages
+     * themselves — see the report).
      */
     await expect(form).toHaveCount(0);
     await expect(notice(page)).toContainText('Zmieniono strone');
     await expect(notice(page)).toHaveAttribute('data-shown', 'true');
-    // Back on the first page the row is there again, and its form is not open.
     await table.getByTestId('data-page-prev').click();
     await expect(table.locator(`tr[data-record-id="${onFirstPage.id}"]`)).toHaveCount(1);
-    await expect(table.getByTestId('record-action-form')).toHaveCount(0);
+    const reopened = table.getByTestId('record-action-form');
+    await expect(reopened).toHaveAttribute('data-record-id', String(onFirstPage.id));
+    await expect(reopened.getByLabel('Nowa cena jednostkowa')).toHaveValue('');
   });
 
   test('(h) po akcji rekordu wskazana jest NOWA wartosc, zgodna ze swiezym odczytem backendu', async ({ page }) => {
@@ -674,7 +678,13 @@ test.describe('wskazanie wartosci w tabeli z akcjami rekordu', () => {
     expect(shown).toMatchObject({ executed: true, shown: true, matchesBackend: true });
     expect(shown.backend.rawValue).toBe(999950);
     expect(shown.revealed.rawValue).toBe(999950);
-    expect(shown.backend.displayedText).toContain('9 999,50');
+    // The text is the descriptor's own formatting of the new value, not a literal.
+    expect(shown.backend.displayedText).toBe(
+      formatFieldValue(changed, after.raw.descriptor!.fields.find((f) => f.field === 'unitPriceMinor')!),
+    );
+    expect(shown.backend.displayedText).not.toBe(
+      formatFieldValue(target, after.raw.descriptor!.fields.find((f) => f.field === 'unitPriceMinor')!),
+    );
     expect(await notShown(page, runId, {
       recordKind: 'offer_item',
       recordId: String(target.id),

@@ -266,7 +266,7 @@ export function revealNoticeText(notice: RevealNotice): { headline: string; subj
       a.kind === 'filter_cleared'
         ? `Zdjeto zawezenie: ${a.detail}.`
         : a.kind === 'page_changed'
-          ? `Zmieniono ${a.detail}.`
+          ? `Zmieniono strone: ${a.from ?? '?'} → ${a.to ?? '?'}.`
           : `${a.detail}.`,
     ),
     note: 'Zmiany dotycza tylko tego, co widac — dane sa bez zmian.',

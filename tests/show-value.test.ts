@@ -1177,6 +1177,7 @@ describe('zmiana prezentacji przezywa odmowe', () => {
     expect(text.headline).toBe('Agent zmienil widok, szukajac wartosci.');
     expect(text.subject).toContain('nie zostalo wskazane');
     expect(text.changes[0]).toBe('Zdjeto zawezenie: Kraj (kod ISO): PL.');
+    expect(text.changes[1]).toBe('Zmieniono strone: 1 → 2.');
   });
 
   it('komorka poza widocznym obszarem: not_visible z wartoscia, zmianami i paskiem', async () => {
