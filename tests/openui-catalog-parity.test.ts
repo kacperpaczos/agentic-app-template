@@ -3,8 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { ReadResultDescriptor } from '@platform/contracts';
 import { OpenUiServerCatalog } from '@platform/server';
 import { createProcurementModule } from '@module/procurement/server';
-import { procurementUiModule } from '@module/procurement/ui';
-import { buildRegistry, groupRecords, platformCardRenderers, readGate, withGrouping } from '@platform/ui';
+import { buildRegistry, groupRecords, platformCardRenderers, readGate, withGrouping, type UiModule } from '@platform/ui';
 import { buildDataModel } from '../packages/platform-ui/src/views/model.ts';
 import { createHarness } from './helpers.ts';
 
@@ -25,6 +24,13 @@ import { createHarness } from './helpers.ts';
 
 describe('zgodnosc katalogu OpenUI przegladarki i serwera', () => {
   it('te same komponenty i te same parametry w tej samej kolejnosci', async () => {
+    /*
+     * Imported at run time by a computed name: `check:module-swap` typechecks a
+     * copy without the example module's browser half, and that copy must not
+     * fail on a test of the module itself.
+     */
+    const moduleUi = '@module/procurement/ui';
+    const { procurementUiModule } = (await import(moduleUi)) as { procurementUiModule: UiModule };
     const h = await createHarness({ seed: false });
     try {
       const browser = buildRegistry({
