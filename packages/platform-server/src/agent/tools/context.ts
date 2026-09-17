@@ -29,6 +29,11 @@ export function contextTools(services: PlatformServices): Array<ModuleToolDefini
           filters: ctx.appContext.filters,
           viewport: ctx.appContext.viewport,
           unsavedDrafts: ctx.appContext.drafts,
+          /*
+           * Only the marker of the screen at send time (version, tab, view,
+           * address). What the screen shows now is `ui_state`'s answer.
+           */
+          ui: ctx.appContext.ui,
           note: 'unsavedDrafts to NIEZAPISANY stan formularza uzytkownika. To nie sa dane zapisane w bazie i nie wolno ich traktowac jak faktow.',
           workspaceDir: ctx.workspaceDir,
         };

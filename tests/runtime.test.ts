@@ -175,7 +175,7 @@ describe('rejestr uruchomien i cykl zycia zadania', () => {
       prompt: 'p',
       appContext: {
         conversationId: conv.id, spaceId: null, resource: null,
-        selection: [], filters: {}, viewport: null, drafts: [],
+        selection: [], filters: {}, viewport: null, drafts: [], ui: null,
       },
       workspaceDir: null,
       abort,
@@ -289,7 +289,7 @@ describe('strumien zdarzen AG-UI', () => {
       prompt: 'p',
       appContext: {
         conversationId: conv.id, spaceId: null, resource: null,
-        selection: [], filters: {}, viewport: null, drafts: [],
+        selection: [], filters: {}, viewport: null, drafts: [], ui: null,
       },
       workspaceDir: null,
       abort: new AbortController(),

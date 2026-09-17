@@ -5,6 +5,7 @@ import { canvasTools } from './canvas.ts';
 import { contextTools } from './context.ts';
 import { fileTools } from './files.ts';
 import { uiTools } from './ui.ts';
+import { uiStateTools } from './ui-state.ts';
 
 export { stageFileIntoWorkspace } from './files.ts';
 
@@ -25,6 +26,7 @@ export function platformTools(services: PlatformServices): ModuleToolDefinition<
     ...contextTools(services),
     ...canvasTools(services),
     ...uiTools(services),
+    ...uiStateTools(services),
     ...fileTools(services),
     ...artifactTools(services),
   ];

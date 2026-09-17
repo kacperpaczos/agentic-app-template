@@ -354,5 +354,12 @@ export const uiCommandResultSchema = z.object({
    * acknowledgement is that it means "the user is looking at it".
    */
   filtered: z.object({ matched: z.number(), total: z.number() }).optional(),
+  /**
+   * Version of the tab's interface description published after the command
+   * was carried out (see `uiSnapshotSchema`). The tab publishes before it
+   * acknowledges, so a reader asking for this version or newer is not asking
+   * for something still on its way. Absent when nothing could be published.
+   */
+  uiVersion: z.number().int().min(1).optional(),
 });
 export type UiCommandResult = z.infer<typeof uiCommandResultSchema>;

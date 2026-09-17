@@ -33,6 +33,13 @@ export type Step =
    *
    * `name` is the tool's local name (`ui_catalog`, `procurement_list_cases`) or
    * its exposed one (`mcp__app__ui_catalog`).
+   *
+   * A string `"$last.<path>"` anywhere in `input` is replaced by that value of
+   * the previous `ui` or `call` step's result (see {@link LAST_RESULT}) — how a
+   * scenario hands a version from one step's answer to the next call, as a
+   * model would. A path the previous result does not have becomes `null`, so
+   * the tool's own validation refuses the call visibly instead of the property
+   * silently disappearing.
    */
   | { kind: 'call'; name: string; input?: unknown; maxChars?: number }
   /** Time passing with nothing emitted — lets the browser settle and repaint. */
@@ -57,6 +64,28 @@ export interface ScriptedAgentOptions {
    * platform that owns them usually does not exist yet when the agent is built.
    */
   tools?: () => ToolEntry[];
+}
+
+/**
+ * Prefix of a placeholder resolved from the previous `ui` or `call` result,
+ * e.g. `{ minVersion: '$last.uiVersion' }`.
+ */
+export const LAST_RESULT = '$last.';
+
+/** Replaces `"$last.<path>"` strings in a call's input with values from the previous result. */
+export function resolveLastResult(input: unknown, last: unknown): unknown {
+  if (typeof input === 'string' && input.startsWith(LAST_RESULT)) {
+    let value: unknown = last;
+    for (const key of input.slice(LAST_RESULT.length).split('.')) {
+      value = value && typeof value === 'object' ? (value as Record<string, unknown>)[key] : undefined;
+    }
+    return value === undefined ? null : value;
+  }
+  if (Array.isArray(input)) return input.map((v) => resolveLastResult(v, last));
+  if (input && typeof input === 'object') {
+    return Object.fromEntries(Object.entries(input).map(([k, v]) => [k, resolveLastResult(v, last)]));
+  }
+  return input;
 }
 
 /** Default length of the result echoed into the answer by a `call` step. */
@@ -103,6 +132,8 @@ export function scriptedAgent(steps: Step[], opts: ScriptedAgentOptions = {}): M
     await fire('Stop', { session_id: 'sess_scripted' });
 
     let callSeq = 0;
+    /** What the previous `ui` or `call` step answered, for `$last.` placeholders. */
+    let lastResult: unknown = null;
     /*
      * Honours the abort signal, as the real SDK does. Without this a scripted
      * run would ignore a cancellation and finish anyway — which would make a
@@ -121,7 +152,7 @@ export function scriptedAgent(steps: Step[], opts: ScriptedAgentOptions = {}): M
           if (e.type === 'call') {
             const step = e.step as Extract<Step, { kind: 'call' }>;
             const localName = step.name.replace(/^mcp__app__/, '');
-            const input = step.input ?? {};
+            const input = resolveLastResult(step.input ?? {}, lastResult);
             callSeq += 1;
             const id = `tu_call_${callSeq}`;
             await fire('PreToolUse', { tool_use_id: id, tool_name: mcpToolName(localName), tool_input: input });
@@ -138,6 +169,11 @@ export function scriptedAgent(steps: Step[], opts: ScriptedAgentOptions = {}): M
                 ? refusal('unsupported_operation', 'Brak kontekstu wykonania dla wywolania narzedzia.')
                 : await invokeTool(entry, input, ctx);
             const text = outcome.content.map((c) => c.text).join('');
+            try {
+              lastResult = JSON.parse(text);
+            } catch {
+              lastResult = null;
+            }
 
             if (outcome.isError) await fire('PostToolUseFailure', { tool_use_id: id, error: text });
             else await fire('PostToolUse', { tool_use_id: id, tool_response: text });
@@ -179,13 +215,15 @@ export function scriptedAgent(steps: Step[], opts: ScriptedAgentOptions = {}): M
               })) as Record<string, unknown>;
             }
             const counted = outcome.filtered as { matched: number; total: number } | undefined;
+            lastResult = outcome;
             yield {
               type: 'text-delta',
               payload: {
                 text:
                   `[ui:${step.label ?? step.targetId}] executed=${outcome.executed} ` +
                   `reason=${outcome.reason ?? '-'} ` +
-                  (counted ? `pokazane=${counted.matched}/${counted.total} ` : ''),
+                  (counted ? `pokazane=${counted.matched}/${counted.total} ` : '') +
+                  (outcome.uiVersion !== undefined ? `uiVersion=${outcome.uiVersion} ` : ''),
               },
             };
             continue;

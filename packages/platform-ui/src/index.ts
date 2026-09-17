@@ -21,6 +21,8 @@ export * from './shell/SettingsPage.tsx';
 export * from './shell/FilesPage.tsx';
 export * from './shell/WorkspacePage.tsx';
 export * from './state/uiSemantics.ts';
+export * from './state/uiSnapshot.ts';
+export * from './shell/UiSnapshotPublisher.tsx';
 export * from './state/viewFilter.ts';
 export * from './components/RenderErrorBoundary.tsx';
 export * from './views/ComposedView.tsx';

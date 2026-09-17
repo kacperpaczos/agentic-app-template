@@ -18,6 +18,7 @@ import {
   type AppContext,
   type StoredMessage,
   uiCommandResultSchema,
+  UI_SNAPSHOT_MAX_BYTES,
 } from '@platform/contracts';
 import { probeAuth } from '../agent/auth.ts';
 import { AgentRuntime } from '../agent/runtime.ts';
@@ -92,7 +93,7 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
       c.header('Access-Control-Allow-Credentials', 'true');
       c.header('Vary', 'Origin');
       c.header('Access-Control-Allow-Headers', 'content-type, x-app-user');
-      c.header('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+      c.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
     }
     if (c.req.method === 'OPTIONS') return c.body(null, 204);
     return next();
@@ -451,6 +452,49 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
   app.get('/api/ui/views', (c) => {
     c.get('ownerId');
     return json(c, { views: services.modules.views() });
+  });
+
+  /**
+   * A tab publishing what it shows (`uiSnapshotSchema`).
+   *
+   * The owner is the session's; the description names only what is on screen.
+   * The body is read as text so its size is checked before it is parsed.
+   * Refused with `validation_failed` (too large, malformed) or `conflict` (a
+   * version that does not advance the tab's counter — the tab takes a new
+   * identity and publishes again).
+   */
+  app.put('/api/ui/snapshot', async (c) => {
+    const ownerId = c.get('ownerId');
+    const declared = Number(c.req.header('content-length') ?? '0');
+    if (declared > UI_SNAPSHOT_MAX_BYTES) {
+      throw new AppError('validation_failed', `Opis interfejsu przekracza ${UI_SNAPSHOT_MAX_BYTES} bajtow.`, {
+        reason: 'too_large',
+        limit: UI_SNAPSHOT_MAX_BYTES,
+      });
+    }
+    return json(c, { accepted: true, ...services.uiSnapshots.publishRaw(ownerId, await c.req.text()) });
+  });
+
+  /**
+   * The description the agent would be given for a conversation — the same
+   * evaluation as `ui_state`, without waiting — or one tab's latest. Only the
+   * signed-in owner's own tabs are ever visible. For diagnostics and tests.
+   */
+  app.get('/api/ui/snapshot', (c) => {
+    const ownerId = c.get('ownerId');
+    const clientId = c.req.query('clientId');
+    if (clientId) return json(c, { snapshot: services.uiSnapshots.forClient(ownerId, clientId) });
+    const conversationId = c.req.query('conversationId');
+    if (!conversationId) {
+      throw new AppError('validation_failed', 'Podaj conversationId albo clientId.');
+    }
+    const minVersion = Number(c.req.query('minVersion'));
+    return json(
+      c,
+      services.uiSnapshots.evaluate(ownerId, conversationId, {
+        ...(Number.isInteger(minVersion) && minVersion > 0 ? { minVersion } : {}),
+      }),
+    );
   });
 
   /* -------------------------------- reads ------------------------------- */

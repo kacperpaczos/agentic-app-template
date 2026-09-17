@@ -46,6 +46,7 @@ const EMPTY_CONTEXT = (conversationId: string) => ({
   filters: {},
   viewport: null,
   drafts: [],
+  ui: null,
 });
 
 /**

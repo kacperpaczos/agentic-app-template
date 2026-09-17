@@ -104,6 +104,8 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
           label: known.label,
           url: result.url,
           highlighted: result.highlighted ?? false,
+          // The screen's description version after the move; pass it to ui_state as minVersion.
+          uiVersion: result.uiVersion,
         };
       },
     },
@@ -215,6 +217,7 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
           url: result.url,
           cleared: clearing && result.executed,
           filtered: result.filtered,
+          uiVersion: result.uiVersion,
         };
       },
     },

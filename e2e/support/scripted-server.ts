@@ -181,6 +181,51 @@ const SCENARIOS: Record<string, Step[]> = {
     { kind: 'call', name: 'ui_catalog', maxChars: 4000 },
     { kind: 'text', text: 'Odczytalem katalog.' },
   ],
+  /*
+   * Reading the screen's description (`ui_state`), as the agent would.
+   * The full results are in the conversation's tool messages; the chat shows
+   * the start of each so a test can see which call answered what.
+   */
+  'ui-state-read': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'call', name: 'ui_state', maxChars: 160 },
+    { kind: 'text', text: 'Odczytalem opis ekranu.' },
+  ],
+  /*
+   * Narrow through the real `ui_filter` handler and gate, then read the screen
+   * asking for at least the version the acknowledgement carried — and then the
+   * context the command itself was sent with.
+   */
+  'ui-state-after-filter': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'call', name: 'ui_state', maxChars: 160 },
+    {
+      kind: 'call',
+      name: 'ui_filter',
+      input: {
+        targetId: 'procurement.data',
+        predicates: [{ field: 'country', op: 'eq', value: 'PL' }],
+        label: 'tylko dostawcy z Polski',
+      },
+      maxChars: 400,
+    },
+    { kind: 'call', name: 'ui_state', input: { minVersion: '$last.uiVersion' }, maxChars: 160 },
+    { kind: 'call', name: 'get_context', maxChars: 160 },
+    { kind: 'text', text: 'Opisalem ekran po zawezeniu.' },
+  ],
+  /* A version no tab has published: the answer must be stale, after the wait. */
+  'ui-state-future-version': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'call', name: 'ui_state', input: { minVersion: 1_000_000, waitMs: 1500 }, maxChars: 160 },
+    { kind: 'text', text: 'Nie mam tak nowego opisu.' },
+  ],
+  /* Reads the screen late, after the user may have moved to another conversation. */
+  'ui-state-late': [
+    { kind: 'text', text: 'Zaczynam prace w tle. ', delayMs: 200 },
+    { kind: 'wait', delayMs: 8000 },
+    { kind: 'call', name: 'ui_state', maxChars: 160 },
+    { kind: 'text', text: 'Koniec pracy w tle.' },
+  ],
   'tool-error': [
     {
       kind: 'tool',

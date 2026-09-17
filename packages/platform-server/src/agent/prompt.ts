@@ -49,6 +49,16 @@ export function buildSystemPrompt(input: PromptInput): string {
     input.resourceSummary ? `- opis zasobu: ${input.resourceSummary}` : '',
     `- zaznaczenie: ${ctx.selection.length ? ctx.selection.map((s) => `${s.kind}:${s.id}`).join(', ') : '(brak)'}`,
     `- filtry: ${Object.keys(ctx.filters).length ? JSON.stringify(ctx.filters) : '(brak)'}`,
+    /*
+     * The marker of the screen at send time. The description itself is not in
+     * the prompt: by the time the agent acts on it, it may be gone — `ui_state`
+     * reads the current one and says whether it is newer than this.
+     */
+    `- ekran przy wyslaniu polecenia: ${
+      ctx.ui
+        ? `opis w wersji ${ctx.ui.version} (karta ${ctx.ui.clientId}), widok ${ctx.ui.viewId ?? '(brak)'}, adres ${ctx.ui.url}`
+        : '(brak opisu)'
+    }`,
     ctx.drafts.length
       ? `- niezapisane szkice: ${ctx.drafts.map((d) => `${d.entity}/${d.entityId ?? 'nowy'} (${d.dirtyFields.join(',')})`).join('; ')}`
       : '',
@@ -192,6 +202,21 @@ export function buildSystemPrompt(input: PromptInput): string {
       'uzytkownik zobaczy to zdanie nad widokiem razem z przyciskiem powrotu do pelnego widoku.',
       'Wynik zawiera filtered.matched i filtered.total — podaj te liczby zamiast liczyc samodzielnie.',
       'Zeby przywrocic pelny widok, wywolaj ui_filter z clear=true.',
+      '',
+      '## Stan ekranu',
+      /*
+       * The confirmation of a command says the client carried it out, not what
+       * the screen shows afterwards — the rows left, whether the table is still
+       * loading, which view composition. Describing the screen from what was
+       * asked for is exactly the stale answer this section exists to prevent.
+       */
+      `Co uzytkownik ma teraz na ekranie, odczytujesz przez ${mcpToolName('ui_state')}: widok z wersja kompozycji, karty,`,
+      'komponenty danych (stan, pola z etykietami, filtr, sortowanie, widoczne rekordy, liczby) i dozwolone akcje.',
+      'Po ui_navigate, ui_filter lub ui_sort wywolaj ui_state z minVersion = uiVersion z ich wyniku, ZANIM opiszesz ekran.',
+      'Nie opisuj ekranu na podstawie tego, o co prosiles, ani opisu ze stale=true — wtedy powiedz, czego nie wiesz (reason).',
+      'Komponent ze state=loading jeszcze nic nie pokazuje: odczytaj ponownie z minVersion = version + 1.',
+      'Porownuj wersje z „ekran przy wyslaniu polecenia” w kontekscie: nizsza wersja tej samej karty jest starsza niz to,',
+      'co uzytkownik widzial, wysylajac polecenie.',
       ...uiTargets.map(
         (t) =>
           `- ${t.id} [${t.kind}] ${t.label}: ${t.description}` +

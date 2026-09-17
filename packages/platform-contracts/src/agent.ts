@@ -39,6 +39,22 @@ export const appContextSchema = z.object({
     )
     .max(20)
     .default([]),
+  /**
+   * The tab's interface description at the moment the command was sent: its
+   * version, which tab, which view and address. Only the marker travels here —
+   * the description itself is read with `ui_state`, which can then say whether
+   * what it found is older or newer than what the user was looking at when
+   * they asked. Null when the tab had not described its screen yet.
+   */
+  ui: z
+    .object({
+      version: z.number().int().min(1),
+      clientId: z.string().max(80),
+      viewId: z.string().max(120).nullable(),
+      url: z.string().max(2000),
+    })
+    .nullable()
+    .default(null),
 });
 export type AppContext = z.infer<typeof appContextSchema>;
 
@@ -50,6 +66,7 @@ export const EMPTY_APP_CONTEXT: AppContext = {
   filters: {},
   viewport: null,
   drafts: [],
+  ui: null,
 };
 
 export const runStatusSchema = z.enum([

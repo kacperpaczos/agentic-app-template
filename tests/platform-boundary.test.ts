@@ -96,7 +96,7 @@ describe('platforma dziala bez modulu zakupowego', () => {
         ownerId: DEFAULT_USER_ID,
         appContext: {
           conversationId: null, spaceId: null, resource: null,
-          selection: [], filters: {}, viewport: null, drafts: [],
+          selection: [], filters: {}, viewport: null, drafts: [], ui: null,
         },
         conversationId: null,
         runId: null,
