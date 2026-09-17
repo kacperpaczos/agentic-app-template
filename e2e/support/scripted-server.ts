@@ -225,6 +225,20 @@ const SCENARIOS: Record<string, Step[]> = {
     { kind: 'text', text: 'Powtorzylem zawezenie i sortowanie.' },
   ],
   /*
+   * An exact narrowing on a text field (`eq`), which the user's controls, where
+   * a text field means "contains", must not widen when a different field is
+   * changed.
+   */
+  'viewstate-exact-name': [
+    { kind: 'wait', delayMs: 150 },
+    {
+      kind: 'call',
+      name: 'ui_filter',
+      input: { targetId: 'procurement.data', predicates: [{ field: 'name', op: 'eq', value: 'NordAV' }], label: 'dokladnie NordAV' },
+    },
+    { kind: 'text', text: 'Zawezilem do nazwy NordAV.' },
+  ],
+  /*
    * Orders the view cannot take: a field the read does not have and one it
    * declares unsortable. Both must be refused by name, before the browser is
    * asked for anything, and the screen must stay as it was.

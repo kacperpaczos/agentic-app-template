@@ -35,7 +35,8 @@ export function uiSortTools(services: PlatformServices): Array<ModuleToolDefinit
         'Ustawia kolejnosc wierszy widoku wedlug jednego pola (rosnaco albo malejaco) — tak odpowiadasz ' +
         'na prosby typu "posortuj po X". Nie przepisuj posortowanych wierszy do rozmowy. Pola, po ktorych ' +
         'wolno sortowac, podaje ui_catalog jako sortableFields; inne pole jest odrzucane (unknown_field ' +
-        'albo not_sortable) z lista dozwolonych. clear=true przywraca domyslny porzadek widoku. ' +
+        'albo not_sortable) z lista dozwolonych. clear=true przywraca domyslny porzadek widoku (tylko widoku, ktory ' +
+        'ma sortowalne rekordy; inny cel odpowiada not_sortable i nic nie zmienia). ' +
         'Sortowanie zmienia tylko prezentacje, nie dane. Zmiana kolejnosci wraca do pierwszej strony. ' +
         'Zwraca to, co KLIENT faktycznie pokazal: sorted (pole i kierunek) i page (strona, rozmiar, ' +
         'liczba stron). Jesli executed=false, nie twierdz, ze widok jest posortowany.',
@@ -63,27 +64,32 @@ export function uiSortTools(services: PlatformServices): Array<ModuleToolDefinit
           };
         }
 
-        // Putting a view back in its own order never depends on what it declares.
         const clearing = input.clear === true;
+        if (!clearing && !input.field) {
+          throw new AppError(
+            'validation_failed',
+            'Podaj field (pole z sortableFields) albo clear=true, zeby przywrocic domyslny porzadek.',
+          );
+        }
+        /*
+         * A target whose view has no records to order has no order to set — and
+         * none to clear. Answered here, before the browser is asked: "cleared"
+         * would be a success nothing applied, and performing it would move the
+         * user to that target's screen for nothing.
+         */
+        const primary = primaryDescriptorOf(services.modules, known.id);
+        if (!primary) {
+          return {
+            executed: false,
+            reason: UI_COMMAND_FAILURES.notSortable,
+            targetId: known.id,
+            label: known.label,
+            ...(clearing ? {} : { requested: input.field }),
+            available: [],
+          };
+        }
         let sort: { field: string; direction: 'asc' | 'desc' } | null = null;
         if (!clearing) {
-          if (!input.field) {
-            throw new AppError(
-              'validation_failed',
-              'Podaj field (pole z sortableFields) albo clear=true, zeby przywrocic domyslny porzadek.',
-            );
-          }
-          const primary = primaryDescriptorOf(services.modules, known.id);
-          if (!primary) {
-            return {
-              executed: false,
-              reason: UI_COMMAND_FAILURES.notSortable,
-              targetId: known.id,
-              label: known.label,
-              requested: input.field,
-              available: [],
-            };
-          }
           const check = checkSortField(primary.descriptor, input.field);
           if (!check.ok) {
             return {

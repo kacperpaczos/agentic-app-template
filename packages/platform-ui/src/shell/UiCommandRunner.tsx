@@ -1,11 +1,8 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import {
   UI_COMMAND_FAILURES,
-  applySearchPatch,
-  parseAddressSearch,
   viewAddressKey,
-  viewStatePatch,
   type UiCommand,
   type UiCommandResult,
   type UiTarget,
@@ -14,6 +11,7 @@ import {
 import { apiGet, apiPost } from '../api/client.ts';
 import { useAppState, type ViewStateReport } from '../state/appState.ts';
 import { setUiCommandHandler } from '../chat/runEvents.ts';
+import { cachedLoader, planViewCommand } from './uiCommandPlan.ts';
 
 /**
  * Performs the agent's interface commands — and reports back what really
@@ -33,7 +31,10 @@ import { setUiCommandHandler } from '../chat/runEvents.ts';
  *  - `no_client` — added by the server when nothing answered at all;
  *  - `not_filterable` / `unknown_field` — the view declares no narrowing, or the
  *    agent named a property it does not declare;
- *  - `not_sortable` — an order for a target with no view that can be ordered;
+ *  - `not_sortable` — an order (or clearing one) for a target with no view that
+ *    can be ordered;
+ *  - `views_unavailable` — the view definitions could not be loaded, so a
+ *    change of a view's state could not be judged; nothing was done;
  *  - `not_applied` — the narrowing or order was accepted but no view reported
  *    applying it. Distinct from narrowing to nothing: "your screen now shows
  *    none of the rows" is an answer, "your screen is unchanged" is a defect,
@@ -61,7 +62,11 @@ export function UiCommandRunner() {
   const reportFilterOutcome = useAppState((s) => s.reportFilterOutcome);
   const handled = useRef(new Set<string>());
   const catalog = useRef<UiTarget[] | null>(null);
-  const views = useRef<ViewDefinition[] | null>(null);
+  // View definitions, loaded on the first command that needs them; a failed load is retried.
+  const loadViews = useMemo(
+    () => cachedLoader(async () => (await apiGet<{ views: ViewDefinition[] }>('/api/ui/views')).views),
+    [],
+  );
 
   /** Scrolls to the element and marks it, returning whether it was found. */
   const reveal = useCallback(async (selector: string | undefined): Promise<boolean> => {
@@ -109,61 +114,27 @@ export function UiCommandRunner() {
       // `SpaceSync`, so Back returns to the previous one.
       if (command.spaceId) setSpace(command.spaceId);
 
-      if (!views.current) {
-        try {
-          views.current = (await apiGet<{ views: ViewDefinition[] }>('/api/ui/views')).views;
-        } catch {
-          views.current = [];
-        }
-      }
-      // Views that report their state: a primary instance reads this target's view.
-      const reportingView = Boolean(views.current.find((v) => v.id === target.id)?.primaryOperation);
-
       /*
        * A narrowing and an order are changes of address, not of client state.
        *
        * They become search parameters (`?country=PL&sort=-name`), so the view
        * can be linked, reloaded and undone with Back — see `state/viewFilter.ts`.
        * For each, `undefined` leaves the address alone, `null` clears it, and a
-       * value sets it; `viewStatePatch` applies the rules both share (a new
-       * narrowing replaces the old one, either change returns to page 1).
+       * value sets it. Which commands are refused, where a command leads and
+       * whether a view must confirm it is decided in `planViewCommand`.
        */
       const narrowing = command.filter;
       const ordering = command.sort;
       const changesView = narrowing !== undefined || ordering !== undefined;
-      const filterFields = (target.filter?.fields ?? []).map((f) => f.field);
-
-      if (narrowing) {
-        if (!target.filter || !target.to) {
-          // A narrowing belongs to a screen, and this target declares none — or
-          // has no screen of its own to narrow.
-          return { ...base, executed: false, reason: UI_COMMAND_FAILURES.notFilterable };
-        }
-        const declared = new Set(filterFields);
-        if (narrowing.predicates.some((p) => !declared.has(p.field))) {
-          return { ...base, executed: false, reason: UI_COMMAND_FAILURES.unknownField };
-        }
-      }
-      if (ordering && (!target.to || !reportingView)) {
-        // Only a view with a primary instance knows the fields it can be ordered by.
-        return { ...base, executed: false, reason: UI_COMMAND_FAILURES.notSortable };
-      }
-
-      /*
-       * The address the command leads to. Parameters belong to the screen they
-       * were set on: staying on it keeps them, arriving from another screen
-       * starts clean (the session's `c` and `s` are retained by the router), so
-       * one view's order or page is never carried onto another.
-       */
-      const samePath = target.to !== undefined && window.location.pathname === target.to;
-      const patch = changesView
-        ? viewStatePatch(filterFields, {
-            ...(narrowing !== undefined ? { predicates: narrowing?.predicates ?? null } : {}),
-            ...(ordering !== undefined ? { sort: ordering } : {}),
-          })
-        : {};
-      const expected = applySearchPatch(samePath ? parseAddressSearch(window.location.search) : {}, patch);
-      const expectedKey = viewAddressKey(expected, filterFields);
+      const plan = planViewCommand({
+        command,
+        target,
+        // Only a change of a view's state needs the view definitions.
+        views: changesView ? await loadViews() : [],
+        location: { pathname: window.location.pathname, search: window.location.search },
+      });
+      if (plan.kind === 'refuse') return { ...base, executed: false, reason: plan.reason };
+      const { filterFields, reportingView, samePath, patch, expected, expectedKey, unchanged, awaitsView } = plan;
 
       /*
        * The same state asked for again changes nothing in the address, so no
@@ -172,8 +143,6 @@ export function UiCommandRunner() {
        * matches the address and answers it; a module screen's narrowing count
        * is kept rather than reset, since it describes this very address.
        */
-      const unchanged =
-        samePath && viewAddressKey(parseAddressSearch(window.location.search), filterFields) === expectedKey;
       const standingOutcome = useAppState.getState().filterOutcome;
 
       if (changesView) {
@@ -210,11 +179,6 @@ export function UiCommandRunner() {
        */
       let filtered: { matched: number; total: number } | undefined;
       let viewReport: ViewStateReport | null = null;
-      // Setting a narrowing always expects a view to apply it; clearing, or any
-      // order, is only observable on a view that reports its state.
-      const awaitsView = Boolean(
-        target.to && (narrowing || (reportingView && (narrowing === null || ordering !== undefined))),
-      );
       if (awaitsView) {
         for (let attempt = 0; attempt < VIEW_REPORT_ATTEMPTS; attempt += 1) {
           const state = useAppState.getState();
@@ -269,7 +233,7 @@ export function UiCommandRunner() {
         url: window.location.pathname + window.location.search,
       };
     },
-    [navigate, reveal, setSpace, setAgentFilterKey, reportFilterOutcome],
+    [navigate, reveal, setSpace, setAgentFilterKey, reportFilterOutcome, loadViews],
   );
 
   useEffect(() => {

@@ -32,6 +32,7 @@ import {
 import { buildDataModel, describeDataInstance } from '../packages/platform-ui/src/views/model.ts';
 import { useAppState, type ViewStateReport } from '../packages/platform-ui/src/state/appState.ts';
 import { nextSort } from '../packages/platform-ui/src/views/DataTableControls.tsx';
+import { cachedLoader, planViewCommand } from '../packages/platform-ui/src/shell/uiCommandPlan.ts';
 import { createHarness, type Harness } from './helpers.ts';
 
 /**
@@ -531,11 +532,27 @@ describe('ui_sort', () => {
     expect(emitted).toHaveLength(0);
   });
 
-  it('clear=true wysyla sort: null (nie brak) i dziala na kazdym celu', async () => {
-    const { result, emitted } = await callTool('ui_sort', { targetId: 'platform.settings', clear: true }, sortedBy());
+  it('clear=true na widoku z rekordami wysyla sort: null (nie brak)', async () => {
+    const { result, emitted } = await callTool('ui_sort', { targetId: 'procurement.data', clear: true }, sortedBy());
     expect(emitted).toHaveLength(1);
     expect(emitted[0]!.sort).toBeNull();
     expect(result).toMatchObject({ executed: true, cleared: true, sorted: null });
+  });
+
+  it('clear=true na celu bez widoku z rekordami: not_sortable, bez komendy i bez przeniesienia uzytkownika', async () => {
+    /*
+     * There is no order to clear there. "cleared" would be a success nothing
+     * applied — and performing it moved the user to that target's screen.
+     */
+    const { result, emitted } = await callTool('ui_sort', { targetId: 'platform.settings', clear: true }, sortedBy());
+    expect(result).toEqual({
+      executed: false,
+      reason: UI_COMMAND_FAILURES.notSortable,
+      targetId: 'platform.settings',
+      label: 'Ustawienia',
+      available: [],
+    });
+    expect(emitted).toHaveLength(0);
   });
 
   it('odmowa klienta (not_applied) jest raportowana, nie nadpisywana', async () => {
@@ -642,10 +659,107 @@ describe('ui_sort', () => {
     expect(prompt).toContain('ZAWEZENIE I SORTOWANIE ZMIENIAJA TYLKO PREZENTACJE');
     expect(prompt).toMatch(/procurement\.data \[view\].*sortowanie po: name, taxId, country/);
     expect(prompt).not.toMatch(/sortowanie po: [^\n]*contactEmail/);
+    // The target list sits where "ponizsza lista" points: under interface control,
+    // before the narrowing and ordering sections, which stay self-contained.
+    const control = prompt.indexOf('# Sterowanie interfejsem');
+    const list = prompt.indexOf('- procurement.data [view]');
+    const narrowing = prompt.indexOf('## Zawezanie widoku');
+    const ordering = prompt.indexOf('## Sortowanie i strony widoku');
+    expect(control).toBeGreaterThan(-1);
+    expect(list).toBeGreaterThan(control);
+    expect(narrowing).toBeGreaterThan(list);
+    expect(ordering).toBeGreaterThan(narrowing);
+    expect(prompt.slice(ordering)).not.toMatch(/^- (platform|procurement)\./m);
     expect(prompt).toContain(
       '- stan widoku procurement.data (tylko prezentacja, dane bez zmian): zawezenie country in PL|CZ; ' +
         'sortowanie name malejaco; strona 2 z 3 (po 10); pokazane 23 z 30',
     );
+  });
+});
+
+describe('plan polecenia UI w przegladarce (UiCommandRunner)', () => {
+  const dataTarget: UiTarget = {
+    id: 'm.data',
+    kind: 'view',
+    label: 'Dane',
+    description: 'x',
+    to: '/data',
+    filter: { collection: 'rows', fields: [{ field: 'country', label: 'Kraj' }, { field: 'name', label: 'Nazwa' }] },
+  };
+  const settingsTarget: UiTarget = { id: 'p.settings', kind: 'view', label: 'Ustawienia', description: 'x', to: '/settings' };
+  const views = [{ id: 'm.data', title: 'Dane', composition: 'root = Stack([])', primaryOperation: 'm.rows' }];
+  const onData = { pathname: '/data', search: '?country=PL&sort=-name&page=2&c=cnv_1' };
+
+  it('nieudane wczytanie widokow nie jest zapamietywane: kolejne polecenie probuje ponownie', async () => {
+    let calls = 0;
+    const load = cachedLoader(async () => {
+      calls += 1;
+      if (calls === 1) throw new Error('siec');
+      return ['widok'];
+    });
+    expect(await load()).toBeNull();
+    expect(await load()).toEqual(['widok']);
+    expect(await load()).toEqual(['widok']);
+    // Loaded once, then kept.
+    expect(calls).toBe(2);
+  });
+
+  it('bez definicji widokow zmiana stanu widoku to views_unavailable — nie not_sortable i nie niesprawdzony sukces', () => {
+    const plan = (command: Parameters<typeof planViewCommand>[0]['command'], target = dataTarget) =>
+      planViewCommand({ command, target, views: null, location: onData });
+    expect(plan({ sort: { field: 'name', direction: 'asc' } })).toEqual({ kind: 'refuse', reason: 'views_unavailable' });
+    expect(plan({ sort: null })).toEqual({ kind: 'refuse', reason: 'views_unavailable' });
+    expect(plan({ filter: null })).toEqual({ kind: 'refuse', reason: 'views_unavailable' });
+    expect(plan({ filter: { targetId: 'm.data', predicates: [{ field: 'country', op: 'eq', value: 'FI' }], label: 'x' } })).toEqual({
+      kind: 'refuse',
+      reason: 'views_unavailable',
+    });
+    // Refusals that do not depend on views keep their own reason.
+    expect(plan({ filter: { targetId: 'm.data', predicates: [{ field: 'x', op: 'eq', value: 'y' }], label: 'x' } })).toEqual({
+      kind: 'refuse',
+      reason: 'unknown_field',
+    });
+    // A plain navigation needs no views.
+    expect(planViewCommand({ command: {}, target: settingsTarget, views: [], location: onData })).toMatchObject({
+      kind: 'apply',
+      changesView: false,
+      awaitsView: false,
+      patch: {},
+    });
+  });
+
+  it('z definicjami widokow: sortowanie i czyszczenie na widoku czekaja na raport widoku', () => {
+    const sorted = planViewCommand({ command: { sort: { field: 'name', direction: 'asc' } }, target: dataTarget, views, location: onData });
+    expect(sorted).toMatchObject({ kind: 'apply', reportingView: true, samePath: true, awaitsView: true, unchanged: false });
+    if (sorted.kind === 'apply') {
+      expect(sorted.patch).toStrictEqual({ sort: 'name', page: undefined });
+      expect(sorted.expected).toEqual({ country: 'PL', sort: 'name', c: 'cnv_1' });
+    }
+    expect(planViewCommand({ command: { filter: null }, target: dataTarget, views, location: onData })).toMatchObject({
+      kind: 'apply',
+      awaitsView: true,
+    });
+    expect(planViewCommand({ command: { sort: null }, target: dataTarget, views, location: onData })).toMatchObject({
+      kind: 'apply',
+      awaitsView: true,
+    });
+    // The same order again: nothing in the address changes.
+    expect(
+      planViewCommand({ command: { sort: { field: 'name', direction: 'desc' } }, target: dataTarget, views, location: { pathname: '/data', search: '?country=PL&sort=-name' } }),
+    ).toMatchObject({ kind: 'apply', unchanged: true, awaitsView: true });
+    // From another screen the view's parameters start clean.
+    const fromCases = planViewCommand({ command: { sort: { field: 'name', direction: 'asc' } }, target: dataTarget, views, location: { pathname: '/cases', search: '?sort=-code&page=3' } });
+    expect(fromCases).toMatchObject({ kind: 'apply', samePath: false, expected: { sort: 'name' } });
+  });
+
+  it('czyszczenie porzadku celu bez widoku z rekordami: not_sortable, bez nawigacji', () => {
+    expect(planViewCommand({ command: { sort: null }, target: settingsTarget, views, location: onData })).toEqual({
+      kind: 'refuse',
+      reason: 'not_sortable',
+    });
+    expect(
+      planViewCommand({ command: { sort: { field: 'x', direction: 'asc' } }, target: settingsTarget, views, location: onData }),
+    ).toEqual({ kind: 'refuse', reason: 'not_sortable' });
   });
 });
 
@@ -663,5 +777,6 @@ describe('kontrakt polecenia UI', () => {
       uiCommandResultSchema.parse({ commandId: 'x', executed: true, sorted: null, page: { index: 1, size: 10, count: 2 } }),
     ).toMatchObject({ sorted: null, page: { index: 1, size: 10, count: 2 } });
     expect(UI_COMMAND_FAILURES.notSortable).toBe('not_sortable');
+    expect(UI_COMMAND_FAILURES.viewsUnavailable).toBe('views_unavailable');
   });
 });

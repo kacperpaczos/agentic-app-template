@@ -41,12 +41,24 @@ function draftFor(fields: FilterField[], predicates: ViewFilterPredicate[]): Rec
   return out;
 }
 
+/** How an applied predicate on a text field reads next to it, when the field alone does not say. */
+const OPERATOR_HINTS: Partial<Record<ViewFilterPredicate['op'], string>> = {
+  eq: 'rowna sie',
+  contains: 'zawiera',
+};
+
 /**
  * Narrowing controls for the fields the view's target declares: a list for a
  * field with suggested values, a text field ("contains") for the rest.
  *
  * Applied with the button (or Enter), not on every keystroke or selection: each
  * application is a history entry, and Back should undo a decision, not a letter.
+ *
+ * **A field the user did not edit keeps its predicate as it is.** The agent may
+ * narrow a text field with `eq`; rebuilding every field from its text on
+ * "Apply" turned that into `contains` and silently widened the result when the
+ * user changed a different field. So only edited fields are rebuilt, and an
+ * applied text predicate shows its operator beside the field.
  */
 export function FilterBar(props: {
   fields: FilterField[];
@@ -57,17 +69,29 @@ export function FilterBar(props: {
   const baseId = useId();
   const appliedKey = JSON.stringify(predicates);
   const [draft, setDraft] = useState(() => draftFor(fields, predicates));
+  const [edited, setEdited] = useState<ReadonlySet<string>>(() => new Set());
 
   // The address changed — by Back, a link or the agent: show what is applied.
   useEffect(() => {
     setDraft(draftFor(fields, predicates));
+    setEdited(new Set());
     // `appliedKey` is the value of `predicates`.
   }, [appliedKey, fields]);
+
+  const edit = (field: string, value: string) => {
+    setDraft((d) => ({ ...d, [field]: value }));
+    setEdited((e) => new Set(e).add(field));
+  };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const next: ViewFilterPredicate[] = [];
     for (const f of fields) {
+      if (!edited.has(f.field)) {
+        const kept = predicates.find((p) => p.field === f.field);
+        if (kept) next.push(kept);
+        continue;
+      }
       const value = (draft[f.field] ?? '').trim();
       if (!value) continue;
       if (value === CURRENT) {
@@ -93,6 +117,15 @@ export function FilterBar(props: {
       {fields.map((f) => {
         const id = `${baseId}-${f.field}`;
         const current = predicates.find((p) => p.field === f.field);
+        const hint = f.values?.length
+          ? null
+          : edited.has(f.field)
+            ? (draft[f.field] ?? '').trim() && draft[f.field] !== CURRENT
+              ? OPERATOR_HINTS.contains
+              : null
+            : current && draft[f.field] !== CURRENT
+              ? (OPERATOR_HINTS[current.op] ?? null)
+              : null;
         return (
           <div className="pf-filterbar__field" key={f.field}>
             <label htmlFor={id}>{f.label}</label>
@@ -102,7 +135,7 @@ export function FilterBar(props: {
                 name={f.field}
                 data-filter-field={f.field}
                 value={draft[f.field] ?? ''}
-                onChange={(e) => setDraft((d) => ({ ...d, [f.field]: e.target.value }))}
+                onChange={(e) => edit(f.field, e.target.value)}
               >
                 <option value="">wszystkie</option>
                 {draft[f.field] === CURRENT && current && (
@@ -122,8 +155,14 @@ export function FilterBar(props: {
                 data-filter-field={f.field}
                 placeholder={draft[f.field] === CURRENT && current ? describePredicate(current, f.label) : 'zawiera…'}
                 value={draft[f.field] === CURRENT ? '' : (draft[f.field] ?? '')}
-                onChange={(e) => setDraft((d) => ({ ...d, [f.field]: e.target.value }))}
+                aria-describedby={hint ? `${id}-op` : undefined}
+                onChange={(e) => edit(f.field, e.target.value)}
               />
+            )}
+            {hint && (
+              <span id={`${id}-op`} className="pf-filterbar__op" data-filter-op-for={f.field}>
+                {hint}
+              </span>
             )}
           </div>
         );

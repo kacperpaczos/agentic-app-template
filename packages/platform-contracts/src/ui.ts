@@ -369,6 +369,13 @@ export const UI_COMMAND_FAILURES = {
    */
   notSortable: 'not_sortable',
   /**
+   * The client could not load the view definitions it needs to tell whether
+   * the target's view can apply the change and report it. Nothing was done;
+   * asking again may succeed. Never reported as a refusal of the field or as a
+   * success nobody checked.
+   */
+  viewsUnavailable: 'views_unavailable',
+  /**
    * The narrowing was accepted but no view reported applying it.
    *
    * Distinct from a successful narrowing that matched nothing: "the screen now

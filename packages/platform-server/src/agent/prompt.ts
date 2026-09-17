@@ -180,6 +180,20 @@ export function buildSystemPrompt(input: PromptInput): string {
       'Wynik ui_navigate zawiera executed=true/false. Jesli false, powiedz uzytkownikowi,',
       'czego nie udalo sie zrobic i dlaczego — nie twierdz, ze cos otworzyles.',
       'Pokazanie ustawienia niczego w nim nie zmienia.',
+      /*
+       * The list the sentences above call "ponizsza lista" — directly under
+       * them, not after the sections on narrowing and ordering, which only
+       * refer to the fields each entry names.
+       */
+      'Cele interfejsu (zawezanie po: pola dla ui_filter; sortowanie po: pola dla ui_sort):',
+      ...uiTargets.map((t) => {
+        const sortable = sortableFieldsOfTarget(input.registry, t.id);
+        return (
+          `- ${t.id} [${t.kind}] ${t.label}: ${t.description}` +
+          (t.filter ? ` | zawezanie po: ${t.filter.fields.map((f) => f.field).join(', ')}` : '') +
+          (sortable?.length ? ` | sortowanie po: ${sortable.map((f) => f.field).join(', ')}` : '')
+        );
+      }),
       '',
       '## Zawezanie widoku',
       /*
@@ -210,14 +224,6 @@ export function buildSystemPrompt(input: PromptInput): string {
       'Nie zmieniaja danych w bazie: nie mow, ze cos usunales, ukryles na stale albo przestawiles w danych.',
       'Aktualny stan widoku uzytkownika (zawezenie, sortowanie, strona, pokazane X z Y) jest w kontekscie',
       'aplikacji powyzej i w filters zwracanym przez get_context — z chwili wyslania polecenia.',
-      ...uiTargets.map((t) => {
-        const sortable = sortableFieldsOfTarget(input.registry, t.id);
-        return (
-          `- ${t.id} [${t.kind}] ${t.label}: ${t.description}` +
-          (t.filter ? ` | zawezanie po: ${t.filter.fields.map((f) => f.field).join(', ')}` : '') +
-          (sortable?.length ? ` | sortowanie po: ${sortable.map((f) => f.field).join(', ')}` : '')
-        );
-      }),
     );
   }
 

@@ -380,6 +380,7 @@ body {
   border: 1px solid var(--pf-border); border-radius: 6px; padding: 3px 6px; font: inherit; font-size: 13px;
   background: var(--pf-panel);
 }
+.pf-filterbar__op { font-size: 11px; color: var(--pf-muted); }
 .pf-filterbar__actions { display: flex; gap: 6px; }
 .pf-sort {
   all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;

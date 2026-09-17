@@ -17,9 +17,11 @@ import { recordsOf, type ReadResponse } from '@platform/contracts';
  * not with the application's sorting function — plus literal fixture names, so
  * the screen cannot pass by agreeing with itself.
  *
- * This instance's database gets twelve more suppliers before it starts (two
- * Polish ones whose names start with Ł and Ź, ten German ones), so the list has
- * two pages of ten, and Polish collation differs from code-point order.
+ * This instance's database gets thirteen more suppliers before it starts (two
+ * Polish ones whose names start with Ł and Ź, ten German ones, and a Czech
+ * "NordAV" whose name is part of "NordAV OY"), so the list has two pages of
+ * ten, Polish collation differs from code-point order, and "equals" differs
+ * from "contains".
  */
 
 const scripted = new ScriptedInstance({ port: 8798, dataDirName: '.e2e-scripted-viewstate' });
@@ -28,6 +30,8 @@ const BASE = scripted.baseUrl;
 const EXTRA_SUPPLIERS = [
   { name: 'Łódzka Technika Sceniczna', taxId: '7250000001', country: 'PL' },
   { name: 'Źródło Dźwięku', taxId: '6310000002', country: 'PL' },
+  // Its whole name is a part of another's ("NordAV OY"): "equals" and "contains" differ.
+  { name: 'NordAV', taxId: 'CZ12345678', country: 'CZ' },
   ...Array.from({ length: 10 }, (_, i) => ({
     name: `Dostawca DE ${String(i + 1).padStart(2, '0')}`,
     taxId: `DE1000000${String(i + 1).padStart(2, '0')}`,
@@ -89,7 +93,7 @@ async function send(page: Page, text: string) {
 const settled = (page: Page) =>
   expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', /succeeded|failed/, { timeout: 60_000 });
 
-type Supplier = { id: string; name: string; country: string };
+type Supplier = { id: string; name: string; country: string; taxId: string };
 
 /** The suppliers as the backend returns them, in its order, through the endpoint the view uses. */
 async function backendSuppliers(page: Page): Promise<{ raw: ReadResponse; records: Supplier[] }> {
@@ -237,12 +241,19 @@ test.describe('stan widoku: zawezenie, sortowanie, strony', () => {
       total: TOTAL,
     };
     expect(second.context.filters).toEqual({ 'procurement.data': carried });
-    // …and the run received it: its `get_context` handler returns the run's stored context.
-    await expect(answer(page)).toContainText('Zawezilem i posortowalem widok.');
+    // The second run itself: it is the one the status bar names, and it answered in its own message.
+    await expect(page.getByTestId('last-run')).toHaveText(`run ${second.runId.slice(-8)}`);
+    await expect(answer(page).getByText('Zawezilem i posortowalem widok.')).toHaveCount(2, { timeout: 60_000 });
+    // …and it received the state: its `get_context` handler returns the run's stored context,
+    // and its own commands were applied to that screen (the same state again, confirmed by the view).
     await expect
       .poll(async () => (await toolResults(page, second.runId))[0]?.result.filters, { timeout: 60_000 })
       .toEqual({ 'procurement.data': carried });
     await settled(page);
+    const secondResults = await toolResults(page, second.runId);
+    expect(secondResults.map((r) => r.name)).toEqual(['mcp__app__get_context', 'mcp__app__ui_filter', 'mcp__app__ui_sort']);
+    expect(secondResults[1]!.result).toMatchObject({ executed: true, filtered: { matched: 5, total: TOTAL } });
+    expect(secondResults[2]!.result).toMatchObject({ executed: true, sorted: { field: 'name', direction: 'desc' } });
   });
 
   test('(a) to samo zawezenie i sortowanie drugi raz: wykonane, z liczbami i strona, nie not_applied', async ({ page }) => {
@@ -313,6 +324,37 @@ test.describe('stan widoku: zawezenie, sortowanie, strony', () => {
       },
     });
     await settled(page);
+  });
+
+  test('(b) zawezenie agenta "rowna sie" na polu tekstowym zostaje takie, gdy uzytkownik zmienia inne pole', async ({ page }) => {
+    await scripted.start('viewstate-exact-name');
+    await openApp(page);
+    const { records } = await backendSuppliers(page);
+    const controls = view(page).getByTestId('view-filter-controls');
+
+    await sendForRun(page, 'Pokaz dostawce o nazwie dokladnie NordAV.');
+    const exact = records.filter((s) => s.name === 'NordAV');
+    expect(exact).toHaveLength(1);
+    // "contains" would also keep "NordAV OY" — the exact narrowing keeps one.
+    expect(records.filter((s) => s.name.toLowerCase().includes('nordav'))).toHaveLength(2);
+    await expect.poll(() => rowIds(page), { timeout: 60_000 }).toEqual(exact.map((s) => s.id));
+    await settled(page);
+    expect(param(page, 'name')).toBe('NordAV');
+    // The control says which operator is applied.
+    await expect(controls.getByLabel('Nazwa dostawcy')).toHaveValue('NordAV');
+    await expect(controls.locator('[data-filter-op-for="name"]')).toHaveText('rowna sie');
+
+    // The user narrows a different field and applies.
+    await controls.getByLabel('NIP').fill('12345678');
+    await controls.getByRole('button', { name: 'Zastosuj' }).click();
+
+    await expect.poll(() => param(page, 'taxId')).toBe('~12345678');
+    expect(param(page, 'name')).toBe('NordAV');
+    const expected = records.filter((s) => s.name === 'NordAV' && s.taxId.includes('12345678'));
+    await expect.poll(() => rowIds(page)).toEqual(expected.map((s) => s.id));
+    expect(expected.map((s) => s.name)).toEqual(['NordAV']);
+    await expect(banner(page)).toContainText('Nazwa dostawcy: NordAV');
+    await expect(banner(page)).toContainText('NIP zawiera „12345678”');
   });
 
   test('(c) strony: Nastepna, Wstecz, klawiatura na naglowku wraca na strone 1, strona spoza zakresu', async ({ page }) => {
