@@ -916,6 +916,9 @@ describe('I2: wersja nalezy do karty, zamkniete i milczace karty', () => {
       { kind: 'call', name: 'ui_state', input: { minVersion: '$last.uiVersion', waitMs: 150 } },
       { kind: 'wait', delayMs: 300 },
       { kind: 'call', name: 'ui_state', input: { minVersion: 4, clientId: Y } },
+      { kind: 'wait', delayMs: 400 },
+      // Y has closed meanwhile; X still shows the conversation at 40. The version is Y's, not X's.
+      { kind: 'call', name: 'ui_state', input: { minVersion: 4, waitMs: 0 } },
       { kind: 'call', name: 'ui_state', input: { clientId: 'ui_tab_closed_long_ago' } },
     ];
     const runtime = new AgentRuntime(
@@ -934,11 +937,12 @@ describe('I2: wersja nalezy do karty, zamkniete i milczace karty', () => {
         // Tab Y acknowledges first with its version 4, which reaches the backend only a moment later.
         runtime.acknowledgeUiCommand({ commandId: command.commandId, targetId: command.targetId, executed: true, filtered: { matched: 3, total: 4 }, uiVersion: 4, uiClientId: Y, uiPublication: 'published' });
         setTimeout(() => store.publish(h.ownerId, snapshot({ clientId: Y, version: 4, conversationId: conv.id, url: '/data?country=PL' })), 250);
+        setTimeout(() => store.retire(h.ownerId, Y, 4), 650);
       }
       if (e.type === AGUI_EVENTS.TOOL_CALL_RESULT) results.push(JSON.parse(e.content));
     }
     await started.done;
-    const [filtered, bound, explicit, gone] = results;
+    const [filtered, bound, explicit, closed, gone] = results;
 
     expect(filtered).toMatchObject({ executed: true, uiVersion: 4, uiClientId: Y, uiPublication: 'published' });
     // Not X's pre-command description at 40: Y has not published 4 yet, and says so.
@@ -947,6 +951,7 @@ describe('I2: wersja nalezy do karty, zamkniete i milczace karty', () => {
     // Once it has, the named tab's version 4 is the confirmed state.
     expect(explicit).toMatchObject({ stale: false, version: 4 });
     expect(explicit.snapshot).toMatchObject({ clientId: Y, url: '/data?country=PL' });
+    expect(closed).toMatchObject({ stale: true, reason: 'client_gone', snapshot: null });
     expect(gone).toMatchObject({ stale: true, reason: 'client_gone', snapshot: null });
     // The run is over: its acknowledgement is forgotten.
     expect(store.acknowledgement(h.ownerId, started.runId)).toBeNull();
