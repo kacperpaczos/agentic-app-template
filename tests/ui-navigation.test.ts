@@ -292,11 +292,20 @@ describe('ui_navigate zwraca to, co potwierdzil klient', () => {
      * of them writes.
      *
      * `ui_state` only reads the description the user's tab published of its
-     * screen; it moves nothing.
+     * screen; it moves nothing. `ui_show_value` brings one record's field on
+     * screen and points at it: it may clear a narrowing it applied or turn a
+     * page — presentation, reported in its own result — and writes nothing.
      */
     const tools = platformTools(h.platform.services);
     const ui = tools.filter((t) => /^ui_/.test(t.name));
-    expect(ui.map((t) => t.name).sort()).toEqual(['ui_catalog', 'ui_filter', 'ui_navigate', 'ui_sort', 'ui_state']);
+    expect(ui.map((t) => t.name).sort()).toEqual([
+      'ui_catalog',
+      'ui_filter',
+      'ui_navigate',
+      'ui_show_value',
+      'ui_sort',
+      'ui_state',
+    ]);
     expect(ui.every((t) => t.effect === 'read')).toBe(true);
   });
 });

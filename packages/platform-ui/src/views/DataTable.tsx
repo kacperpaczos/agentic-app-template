@@ -19,6 +19,7 @@ import { FilterBar, HeaderCell, Pager, nextSort } from './DataTableControls.tsx'
 import { RecordActionCell, RecordActionStatus, RecordActionsHeader, useRecordActions } from './RecordActions.tsx';
 import { withGrouping } from './grouping.ts';
 import { buildDataModel, describeDataInstance } from './model.ts';
+import { useRevealTarget } from './revealTarget.ts';
 import { useDataModel } from './useDataModel.ts';
 import { useComposedView, useInstanceId } from './viewContext.ts';
 
@@ -87,6 +88,24 @@ export function DataTableView(props: DataTableProps) {
       localPage,
     ],
   );
+
+  /*
+   * Where a record is and how to bring it on screen, for the command that shows
+   * one record's value (`views/revealTarget.ts`): the same rows, narrowing,
+   * order and pages as rendered here.
+   */
+  useRevealTarget({
+    instanceId,
+    viewId: view?.viewId ?? null,
+    props,
+    response,
+    address: address
+      ? { targetId: address.targetId, key: address.key, predicates: address.predicates, sort: address.sort, page: address.page, filterFields: address.filterFields }
+      : null,
+    localPage,
+    setLocalPage,
+    refreshing,
+  });
 
   const outcome = model?.outcome ?? null;
   useEffect(() => {

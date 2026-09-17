@@ -24,6 +24,7 @@ import { useAppState } from '../state/appState.ts';
 import { CardBody } from './CardBody.tsx';
 import { QueryErrorState } from '../components/ErrorState.tsx';
 import { useDisplayCanvas } from '../state/displayedCanvas.ts';
+import { registerCanvasFocus } from './canvasFocus.ts';
 
 /**
  * Infinite canvas.
@@ -111,7 +112,21 @@ function CanvasInner({
   const updateGeometry = useUpdateGeometry(spaceId);
   const saveViewport = useSaveViewport(spaceId);
   const setViewport = useAppState((s) => s.setViewport);
-  const { setViewport: applyViewport } = useReactFlow();
+  const { setViewport: applyViewport, getNode, setCenter, getZoom } = useReactFlow();
+
+  // Centring one card, for a command that points at a value inside it (`canvasFocus.ts`).
+  useEffect(
+    () =>
+      registerCanvasFocus((cardId) => {
+        const node = getNode(cardId);
+        if (!node) return false;
+        const width = node.measured?.width ?? node.width ?? 0;
+        const height = node.measured?.height ?? node.height ?? 0;
+        void setCenter(node.position.x + width / 2, node.position.y + height / 2, { zoom: getZoom(), duration: 0 });
+        return true;
+      }),
+    [getNode, setCenter, getZoom],
+  );
 
   /** Pending geometry writes, flushed after the pointer settles. */
   const pending = useRef(new Map<string, { x: number; y: number; width?: number; height?: number }>());

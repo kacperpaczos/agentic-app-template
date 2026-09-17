@@ -14,6 +14,7 @@ import { setUiCommandHandler } from '../chat/runEvents.ts';
 import { uiSnapshotSession } from '../state/uiSnapshot.ts';
 import { performAndAcknowledge, pollUntil, waitingDeadline } from './uiCommandAck.ts';
 import { cachedLoader, planViewCommand } from './uiCommandPlan.ts';
+import { markHighlighted, performReveal } from './uiReveal.ts';
 
 /**
  * Performs the agent's interface commands — and reports back what really
@@ -47,9 +48,6 @@ import { cachedLoader, planViewCommand } from './uiCommandPlan.ts';
  * because the user reloaded.
  */
 
-/** How long the highlight stays on screen. */
-const HIGHLIGHT_MS = 2600;
-
 /**
  * How long to wait for a view to report the state it was asked for. Long
  * enough for a screen that still has to fetch its composition and its read.
@@ -81,8 +79,7 @@ export function UiCommandRunner() {
     });
     if (!el) return false;
     el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    el.setAttribute('data-ui-highlight', 'true');
-    window.setTimeout(() => el.removeAttribute('data-ui-highlight'), HIGHLIGHT_MS);
+    markHighlighted(el);
     return true;
   }, []);
 
@@ -113,6 +110,22 @@ export function UiCommandRunner() {
           return { ...base, executed: false, reason: UI_COMMAND_FAILURES.unknownTarget };
         }
       }
+      /*
+       * Showing one record's field is its own kind of command: the server has
+       * already chosen the data component that renders it, and the client's
+       * work is to reach that instance, make the record visible and point at
+       * the cell — see `uiReveal.ts`. It is answered before the catalog target
+       * is resolved, because a record screen with route parameters has no
+       * catalog target of its own.
+       */
+      if (command.reveal) {
+        return performReveal({ ...command, reveal: command.reveal }, {
+          catalog: catalog.current,
+          navigate: (options) => navigate(options as never) as Promise<unknown>,
+          until: waitUntil,
+        });
+      }
+
       const target = catalog.current.find((t) => t.id === command.targetId);
       if (!target) {
         return { ...base, executed: false, reason: UI_COMMAND_FAILURES.unknownTarget };

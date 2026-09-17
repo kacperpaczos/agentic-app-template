@@ -180,6 +180,17 @@ export function formatFieldValue(record: DataRecord, field: RecordField): string
 }
 
 /**
+ * A field's stored value as a result or an acknowledgement carries it
+ * (`recordValueSchema`): a primitive, or null for anything else — a missing
+ * field, an object, an array. One implementation, so the value the server read
+ * and the value the browser says it is showing are comparable at all.
+ */
+export function recordValue(record: DataRecord, field: string): string | number | boolean | null {
+  const raw = record[field];
+  return typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean' ? raw : null;
+}
+
+/**
  * A decimal number as `formatFieldValue` writes one, and as people type one:
  * optional sign, digits optionally grouped by spaces (the Polish grouping is a
  * no-break space), and a decimal comma — or a dot, which is what a numeric

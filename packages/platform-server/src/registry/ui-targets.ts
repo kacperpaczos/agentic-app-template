@@ -1,4 +1,4 @@
-import { RESERVED_SEARCH_KEYS, type UiTarget } from '@platform/contracts';
+import { AGENT_VIEWS_TARGET_ID, RESERVED_SEARCH_KEYS, type UiTarget } from '@platform/contracts';
 
 /**
  * Places in the interface the agent can be asked to open, contributed by the
@@ -31,7 +31,7 @@ export const PLATFORM_UI_TARGETS: UiTarget[] = [
     to: '/spaces',
   },
   {
-    id: 'platform.agentViews',
+    id: AGENT_VIEWS_TARGET_ID,
     kind: 'view',
     label: 'Widoki agenta',
     description:

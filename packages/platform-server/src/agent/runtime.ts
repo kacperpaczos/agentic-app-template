@@ -443,6 +443,7 @@ export class AgentRuntime {
             ...(command.filter !== undefined ? { filter: command.filter } : {}),
             ...(command.sort !== undefined ? { sort: command.sort } : {}),
             reason: command.reason,
+            ...(command.reveal ? { reveal: command.reveal } : {}),
           },
           stream,
         ).then((result) => {

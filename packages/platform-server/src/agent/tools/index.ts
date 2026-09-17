@@ -5,6 +5,7 @@ import { artifactTools } from './artifacts.ts';
 import { canvasTools } from './canvas.ts';
 import { contextTools } from './context.ts';
 import { fileTools } from './files.ts';
+import { uiShowValueTools } from './ui-show-value.ts';
 import { uiSortTools } from './ui-sort.ts';
 import { uiTools } from './ui.ts';
 import { uiStateTools } from './ui-state.ts';
@@ -34,6 +35,8 @@ export function platformTools(services: PlatformServices): ModuleToolDefinition<
     ...fileTools(services),
     ...artifactTools(services),
     ...agentViewTools(services),
+    // Appended, like the agent views before it: the order the model has seen is kept.
+    ...uiShowValueTools(services),
   ];
   return defs as ModuleToolDefinition<never>[];
 }

@@ -17,6 +17,15 @@ import { z } from 'zod';
  * makes "no such target" a real answer instead of an improvised one.
  */
 
+/**
+ * The platform's own screen showing a conversation's agent views.
+ *
+ * Named in the contract because both halves need it without knowing each
+ * other: the server declares the target and points a command at it, the
+ * browser resolves it to a route when it has to open it.
+ */
+export const AGENT_VIEWS_TARGET_ID = 'platform.agentViews';
+
 export const UI_TARGET_KINDS = ['view', 'section', 'setting', 'element'] as const;
 export type UiTargetKind = (typeof UI_TARGET_KINDS)[number];
 
@@ -162,6 +171,28 @@ export const dataSortSchema = z.object({
   direction: z.enum(['asc', 'desc']).describe('asc rosnaco, desc malejaco'),
 });
 export type DataSort = z.infer<typeof dataSortSchema>;
+
+/**
+ * Which registered read a data component (or a live artifact) re-runs.
+ *
+ * Never code, never SQL, never values: a qualified operation name and the input
+ * the operation's own schema validates. `input` is a loose object rather than
+ * `z.record()` so that the schema can be offered to the model over MCP.
+ *
+ * Here rather than in `views.ts` so that an interface command can name the read
+ * of the instance it points at (`uiRevealSchema`) without an import cycle.
+ */
+export const dataSourceSchema = z.object({
+  /** Qualified operation name, `<moduleId>.<operation>`. */
+  operation: z
+    .string()
+    .min(1)
+    .max(200)
+    .describe('Kwalifikowana nazwa zarejestrowanej operacji odczytu, np. "modul.operacja"'),
+  /** Input for the operation; validated against the operation's own schema. */
+  input: z.looseObject({}).optional().describe('Wejscie operacji zgodne z jej schematem'),
+});
+export type DataSource = z.infer<typeof dataSourceSchema>;
 
 /** Which page of a view is on screen. `index` counts from 1; `count` is the number of pages. */
 export const viewPageSchema = z.object({
@@ -309,6 +340,128 @@ export function describePredicate(
   return `${fieldLabel}: ${shown}`;
 }
 
+/* -------------------------------------------------------------------------- */
+/*  Showing one value: a field of a record                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Where the value of a record's field is to be shown.
+ *
+ * **Why the server names the place and the instance.** "Show me this value"
+ * has a right answer only if the application can say where that record and
+ * field are drawn. The server works that out from what is declared — module
+ * views and the conversation's agent views, their compositions, the reads'
+ * descriptors (`ui_show_value`) — and tells the client exactly which data
+ * component to reveal it in, by its view (or agent view card) and its read.
+ * The client then only has to find that instance, never guess one.
+ *
+ *  - `view` — a module view: its own screen (`UiTarget.to`, navigated to), or a
+ *    record screen with route parameters that the tab is showing right now
+ *    (not navigated to: its parameters are not the server's to guess);
+ *  - `agent_view` — a card of the run's conversation's agent views
+ *    (`platform.agentViews`).
+ */
+export const uiRevealPresentationSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('view'), viewId: z.string().min(3).max(120) }),
+  z.object({ kind: z.literal('agent_view'), cardId: z.string().min(1).max(128) }),
+]);
+export type UiRevealPresentation = z.infer<typeof uiRevealPresentationSchema>;
+
+export const uiRevealSchema = z.object({
+  /** The record, as its read's descriptor names it (`record.kind`, the `idField` value as a string). */
+  recordKind: z.string().min(1).max(80),
+  recordId: z.string().min(1).max(128),
+  /** A declared field of the record, rendered by the instance. */
+  field: z.string().min(1).max(80),
+  presentation: uiRevealPresentationSchema,
+  /** The read of the data component that renders it, input resolved. */
+  source: dataSourceSchema,
+});
+export type UiReveal = z.infer<typeof uiRevealSchema>;
+
+/**
+ * A change of presentation made to bring the value on screen. Never a change of
+ * data: which records are shown and where, reported so the user and the agent
+ * can see what moved.
+ *
+ *  - `filter_cleared` — the address bar's narrowing hid the record; the
+ *    predicates on the fields that excluded it were removed (others stay);
+ *  - `page_changed` — the record was on another page;
+ *  - `card_focused` — the canvas was moved to bring the agent view card in view.
+ */
+export const UI_REVEAL_ADJUSTMENT_KINDS = ['filter_cleared', 'page_changed', 'card_focused'] as const;
+export type UiRevealAdjustmentKind = (typeof UI_REVEAL_ADJUSTMENT_KINDS)[number];
+
+export const uiRevealAdjustmentSchema = z.object({
+  kind: z.enum(UI_REVEAL_ADJUSTMENT_KINDS),
+  /** What changed, in words shown to the user (e.g. „Kraj: PL”, „strona 1 → 2”). */
+  detail: z.string().max(300),
+  /** `filter_cleared`: the predicates removed. */
+  predicates: z.array(viewFilterPredicateSchema).max(8).optional(),
+  /** `page_changed`: the page before and after. */
+  from: z.number().int().min(1).optional(),
+  to: z.number().int().min(1).optional(),
+});
+export type UiRevealAdjustment = z.infer<typeof uiRevealAdjustmentSchema>;
+
+/** A stored field value as it travels: records hold primitives. */
+export const recordValueSchema = z.union([z.string().max(10_000), z.number(), z.boolean(), z.null()]);
+
+/**
+ * What the client revealed, as it found it on screen — the client's own
+ * statement, compared with the backend by the server, never taken on trust.
+ *
+ * The changes of presentation it made are **not** here: they are on the result
+ * itself (`uiCommandResultSchema.adjustments`), because a change can outlive a
+ * refusal — the narrowing is already gone when the cell turns out not to be
+ * there — and a change nobody reports is a change the user cannot undo.
+ */
+export const uiRevealedSchema = z.object({
+  recordKind: z.string().max(80),
+  recordId: z.string().max(128),
+  field: z.string().max(80),
+  /** The text of the highlighted cell. */
+  displayedText: z.string().max(2000),
+  /** The field's value on the row the cell was drawn from; null when the record has none. */
+  rawValue: recordValueSchema,
+  /** The page the record is on after the reveal; null when the table does not page. */
+  page: viewPageSchema.nullable(),
+});
+export type UiRevealed = z.infer<typeof uiRevealedSchema>;
+
+/**
+ * Why `ui_show_value` did not show a value, decided on the server before
+ * anything is asked of the browser. Each is a different answer:
+ *
+ *  - `unknown_field` — no read declares this field for records of this kind;
+ *  - `no_renderer` — nothing the user can be taken to renders records of this
+ *    kind, or none of those places shows this field (`detail` says which);
+ *  - `ambiguous` — the record is shown in more than one place; the candidates
+ *    are listed and one must be named (`targetId`);
+ *  - `record_not_found` — none of the places that render the kind has this
+ *    record, as read for the signed-in owner;
+ *  - `forbidden` — the reads behind those places are refused for this owner;
+ *  - `unreadable` — those reads failed for another reason, so nothing is known
+ *    about the record. Distinct from `record_not_found` on purpose: "it is not
+ *    there" and "I could not look" are different claims, and only the first one
+ *    may be repeated to the user as a fact;
+ *  - `unknown_target` — the `targetId` given names no view, card or catalog
+ *    target this run could use.
+ *
+ * The client adds its own (`UI_COMMAND_FAILURES`): `inactive_conversation`,
+ * `not_present`, `not_visible`, `no_client`.
+ */
+export const SHOW_VALUE_REFUSALS = {
+  unknownField: 'unknown_field',
+  noRenderer: 'no_renderer',
+  ambiguous: 'ambiguous',
+  recordNotFound: 'record_not_found',
+  forbidden: 'forbidden',
+  unreadable: 'unreadable',
+  unknownTarget: 'unknown_target',
+} as const;
+export type ShowValueRefusal = (typeof SHOW_VALUE_REFUSALS)[keyof typeof SHOW_VALUE_REFUSALS];
+
 /**
  * What the client is asked to do.
  *
@@ -339,6 +492,13 @@ export const uiCommandSchema = z.object({
   sort: dataSortSchema.nullable().optional(),
   /** Why the agent is doing it, shown to the user. */
   reason: z.string().max(200).optional(),
+  /**
+   * A field of a record to bring on screen and point at, in the data component
+   * the server chose (`ui_show_value`). The client may change the presentation
+   * to get there — clear the narrowing that hides the record, turn the page —
+   * and reports each change; it never changes data.
+   */
+  reveal: uiRevealSchema.optional(),
 });
 export type UiCommand = z.infer<typeof uiCommandSchema>;
 
@@ -348,6 +508,11 @@ export const UI_COMMAND_FAILURES = {
   unknownTarget: 'unknown_target',
   /** The target exists but its element is not in the document. */
   notPresent: 'not_present',
+  /**
+   * The element is in the document but could not be brought into view, so
+   * nothing was pointed at that the user can see.
+   */
+  notVisible: 'not_visible',
   /** The owner may not see it. */
   forbidden: 'forbidden',
   /**
@@ -465,5 +630,18 @@ export const uiCommandResultSchema = z.object({
   uiClientId: uiClientIdSchema.optional(),
   /** Why `uiVersion` is absent, or that it is present. */
   uiPublication: z.enum(UI_PUBLICATION_STATUSES).optional(),
+  /**
+   * For a `reveal`: the record and field the client pointed at, with the text
+   * and the value on screen. Present only when a cell was found; `highlighted`
+   * says whether it was brought into view.
+   */
+  revealed: uiRevealedSchema.optional(),
+  /**
+   * Changes of presentation the client made carrying the command out —
+   * reported **whatever the outcome**. A cleared narrowing or a turned page
+   * outlives a refusal: the user is looking at it, so the agent is told about
+   * it even when nothing was pointed at.
+   */
+  adjustments: z.array(uiRevealAdjustmentSchema).max(8).optional(),
 });
 export type UiCommandResult = z.infer<typeof uiCommandResultSchema>;
