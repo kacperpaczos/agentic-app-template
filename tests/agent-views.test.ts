@@ -438,6 +438,22 @@ describe('narzedzia widokow agenta', () => {
       ctx,
     );
     expect(table.body).toMatchObject({ rendered: false, warnings: [] });
+
+    // The composition from the turn itself: unit prices of a case's offer items,
+    // which are quoted in PLN and in EUR, so the chart never drew.
+    const items = `{operation: "procurement.case_offer_items", input: {caseId: "${caseId}"}}`;
+    const asInTurn = await call(
+      'agent_view_update',
+      {
+        cardId: table.body.cardId,
+        patch: `root = Stack([tabela, wykres])\ntabela = DataTable(${items}, ["name", "unitPriceMinor"])\nwykres = DataChart(${items}, "bar", "name", ["unitPriceMinor"], "Ceny jednostkowe pozycji ofert")`,
+      },
+      ctx,
+    );
+    expect(asInTurn.ok, JSON.stringify(asInTurn.body)).toBe(true);
+    expect(asInTurn.body.warnings).toHaveLength(1);
+    expect(asInTurn.body.warnings[0]).toMatchObject({ code: 'unit_from_record', statementId: 'wykres' });
+    expect(asInTurn.body.warnings[0].message).toContain('Cena jednostkowa (jednostka z pola currency)');
   });
 
   it('patch zmienia tylko wskazana instrukcje, a pozostale instrukcje, geometria i inne widoki zostaja', async () => {
