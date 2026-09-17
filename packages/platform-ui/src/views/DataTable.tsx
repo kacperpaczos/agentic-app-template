@@ -1,8 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import {
   formatFieldValue,
   isNumericField,
+  isSortableField,
   recordIdOf,
   recordRouteOf,
   type DataRecord,
@@ -10,11 +11,11 @@ import {
   type ReadResultDescriptor,
   type RecordField,
 } from '@platform/contracts';
-import { useUiTargets } from '../api/queries.ts';
-import { useAppState } from '../state/appState.ts';
+import { useAppState, type ViewStateReport } from '../state/appState.ts';
 import { useDescribeInstance } from '../state/uiSemantics.ts';
-import { useActiveViewFilter } from '../state/viewFilter.ts';
+import { useViewAddress } from '../state/viewFilter.ts';
 import { DataFrame, EmptyBody, FailureBody, LoadingBody } from './DataFrame.tsx';
+import { FilterBar, HeaderCell, Pager, nextSort } from './DataTableControls.tsx';
 import { withGrouping } from './grouping.ts';
 import { buildDataModel, describeDataInstance } from './model.ts';
 import { useDataModel } from './useDataModel.ts';
@@ -29,29 +30,38 @@ import { useComposedView, useInstanceId } from './viewContext.ts';
  * `data-field`), so a record's value on screen can be found by what it is
  * rather than by where it happens to be drawn.
  *
- * **Narrowing.** Inside a module view, the instance reading the view's
- * `primaryOperation` is the view's primary instance: the address bar's
- * narrowing of the view's target applies to it, and it reports what it counted
- * to the banner and to the agent — the same rule and the same report as a
- * module screen reading its own route (`applyViewFilter`). Any other table,
- * including one in a card or the chat, applies only its composition's `filter`.
+ * **The view's state.** Inside a module view, the instance reading the view's
+ * `primaryOperation` is the view's primary instance. On the view's own screen
+ * the address bar's narrowing, order (`sort`) and page (`page`) apply to it,
+ * and it shows the controls that change them — the same address the agent's
+ * commands change. It reports what it applied and counted: the narrowing's
+ * outcome to the banner (`reportFilterOutcome`, as a module screen reading its
+ * own route does), and its whole state to `viewStates`, which the banner, the
+ * acknowledgement of an agent's command and the next command's context read.
  *
- * **Grouping.** `groupBy` shows the rows in groups by one declared field, each
- * under a heading with its value and count (`grouping.ts`); the rows themselves
- * are rendered exactly as without it.
+ * Any other table — in a card, in the chat — applies only its composition's
+ * `filter` and `sort`, and pages in memory: it has no address of its own.
  *
- * `pageSize` is accepted and not yet applied: every matching row is shown.
- * Paging belongs with the address-bar state that makes it undoable.
+ * **Grouping.** `groupBy` shows the rows of the page on screen in groups by one
+ * declared field, each under a heading with its value, the number of its rows
+ * on this page and — when the page shows only part of the group — how many
+ * the whole matched set has (`grouping.ts`). Groups follow the rows, not the
+ * other way round: paging and order stay exactly as without grouping, so the
+ * page, the pager and the semantic description (which lists the page's rows)
+ * keep describing the same records.
  */
 export function DataTableView(props: DataTableProps) {
   const instanceId = useInstanceId('DataTable');
   const view = useComposedView();
-  const active = useActiveViewFilter();
-  const targets = useUiTargets();
   const reportFilterOutcome = useAppState((s) => s.reportFilterOutcome);
+  const reportViewState = useAppState((s) => s.reportViewState);
+  const dropViewState = useAppState((s) => s.dropViewState);
 
   const primary = Boolean(view && view.primaryOperation === props.source.operation);
-  const narrowing = primary && active && active.targetId === view!.viewId ? active : null;
+  const address = useViewAddress(primary ? view!.viewId : null);
+  const [localPage, setLocalPage] = useState(1);
+  const narrowing =
+    address && address.predicates.length > 0 ? { targetId: address.targetId, predicates: address.predicates } : null;
 
   const { state, model, error, response } = useDataModel(
     props.source,
@@ -63,11 +73,18 @@ export function DataTableView(props: DataTableProps) {
           filter: props.filter,
           sort: props.sort,
           narrowing,
+          addressSort: address?.sort ?? null,
+          pageSize: props.pageSize,
+          page: address ? address.page : localPage,
         }),
         props.groupBy,
       ),
     // The renderer re-evaluates props on every render; compare them by value.
-    [JSON.stringify([props.columns, props.filter, props.sort, props.groupBy]), narrowing],
+    [
+      JSON.stringify([props.columns, props.filter, props.sort, props.pageSize, props.groupBy]),
+      address ? `${address.targetId}|${address.key}` : null,
+      localPage,
+    ],
   );
 
   const outcome = model?.outcome ?? null;
@@ -75,7 +92,33 @@ export function DataTableView(props: DataTableProps) {
     if (outcome) reportFilterOutcome(outcome);
   }, [outcome, reportFilterOutcome]);
 
-  const filterable = primary && Boolean(targets.data?.find((t) => t.id === view!.viewId)?.filter);
+  const report: ViewStateReport | null =
+    address && model
+      ? {
+          targetId: address.targetId,
+          instanceId,
+          address: address.key,
+          predicates: address.predicates,
+          sort: model.sort,
+          sortLabel: model.sort ? (model.descriptor.fields.find((f) => f.field === model.sort!.field)?.label ?? null) : null,
+          sortFromAddress: model.sortFromAddress,
+          rejectedSort: model.rejectedSort,
+          page: model.page ? { index: model.page.index, size: model.page.size, count: model.page.count } : null,
+          clampedFrom: model.page?.clamped ? model.page.requested : null,
+          matched: model.records.length,
+          total: model.baseCount,
+        }
+      : null;
+  const reportKey = report ? JSON.stringify(report) : null;
+  useEffect(() => {
+    if (!report) return;
+    reportViewState(report);
+    return () => dropViewState(report.targetId, report.instanceId);
+    // `reportKey` is the value of `report`.
+  }, [reportKey, reportViewState, dropViewState]);
+
+  const filterable = Boolean(address && address.filterFields.length > 0);
+  const sortable = Boolean(address && model?.descriptor.fields.some(isSortableField));
   const shownState = model && model.records.length === 0 ? 'empty' : state;
   useDescribeInstance(
     describeDataInstance({
@@ -91,7 +134,12 @@ export function DataTableView(props: DataTableProps) {
       sort: props.sort ?? null,
       error,
       actions: model
-        ? [...(filterable ? ['filter'] : []), ...(model.descriptor.record.route ? ['open_record'] : [])]
+        ? [
+            ...(filterable ? ['filter'] : []),
+            ...(sortable ? ['sort'] : []),
+            ...(model.page && model.page.count > 1 ? ['page'] : []),
+            ...(model.descriptor.record.route ? ['open_record'] : []),
+          ]
         : [],
     }),
   );
@@ -105,16 +153,13 @@ export function DataTableView(props: DataTableProps) {
       </DataFrame>
     );
   }
-  if (shownState === 'empty') {
-    return (
-      <DataFrame {...frame} state="empty">
-        <EmptyBody total={outcome?.total ?? model.total} matched={0} />
-      </DataFrame>
-    );
-  }
 
   const { descriptor } = model;
   const linkField = linkColumn(descriptor, model.fields);
+  const onSort = address
+    ? (field: string) => address.change({ sort: nextSort(model.sort, model.sortFromAddress, field) })
+    : null;
+  const onPage = address ? (index: number) => address.change({ page: index }) : setLocalPage;
 
   const renderRow = (record: DataRecord, index: number) => {
     const id = recordIdOf(record, descriptor);
@@ -143,40 +188,63 @@ export function DataTableView(props: DataTableProps) {
     );
   };
 
+  /*
+   * One frame for the ready and the empty state, with the controls at the same
+   * place in both: narrowing to nothing must leave the user the fields to
+   * change it with, and pressing "Apply" must not move the focus away.
+   */
   return (
-    <DataFrame {...frame} state="ready">
-      <table className="pf-table">
-        <thead>
-          <tr>
-            {model.fields.map((f) => (
-              <th key={f.field} scope="col" data-field={f.field}>
-                {f.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        {model.grouping ? (
-          /*
-           * One body per group, headed by the value and its count. The rows are
-           * the same rows as ungrouped — same attributes, same cells.
-           */
-          model.grouping.groups.map((group) => (
-            <tbody key={group.key} data-group-field={model.grouping!.field.field} data-group-key={group.key}>
-              <tr className="pf-table__group">
-                <th colSpan={model.fields.length} scope="rowgroup">
-                  {model.grouping!.field.label}: {group.label}{' '}
-                  <span className="pf-muted" data-group-count={group.records.length}>
-                    ({group.records.length})
-                  </span>
-                </th>
-              </tr>
-              {group.records.map((record, index) => renderRow(record, index))}
-            </tbody>
-          ))
-        ) : (
-          <tbody>{model.records.map((record, index) => renderRow(record, index))}</tbody>
-        )}
-      </table>
+    <DataFrame {...frame} state={shownState === 'empty' ? 'empty' : 'ready'}>
+      {address && filterable && (
+        <FilterBar
+          fields={address.filterFields}
+          predicates={address.predicates}
+          onApply={(predicates) => address.change({ predicates })}
+        />
+      )}
+      {shownState === 'empty' ? (
+        <EmptyBody total={outcome?.total ?? model.total} matched={0} />
+      ) : (
+        <table className="pf-table">
+          <thead>
+            <tr>
+              {model.fields.map((f) => (
+                <HeaderCell key={f.field} field={f} sortable={isSortableField(f)} sort={model.sort} onSort={onSort} />
+              ))}
+            </tr>
+          </thead>
+          {model.grouping ? (
+            /*
+             * One body per group of the page's rows, headed by the value and its
+             * count. The rows are the same rows as ungrouped — same attributes,
+             * same cells.
+             */
+            model.grouping.groups.map((group) => (
+              <tbody key={group.key} data-group-field={model.grouping!.field.field} data-group-key={group.key}>
+                <tr className="pf-table__group">
+                  <th colSpan={model.fields.length} scope="rowgroup">
+                    {model.grouping!.field.label}: {group.label}{' '}
+                    <span
+                      className="pf-muted"
+                      data-group-count={group.records.length}
+                      data-group-total={group.total}
+                    >
+                      ({group.records.length}
+                      {group.total !== group.records.length ? ` z ${group.total}` : ''})
+                    </span>
+                  </th>
+                </tr>
+                {group.records.map((record, index) => renderRow(record, index))}
+              </tbody>
+            ))
+          ) : (
+            <tbody>{model.shown.map((record, index) => renderRow(record, index))}</tbody>
+          )}
+        </table>
+      )}
+      {model.page && (model.page.count > 1 || model.page.clamped) && (
+        <Pager page={model.page} onPage={onPage} />
+      )}
     </DataFrame>
   );
 }

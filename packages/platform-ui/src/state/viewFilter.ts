@@ -1,11 +1,20 @@
-import { useMemo } from 'react';
-import { useRouterState } from '@tanstack/react-router';
+import { useCallback, useMemo } from 'react';
+import { useNavigate, useRouterState } from '@tanstack/react-router';
 import {
+  VIEW_PAGE_SEARCH_KEY,
+  VIEW_SORT_SEARCH_KEY,
   filterFromSearch,
+  pageFromParam,
+  sortFromParam,
+  viewAddressKey,
+  viewStatePatch,
+  type DataSort,
   type UiTarget,
   type ViewFilterPredicate,
+  type ViewStateChange,
 } from '@platform/contracts';
 import { useUiTargets } from '../api/queries.ts';
+import { useAppState, type ViewStateReport } from './appState.ts';
 
 /**
  * The narrowing the address bar is carrying, for the screen on screen.
@@ -56,4 +65,79 @@ export function useActiveViewFilter(): ActiveViewFilter | null {
       fields: target.filter.fields,
     };
   }, [targets.data, pathname, search]);
+}
+
+/**
+ * The address bar's state of one view — narrowing, order, page — and the way
+ * to change it.
+ *
+ * Present only for the view whose screen is open: the target named by
+ * `viewId` must be the one whose route is the current path. A composed view
+ * rendered anywhere else (a card, a chat message) has no address of its own
+ * and must not pick up another screen's parameters.
+ *
+ * `sort` and `page` are read as written; whether the view can honour them is
+ * decided by the view against its read's descriptor. Every `change` is a
+ * navigation — one history entry, undone with Back — built by
+ * `viewStatePatch`, which is where "a new narrowing returns to page 1" lives.
+ */
+export interface ViewAddress {
+  targetId: string;
+  /** The target's declared narrowing fields; empty when it declares none. */
+  filterFields: NonNullable<UiTarget['filter']>['fields'];
+  predicates: ViewFilterPredicate[];
+  sort: DataSort | null;
+  page: number | null;
+  /** `viewAddressKey` of this state. */
+  key: string;
+  change: (change: ViewStateChange) => void;
+}
+
+export function useViewAddress(viewId: string | null): ViewAddress | null {
+  const targets = useUiTargets();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const search = useRouterState({ select: (s) => s.location.search as Record<string, unknown> });
+  const navigate = useNavigate();
+
+  const target = viewId ? (targets.data?.find((t) => t.id === viewId && t.to === pathname) ?? null) : null;
+  const fields = target?.filter?.fields;
+
+  const change = useCallback(
+    (next: ViewStateChange) => {
+      const patch = viewStatePatch((fields ?? []).map((f) => f.field), next);
+      void navigate({
+        to: '.',
+        search: (prev: Record<string, unknown>) => ({ ...prev, ...patch }),
+      } as never);
+    },
+    [fields, navigate],
+  );
+
+  return useMemo(() => {
+    if (!target) return null;
+    const names = (fields ?? []).map((f) => f.field);
+    return {
+      targetId: target.id,
+      filterFields: fields ?? [],
+      predicates: filterFromSearch(search, names),
+      sort: sortFromParam(search[VIEW_SORT_SEARCH_KEY]),
+      page: pageFromParam(search[VIEW_PAGE_SEARCH_KEY]),
+      key: viewAddressKey(search, names),
+      change,
+    };
+  }, [target, fields, search, change]);
+}
+
+/** The reported state of the view whose screen is open, if one reported. */
+export function useActiveViewReport(): ViewStateReport | null {
+  const targets = useUiTargets();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const reports = useAppState((s) => s.viewStates);
+  return useMemo(
+    () =>
+      Object.values(reports).find(
+        (r) => targets.data?.find((t) => t.id === r.targetId)?.to === pathname,
+      ) ?? null,
+    [reports, targets.data, pathname],
+  );
 }

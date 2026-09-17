@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { APP_ERROR_CODES } from './errors.ts';
-import { viewFilterPredicateSchema } from './ui.ts';
+import { dataSortSchema, viewFilterPredicateSchema, viewPageSchema } from './ui.ts';
 
 /**
  * Data views: what a module's read returns, how a screen is composed from it,
@@ -77,7 +77,10 @@ export const recordFieldSchema = z
       .array(z.object({ value: z.string().max(120), label: z.string().max(120) }))
       .max(60)
       .optional(),
-    /** Whether a view may be ordered by this field. */
+    /**
+     * Whether a view may be ordered by this field. A declared field is
+     * sortable unless it says `false` (see `checkSortField`).
+     */
     sortable: z.boolean().optional(),
   })
   .superRefine((f, ctx) => {
@@ -235,12 +238,6 @@ export type ViewDefinition = z.infer<typeof viewDefinitionSchema>;
 export const DATA_COMPONENTS = ['DataTable', 'DataChart', 'DataSummary'] as const;
 export type DataComponentName = (typeof DATA_COMPONENTS)[number];
 
-export const dataSortSchema = z.object({
-  field: fieldName,
-  direction: z.enum(['asc', 'desc']).describe('asc rosnaco, desc malejaco'),
-});
-export type DataSort = z.infer<typeof dataSortSchema>;
-
 const dataFilterSchema = z
   .array(viewFilterPredicateSchema)
   .max(8)
@@ -396,13 +393,7 @@ export const semanticInstanceSchema = z
     filter: z.array(viewFilterPredicateSchema).max(28),
     sort: dataSortSchema.nullable(),
     /** `index` counts from 1. Null when the instance does not paginate. */
-    page: z
-      .object({
-        index: z.number().int().min(1),
-        size: z.number().int().min(1),
-        count: z.number().int().min(0),
-      })
-      .nullable(),
+    page: viewPageSchema.nullable(),
     /** Records on screen, at most the limit. Empty unless `ready`. */
     visibleRecordIds: z.array(z.string().max(128)).max(SEMANTIC_VISIBLE_RECORDS_LIMIT),
     /**

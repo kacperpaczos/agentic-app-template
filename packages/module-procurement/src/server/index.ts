@@ -2,13 +2,14 @@ import { z } from 'zod';
 import { AppError, type CardComponentDescriptor, type ServerModule } from '@platform/contracts';
 import type { PlatformServices } from '@platform/server';
 import { MODULE_ID } from '../shared/index.ts';
-import { PROCUREMENT_OPENUI_COMPONENTS } from '../shared/openui.ts';
+import { PROCUREMENT_OPENUI_COMPONENTS } from '../shared/openui-components.ts';
 import { updateOfferItemInput } from './inputs.ts';
 import { PROCUREMENT_MIGRATIONS } from './schema.ts';
 import { seedProcurement } from './seed.ts';
 import { ProcurementService } from './services.ts';
 import { procurementTools } from './tools.ts';
 import {
+  caseOfferItemRecords,
   caseRecords,
   comparisonRecords,
   procurementViews,
@@ -192,6 +193,14 @@ export function createProcurementModule(platform: PlatformServices): ServerModul
         inputSchema: caseRef,
         run: async (i: { caseId: string }, ctx) => service.getCaseDetail(i.caseId, ctx.ownerId),
         result: requirementRecords,
+      },
+      {
+        name: 'case_offer_items',
+        description:
+          'Pozycje ofert w sprawie, jedna na wiersz: dostawca, nazwa, jednostka, ilosc, cena jednostkowa i waluta.',
+        inputSchema: caseRef,
+        run: async (i: { caseId: string }, ctx) => ({ items: service.listCaseOfferItems(i.caseId, ctx.ownerId) }),
+        result: caseOfferItemRecords,
       },
       /*
        * The two lists behind the module's list screens. The same service calls

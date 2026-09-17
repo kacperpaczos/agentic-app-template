@@ -13,6 +13,7 @@ import {
   SettingsPage,
   WorkspacePage,
 } from '@platform/ui';
+import { parseAddressSearch, stringifyAddressSearch } from '@platform/contracts';
 import { CaseDetailPage, CasesPage, DataPage, ItemProvenancePage } from '@module/procurement/ui';
 
 /**
@@ -75,11 +76,12 @@ const rootRoute = createRootRoute({
    * which knows nothing about this) keeps the session by default.
    */
   /*
-   * Only the session identifiers are retained. A narrowing deliberately is not:
-   * it belongs to the view it was made for, and carrying `country=PL` onto the
-   * next screen would hide rows there that nobody asked to hide. Leaving a
-   * filtered view therefore drops the filter, and Back brings it back — which is
-   * what the address bar is for.
+   * Only the session identifiers are retained. A view's state deliberately is
+   * not — its narrowing, its order (`sort`) and its page (`page`) belong to the
+   * view they were made for: carrying `country=PL` or `page=3` onto the next
+   * screen would hide rows there that nobody asked to hide. Leaving a view
+   * therefore drops them, and Back brings them back — which is what the
+   * address bar is for.
    */
   search: { middlewares: [retainSearchParams(['c', 's'])] },
   component: () => (
@@ -157,7 +159,18 @@ const routeTree = rootRoute.addChildren([
   itemProvenanceRoute,
 ]);
 
-export const router = createRouter({ routeTree, defaultPreload: 'intent' });
+export const router = createRouter({
+  routeTree,
+  defaultPreload: 'intent',
+  /*
+   * Search parameters are plain strings. The router's default reads each value
+   * as JSON, which turned `?page=2` (and a numeric narrowing such as a tax id)
+   * into a number that the validator above then dropped, and wrote strings back
+   * in JSON quotes. These parameters are meant to be read and pasted by people.
+   */
+  parseSearch: parseAddressSearch,
+  stringifySearch: stringifyAddressSearch,
+});
 
 declare module '@tanstack/react-router' {
   interface Register {

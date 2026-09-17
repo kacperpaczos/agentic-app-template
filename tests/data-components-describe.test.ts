@@ -25,6 +25,8 @@ import {
  */
 
 const recorded = vi.hoisted(() => [] as SemanticInstance[]);
+/** The address state `useViewAddress` hands the table; null outside a view's own screen. */
+const address = vi.hoisted(() => ({ current: null as unknown }));
 
 vi.mock('../packages/platform-ui/src/state/uiSemantics.ts', () => ({
   useDescribeInstance: (d: SemanticInstance | null) => {
@@ -33,11 +35,13 @@ vi.mock('../packages/platform-ui/src/state/uiSemantics.ts', () => ({
 }));
 vi.mock('../packages/platform-ui/src/state/viewFilter.ts', () => ({
   useActiveViewFilter: () => null,
+  useViewAddress: (viewId: string | null) => (viewId ? address.current : null),
 }));
 
 const { DataSummaryView } = await import('../packages/platform-ui/src/views/DataSummary.tsx');
 const { DataTableView } = await import('../packages/platform-ui/src/views/DataTable.tsx');
 const { DataChartView } = await import('../packages/platform-ui/src/views/DataChart.tsx');
+const { ComposedViewContext } = await import('../packages/platform-ui/src/views/viewContext.ts');
 const { setAccessContext } = await import('../packages/platform-ui/src/api/accessContext.ts');
 const { qk } = await import('../packages/platform-ui/src/api/queries.ts');
 
@@ -67,7 +71,12 @@ const response = (count: number): ReadResponse => ({
 type CacheState = { data: ReadResponse } | { error: AppError } | null;
 
 /** Renders one component over a prepared cache and returns its last description and markup. */
-function render(component: unknown, props: Record<string, unknown>, cache: CacheState) {
+function render(
+  component: unknown,
+  props: Record<string, unknown>,
+  cache: CacheState,
+  view: { viewId: string; primaryOperation: string | null } | null = null,
+) {
   // `retryOnMount: false` keeps a failed query failed during a render with no
   // effects; otherwise the observer optimistically reports a refetch (pending).
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false } } });
@@ -80,7 +89,14 @@ function render(component: unknown, props: Record<string, unknown>, cache: Cache
     query.setState({ ...query.state, status: 'error', error: cache.error, errorUpdatedAt: Date.now(), fetchStatus: 'idle' });
   }
   recorded.length = 0;
-  const html = renderToString(createElement(QueryClientProvider, { client: qc }, createElement(component, props)));
+  const inner = createElement(component, props);
+  const html = renderToString(
+    createElement(
+      QueryClientProvider,
+      { client: qc },
+      view ? createElement(ComposedViewContext.Provider, { value: view }, inner) : inner,
+    ),
+  );
   const description = recorded.at(-1)!;
   expect(description, 'komponent nie zglosil opisu').toBeTruthy();
   expect(semanticInstanceSchema.safeParse(description).success, JSON.stringify(description)).toBe(true);
@@ -164,6 +180,62 @@ describe('DataTable', () => {
     expect(description.error!.message).toMatch(/wojewodztwo/);
     expect(description.record).toEqual({ kind: 'thing', idField: 'id' });
     expect(description.fields.map((f) => f.field)).toEqual(['name']);
+  });
+});
+
+describe('DataTable ze stronami i stanem widoku', () => {
+  it('tabela poza widokiem z pageSize: pierwsza strona, opis z page i tylko narysowanymi rekordami', () => {
+    const { description, html } = render(DataTableView, { source, columns: ['name'], pageSize: 10 }, { data: response(23) });
+    expect(description).toMatchObject({ state: 'ready', matched: 23, total: 23, page: { index: 1, size: 10, count: 3 } });
+    expect(description.visibleRecordIds).toEqual(['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7', 't8', 't9']);
+    expect((html.match(/<tr data-record-kind/g) ?? []).length).toBe(10);
+    expect(html).toContain('Strona <!-- -->1<!-- --> z <!-- -->3');
+    // Outside a view's own screen there is nothing to narrow or order from the address.
+    expect(html).not.toContain('data-testid="view-filter-controls"');
+    expect(html).not.toContain('data-sort-field');
+  });
+
+  it('instancja glowna: kontrolki pokazuja stan z adresu — aria-sort, wartosc pola, strona', () => {
+    address.current = {
+      targetId: 'm.view',
+      filterFields: [
+        { field: 'currency', label: 'Waluta', values: ['PLN', 'EUR'] },
+        { field: 'name', label: 'Nazwa rekordu' },
+      ],
+      predicates: [
+        { field: 'currency', op: 'eq', value: 'PLN' },
+        { field: 'name', op: 'contains', value: 'n1' },
+      ],
+      sort: { field: 'name', direction: 'desc' },
+      page: 2,
+      key: 'k',
+      change: () => {},
+    };
+    try {
+      const { description, html } = render(
+        DataTableView,
+        { source, columns: ['name', 'total'], pageSize: 5 },
+        { data: response(30) },
+        { viewId: 'm.view', primaryOperation: 'm.things' },
+      );
+      // n1, n10…n19: eleven records; descending by name n19…n10, n1 — the second page of three is n14…n10.
+      expect(description).toMatchObject({
+        state: 'ready',
+        matched: 11,
+        total: 30,
+        sort: { field: 'name', direction: 'desc' },
+        page: { index: 2, size: 5, count: 3 },
+      });
+      expect(description.visibleRecordIds).toEqual(['t14', 't13', 't12', 't11', 't10']);
+      expect(description.actions).toEqual(expect.arrayContaining(['filter', 'sort', 'page']));
+      expect(html).toMatch(/<th scope="col" data-field="name" aria-sort="descending"><button type="button" class="pf-sort" data-sort-field="name">Nazwa<\/button><\/th>/);
+      expect(html).toMatch(/<th scope="col" data-field="total" aria-sort="none">/);
+      expect(html).toMatch(/<option value="PLN" selected="">PLN<\/option>/);
+      expect(html).toMatch(/<input[^>]*name="name"[^>]*value="n1"/);
+      expect(html).toContain('Strona <!-- -->2<!-- --> z <!-- -->3');
+    } finally {
+      address.current = null;
+    }
   });
 });
 

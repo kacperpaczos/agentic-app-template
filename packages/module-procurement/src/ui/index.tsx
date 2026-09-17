@@ -2,16 +2,18 @@ import { defineComponent } from '@openuidev/react-lang';
 import type { ConversationStarterContribution, MenuItemContribution } from '@platform/contracts';
 import type { UiModule } from '@platform/ui';
 import { MODULE_ID } from '../shared/index.ts';
-import { PROCUREMENT_OPENUI_COMPONENTS } from '../shared/openui.ts';
+import { PROCUREMENT_OPENUI_COMPONENTS } from '../shared/openui-components.ts';
 import {
   ComparisonTableCard,
   CostChartCard,
   procurementCardRenderers,
 } from './cards.tsx';
+import { procurementDetailOpenuiComponents } from './detailComponents.tsx';
 import { CaseDetailPage, CasesPage, DataPage, ItemProvenancePage } from './pages.tsx';
 
 export { CaseDetailPage, CasesPage, DataPage, ItemProvenancePage } from './pages.tsx';
 export * from './cards.tsx';
+export * from './detailComponents.tsx';
 
 const menu: MenuItemContribution[] = [
   { id: 'procurement.cases', section: 'records', label: 'Wszystkie sprawy', to: '/cases', order: 10 },
@@ -39,11 +41,13 @@ const starters: ConversationStarterContribution[] = [
  * canvas cards, so a table written by the agent and a table in the default
  * layout are the same table reading the same backend data.
  *
- * Name, description and props schema come from `shared/openui.ts`, which the
- * server half declares too — see there for why.
+ * Name, description and props schema of every one of them come from
+ * `shared/openui-components.ts`, which the server half declares too — see there
+ * for why.
  */
 const { OfferComparison, OfferCostChart } = PROCUREMENT_OPENUI_COMPONENTS;
 const openuiComponents = [
+  ...procurementDetailOpenuiComponents,
   defineComponent({
     name: OfferComparison.name,
     description: OfferComparison.description,
