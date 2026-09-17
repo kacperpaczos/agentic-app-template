@@ -415,6 +415,8 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     expect(after.conversationId).toBeNull();
     const text = JSON.stringify(after);
     for (const id of mine) expect(text).not.toContain(id);
+    // Not even in the address, which still carries the conversation until the chat catches up.
+    expect(text).not.toContain(conversationId);
     expect(after.instances.some((i: any) => i.state === 'ready' && i.matched === mine.length)).toBe(false);
   });
 

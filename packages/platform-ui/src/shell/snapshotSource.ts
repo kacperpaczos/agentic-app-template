@@ -32,8 +32,10 @@ export type ShellSnapshotSource = (() => UiSnapshotContent | null) & { dispose()
  *
  * **Nothing from before an identity switch.** The shell's conversation and
  * space are not reset by a switch, so the ids held at that moment are not
- * reported (as `null`) until the shell moves to another one; component
- * descriptions from before the switch are filtered out by the registry itself.
+ * reported (as `null`) until the shell moves to another one — neither as ids
+ * nor in the address, whose session parameters (`c`, `s`) carry the same ids;
+ * component descriptions from before the switch are filtered out by the
+ * registry itself.
  *
  * **No description without the catalog.** While the catalog is still loading
  * for the signed-in owner — right after a switch, or at startup — the screen
@@ -64,6 +66,23 @@ export function createShellSnapshotSource(deps: ShellSnapshotDeps): ShellSnapsho
     return value;
   };
 
+  /* The address as shown, minus a session parameter still naming an id held at the switch. */
+  const withoutHeldSessionParams = (search: string): string => {
+    if (heldAtSwitch.conversationId === undefined && heldAtSwitch.spaceId === undefined) return search;
+    const params = new URLSearchParams(search);
+    let dropped = false;
+    for (const [param, key] of [['c', 'conversationId'], ['s', 'spaceId']] as const) {
+      const held = heldAtSwitch[key];
+      if (held && params.get(param) === held) {
+        params.delete(param);
+        dropped = true;
+      }
+    }
+    if (!dropped) return search;
+    const rest = params.toString();
+    return rest ? `?${rest}` : '';
+  };
+
   const source = () => {
     const owner = scope();
     if (known.scope !== owner) known = { scope: owner };
@@ -82,7 +101,7 @@ export function createShellSnapshotSource(deps: ShellSnapshotDeps): ShellSnapsho
 
     const { pathname, search } = deps.location();
     return buildUiSnapshotContent({
-      url: pathname + search,
+      url: pathname + withoutHeldSessionParams(search),
       pathname,
       conversationId,
       spaceId,

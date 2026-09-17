@@ -1389,7 +1389,8 @@ describe('Fix round 3', () => {
     setAccessContext(qc, 'local-user');
     const stores: Record<string, UiSnapshotStore> = { 'local-user': new UiSnapshotStore(), 'other-user': new UiSnapshotStore() };
     const shell = { conversationId: 'cnv_of_local_user' as string | null, spaceId: 'spc_of_local_user' as string | null };
-    const source = createShellSnapshotSource({ qc, location: () => ({ pathname: '/settings', search: '' }), shell: () => shell, instances: listInstances });
+    const location = { pathname: '/settings', search: '?c=cnv_of_local_user&s=spc_of_local_user&tab=auth' };
+    const source = createShellSnapshotSource({ qc, location: () => location, shell: () => shell, instances: listInstances });
     const s = new UiSnapshotSession({
       identity: sessionIdentityStore(),
       send: async (snap) => void stores[accessScope()]!.publish(accessScope(), snap),
@@ -1403,6 +1404,7 @@ describe('Fix round 3', () => {
       const mine = stores['local-user']!.forClient('local-user', s.clientId)!;
       expect(mine.instances.map((i) => i.instanceId)).toEqual(['DataTable-w-czacie']);
       expect(mine).toMatchObject({ conversationId: 'cnv_of_local_user', spaceId: 'spc_of_local_user' });
+      expect(mine.url).toBe('/settings?c=cnv_of_local_user&s=spc_of_local_user&tab=auth');
 
       // Settings → switch identity. The chat's table does not re-render; the shell keeps its ids.
       setAccessContext(qc, 'other-user');
@@ -1420,11 +1422,17 @@ describe('Fix round 3', () => {
       expect(JSON.stringify(theirs)).not.toContain('rec_local_');
       expect(JSON.stringify(theirs)).not.toContain('_of_local_user');
       expect(theirs.target?.id).toBe('platform.settings');
+      // The address still carries them until the chat catches up; the description does not.
+      expect(theirs.url).toBe('/settings?tab=auth');
 
       // Once the shell moves to the new owner's conversation, it is reported.
       shell.conversationId = 'cnv_of_other_user';
+      location.search = '?c=cnv_of_other_user&tab=auth';
       expect((await s.flush()).status).toBe('published');
-      expect(stores['other-user']!.forClient('other-user', s.clientId)?.conversationId).toBe('cnv_of_other_user');
+      expect(stores['other-user']!.forClient('other-user', s.clientId)).toMatchObject({
+        conversationId: 'cnv_of_other_user',
+        url: '/settings?c=cnv_of_other_user&tab=auth',
+      });
     } finally {
       unregisterInstance('DataTable-w-czacie');
       source.dispose();
