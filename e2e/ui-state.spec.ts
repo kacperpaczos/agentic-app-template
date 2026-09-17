@@ -420,6 +420,93 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     expect(after.instances.some((i: any) => i.state === 'ready' && i.matched === mine.length)).toBe(false);
   });
 
+  test('ui_sort, a potem ui_state z minVersion i clientId z jego wyniku: opis ma nowy porzadek w kolejnosci z ekranu', async ({ page }) => {
+    await scripted.restart('ui-state-after-sort');
+    await openApp(page, '/data');
+    await expect(rows(page)).toHaveCount(4);
+    await send(page, 'Posortuj dostawcow malejaco po nazwie i opisz ekran.');
+    await settled(page);
+    await expect.poll(() => new URL(page.url()).searchParams.get('sort')).toBe('-name');
+
+    const conversationId = await conversationOnScreen(page);
+    const clientId = await clientIdOf(page);
+    const [sorted] = await toolResults(page, conversationId, 'ui_sort');
+    const [state] = await toolResults(page, conversationId, 'ui_state');
+    expect(sorted).toMatchObject({
+      executed: true,
+      sorted: { field: 'name', direction: 'desc' },
+      uiClientId: clientId,
+      uiPublication: 'published',
+    });
+    expect(state.stale).toBe(false);
+    expect(state.version).toBeGreaterThanOrEqual(sorted.uiVersion);
+    expect(state.snapshot.clientId).toBe(clientId);
+    const table = state.snapshot.instances.find((i: any) => i.component === 'DataTable');
+    expect(table).toMatchObject({ sort: { field: 'name', direction: 'desc' }, groupBy: null });
+
+    // The order on screen, the order described, and the backend's records ordered by name, descending.
+    const onScreen = await rows(page).evaluateAll((trs) => trs.map((tr) => tr.getAttribute('data-record-id')));
+    expect(table.visibleRecordIds).toEqual(onScreen);
+    const { all } = await suppliers(page);
+    expect(onScreen).toEqual([...all].sort((a, b) => b.name.localeCompare(a.name, 'pl')).map((s) => s.id));
+  });
+
+  test('Widoki agenta: opis nazywa cel, przestrzen rozmowy z kartami i wersja kompozycji, a tabela grupowanie w kolejnosci z ekranu', async ({ page }) => {
+    await scripted.restart('ui-state-agent-views');
+    await openApp(page, '/data');
+    await send(page, 'Zrob zestawienie ofert wedlug waluty i pokaz je.');
+    await settled(page);
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/agent-views');
+    const table = page.getByTestId('agent-views-page').locator('[data-ui-instance][data-component="DataTable"]');
+    await expect(table).toHaveAttribute('data-state', 'ready');
+
+    const conversationId = await conversationOnScreen(page);
+    const clientId = await clientIdOf(page);
+    const [opened] = await toolResults(page, conversationId, 'ui_navigate');
+    const [state] = await toolResults(page, conversationId, 'ui_state');
+    expect(opened).toMatchObject({ executed: true, uiClientId: clientId, uiPublication: 'published' });
+    expect(state.stale).toBe(false);
+    expect(state.version).toBeGreaterThanOrEqual(opened.uiVersion);
+
+    // The conversation's space and cards, as the backend has them.
+    const api = await getJson(page, `/api/conversations/${conversationId}/agent-views`);
+    expect(api.cards).toHaveLength(1);
+    const snap = state.snapshot;
+    expect(snap.target).toMatchObject({ id: 'platform.agentViews' });
+    expect(snap.cardsSpaceId).toBe(api.space.id);
+    expect(snap.spaceId).not.toBe(api.space.id); // the working space is not the agent views space
+    expect(snap.cards).toEqual(
+      api.cards.map((c: any) => ({
+        cardId: c.id,
+        title: c.title,
+        kind: c.spec.kind,
+        component: c.spec.kind === 'component' ? c.spec.component : 'openui',
+        specVersion: c.specVersion,
+      })),
+    );
+    expect(snap.view).toEqual({
+      id: 'platform.agentViews',
+      title: 'Widoki agenta',
+      compositionVersion: fnvVersion(`${api.space.id}|${api.cards.map((c: any) => `${c.id}@${c.specVersion}`).join(',')}`),
+    });
+
+    // The card's table: grouped by currency, its records in the order on screen.
+    const described = await published(page, (s) =>
+      s.instances.some((i: any) => i.component === 'DataTable' && i.state === 'ready' && i.source.operation === 'procurement.comparison'),
+    );
+    const grouped = described.instances.find((i: any) => i.source.operation === 'procurement.comparison');
+    expect(grouped.groupBy).toBe('currency');
+    const onScreen = await table.locator('tbody tr[data-record-id]').evaluateAll((trs) => trs.map((tr) => tr.getAttribute('data-record-id')));
+    expect(onScreen.length).toBeGreaterThan(0);
+    expect(grouped.visibleRecordIds).toEqual(onScreen);
+    // Each group heading on screen is followed by records of that currency only.
+    const read = await postJson(page, '/api/read', { operation: 'procurement.comparison', input: { caseId: /caseId: "([^"]+)"/.exec(api.cards[0].spec.source)![1] } });
+    const currencyOf = new Map(read.result.rows.map((r: any) => [r.offerId, r.currency]));
+    const sequence = onScreen.map((id) => currencyOf.get(id));
+    const blocks = sequence.filter((c, i) => i === 0 || c !== sequence[i - 1]);
+    expect(new Set(blocks).size).toBe(blocks.length);
+  });
+
   test('wykonanie rozmowy A, gdy przegladarka pokazuje B, dostaje other_conversation', async ({ page }) => {
     await scripted.restart('ui-state-late');
     await openApp(page, '/data');

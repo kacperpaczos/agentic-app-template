@@ -17,11 +17,15 @@ import {
   clampUiUrl,
   compositionVersionOf,
   parseRunAppContext,
+  semanticInstanceSchema,
   uiCommandResultSchema,
   uiCommandSchema,
   uiSnapshotSchema,
   type AppContext,
+  type CanvasCard,
   type CanvasState,
+  type ReadResponse,
+  type ReadResultDescriptor,
   type SemanticInstance,
   type ToolCallContext,
   type UiCommand,
@@ -42,7 +46,13 @@ import {
 import {
   AccessContextChanged,
   UiSnapshotSession,
+  accessEpoch,
   accessScope,
+  createInstanceDescriber,
+  displayedCanvas,
+  pollUntil,
+  setDisplayedCanvas,
+  waitingDeadline,
   apiPut,
   buildUiSnapshotContent,
   createShellSnapshotSource,
@@ -62,6 +72,8 @@ import {
   type UiSnapshotInput,
 } from '@platform/ui';
 import { resolveLastResult, scriptedAgent, type Step } from '../e2e/support/scripted-agent.ts';
+import { buildDataModel, describeDataInstance } from '../packages/platform-ui/src/views/model.ts';
+import { withGrouping } from '../packages/platform-ui/src/views/grouping.ts';
 import { createHarness, login, type Harness } from './helpers.ts';
 
 /**
@@ -131,6 +143,7 @@ function snapshot(over: Partial<UiSnapshot> = {}): UiSnapshot {
     view: { id: 'procurement.data', title: 'Dostawcy', compositionVersion: 'x-00000000' },
     cards: null,
     cardsOmitted: 0,
+    cardsSpaceId: null,
     instances: [instance('DataTable-a')],
     instancesOmitted: 0,
     actions: ['navigate', 'filter', 'sort'],
@@ -1503,6 +1516,258 @@ describe('Fix round 3', () => {
       expect(error).toBeInstanceOf(AccessContextChanged);
     } finally {
       globalThis.fetch = original;
+      resetAccessContext();
+    }
+  });
+});
+
+/* ========================================================================== */
+/*  Merge round: Task 2 runner and ui_sort, Task 4 agent views and groupBy    */
+/* ========================================================================== */
+
+describe('Merge round', () => {
+  it('R1: czekanie na raport widoku konczy sie w budzecie — wykonana komenda nie jest no_client, opis ma wersje', async () => {
+    const BUDGET = 2000;
+    const conv = h.platform.services.conversations.create({ ownerId: h.ownerId, firstMessage: { content: 'x' } });
+    const run = h.platform.services.runs.start({
+      conversationId: conv.id,
+      ownerId: h.ownerId,
+      prompt: 'x',
+      appContext: context({ conversationId: conv.id }),
+      workspaceDir: null,
+      abort: new AbortController(),
+    });
+    const stream = new RunEventStream(run.id, h.platform.services.runs);
+    const runtime = h.platform.runtime;
+    const session = new UiSnapshotSession({ identity: sessionIdentityStore(), send: async () => {}, scope: () => 'x' });
+    session.setSource(() => buildUiSnapshotContent({ url: '/data', pathname: '/data', conversationId: conv.id, spaceId: null, instances: [], targets: [], views: [], canvas: undefined }));
+
+    const watcher = (async () => {
+      for await (const { event } of stream.read(0)) {
+        const e = event as Record<string, unknown>;
+        if (e.type === 'CUSTOM' && e.name === PLATFORM_CUSTOM_EVENTS.uiCommand) {
+          const cmd = uiCommandSchema.parse(e.value);
+          void performAndAcknowledge(cmd, {
+            // Task 2's wait for a view report that never comes: 80 × 60 ms, bounded by the budget.
+            perform: async (c, { deadline }) => {
+              const report = await pollUntil(() => null, { attempts: 80, intervalMs: 60, until: waitingDeadline(deadline) });
+              return report
+                ? { commandId: c.commandId, executed: true }
+                : { commandId: c.commandId, targetId: c.targetId, executed: false, reason: 'not_applied', url: '/data' };
+            },
+            session,
+            post: async (_runId, result) => runtime.acknowledgeUiCommand(result),
+            budgetMs: BUDGET,
+            marginMs: 200,
+          });
+        }
+      }
+    })();
+    const started = Date.now();
+    const outcome = await runtime.requestUiCommand(
+      { commandId: 'uic_budget_view', runId: run.id, conversationId: conv.id, targetId: 'procurement.data', spaceId: null },
+      stream,
+      BUDGET,
+    );
+    const took = Date.now() - started;
+    stream.close();
+    await watcher;
+    expect(outcome).toMatchObject({ executed: false, reason: 'not_applied', uiPublication: 'published' });
+    expect(outcome.uiVersion).toBe(1);
+    expect(outcome.uiClientId).toBe(session.clientId);
+    expect(took).toBeLessThan(BUDGET);
+
+    // pollUntil itself never waits past `until`.
+    const t0 = Date.now();
+    expect(await pollUntil(() => null, { attempts: 80, intervalMs: 60, until: t0 + 150 })).toBeNull();
+    expect(Date.now() - t0).toBeLessThan(400);
+    expect(await pollUntil(() => 'jest', { attempts: 1, intervalMs: 60, until: t0 })).toBe('jest');
+  });
+
+  it('R2: ui_sort przekazuje uiVersion, uiClientId i uiPublication z potwierdzenia jak ui_navigate i ui_filter', async () => {
+    const conv = h.platform.services.conversations.create({ ownerId: h.ownerId, firstMessage: { content: 'x' } });
+    const run = h.platform.services.runs.start({
+      conversationId: conv.id,
+      ownerId: h.ownerId,
+      prompt: 'x',
+      appContext: context({ conversationId: conv.id }),
+      workspaceDir: null,
+      abort: new AbortController(),
+    });
+    const stream = new RunEventStream(run.id, h.platform.services.runs);
+    const runtime = h.platform.runtime;
+    const cookie = await login(h.platform.app, h.ownerId);
+    const watcher = (async () => {
+      for await (const { event } of stream.read(0)) {
+        const e = event as Record<string, unknown>;
+        if (e.type === 'CUSTOM' && e.name === PLATFORM_CUSTOM_EVENTS.uiCommand) {
+          const command = uiCommandSchema.parse(e.value);
+          await h.platform.app.request(`/api/runs/${run.id}/ui-ack`, {
+            method: 'POST',
+            headers: { cookie, 'content-type': 'application/json' },
+            body: JSON.stringify({
+              commandId: command.commandId,
+              targetId: command.targetId,
+              executed: true,
+              url: '/data?sort=-name',
+              sorted: { field: 'name', direction: 'desc' },
+              uiVersion: 7,
+              uiClientId: 'ui_tab_sorting_01',
+              uiPublication: 'published',
+            }),
+          });
+        }
+      }
+    })();
+    const ctx: ToolCallContext = {
+      ...toolCtx({ conversationId: conv.id, runId: run.id }),
+      requestUi: (command) =>
+        runtime.requestUiCommand(
+          {
+            commandId: `uic_${Math.random().toString(36).slice(2, 12)}`,
+            runId: run.id,
+            conversationId: conv.id,
+            targetId: command.targetId,
+            spaceId: command.spaceId ?? null,
+            ...(command.sort !== undefined ? { sort: command.sort } : {}),
+          },
+          stream,
+          2000,
+        ),
+    };
+    const sorted = (await platformTools(h.platform.services)
+      .find((t) => t.name === 'ui_sort')!
+      .handler({ targetId: 'procurement.data', field: 'name', direction: 'desc' } as never, ctx)) as any;
+    stream.close();
+    await watcher;
+    expect(sorted).toMatchObject({
+      executed: true,
+      sorted: { field: 'name', direction: 'desc' },
+      uiVersion: 7,
+      uiClientId: 'ui_tab_sorting_01',
+      uiPublication: 'published',
+    });
+  });
+
+  it('R3: na Widokach agenta karty i wersja kompozycji opisuja przestrzen rozmowy na ekranie, nie przestrzen robocza', () => {
+    const targets = h.platform.services.modules.uiTargets();
+    const working = { space: { id: 'spc_working' }, cards: [{ id: 'crd_working', title: 'Robocza', spec: { kind: 'openui', source: 'x' }, specVersion: 1 }] } as unknown as CanvasState;
+    const agentCards = [
+      { id: 'crd_view_1', title: 'Zestawienie ofert', spec: { kind: 'openui', source: 'root = Stack([])' }, specVersion: 2 },
+      { id: 'crd_view_2', title: 'Suma ofert', spec: { kind: 'openui', source: 'root = Stack([])' }, specVersion: 1 },
+    ] as unknown as CanvasCard[];
+    const input = (displayed: UiSnapshotInput['displayed']): UiSnapshotInput => ({
+      url: '/agent-views?c=cnv_a',
+      pathname: '/agent-views',
+      conversationId: 'cnv_a',
+      spaceId: 'spc_working',
+      instances: [],
+      targets,
+      views: h.platform.services.modules.views(),
+      canvas: working,
+      displayed,
+    });
+
+    const shown = buildUiSnapshotContent(input({ spaceId: 'spc_conv_a', scopeKind: 'conversation', cards: agentCards }));
+    expect(shown.target?.id).toBe('platform.agentViews');
+    expect(shown.spaceId).toBe('spc_working');
+    expect(shown.cardsSpaceId).toBe('spc_conv_a');
+    expect(shown.cards?.map((c) => [c.cardId, c.specVersion])).toEqual([['crd_view_1', 2], ['crd_view_2', 1]]);
+    expect(shown.view).toEqual({
+      id: 'platform.agentViews',
+      title: 'Widoki agenta',
+      compositionVersion: compositionVersionOf('spc_conv_a|crd_view_1@2,crd_view_2@1'),
+    });
+    // An agent view edited (spec version) is a new composition version.
+    const edited = buildUiSnapshotContent(
+      input({ spaceId: 'spc_conv_a', scopeKind: 'conversation', cards: [{ ...agentCards[0]!, specVersion: 3 }, agentCards[1]!] }),
+    );
+    expect(edited.view?.compositionVersion).not.toBe(shown.view?.compositionVersion);
+
+    // No views yet: an empty set of cards of no space — not the working space's cards.
+    const none = buildUiSnapshotContent(input({ spaceId: null, scopeKind: 'conversation', cards: [] }));
+    expect(none).toMatchObject({ cards: [], cardsSpaceId: null });
+    // Still loading: unknown.
+    expect(buildUiSnapshotContent(input({ spaceId: null, scopeKind: 'conversation', cards: null }))).toMatchObject({ cards: null, view: null });
+    // The working canvas on screen: its cards, and no composition version of its own.
+    const canvas = buildUiSnapshotContent({ ...input({ spaceId: 'spc_working', scopeKind: null, cards: working.cards }), url: '/', pathname: '/' });
+    expect(canvas).toMatchObject({ cardsSpaceId: 'spc_working', view: null });
+    expect(canvas.cards?.map((c) => c.cardId)).toEqual(['crd_working']);
+    // Nothing displayed (a data screen): the working space, as before.
+    expect(buildUiSnapshotContent({ ...input(null), url: '/data', pathname: '/data' })).toMatchObject({ cardsSpaceId: 'spc_working' });
+  });
+
+  it('R3: rejestr przestrzeni na ekranie — ostatnio zamontowana, tylko pod biezaca tozsamoscia', () => {
+    const qc = new QueryClient();
+    setAccessContext(qc, 'local-user');
+    try {
+      const before = accessEpoch();
+      setDisplayedCanvas('k1', { spaceId: 'spc_1', scopeKind: null, cards: [] });
+      setDisplayedCanvas('k2', { spaceId: 'spc_2', scopeKind: 'conversation', cards: null });
+      expect(displayedCanvas()?.spaceId).toBe('spc_2');
+      setDisplayedCanvas('k2', null);
+      expect(displayedCanvas()?.spaceId).toBe('spc_1');
+      setAccessContext(qc, 'other-user');
+      expect(displayedCanvas()).toBeNull();
+      // Rendered before the switch, recorded after it: still not this identity's.
+      setDisplayedCanvas('k3', { spaceId: 'spc_3', scopeKind: null, cards: [] }, before);
+      expect(displayedCanvas()).toBeNull();
+      setDisplayedCanvas('k1', null);
+      setDisplayedCanvas('k3', null);
+    } finally {
+      resetAccessContext();
+    }
+  });
+
+  it('R4: tabela grupowana mowi, po czym, a widoczne rekordy sa w kolejnosci z ekranu', () => {
+    const descriptor: ReadResultDescriptor = {
+      collection: 'rows',
+      record: { kind: 'offer', idField: 'id' },
+      fields: [
+        { field: 'name', label: 'Nazwa', type: 'text' },
+        { field: 'currency', label: 'Waluta', type: 'text' },
+      ],
+    };
+    const response: ReadResponse = {
+      operation: 'm.rows',
+      descriptor,
+      resolvedAt: new Date().toISOString(),
+      result: {
+        rows: [
+          { id: 'a', name: 'A', currency: 'PLN' },
+          { id: 'b', name: 'B', currency: 'EUR' },
+          { id: 'c', name: 'C', currency: 'PLN' },
+        ],
+      },
+    };
+    const describe = (model: Parameters<typeof describeDataInstance>[0]['model']) =>
+      describeDataInstance({ instanceId: 'DataTable-g', component: 'DataTable', viewId: null, source: { operation: 'm.rows' }, state: 'ready', model, actions: [] });
+
+    const plain = describe(withGrouping(buildDataModel({ response }), null));
+    expect(plain).toMatchObject({ groupBy: null, visibleRecordIds: ['a', 'b', 'c'] });
+
+    const grouped = describe(withGrouping(buildDataModel({ response }), 'currency'));
+    // On screen: the PLN group (A, C), then the EUR group (B).
+    expect(grouped).toMatchObject({ groupBy: 'currency', visibleRecordIds: ['a', 'c', 'b'], matched: 3, total: 3 });
+    expect(semanticInstanceSchema.safeParse(grouped).success).toBe(true);
+    // Older descriptions without the field still validate.
+    const { groupBy: _omitted, ...older } = grouped;
+    expect(semanticInstanceSchema.safeParse(older).success).toBe(true);
+  });
+
+  it('B1: opis wyrenderowany przed przelaczeniem tozsamosci nie jest wymieniany, choc zapisany po nim', () => {
+    const qc = new QueryClient();
+    setAccessContext(qc, 'local-user');
+    try {
+      const renderedAt = accessEpoch();
+      setAccessContext(qc, 'other-user');
+      const describer = createInstanceDescriber();
+      describer.update(instance('DataTable-render'), renderedAt);
+      expect(listInstances().map((i) => i.instanceId)).not.toContain('DataTable-render');
+      describer.update(instance('DataTable-render'), accessEpoch());
+      expect(listInstances().map((i) => i.instanceId)).toContain('DataTable-render');
+      describer.dispose();
+    } finally {
       resetAccessContext();
     }
   });

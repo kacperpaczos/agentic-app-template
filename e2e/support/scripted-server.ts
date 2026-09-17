@@ -17,7 +17,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { collectToolEntries, platformTools, type PlatformInstance } from '@platform/server';
 import { composeApp } from '../../apps/server/src/compose.ts';
 import { agentViewsScript } from './agent-views-scenario.ts';
-import { scriptedAgent, type Step } from './scripted-agent.ts';
+import { scriptedAgent, type CallRecord, type Step } from './scripted-agent.ts';
 
 /**
  * Scenarios the browser tests drive. Named so a spec reads as an intention
@@ -231,6 +231,55 @@ const SCENARIOS: Record<string, Step[]> = {
     { kind: 'wait', delayMs: 10_000 },
     { kind: 'call', name: 'ui_state', maxChars: 160 },
     { kind: 'text', text: 'Koniec pracy w tle.' },
+  ],
+  /*
+   * Order through the real `ui_sort` handler and gate, then read the screen with
+   * the version and tab its acknowledgement carried.
+   */
+  'ui-state-after-sort': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'call', name: 'ui_sort', input: { targetId: 'procurement.data', field: 'name', direction: 'desc' }, maxChars: 400 },
+    {
+      kind: 'call',
+      name: 'ui_state',
+      input: { minVersion: '$last.uiVersion', clientId: '$last.uiClientId' },
+      maxChars: 160,
+    },
+    { kind: 'text', text: 'Opisalem ekran po sortowaniu.' },
+  ],
+  /*
+   * An agent view grouped by currency, the agent views screen opened through
+   * the real `ui_navigate`, and the screen read with the version and tab of that
+   * acknowledgement.
+   */
+  'ui-state-agent-views': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'call', name: 'procurement_list_cases', maxChars: 200 },
+    {
+      kind: 'call',
+      name: 'agent_view_create',
+      input: (calls: CallRecord[]) => {
+        const listed = calls.find((c) => c.name === 'procurement_list_cases');
+        const found = listed?.result?.cases?.find((c: { code: string }) => c.code === 'PC-2026-01');
+        if (!found) throw new Error('scenariusz: brak sprawy PC-2026-01');
+        return {
+          title: 'Oferty wedlug waluty',
+          source: [
+            'root = Stack([tabela])',
+            `tabela = DataTable({operation: "procurement.comparison", input: {caseId: "${found.id}"}}, ["supplierName", "currency", "totalMinor"], "Oferty", null, null, null, "currency")`,
+          ].join('\n'),
+        };
+      },
+      maxChars: 300,
+    },
+    { kind: 'call', name: 'ui_navigate', input: { targetId: 'platform.agentViews' }, maxChars: 300 },
+    {
+      kind: 'call',
+      name: 'ui_state',
+      input: { minVersion: '$last.uiVersion', clientId: '$last.uiClientId' },
+      maxChars: 160,
+    },
+    { kind: 'text', text: 'Opisalem widoki agenta.' },
   ],
   /*
    * An answer that is an OpenUI composition: the chat renders a data component

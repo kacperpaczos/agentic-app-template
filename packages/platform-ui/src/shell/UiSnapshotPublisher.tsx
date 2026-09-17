@@ -4,6 +4,7 @@ import { useRouterState } from '@tanstack/react-router';
 import { accessEpoch, onAccessContextChange } from '../api/accessContext.ts';
 import { useCanvasState, useUiTargets, useViewDefinitions } from '../api/queries.ts';
 import { useAppState } from '../state/appState.ts';
+import { displayedCanvas, useDisplayedCanvases } from '../state/displayedCanvas.ts';
 import { listInstances, useUiSemantics } from '../state/uiSemantics.ts';
 import { uiSnapshotSession } from '../state/uiSnapshot.ts';
 import { createShellSnapshotSource } from './snapshotSource.ts';
@@ -52,12 +53,14 @@ export function UiSnapshotPublisher() {
         return { conversationId: s.conversationId, spaceId: s.spaceId };
       },
       instances: listInstances,
+      displayed: displayedCanvas,
     });
     uiSnapshotSession.setSource(source);
 
     const changed = () => uiSnapshotSession.changed();
     const unsubscribe = [
       useUiSemantics.subscribe(changed),
+      useDisplayedCanvases.subscribe(changed),
       // The store also carries streamed text; only these two describe the screen.
       useAppState.subscribe((s, prev) => {
         if (s.conversationId !== prev.conversationId || s.spaceId !== prev.spaceId) changed();

@@ -53,7 +53,7 @@ export const useUiSemantics = create<UiSemanticsState>(() => ({ instances: {}, o
  * that version the list do not see a change that did not happen.
  * Returns whether the description is now recorded.
  */
-export function registerInstance(description: SemanticInstance): boolean {
+export function registerInstance(description: SemanticInstance, epoch: number = accessEpoch()): boolean {
   const parsed = semanticInstanceSchema.safeParse(description);
   if (!parsed.success) {
     console.error(
@@ -64,7 +64,6 @@ export function registerInstance(description: SemanticInstance): boolean {
     return false;
   }
   const id = parsed.data.instanceId;
-  const epoch = accessEpoch();
   const state = useUiSemantics.getState();
   const current = state.instances[id];
   if (current && state.epochs[id] === epoch && JSON.stringify(current) === JSON.stringify(parsed.data)) return true;
@@ -108,7 +107,12 @@ export function listInstances(): SemanticInstance[] {
  * that no longer exists.
  */
 export interface InstanceDescriber {
-  update(description: SemanticInstance | null): void;
+  /**
+   * `epoch` — the access epoch of the render that produced the description; a
+   * description rendered before an identity switch keeps its old epoch even if
+   * it is recorded after the switch.
+   */
+  update(description: SemanticInstance | null, epoch?: number): void;
   dispose(): void;
 }
 
@@ -119,10 +123,10 @@ export function createInstanceDescriber(): InstanceDescriber {
     registered = null;
   };
   return {
-    update(description) {
+    update(description, epoch) {
       if (!description) return drop();
       if (registered && registered !== description.instanceId) drop();
-      if (registerInstance(description)) {
+      if (registerInstance(description, epoch)) {
         registered = description.instanceId;
       } else {
         unregisterInstance(description.instanceId);
@@ -143,9 +147,11 @@ export function createInstanceDescriber(): InstanceDescriber {
 export function useDescribeInstance(description: SemanticInstance | null): void {
   const [describer] = useState(createInstanceDescriber);
   const key = description ? JSON.stringify(description) : null;
+  // The identity the description was rendered under — read now, not when the effect runs.
+  const epoch = accessEpoch();
   useEffect(() => {
-    describer.update(description);
+    describer.update(description, epoch);
     // `key` carries the description's content; the object itself is new on every render.
-  }, [describer, key]);
+  }, [describer, key, epoch]);
   useEffect(() => () => describer.dispose(), [describer]);
 }

@@ -1,4 +1,5 @@
 import {
+  AGENT_VIEWS_SCOPE_KIND,
   AppError,
   UI_CLIENT_HEARTBEAT_MS,
   UI_SNAPSHOT_CARDS_LIMIT,
@@ -7,6 +8,7 @@ import {
   clampUiUrl,
   compositionVersionOf,
   type AppContext,
+  type CanvasCard,
   type CanvasState,
   type SemanticInstance,
   type UiSnapshot,
@@ -52,8 +54,13 @@ export interface UiSnapshotInput {
   targets: readonly UiTarget[] | undefined;
   /** Module views, when loaded. */
   views: readonly ViewDefinition[] | undefined;
-  /** The active space's cards, when loaded. */
+  /** The working space's cards, when loaded. */
   canvas: CanvasState | undefined;
+  /**
+   * The space actually on screen and its cards, when a canvas (or the agent
+   * views page) is displayed — preferred to the working space.
+   */
+  displayed?: { spaceId: string | null; scopeKind: string | null; cards: CanvasCard[] | null } | null;
 }
 
 /** Room left for version, identity and capture time under the size limit. */
@@ -82,8 +89,28 @@ export function buildUiSnapshotContent(input: UiSnapshotInput): UiSnapshotConten
     input.instances.map((i) => (i.viewId ? views.get(i.viewId) : undefined)).find((v) => v !== undefined) ??
     null;
 
-  const spaceCards =
-    input.spaceId && input.canvas && input.canvas.space.id === input.spaceId ? input.canvas.cards : null;
+  const displayed = input.displayed ?? null;
+  const cardsSpaceId = displayed ? displayed.spaceId : input.spaceId;
+  const spaceCards: CanvasCard[] | null = displayed
+    ? displayed.cards
+    : input.spaceId && input.canvas && input.canvas.space.id === input.spaceId
+      ? input.canvas.cards
+      : null;
+  /*
+   * A conversation's agent views are a composition too: named by the space and
+   * every card's spec version, so a view added, removed or edited by the agent
+   * is a new composition version.
+   */
+  const agentViews =
+    displayed && displayed.scopeKind === AGENT_VIEWS_SCOPE_KIND && displayed.cards
+      ? {
+          id: target?.id ?? `space:${displayed.spaceId ?? 'none'}`,
+          title: target?.label ?? 'Widoki agenta',
+          compositionVersion: compositionVersionOf(
+            `${displayed.spaceId ?? ''}|${displayed.cards.map((c) => `${c.id}@${c.specVersion}`).join(',')}`,
+          ),
+        }
+      : null;
 
   let instances = input.instances.slice(0, UI_SNAPSHOT_INSTANCES_LIMIT);
   let instancesOmitted = input.instances.length - instances.length;
@@ -94,7 +121,9 @@ export function buildUiSnapshotContent(input: UiSnapshotInput): UiSnapshotConten
     // A narrowed address can be far longer than a description carries: cut, and said so.
     ...clampUiUrl(input.url),
     target: target ? { id: target.id, kind: target.kind, label: target.label } : null,
-    view: view ? { id: view.id, title: view.title, compositionVersion: compositionVersionOf(view.composition) } : null,
+    view: view
+      ? { id: view.id, title: view.title, compositionVersion: compositionVersionOf(view.composition) }
+      : agentViews,
     cards: spaceCards
       ? spaceCards.slice(0, UI_SNAPSHOT_CARDS_LIMIT).map((c) => ({
           cardId: c.id,
@@ -105,6 +134,7 @@ export function buildUiSnapshotContent(input: UiSnapshotInput): UiSnapshotConten
         }))
       : null,
     cardsOmitted: spaceCards ? Math.max(0, spaceCards.length - UI_SNAPSHOT_CARDS_LIMIT) : 0,
+    cardsSpaceId: cardsSpaceId ?? null,
     instances,
     instancesOmitted,
     /*

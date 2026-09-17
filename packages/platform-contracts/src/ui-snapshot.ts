@@ -78,11 +78,22 @@ export const uiSnapshotSchema = z.object({
   clientId: uiClientIdSchema,
   /** When the tab assembled this description (the tab's clock). */
   capturedAt: z.iso.datetime(),
-  /** The conversation open in the tab's chat; null for a new, unsaved one. */
+  /**
+   * The conversation open in the tab's chat; null for a new, unsaved one.
+   * Also null right after an identity switch while the chat still holds the
+   * previous identity's conversation — it is not reported until the chat moves.
+   */
   conversationId: z.string().max(128).nullable(),
-  /** The canvas space the tab has selected. */
+  /**
+   * The working canvas space the tab has selected. Null after an identity
+   * switch while it is still the previous identity's, as `conversationId`.
+   */
   spaceId: z.string().max(128).nullable(),
-  /** Path and query of the screen, as the address bar shows it — cut to the limit. */
+  /**
+   * Path and query of the screen, as the address bar shows it — cut to the
+   * limit, and without the session parameters (`c`, `s`) that still name the
+   * previous identity's conversation or space after a switch.
+   */
   url: z.string().max(UI_URL_MAX_LENGTH),
   /** True when `url` was cut: the address on screen is longer. */
   urlTruncated: z.boolean(),
@@ -91,10 +102,13 @@ export const uiSnapshotSchema = z.object({
     .object({ id: z.string().max(120), kind: z.enum(UI_TARGET_KINDS), label: z.string().max(120) })
     .nullable(),
   /**
-   * The module view composing the screen, if the screen is one. The version
-   * names the composition's source (see {@link compositionVersionOf}), so two
-   * descriptions of the same view with different versions describe different
-   * compositions.
+   * The composition on screen, if there is one, with a version that changes
+   * whenever it does (see {@link compositionVersionOf}):
+   *  - a module view — `id` is the view's, the version names its source;
+   *  - a conversation's agent views (a canvas of a conversation-scoped space) —
+   *    `id` is the screen's target (or `space:<id>`), the version names the
+   *    space and every card in it with its `specVersion`, so adding, removing
+   *    or editing an agent view gives a new version.
    */
   view: z
     .object({
@@ -104,14 +118,24 @@ export const uiSnapshotSchema = z.object({
     })
     .nullable(),
   /**
-   * Cards of the active space, whether or not the canvas is the screen on
-   * display (`target` says which screen is). Null while this tab has not loaded
-   * the space — unknown, which is not the same as none.
+   * Cards of the space in `cardsSpaceId`: the canvas space actually on screen
+   * (the working canvas, or a conversation's agent views), otherwise the
+   * working space selected in the shell (`target` says which screen is shown).
+   * Null while not loaded — unknown, which is not the same as none; empty for a
+   * conversation that has no agent views yet.
    */
   cards: z.array(uiSnapshotCardSchema).max(UI_SNAPSHOT_CARDS_LIMIT).nullable(),
+  /** Which space `cards` belong to; null when none (e.g. a conversation without agent views). */
+  cardsSpaceId: z.string().max(128).nullable(),
   /** Cards of the space left out of `cards` by its limit. */
   cardsOmitted: z.number().int().nonnegative(),
-  /** What each mounted data component says it shows, in mounting order. */
+  /**
+   * What mounted data components say they show, in mounting order — only those
+   * that described themselves under the identity signed in now. After an
+   * identity switch a component that has not described itself again (it was
+   * not re-rendered) is left out: a mounted component may be missing here, but
+   * nothing described under the previous identity is listed.
+   */
   instances: z.array(semanticInstanceSchema).max(UI_SNAPSHOT_INSTANCES_LIMIT),
   /** Mounted descriptions left out by the count or size limit. */
   instancesOmitted: z.number().int().nonnegative(),

@@ -23,6 +23,7 @@ export * from './shell/WorkspacePage.tsx';
 export * from './shell/AgentViewsPage.tsx';
 export * from './state/uiSemantics.ts';
 export * from './state/uiSnapshot.ts';
+export * from './state/displayedCanvas.ts';
 export * from './shell/UiSnapshotPublisher.tsx';
 export * from './shell/uiCommandAck.ts';
 export * from './shell/snapshotSource.ts';

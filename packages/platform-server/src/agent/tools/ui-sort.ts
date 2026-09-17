@@ -120,6 +120,10 @@ export function uiSortTools(services: PlatformServices): Array<ModuleToolDefinit
           sorted: result.sorted,
           page: result.page,
           filtered: result.filtered,
+          // The screen's description after the change, and the tab it belongs to: pass both to ui_state.
+          uiVersion: result.uiVersion,
+          uiClientId: result.uiClientId,
+          uiPublication: result.uiPublication,
         };
       },
     },

@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import { useAgentViews } from '../api/queries.ts';
 import { CanvasSurface } from '../canvas/CanvasHost.tsx';
 import { QueryErrorState } from '../components/ErrorState.tsx';
+import { AGENT_VIEWS_SCOPE_KIND } from '@platform/contracts';
+import { useDisplayCanvas } from '../state/displayedCanvas.ts';
 import { useSessionLocation } from '../state/sessionLocation.ts';
 
 /**
@@ -22,6 +24,22 @@ import { useSessionLocation } from '../state/sessionLocation.ts';
 export function AgentViewsPage() {
   const { conversationId } = useSessionLocation();
   const views = useAgentViews(conversationId);
+  /*
+   * What this page shows, for the screen's description, while it has no canvas
+   * of its own on screen: no views yet is an empty set of cards, not the working
+   * space's. Once the canvas is there, the canvas says it (with fresher cards).
+   */
+  const shownSpace = views.data?.space ?? null;
+  const canvasOnScreen = Boolean(shownSpace && views.data && views.data.cards.length > 0);
+  useDisplayCanvas(
+    conversationId && !canvasOnScreen
+      ? {
+          spaceId: shownSpace?.id ?? null,
+          scopeKind: AGENT_VIEWS_SCOPE_KIND,
+          cards: views.data && !views.error ? views.data.cards : null,
+        }
+      : null,
+  );
 
   const frame = (state: string, body: ReactNode, spaceId?: string) => (
     <div

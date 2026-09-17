@@ -9,6 +9,36 @@ import type { UiSnapshotSession } from '../state/uiSnapshot.ts';
 
 /** Less time than this left is not worth starting a publication in. */
 const MIN_PUBLICATION_MS = 100;
+/**
+ * Time kept back, within the budget, for describing the result: letting the
+ * view settle and publishing its description. Waiting inside `perform` (for a
+ * view to report, for an element to appear) stops this long before the
+ * deadline — see {@link waitingDeadline}.
+ */
+export const UI_ACK_PUBLICATION_RESERVE_MS = 800;
+
+/** Until when `perform` may wait, given the acknowledgement's deadline. */
+export function waitingDeadline(deadline: number): number {
+  return deadline - UI_ACK_PUBLICATION_RESERVE_MS;
+}
+
+/**
+ * Asks `probe` every `intervalMs`, at most `attempts` times, and never past
+ * `until`: resolves with its first non-null answer, or null. `until` is
+ * required on purpose — every wait inside a UI command belongs to its budget.
+ */
+export async function pollUntil<T>(
+  probe: () => T | null,
+  opts: { attempts: number; intervalMs: number; until: number },
+): Promise<T | null> {
+  for (let attempt = 0; attempt < opts.attempts; attempt += 1) {
+    const found = probe();
+    if (found !== null) return found;
+    if (Date.now() + opts.intervalMs > opts.until) return null;
+    await new Promise((r) => setTimeout(r, opts.intervalMs));
+  }
+  return null;
+}
 /** How long the view must be quiet before it is described (see `UiSnapshotSession.flush`). */
 const SETTLE_MS = 150;
 const MAX_SETTLE_MS = 1500;

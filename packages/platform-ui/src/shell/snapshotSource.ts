@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { CanvasState, SemanticInstance, UiTarget, ViewDefinition } from '@platform/contracts';
 import { accessScope, onAccessContextChange } from '../api/accessContext.ts';
 import { qk } from '../api/queries.ts';
+import type { DisplayedCanvas } from '../state/displayedCanvas.ts';
 import { buildUiSnapshotContent, type UiSnapshotContent } from '../state/uiSnapshot.ts';
 
 export interface ShellSnapshotDeps {
@@ -11,6 +12,8 @@ export interface ShellSnapshotDeps {
   shell: () => { conversationId: string | null; spaceId: string | null };
   /** Descriptions recorded under the identity signed in now (`listInstances`). */
   instances: () => SemanticInstance[];
+  /** The space on screen, under the identity signed in now (`displayedCanvas`). */
+  displayed?: () => DisplayedCanvas | null;
   scope?: () => string;
   /** Subscribes to identity switches; defaults to the application's own. */
   onAccessChange?: (listener: () => void) => () => void;
@@ -110,6 +113,7 @@ export function createShellSnapshotSource(deps: ShellSnapshotDeps): ShellSnapsho
       views: known.views,
       // Only the active space's: the builder ignores a remembered other space.
       canvas: known.canvas,
+      displayed: deps.displayed?.() ?? null,
     });
   };
   return Object.assign(source, { dispose: stop });
