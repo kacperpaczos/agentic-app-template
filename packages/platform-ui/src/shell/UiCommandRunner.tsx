@@ -58,6 +58,7 @@ export function UiCommandRunner() {
   const navigate = useNavigate();
   const setSpace = useAppState((s) => s.setSpace);
   const setAgentFilterKey = useAppState((s) => s.setAgentFilterKey);
+  const reportFilterOutcome = useAppState((s) => s.reportFilterOutcome);
   const handled = useRef(new Set<string>());
   const catalog = useRef<UiTarget[] | null>(null);
   const views = useRef<ViewDefinition[] | null>(null);
@@ -164,6 +165,17 @@ export function UiCommandRunner() {
       const expected = applySearchPatch(samePath ? parseAddressSearch(window.location.search) : {}, patch);
       const expectedKey = viewAddressKey(expected, filterFields);
 
+      /*
+       * The same state asked for again changes nothing in the address, so no
+       * view reports anything new. That is still an applied command: the answer
+       * is the state already on screen. A composed view's standing report
+       * matches the address and answers it; a module screen's narrowing count
+       * is kept rather than reset, since it describes this very address.
+       */
+      const unchanged =
+        samePath && viewAddressKey(parseAddressSearch(window.location.search), filterFields) === expectedKey;
+      const standingOutcome = useAppState.getState().filterOutcome;
+
       if (changesView) {
         /*
          * Remembered as a key of the resulting narrowing and order, so the
@@ -175,6 +187,7 @@ export function UiCommandRunner() {
         const agentKey = viewAddressKey(expected, filterFields, { page: false });
         const empty = viewAddressKey({}, filterFields, { page: false });
         setAgentFilterKey(agentKey === empty ? null : `${target.id}|${agentKey}`);
+        if (unchanged && standingOutcome?.targetId === target.id) reportFilterOutcome(standingOutcome);
       }
 
       if (target.to) {
@@ -256,7 +269,7 @@ export function UiCommandRunner() {
         url: window.location.pathname + window.location.search,
       };
     },
-    [navigate, reveal, setSpace, setAgentFilterKey],
+    [navigate, reveal, setSpace, setAgentFilterKey, reportFilterOutcome],
   );
 
   useEffect(() => {

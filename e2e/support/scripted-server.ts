@@ -204,6 +204,27 @@ const SCENARIOS: Record<string, Step[]> = {
     { kind: 'text', text: 'Zawezilem i posortowalem widok.' },
   ],
   /*
+   * The same narrowing and the same order asked for twice. The second time
+   * nothing in the address changes, and the answer must still be the state on
+   * screen — executed, with its counts — not `not_applied`.
+   */
+  'viewstate-repeat': [
+    { kind: 'wait', delayMs: 150 },
+    {
+      kind: 'call',
+      name: 'ui_filter',
+      input: { targetId: 'procurement.data', predicates: [{ field: 'country', op: 'eq', value: 'PL' }], label: 'z Polski' },
+    },
+    { kind: 'call', name: 'ui_sort', input: { targetId: 'procurement.data', field: 'name', direction: 'desc' } },
+    {
+      kind: 'call',
+      name: 'ui_filter',
+      input: { targetId: 'procurement.data', predicates: [{ field: 'country', op: 'eq', value: 'PL' }], label: 'z Polski' },
+    },
+    { kind: 'call', name: 'ui_sort', input: { targetId: 'procurement.data', field: 'name', direction: 'desc' } },
+    { kind: 'text', text: 'Powtorzylem zawezenie i sortowanie.' },
+  ],
+  /*
    * Orders the view cannot take: a field the read does not have and one it
    * declares unsortable. Both must be refused by name, before the browser is
    * asked for anything, and the screen must stay as it was.

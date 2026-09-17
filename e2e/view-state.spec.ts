@@ -245,6 +245,27 @@ test.describe('stan widoku: zawezenie, sortowanie, strony', () => {
     await settled(page);
   });
 
+  test('(a) to samo zawezenie i sortowanie drugi raz: wykonane, z liczbami i strona, nie not_applied', async ({ page }) => {
+    await scripted.start('viewstate-repeat');
+    await openApp(page);
+    const { runId } = await sendForRun(page, 'Polscy od Z do A. I jeszcze raz to samo.');
+    await settled(page);
+    await expect(answer(page)).toContainText('Powtorzylem zawezenie i sortowanie.');
+
+    const results = (await toolResults(page, runId)).map((r) => r.result);
+    expect(results).toHaveLength(4);
+    const filtered = { executed: true, filtered: { matched: 5, total: TOTAL }, page: { index: 1, size: 10, count: 1 } };
+    const sorted = { executed: true, sorted: { field: 'name', direction: 'desc' }, page: { index: 1, size: 10, count: 1 } };
+    // First time and again — the repeat is answered from the state already on screen.
+    expect(results[0]).toMatchObject(filtered);
+    expect(results[1]).toMatchObject(sorted);
+    expect(results[2]).toMatchObject(filtered);
+    expect(results[3]).toMatchObject(sorted);
+    expect(results.map((r) => r.reason)).toEqual([undefined, undefined, undefined, undefined]);
+    await expect(page.getByTestId('view-filter-count')).toContainText(`pokazane 5 z ${TOTAL}`);
+    await expect(banner(page)).toContainText('Widok zawezony przez agenta.');
+  });
+
   test('(b) uzytkownik zmienia zawezenie w kontrolce: wiersze, adres, pasek; Wstecz przywraca kontrolke', async ({ page }) => {
     await scripted.start('viewstate-filter-sort');
     await openApp(page);
