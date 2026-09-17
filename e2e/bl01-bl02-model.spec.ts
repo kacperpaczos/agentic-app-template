@@ -53,11 +53,18 @@ const AGENT_TIMEOUT = 420_000;
 /**
  * Turns of the subscription this file may spend, retries included.
  *
- * 12 for Task 8 (T25, T26 and the first reading of T27), 6 more for finishing
- * T27 once Task 9 had fixed the two findings the first reading produced, and a
- * final 4 for correcting the step-2 expectation and proving step 6 — the last
- * subscription spend of the plan. The ledger on disk carries all three, turn by
- * turn, so a later grant cannot quietly become a fresh start.
+ * Three grants, 22 turns in all: 12 for Task 8 (T25, T26 and the first reading
+ * of T27), 6 for finishing T27 once Task 9 had fixed the two findings that
+ * reading produced, and a final 4 for correcting the step-2 expectation and
+ * proving step 6 — the last subscription spend of the plan. 12 + 6 + 4 = 22 is
+ * the ceiling, not the spend: 21 turns were actually sent (11 of the first
+ * grant, 6 of the second, 4 of the third), and the one turn left over is the
+ * unused remainder of Task 8's grant, not headroom for another run.
+ *
+ * The grant is closed. This constant is the guard's ceiling and must not be
+ * raised again without a coordinator's grant — the ledger on disk carries every
+ * turn with the grant it came from, so a later number cannot quietly become a
+ * fresh start.
  */
 const MODEL_TURN_BUDGET = 22;
 
@@ -1121,9 +1128,25 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       });
 
       const liveTable = tableCard.locator(`[data-ui-instance="${tableInstance.instanceId}"]`);
-      const hasActionHere =
-        showsItems &&
-        (await liveTable.locator(`tr[data-record-id="${targetId}"] button[data-record-action="change_unit_price"]`).count()) > 0;
+      const actionButton = liveTable.locator(
+        `tr[data-record-id="${targetId}"] button[data-record-action="change_unit_price"]`,
+      );
+      /*
+       * A record action belongs to the *read*, so every table over it offers it
+       * — the module screen, the chat, and the agent's own card alike (Task 7).
+       * When the agent composed its view over that read, the button being there
+       * is therefore part of what this step proves, not a condition to branch
+       * on: an earlier version quietly walked to the case screen when it was
+       * missing and still passed, which would have hidden precisely the defect
+       * "the action does not reach the agent's view".
+       */
+      if (showsItems) {
+        await expect(
+          actionButton,
+          'karta widoku agenta czyta odczyt z akcja rekordu, ale nie daje jej przycisku',
+        ).toHaveCount(1);
+      }
+      const hasActionHere = showsItems;
       evidence.mutacja = { gdzie: hasActionHere ? 'akcja rekordu w widoku agenta' : 'akcja rekordu na ekranie sprawy' };
 
       let mutationTable = liveTable;
@@ -1268,6 +1291,10 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       const stillWithoutReload = await page.evaluate(
         () => (window as unknown as { __t8SinceReload?: boolean }).__t8SinceReload === true,
       );
+      expect(
+        stillWithoutReload,
+        'strona zostala przeladowana miedzy wyjsciem z rozmowy a powrotem — to nie jest przelaczenie rozmowy',
+      ).toBe(true);
       evidence.poPowrocieDoRozmowy = {
         karty: afterSwitch.cards.map((c) => c.id),
         bezPrzeladowaniaOdOstatniego: stillWithoutReload,
