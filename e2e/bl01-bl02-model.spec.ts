@@ -300,6 +300,17 @@ async function expectInstanceMatchesBackend(
   scope: Page | Locator,
   instance: any,
 ): Promise<{ operation: string; records: DataRecord[] }> {
+  /*
+   * What the instance says about itself comes first. A component whose read
+   * failed has nothing to compare with the backend, and the reason it failed —
+   * an operation that does not exist, an input that names no record — is the
+   * finding, not a 404 from a helper.
+   */
+  expect(
+    { state: instance.state, error: instance.error, source: instance.source },
+    'komponent danych nie pokazuje rekordow',
+  ).toMatchObject({ state: 'ready' });
+
   const backend = await readBackend(page, instance.source.operation, instance.source.input);
   const descriptor = backend.descriptor!;
   const kept = recordsOf(backend.result, descriptor).filter((r) => keepsRecord(r, instance.filter ?? []));
@@ -332,6 +343,11 @@ async function expectInstanceMatchesBackend(
 
 /** A chart's caption states the range of each series; the range comes from the backend. */
 async function expectChartMatchesBackend(page: Page, scope: Page | Locator, instance: any): Promise<void> {
+  expect(
+    { state: instance.state, error: instance.error, source: instance.source },
+    'wykres nie pokazuje wartosci',
+  ).toMatchObject({ state: 'ready' });
+
   const backend = await readBackend(page, instance.source.operation, instance.source.input);
   const descriptor = backend.descriptor!;
   const kept = recordsOf(backend.result, descriptor).filter((r) => keepsRecord(r, instance.filter ?? []));
@@ -758,13 +774,19 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       expect(tableInstance, 'karta nie zamontowala tabeli danych').toBeTruthy();
       // The described table really is inside the card this run created.
       await expect(tableCard.locator(`[data-ui-instance="${tableInstance.instanceId}"]`)).toHaveCount(1);
-      const table = await expectInstanceMatchesBackend(page, viewsPage(page), tableInstance);
+      // Written down before it is judged, so a refused or failing composition is
+      // in the evidence with what the run composed rather than only as a stack.
       evidence.zestawienie = {
         kartyZTegoWykonania: created1,
-        operacja: table.operation,
+        kompozycja: state1.cards.map((c) => ({ id: c.id, title: c.title, spec: c.spec })),
+        zrodloInstancji: tableInstance.source,
+        stanInstancji: tableInstance.state,
+        bladInstancji: tableInstance.error,
         wierszy: tableInstance.visibleRecordIds.length,
         wersjaKompozycji: state1.cards[0]!.specVersion,
       };
+      const table = await expectInstanceMatchesBackend(page, viewsPage(page), tableInstance);
+      evidence.zestawienie.operacja = table.operation;
       await shot(page, 't27-zestawienie.png');
 
       /* ---------------------------- 2. the chart ----------------------------- */

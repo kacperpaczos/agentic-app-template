@@ -1,0 +1,30 @@
+{
+  "zapisano": "2026-09-17T19:52:19.517Z",
+  "kodCommit": "118c871809d30536006a7e6a62bea24d9809deb0",
+  "zrodlo": "prawdziwy model (subskrypcja Claude), instancja testowa suity przegladarkowej",
+  "spec": "e2e/bl01-bl02-model.spec.ts",
+  "proba": "T27",
+  "kryteria": [
+    "L3.14",
+    "L3.15",
+    "L3.16",
+    "L3.17",
+    "L3.18"
+  ],
+  "werdykt": "niezaliczona",
+  "przebiegi": [
+    {
+      "runId": "run_39bc79cc133d4bce8fcc",
+      "polecenie": "Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.",
+      "status": "succeeded",
+      "czasMs": 22375,
+      "pierwszyTekstMs": 13686,
+      "wKolejceMs": 4,
+      "narzedzia": [
+        "agent_view_create"
+      ]
+    }
+  ],
+  "rozmowa": "cnv_23b1199a5cd04ff1953f",
+  "turyModeluWydaneLacznie": 7
+}
