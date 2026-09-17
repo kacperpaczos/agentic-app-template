@@ -50,8 +50,15 @@ import {
 
 const AGENT_TIMEOUT = 420_000;
 
-/** Turns of the subscription this file may spend, retries included (Task 8 budget). */
-const MODEL_TURN_BUDGET = 12;
+/**
+ * Turns of the subscription this file may spend, retries included.
+ *
+ * 12 for Task 8 (T25, T26 and the first reading of T27) and 6 more granted for
+ * finishing T27 once Task 9 had fixed the two findings the first reading
+ * produced. The ledger on disk carries both, turn by turn, so the second number
+ * cannot quietly become a fresh start.
+ */
+const MODEL_TURN_BUDGET = 18;
 
 const EVIDENCE_DIR = resolve(process.cwd(), 'docs/evidence/bl01-bl02-2026-09-17');
 const CODE_COMMIT = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: process.cwd() }).toString().trim();
@@ -70,8 +77,11 @@ const LEDGER = resolve(EVIDENCE_DIR, 'tury-modelu.json');
 interface TurnLedger {
   budzet: number;
   wydane: number;
-  tury: Array<{ nr: number; o: string; proba: string; polecenie: string; runId?: string }>;
+  tury: Array<{ nr: number; o: string; proba: string; polecenie: string; runId?: string; etap?: string }>;
 }
+
+/** Which grant a turn is spent from; written next to every turn in the ledger. */
+const TURN_STAGE = process.env.APP_T8_STAGE ?? 'dokonczenie-T27-po-Task-9';
 
 function readLedger(): TurnLedger {
   if (!existsSync(LEDGER)) return { budzet: MODEL_TURN_BUDGET, wydane: 0, tury: [] };
@@ -147,7 +157,8 @@ async function sendForRun(page: Page, text: string, proba = ''): Promise<{ runId
   const ledger = readLedger();
   const nr = ledger.wydane + 1;
   ledger.wydane = nr;
-  ledger.tury.push({ nr, o: new Date().toISOString(), proba, polecenie: text });
+  ledger.tury.push({ nr, o: new Date().toISOString(), proba, polecenie: text, etap: TURN_STAGE });
+  ledger.budzet = MODEL_TURN_BUDGET;
   writeLedger(ledger);
   expect(nr, `budzet Task 8 to ${MODEL_TURN_BUDGET} tur modelu — proba wyslania tury ${nr}`).toBeLessThanOrEqual(
     MODEL_TURN_BUDGET,
@@ -207,6 +218,21 @@ async function runFacts(page: Page, conversationId: string, runId: string, polec
     narzedzia: results.map((r) => r.name.replace(/^mcp__app__/, '')),
   };
 }
+
+/**
+ * Did the run read the screen back after storing a composition?
+ *
+ * A fact from the run's own event log, not from anything it wrote. Task 9 made
+ * `agent_view_create` / `agent_view_update` answer `rendered: false` with a
+ * sentence telling the agent to read `ui_state` before describing the view;
+ * whether that changed behaviour is visible here and nowhere else.
+ */
+const readBackAfterViewTool = (results: Array<{ name: string }>): boolean => {
+  const stored = results.findIndex(
+    (r) => r.name === 'mcp__app__agent_view_create' || r.name === 'mcp__app__agent_view_update',
+  );
+  return stored >= 0 && results.slice(stored + 1).some((r) => r.name === 'mcp__app__ui_state');
+};
 
 const param = (page: Page, key: string) => new URL(page.url()).searchParams.get(key);
 const viewParams = (page: Page) =>
@@ -774,30 +800,25 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       const procurementCase = cases.find((c) => c.code === 'PC-2026-01')!;
 
       /*
-       * The user opens the case first, from the interface.
+       * The case is named the way a user names it: by its business code, from
+       * the agent's own space, with nothing of it on screen.
        *
-       * Two earlier runs of this proba asked for the summary while the case was
-       * only named by its code ("ze sprawy PC-2026-01"); both times the agent
-       * composed `input: {caseId: "PC-2026-01"}` — the code where the
-       * identifier belongs — and the card showed the read's refusal instead of
-       * values. That failure is recorded in
-       * `docs/evidence/bl01-bl02-2026-09-17/t27-proba-a-kod-sprawy-jako-id.json`;
-       * this scenario is the *other* half of the proba: with the case on screen,
-       * whether the agent's own space composes, redraws and survives a change of
-       * the data underneath it. It is not a retry of the same scenario.
+       * This is deliberately the scenario that failed twice before Task 9
+       * (`run_39bc79cc133d4bce8fcc`, `run_24132e16b1cf49a9a624`): the agent put
+       * `input: {caseId: "PC-2026-01"}` — the code where the record's id belongs
+       * — without a single read first, and the card showed the refused read
+       * instead of values. The fix is a rule in the prompt and in the tool's own
+       * description, so it is tested where it broke.
        */
-      await page.getByRole('link', { name: 'Wszystkie sprawy' }).click();
-      await page.getByTestId(`case-tile-${procurementCase.id}`).click();
-      await expect(page.getByTestId('case-detail-page')).toBeVisible();
-      expect(new URL(page.url()).pathname).toBe(`/cases/${procurementCase.id}`);
       evidence.scenariusz =
-        'T27 wariant B — uzytkownik ma sprawe otwarta na ekranie; polecenie wyslane z ekranu sprawy';
+        'T27 — uzytkownik nazywa sprawe jej kodem; polecenie wyslane z przestrzeni „Widoki agenta” ' +
+        '(scenariusz, ktory przed Task 9 oblal dwukrotnie)';
 
       /* --------------------------- 1. the listing ---------------------------- */
       // The working space as it is at the moment of the command; agent views must not move it.
       const workspaceAtCommand = param(page, 's');
       const first =
-        'Zestaw mi w widokach agenta pozycje ofert tej sprawy: dostawca, nazwa pozycji i cena jednostkowa.';
+        'Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.';
       const run1 = await sendForRun(page, first, evidence.proba as string);
       const phase1 = await settled(page, run1.runId);
       const conversationId = param(page, 'c')!;
@@ -806,12 +827,19 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       expect(phase1).toBe('succeeded');
 
       // The cards on screen are the ones *this run* created — ids from its own tool results.
-      const created1 = (await toolResults(page, run1.runId))
+      const results1 = await toolResults(page, run1.runId);
+      const created1 = results1
         .filter((r) => r.name === 'mcp__app__agent_view_create')
         .map((r) => r.result.cardId as string);
+      evidence.odpowiedziNarzedzia = {
+        zestawienie: allResultsOf(results1, 'agent_view_create').map((r: any) => ({
+          rendered: r.rendered ?? null,
+          maZdanieReadBack: typeof r.readBack === 'string' && r.readBack.length > 0,
+          warnings: (r.warnings ?? []).map((w: any) => w.code),
+        })),
+        odczytalEkranPoZapisie: readBackAfterViewTool(results1),
+      };
       expect(created1.length, 'wykonanie nie utworzylo zadnego widoku agenta').toBeGreaterThan(0);
-      // The user opens the agent's space from the navigation to see the result.
-      await openAgentViews(page);
       const state1 = await agentViewsOf(page, conversationId);
       expect(state1.cards.length, 'przestrzen rozmowy jest pusta').toBeGreaterThan(0);
       // Every card in this conversation's space was made by the run under test —
@@ -856,19 +884,20 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
 
       /* ---------------------------- 2. the chart ----------------------------- */
       /*
-       * Open finding (2026-09-17, run_96c52b19607e4a21a589). The agent patched
-       * its card with
-       * `DataChart({operation: "procurement.case_offer_items", input: {caseId}}, "bar", "name", ["unitPriceMinor"], …)`.
-       * The server's validator accepted it — the field is numeric and declared —
-       * but the case's items are priced in PLN *and* EUR, and a money series
-       * carries the record's own currency, so the chart refuses to draw:
-       * „Seria Cena jednostkowa laczy rozne jednostki (PLN, EUR); zawez dane do
-       * jednej jednostki.” The agent then told the user it had added the chart.
-       * Nothing made it look: the prompt requires `ui_state` after
-       * `ui_navigate`/`ui_filter`/`ui_sort`, not after `agent_view_create`/
-       * `agent_view_update`, and the tool's own answer says nothing about what
-       * the card renders. This step therefore fails on purpose until one of the
-       * two is closed — see `task-8-report.md`.
+       * The step that produced finding F2 (`run_96c52b19607e4a21a589`, before
+       * Task 9). The agent patched its card with a money series over items
+       * priced in PLN *and* EUR; the server stored it, the component refused to
+       * draw — „Seria Cena jednostkowa laczy rozne jednostki (PLN, EUR)" — and
+       * the agent told the user the chart was there, because nothing in the
+       * tool's answer said otherwise.
+       *
+       * Task 9's answer now carries `rendered: false`, a `readBack` sentence and
+       * a `unit_from_record` warning for exactly this shape of series, and the
+       * "## Stan ekranu" rule covers `agent_view_*`. The step is unchanged, so
+       * what it measures is whether that reaches the model's behaviour: the
+       * chart on screen has to be `ready` with a range equal to the backend's,
+       * and `evidence.odpowiedziNarzedzia.wykres` records the warning and
+       * whether the run read the screen back.
        */
       const second = 'Dodaj do tego wykres cen jednostkowych tych pozycji.';
       const run2 = await sendForRun(page, second, evidence.proba as string);
@@ -876,6 +905,18 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       evidence.przebiegi.push(await runFacts(page, conversationId, run2.runId, second));
       expect(phase2).toBe('succeeded');
 
+      const results2 = await toolResults(page, run2.runId);
+      evidence.odpowiedziNarzedzia.wykres = {
+        zapisy: [
+          ...allResultsOf(results2, 'agent_view_create'),
+          ...allResultsOf(results2, 'agent_view_update'),
+        ].map((r: any) => ({
+          rendered: r.rendered ?? null,
+          unchanged: r.unchanged ?? null,
+          warnings: (r.warnings ?? []).map((w: any) => w.code),
+        })),
+        odczytalEkranPoZapisie: readBackAfterViewTool(results2),
+      };
       const state2 = await agentViewsOf(page, conversationId);
       // Nothing the first run made was lost.
       for (const id of created1) expect(state2.cards.some((c) => c.id === id)).toBe(true);
@@ -911,6 +952,15 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       evidence.przebiegi.push(await runFacts(page, conversationId, run3.runId, third));
       expect(phase3).toBe('succeeded');
 
+      const results3 = await toolResults(page, run3.runId);
+      evidence.odpowiedziNarzedzia.zmianaZakresu = {
+        zapisy: allResultsOf(results3, 'agent_view_update').map((r: any) => ({
+          rendered: r.rendered ?? null,
+          unchanged: r.unchanged ?? null,
+          warnings: (r.warnings ?? []).map((w: any) => w.code),
+        })),
+        odczytalEkranPoZapisie: readBackAfterViewTool(results3),
+      };
       const state3 = await agentViewsOf(page, conversationId);
       for (const id of [...created1, chartCardId!]) {
         expect(state3.cards.some((c) => c.id === id), `karta ${id} zniknela`).toBe(true);
@@ -1048,6 +1098,9 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       await page.reload();
       await expect(viewsPage(page)).toHaveAttribute('data-conversation-id', conversationId);
       await expect(viewsPage(page)).toHaveAttribute('data-state', 'ready');
+      await page.evaluate(() => {
+        (window as unknown as { __t8SinceReload?: boolean }).__t8SinceReload = true;
+      });
       const afterReload = await agentViewsOf(page, conversationId);
       expect(afterReload.cards.map((c) => c.id).sort()).toEqual(state3.cards.map((c) => c.id).sort());
       for (const card of afterReload.cards) await expect(page.getByTestId(`card-${card.id}`)).toBeVisible();
@@ -1057,14 +1110,64 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
         if (instance.component === 'DataTable') await expectInstanceMatchesBackend(page, viewsPage(page), instance);
         if (instance.component === 'DataChart') await expectChartMatchesBackend(page, viewsPage(page), instance);
       }
-      await expect(
-        tableCard.locator(`td[data-record-id="${targetId}"][data-field="unitPriceMinor"]`),
-      ).toHaveText(newText);
+      if (showsItems) {
+        await expect(
+          tableCard.locator(`td[data-record-id="${targetId}"][data-field="unitPriceMinor"]`),
+        ).toHaveText(newText);
+      }
       evidence.poPrzeladowaniu = {
         karty: afterReload.cards.map((c) => c.id),
         wartosciZgodneZBackendem: true,
       };
       await shot(page, 't27-po-przeladowaniu.png');
+
+      /* ------------- 6. away to another conversation, and back --------------- */
+      /*
+       * The space belongs to the conversation, not to the screen. Leaving for a
+       * new chat has to empty the page, and coming back — the way a user comes
+       * back, from the conversation drawer — has to bring the same cards with
+       * the same values, without a reload.
+       */
+      const { threads } = await getJson<{ threads: Array<{ id: string; title: string }> }>(
+        page,
+        '/api/threads/get',
+      );
+      const title = threads.find((t) => t.id === conversationId)!.title;
+
+      await page.locator('.pf-chat [aria-label="New chat"]').first().click();
+      await expect(viewsPage(page)).toHaveAttribute('data-state', 'no-conversation');
+      await expect(page.getByTestId(`card-${tableCardId}`)).toHaveCount(0);
+
+      const drawer = page.locator('.openui-agent-sidebar-container');
+      if ((await drawer.getAttribute('data-sidebar-visual-state')) !== 'expanded') {
+        await page.locator('.pf-chat [aria-label="Open sidebar"]').first().click();
+      }
+      await expect(drawer).toHaveAttribute('data-sidebar-visual-state', 'expanded');
+      // Let the drawer finish sliding, so the click lands on the row and not where it was.
+      await page.waitForTimeout(500);
+      const row = page.locator('.openui-agent-thread-button', { hasText: title }).first();
+      await expect(row).toBeVisible();
+      // `force`: the list re-renders while it loads and never settles for the stability check.
+      await row.click({ force: true });
+      await expect.poll(() => param(page, 'c'), { timeout: 30_000 }).toBe(conversationId);
+
+      await expect(viewsPage(page)).toHaveAttribute('data-conversation-id', conversationId);
+      await expect(viewsPage(page)).toHaveAttribute('data-state', 'ready');
+      const afterSwitch = await agentViewsOf(page, conversationId);
+      expect(afterSwitch.cards.map((c) => c.id).sort()).toEqual(state3.cards.map((c) => c.id).sort());
+      for (const card of afterSwitch.cards) await expect(page.getByTestId(`card-${card.id}`)).toBeVisible();
+      for (const instance of await describedOnAgentViews(page, 'opis ekranu po powrocie do rozmowy')) {
+        if (instance.component === 'DataTable') await expectInstanceMatchesBackend(page, viewsPage(page), instance);
+        if (instance.component === 'DataChart') await expectChartMatchesBackend(page, viewsPage(page), instance);
+      }
+      const stillWithoutReload = await page.evaluate(
+        () => (window as unknown as { __t8SinceReload?: boolean }).__t8SinceReload === true,
+      );
+      evidence.poPowrocieDoRozmowy = {
+        karty: afterSwitch.cards.map((c) => c.id),
+        bezPrzeladowaniaOdOstatniego: stillWithoutReload,
+        wartosciZgodneZBackendem: true,
+      };
 
       evidence.werdykt = 'zaliczona';
     } finally {
