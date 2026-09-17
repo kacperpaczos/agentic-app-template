@@ -7,13 +7,13 @@ wykonania (`GET /api/runs/:id/events`) i backendu (`POST /api/read`) — nigdy b
 
 | Plik | Co zawiera |
 |---|---|
-| `tury-modelu.json` | rejestr **wszystkich** tur subskrypcji wydanych przez to zadanie (12 na Task 8 + 6 na dokończenie T27 po Task 9): numer, czas, etap, próba, polecenie, identyfikator wykonania |
+| `tury-modelu.json` | rejestr **wszystkich** tur subskrypcji wydanych przez to zadanie (12 na Task 8 + 6 na dokończenie T27 po Task 9 + 4 na domknięcie kroków 2 i 6): numer, czas, etap, próba, polecenie, identyfikator wykonania |
 | `t25-wskazanie-wartosci.json` | T25 — zaliczona; warunek wstępny, werdykt detektora, wynik `ui_show_value`, opis ekranu po, dane backendu przed i po |
 | `t26-zawezenie-rozmowa.json` | T26 — zaliczona; trzy wykonania, wszystkie próby zawężenia modelu, kontekst drugiego polecenia, przywrócony pełny zakres |
 | `t27-proba-a-kod-sprawy-jako-id.json` | T27 wariant A — **niezaliczona** dwukrotnie: model użył kodu sprawy jako jej identyfikatora |
 | `t27-przed-task-9-wykres-nienarysowany.json` | T27 **przed** Task 9 — przebieg, na którym powstało ustalenie F2 (wykres zapisany, nienarysowany, model oznajmił sukces) |
-| `t27-widoki-agenta.json` | T27 **po** Task 9 — kroki 1–4 potwierdzone (identyfikator z odczytu, wykres dołożony, zakres zawężony rozmową, mutacja bez przeładowania) |
-| `t27-kroki-5-6.json` | T27 kroki 5–6 — przeładowanie potwierdzone; powrót do rozmowy niesprawdzony (błąd testu, budżet wyczerpany) |
+| `t27-widoki-agenta.json` | T27 **po** Task 9 — **wszystkie sześć kroków zaliczone** w jednej rozmowie (tury 19–21) |
+| `t27-kroki-5-6.json` | **archiwalny** — tura 17, pomocniczy test kroków 5–6 (przeładowanie potwierdzone); test usunięty ze speca, gdy główna próba objęła te kroki sama |
 | `t25-*.png`, `t26-*.png`, `t27-*.png` | zrzuty ekranu stanu po wykonaniu |
 
 Pliki nie zawierają sekretów, identyfikatorów sesji Claude ani ścieżek spoza repozytorium.

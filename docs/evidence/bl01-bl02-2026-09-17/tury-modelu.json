@@ -1,6 +1,6 @@
 {
   "budzet": 22,
-  "wydane": 18,
+  "wydane": 21,
   "tury": [
     {
       "nr": 1,
@@ -135,6 +135,30 @@
       "polecenie": "Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.",
       "etap": "dokonczenie-T27-po-Task-9",
       "runId": "run_94540037b0394f86878f"
+    },
+    {
+      "nr": 19,
+      "o": "2026-09-17T21:07:13.344Z",
+      "proba": "T27",
+      "polecenie": "Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.",
+      "etap": "domkniecie-T27-krok-2-i-krok-6",
+      "runId": "run_1063a97fce11422d86c8"
+    },
+    {
+      "nr": 20,
+      "o": "2026-09-17T21:07:54.081Z",
+      "proba": "T27",
+      "polecenie": "Dodaj do tego wykres cen jednostkowych tych pozycji.",
+      "etap": "domkniecie-T27-krok-2-i-krok-6",
+      "runId": "run_f0520015edfc48708557"
+    },
+    {
+      "nr": 21,
+      "o": "2026-09-17T21:08:33.665Z",
+      "proba": "T27",
+      "polecenie": "Zawez zestawienie i wykres do pozycji w PLN.",
+      "etap": "domkniecie-T27-krok-2-i-krok-6",
+      "runId": "run_adca8dc48ad946248e1f"
     }
   ],
   "odrzuconeBezWyslania": [
