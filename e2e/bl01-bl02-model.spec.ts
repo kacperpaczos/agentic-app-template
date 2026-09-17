@@ -18,6 +18,7 @@ import {
 import {
   RECORDED_LEDGER,
   WORKING_LEDGER,
+  acceptancePreflight,
   evidencePath,
   readLedger as readTurnLedger,
   runEvidenceDir,
@@ -99,6 +100,19 @@ const TURN_STAGE = process.env.APP_T8_STAGE ?? 'domkniecie-T27-krok-2-i-krok-6';
 
 const readLedger = () => readTurnLedger(MODEL_TURN_BUDGET);
 const writeLedger = writeTurnLedger;
+
+/**
+ * Can this spec be paid for at all — asked once, before the first command.
+ *
+ * Decided here, at load, and not per test: the question is whether what is left
+ * covers the **whole** spec (`ACCEPTANCE_TEST_TURNS` in `support/model-turns.ts`,
+ * one entry per proba), so asking it again after T25 has spent its turn would
+ * skip the rest of a perfectly funded run. Without this, a tally of 21 against a
+ * ceiling of 22 lets T25 send a real command and then trips the per-command
+ * guard in T26 — a paid turn burned for nothing.
+ */
+const preflight = acceptancePreflight(MODEL_TURN_BUDGET);
+let preflightAnnounced = false;
 
 const shot = async (page: Page, name: string) => {
   mkdirSync(runEvidenceDir(), { recursive: true });
@@ -467,6 +481,20 @@ async function changeUnitPrice(page: Page, table: Locator, recordId: string, typ
 
 test.describe('proby odbiorowe z prawdziwym modelem', () => {
   test.describe.configure({ timeout: AGENT_TIMEOUT });
+
+  /*
+   * The skip happens in `beforeEach`, so it is decided before a test body runs
+   * and therefore before anything reaches the composer. A skipped proba claims
+   * nothing: no turn is spent, no evidence is written, and the recorded
+   * verdicts of the run that did prove these criteria stay exactly as they are.
+   */
+  test.beforeEach(() => {
+    if (!preflight.ok && !preflightAnnounced) {
+      preflightAnnounced = true;
+      console.log(`[e2e] ${preflight.message}`);
+    }
+    test.skip(!preflight.ok, preflight.ok ? '' : preflight.message);
+  });
 
   test('T25 — pytanie o wartosc pola rekordu ukrytego zawezeniem konczy sie wskazaniem tego pola na ekranie', async ({
     page,

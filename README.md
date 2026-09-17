@@ -204,7 +204,8 @@ Trzy spece odpowiadają **prawdziwym modelem** i wydają tury subskrypcji: `e2e/
 wypisuje, co pominął i ile by to kosztowało — a `pnpm test:e2e:model` (`APP_E2E_MODEL=1`) uruchamia
 wyłącznie je. Licznik wydanych tur leży w `.e2e-model-turns/` (poza repozytorium); dowody przebiegu
 zapisują się pod stemplem przebiegu w `docs/evidence/<zadanie>/runs/`, więc nie nadpisują zapisanych
-wyników prób odbiorowych.
+wyników prób odbiorowych. Jeśli budżet tur nie pokrywa całego spec-a odbiorowego, spec pomija próby
+z komunikatem, zanim cokolwiek wyśle do modelu — zamiast wydać turę i paść na następnej.
 
 `pnpm acceptance` i `scripts/run-agent.mjs` działają inaczej: łączą się z **działającą** instancją
 (domyślnie `http://127.0.0.1:8791`) i zmieniają jej dane. Kieruj je tylko na osobną instancję z

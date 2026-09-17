@@ -112,6 +112,12 @@ git), zasiewany raz z zamkniętego rejestru `docs/evidence/bl01-bl02-2026-09-17/
 spec **tylko czyta**; dowody przebiegu lądują pod stemplem przebiegu w `docs/evidence/<zadanie>/runs/`,
 więc zapisany werdykt próby odbiorowej nie jest do nadpisania przez późniejszy przebieg.
 
+Przed pierwszym poleceniem spec odbiorowy sprawdza, czy reszta budżetu pokrywa **cały** jego koszt
+(deklarowany per próba). Jeśli nie — pomija próby z komunikatem podającym rejestr, sufit, brak i to, że
+podniesienie sufitu wymaga grantu koordynatora. Nic nie idzie wtedy do modelu i żaden zapisany dowód nie
+jest ruszany: pominięcie jest uczciwą odpowiedzią na brak budżetu, w przeciwieństwie do przebiegu, który
+wydaje turę i pada na następnej.
+
 Podaj faktyczne polecenia, kody wyjścia i liczby testów. Dowody zapisuj w `docs/evidence/<zadanie>/`
 bez sekretów i danych prywatnych.
 

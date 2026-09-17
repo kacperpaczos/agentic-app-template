@@ -18,14 +18,19 @@ import {
   TestIsolationError,
 } from '../e2e/support/isolation.ts';
 import {
+  ACCEPTANCE_TEST_TURNS,
+  ACCEPTANCE_TURNS_NEEDED,
   EVIDENCE_ROOT,
   MODEL_OPT_IN_ENV,
   MODEL_SPEC_FILES,
   MODEL_SPEC_PATTERNS,
+  MODEL_SPEC_TURNS,
   MODEL_TURNS_PER_RUN,
   RECORDED_LEDGER,
   RUN_STAMP,
   WORKING_LEDGER,
+  acceptancePreflight,
+  budgetPreflight,
   evidencePath,
   modelSpecsNotice,
   modelSpecsRequested,
@@ -280,6 +285,53 @@ describe('spece z prawdziwym modelem: opt-in i nienaruszalnosc dowodow', () => {
     const seeded = readLedger(22);
     const recorded = JSON.parse(readFileSync(RECORDED_LEDGER, 'utf8')) as { wydane: number };
     expect(seeded.wydane).toBe(recorded.wydane);
+  });
+
+  it('budzet niepokrywajacy calego speca: decyzja o pominieciu, z rejestrem, sufitem i brakiem', () => {
+    /*
+     * The straznik per polecenie nie wystarcza sam: przy 21 z 22 tur przepuscil
+     * T25 (jedna tura naprawde wyslana) i dopiero T26 odmowil. Sprawdzenie
+     * wstepne pyta o caly spec, zanim cokolwiek pojdzie do modelu.
+     */
+    const short = budgetPreflight({ budget: 22, spent: 21, needed: ACCEPTANCE_TURNS_NEEDED });
+    expect(short.ok).toBe(false);
+    expect(short).toMatchObject({ budget: 22, spent: 21, left: 1, needed: 7, shortfall: 6 });
+    const message = (short as { message: string }).message;
+    expect(message).toContain('21 z 22');
+    expect(message).toContain('zostaje 1');
+    expect(message).toContain('potrzebuje 7');
+    expect(message).toContain('brakuje 6');
+    expect(message).toContain('NIC nie zostalo wyslane do modelu');
+    expect(message).toContain('grantu koordynatora');
+    expect(message).toContain(WORKING_LEDGER);
+
+    // Dokladnie tyle, ile spec potrzebuje, wystarcza; o jedna mniej — nie.
+    expect(budgetPreflight({ budget: 28, spent: 21, needed: ACCEPTANCE_TURNS_NEEDED }).ok).toBe(true);
+    expect(budgetPreflight({ budget: 27, spent: 21, needed: ACCEPTANCE_TURNS_NEEDED }).ok).toBe(false);
+    // Wyczerpany i przekroczony rejestr tez jest pominieciem, nie przebiegiem.
+    expect(budgetPreflight({ budget: 22, spent: 22, needed: ACCEPTANCE_TURNS_NEEDED })).toMatchObject({ ok: false, shortfall: 7 });
+    expect(budgetPreflight({ budget: 22, spent: 30, needed: ACCEPTANCE_TURNS_NEEDED })).toMatchObject({ ok: false, left: -8 });
+    // Swiezy grant z zapasem: przebieg.
+    expect(budgetPreflight({ budget: 40, spent: 21, needed: ACCEPTANCE_TURNS_NEEDED })).toMatchObject({ ok: true, left: 19 });
+
+    // Koszt zadeklarowany per proba i koszt speca nie moga sie rozjechac.
+    expect(Object.values(ACCEPTANCE_TEST_TURNS).reduce((a, b) => a + b, 0)).toBe(ACCEPTANCE_TURNS_NEEDED);
+    expect(MODEL_SPEC_TURNS['bl01-bl02-model.spec.ts']).toBe(ACCEPTANCE_TURNS_NEEDED);
+
+    // Na stanie galezi (zamkniety grant) spec jest pomijany, a nie uruchamiany.
+    expect(acceptancePreflight(22).ok).toBe(false);
+  });
+
+  it('spec odbiorowy pomija proby na podstawie sprawdzenia wstepnego, zanim cokolwiek wysle', () => {
+    // Statyczna kontrola polaczenia: samo wykonanie hooka wymagaloby uruchomienia
+    // speca modelowego, czego to zadanie nie robi (grant zamkniety).
+    const source = readFileSync(resolve(REPO, 'e2e/bl01-bl02-model.spec.ts'), 'utf8');
+    expect(source).toContain('const preflight = acceptancePreflight(MODEL_TURN_BUDGET);');
+    expect(source).toContain('test.skip(!preflight.ok, preflight.ok ? \'\' : preflight.message);');
+    // Skip w beforeEach, czyli przed cialem testu — a wiec przed sendForRun.
+    const hook = source.indexOf('test.beforeEach(');
+    expect(hook).toBeGreaterThan(-1);
+    expect(hook).toBeLessThan(source.indexOf('await sendForRun('));
   });
 
   it('dowody przebiegu ida pod stempel przebiegu — zapisane werdykty sa nie do nadpisania', () => {

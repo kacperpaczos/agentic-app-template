@@ -34,9 +34,22 @@ export type ModelSpecFile = (typeof MODEL_SPEC_FILES)[number];
 /** The same three as Playwright matches them (`testIgnore` / `testMatch`). */
 export const MODEL_SPEC_PATTERNS: string[] = MODEL_SPEC_FILES.map((file) => `**/${file}`);
 
+/**
+ * What each proba of `bl01-bl02-model.spec.ts` costs in turns.
+ *
+ * Declared per test rather than as one number, because the pre-flight check
+ * below has to answer "can the budget left pay for this whole spec" *before*
+ * the first command leaves the browser — and a spec that starts, spends a real
+ * turn and then trips the guard has burned a paid turn for nothing.
+ */
+export const ACCEPTANCE_TEST_TURNS = { T25: 1, T26: 3, T27: 3 } as const;
+
+/** What one clean run of that spec needs, start to finish. */
+export const ACCEPTANCE_TURNS_NEEDED = Object.values(ACCEPTANCE_TEST_TURNS).reduce((a, b) => a + b, 0);
+
 /** Turns one clean run of each spends — what the opt-in actually costs. */
 export const MODEL_SPEC_TURNS: Record<ModelSpecFile, number> = {
-  'bl01-bl02-model.spec.ts': 7,
+  'bl01-bl02-model.spec.ts': ACCEPTANCE_TURNS_NEEDED,
   'agent-ui.spec.ts': 2,
   'files-agent.spec.ts': 2,
 };
@@ -133,6 +146,48 @@ export function readLedger(budget: number): TurnLedger {
     };
   }
   return { budzet: budget, wydane: 0, tury: [] };
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Pre-flight: can this spec be paid for at all?                             */
+/* -------------------------------------------------------------------------- */
+
+export type BudgetPreflight = { budget: number; spent: number; left: number; needed: number } & (
+  | { ok: true }
+  | { ok: false; shortfall: number; message: string }
+);
+
+/**
+ * Whether what is left of the budget covers a whole spec — asked once, before
+ * anything is sent.
+ *
+ * The per-command guard inside the spec is not enough on its own: with 21 of 22
+ * turns already recorded it lets T25 through, T25 sends a real command, and T26
+ * then trips the guard. One paid turn is gone and nothing is proved. This
+ * refuses the whole spec instead, and the refusal is a **skip**: nothing was
+ * claimed, nothing was spent, and the recorded evidence is not touched, which
+ * is the honest answer to "there is no budget for this".
+ */
+export function budgetPreflight(input: { budget: number; spent: number; needed: number }): BudgetPreflight {
+  const { budget, spent, needed } = input;
+  const left = budget - spent;
+  const base = { budget, spent, left, needed };
+  if (left >= needed) return { ...base, ok: true };
+  return {
+    ...base,
+    ok: false,
+    shortfall: needed - left,
+    message:
+      `Budzet tur modelu nie pokrywa tego speca: rejestr ma ${spent} z ${budget} tur (zostaje ${left}), ` +
+      `a spec potrzebuje ${needed} — brakuje ${needed - left}. NIC nie zostalo wyslane do modelu i zaden ` +
+      `zapisany dowod nie zostal ruszony. Podniesienie sufitu MODEL_TURN_BUDGET wymaga grantu koordynatora; ` +
+      `licznik roboczy: ${WORKING_LEDGER}.`,
+  };
+}
+
+/** The same question for `bl01-bl02-model.spec.ts`, against the tally on disk. */
+export function acceptancePreflight(budget: number): BudgetPreflight {
+  return budgetPreflight({ budget, spent: readLedger(budget).wydane, needed: ACCEPTANCE_TURNS_NEEDED });
 }
 
 /** Writes the tally — to the working copy, and nowhere else. */
