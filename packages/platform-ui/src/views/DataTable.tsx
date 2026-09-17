@@ -104,6 +104,7 @@ export function DataTableView(props: DataTableProps) {
       : null,
     localPage,
     setLocalPage,
+    refreshing,
   });
 
   const outcome = model?.outcome ?? null;

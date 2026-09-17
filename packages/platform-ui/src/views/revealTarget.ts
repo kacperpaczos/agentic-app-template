@@ -150,6 +150,12 @@ export interface RevealTarget {
   locate(recordId: string, field: string, opts?: { narrowing?: ViewFilterPredicate[] }): RecordLocation;
   /** Turns a table that pages in memory to a page; null for one paged through the address. */
   showPage: ((index: number) => void) | null;
+  /**
+   * The records shown are being read again (a record action changed them, a run
+   * ended). While this holds, what the table shows may already be out of date,
+   * so a value read from it must not be compared with the backend.
+   */
+  refreshing: boolean;
 }
 
 const mounted = new Map<string, { epoch: number; current: () => RevealTarget }>();
@@ -195,6 +201,8 @@ export interface RevealTargetInput {
   } | null;
   localPage: number;
   setLocalPage: (index: number) => void;
+  /** The read behind the table is in flight again; its rows may be about to change. */
+  refreshing: boolean;
 }
 
 /** Offers a mounted table's locator for as long as it is mounted, with its latest rows and state. */
@@ -224,6 +232,7 @@ export function useRevealTarget(input: RevealTargetInput): void {
               field,
             }),
           showPage: t.address ? null : t.setLocalPage,
+          refreshing: t.refreshing,
         };
       },
       epoch,

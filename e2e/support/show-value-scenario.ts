@@ -166,6 +166,31 @@ export function showValueScript(prompt: string): Step[] {
     ];
   }
 
+  /*
+   * An agent view over a case's offer items, paged so that the record asked
+   * about later is on another page — the table has a record actions column,
+   * and a form may be open in it.
+   */
+  if (prompt.includes('[karta-pozycji]')) {
+    const caseId = value(prompt, 'sprawa');
+    return [
+      {
+        kind: 'call',
+        name: 'agent_view_create',
+        input: {
+          title: 'Pozycje ofert',
+          source: [
+            'root = Stack([tabela])',
+            `tabela = DataTable({operation: "procurement.case_offer_items", input: {caseId: "${caseId}"}}, ` +
+              '["supplierName", "name", "unitPriceMinor"], "Pozycje ofert", 2)',
+          ].join('\n'),
+        },
+        maxChars: 300,
+      },
+      { kind: 'text', text: 'Zrobilem widok pozycji.' },
+    ];
+  }
+
   /* A field of a record on the screen of one record — reached without navigating. */
   if (prompt.includes('[pozycja-sprawy]')) {
     return [

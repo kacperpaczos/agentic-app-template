@@ -542,3 +542,152 @@ test.describe('wskazanie wartosci pola rekordu', () => {
     })).toEqual([]);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/*  With record actions in the table (Task 7)                                  */
+/* -------------------------------------------------------------------------- */
+
+const ACTION = 'change_unit_price';
+const OFFER_ITEMS = 'procurement.case_offer_items';
+
+/** The case's offer items as the backend returns them, in its order. */
+async function backendItems(page: Page, caseId: string): Promise<{ raw: ReadResponse; records: any[] }> {
+  const res = await page.request.post(`${BASE}/api/read`, {
+    data: { operation: OFFER_ITEMS, input: { caseId } },
+  });
+  expect(res.status()).toBe(200);
+  const raw = (await res.json()) as ReadResponse;
+  return { raw, records: recordsOf(raw.result, raw.descriptor!) as any[] };
+}
+
+const firstCaseId = async (page: Page): Promise<string> => {
+  const res = await page.request.post(`${BASE}/api/read`, { data: { operation: 'procurement.cases' } });
+  return ((await res.json()) as any).result.cases[0].id as string;
+};
+
+test.describe('wskazanie wartosci w tabeli z akcjami rekordu', () => {
+  test.describe.configure({ mode: 'serial', timeout: 180_000 });
+
+  test.beforeAll(() => {
+    scripted.prepareDatabase();
+    addSuppliers(scripted.config.dataDir);
+  });
+  test.afterEach(() => scripted.stop());
+
+  test('(g) kolumna akcji i otwarty formularz nie mylą wskazania; zmiana strony zamyka formularz jawnie', async ({
+    page,
+  }) => {
+    await scripted.start('show-value');
+    await openApp(page, '/data');
+    const caseId = await firstCaseId(page);
+    const { records } = await backendItems(page, caseId);
+    // The table in the card shows two rows a page, so the third record is on the second page.
+    const onFirstPage = records[0]!;
+    const wanted = records[2]!;
+    expect(wanted, 'sprawa ma co najmniej trzy pozycje').toBeTruthy();
+
+    await sendForRun(page, `Zrob widok pozycji [karta-pozycji] sprawa=${caseId}`);
+    await settled(page);
+
+    await page.getByRole('link', { name: 'Widoki agenta' }).click();
+    const table = page.locator('[data-testid="agent-views-page"] [data-component="DataTable"]');
+    await expect(table).toHaveAttribute('data-state', 'ready');
+    await watchHighlights(page);
+
+    /* The user opens the price form on a row of the first page and leaves it open. */
+    await table.locator(`tr[data-record-id="${onFirstPage.id}"] [data-record-action="${ACTION}"]`).click();
+    const form = table.getByTestId('record-action-form');
+    await expect(form).toHaveAttribute('data-record-id', String(onFirstPage.id));
+
+    const { runId } = await sendForRun(page, `Pokaz cene tej pozycji [pozycja-sprawy] pozycja=${wanted.id}`);
+    await settled(page);
+
+    const results = await toolResults(page, runId);
+    const shown = resultOf(results, 'ui_show_value');
+    expect(shown).toMatchObject({ executed: true, found: true, shown: true, matchesBackend: true });
+    // The page had to be turned: the record was not on the page the user was looking at.
+    expect(shown.adjustments.map((a: any) => a.kind)).toContain('page_changed');
+
+    /*
+     * The cell pointed at is the record's *value* cell. The actions column
+     * carries no record or field of its own, so it cannot be mistaken for one —
+     * and the open form of another row does not make the lookup find its row.
+     */
+    const marked = (await highlights(page)).filter((hl) => hl.field === 'unitPriceMinor');
+    expect(marked.map((hl) => hl.recordId)).toEqual([String(wanted.id)]);
+    expect(marked[0]!.text).toBe(shown.backend.displayedText);
+    expect(marked[0]!.inViewport).toBe(true);
+    await expect(
+      table.locator(`td[data-record-id="${wanted.id}"][data-field="unitPriceMinor"][data-ui-highlight="true"]`),
+    ).toHaveCount(1);
+
+    /*
+     * The form of the row that left the page is gone with its row, and the
+     * banner says the page was changed and by whom — the change is not silent,
+     * but the text typed into that form (nothing was typed here) would be lost.
+     */
+    await expect(form).toHaveCount(0);
+    await expect(notice(page)).toContainText('Zmieniono strone');
+    await expect(notice(page)).toHaveAttribute('data-shown', 'true');
+    // Back on the first page the row is there again, and its form is not open.
+    await table.getByTestId('data-page-prev').click();
+    await expect(table.locator(`tr[data-record-id="${onFirstPage.id}"]`)).toHaveCount(1);
+    await expect(table.getByTestId('record-action-form')).toHaveCount(0);
+  });
+
+  test('(h) po akcji rekordu wskazana jest NOWA wartosc, zgodna ze swiezym odczytem backendu', async ({ page }) => {
+    await scripted.start('show-value');
+    await openApp(page, '/data');
+    const caseId = await firstCaseId(page);
+    const before = await backendItems(page, caseId);
+    const target = before.records[0]!;
+
+    await page.goto(`${BASE}/cases/${caseId}`);
+    await expect(page.getByTestId('case-detail-page')).toBeVisible();
+    const table = page.locator(`[data-component="DataTable"][data-operation="${OFFER_ITEMS}"]`);
+    await expect(table).toHaveAttribute('data-state', 'ready');
+    await watchHighlights(page);
+
+    /* The user changes the price in the table, with the record action. */
+    const typed = '9 999,50';
+    await table.locator(`tr[data-record-id="${target.id}"] [data-record-action="${ACTION}"]`).click();
+    const form = table.getByTestId('record-action-form');
+    await form.getByLabel('Nowa cena jednostkowa').fill(typed);
+    const saved = page.waitForResponse((r) => r.url().endsWith('/api/actions'));
+    await form.getByRole('button', { name: 'Zapisz' }).click();
+    expect((await saved).status()).toBe(200);
+    await expect(table.getByTestId('record-action-status')).toContainText('zapisano');
+
+    /* The backend really holds the new value; the screen is asked for that one. */
+    const after = await backendItems(page, caseId);
+    const changed = after.records.find((r) => r.id === target.id)!;
+    expect(changed.unitPriceMinor).toBe(999950);
+    expect(changed.unitPriceMinor).not.toBe(target.unitPriceMinor);
+
+    const { runId } = await sendForRun(page, `Pokaz cene tej pozycji [pozycja-sprawy] pozycja=${target.id}`);
+    await settled(page);
+
+    const results = await toolResults(page, runId);
+    const shown = resultOf(results, 'ui_show_value');
+    // The backend read happens when the command runs — after the action — so the
+    // value compared with the screen is the new one, and they agree.
+    expect(shown).toMatchObject({ executed: true, shown: true, matchesBackend: true });
+    expect(shown.backend.rawValue).toBe(999950);
+    expect(shown.revealed.rawValue).toBe(999950);
+    expect(shown.backend.displayedText).toContain('9 999,50');
+    expect(await notShown(page, runId, {
+      recordKind: 'offer_item',
+      recordId: String(target.id),
+      field: 'unitPriceMinor',
+      rawValue: 999950,
+      displayedText: shown.backend.displayedText,
+    })).toEqual([]);
+
+    /* The screen's description keeps both contributions: the record actions and the page. */
+    const state = resultOf(results, 'ui_state');
+    expect(state.stale).toBe(false);
+    const instance = state.snapshot.instances.find((i: any) => i.source.operation === OFFER_ITEMS);
+    expect(instance.actions).toContain(`action:${ACTION}`);
+    expect(instance.visibleRecordIds).toContain(String(target.id));
+  });
+});

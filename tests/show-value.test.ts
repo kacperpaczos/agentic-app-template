@@ -10,6 +10,7 @@ import {
   formatFieldValue,
   parseAddressSearch,
   applySearchPatch,
+  readResultDescriptorSchema,
   stringifyAddressSearch,
   viewAddressKey,
   uiCommandResultSchema,
@@ -970,6 +971,27 @@ describe('kontrakt polecenia i potwierdzenia', () => {
     expect(() =>
       uiCommandResultSchema.parse({ ...ack, adjustments: [{ kind: 'data_changed', detail: 'x' }] }),
     ).toThrow();
+    // Task 7's record actions and this task's changes of presentation are two
+    // different things the same contract carries; neither replaces the other.
+    const withActions = readResultDescriptorSchema.parse({
+      collection: 'items',
+      record: { kind: 'thing', idField: 'id' },
+      fields: [{ field: 'price', label: 'Cena', type: 'money_minor' }],
+      actions: [
+        {
+          id: 'change_price',
+          label: 'Zmien cene',
+          tool: 'update_thing',
+          input: [
+            { key: 'id', from: '$record.id' },
+            { key: 'price', from: '$form.price' },
+          ],
+          form: [{ key: 'price', label: 'Nowa cena', type: 'money_minor' }],
+        },
+      ],
+    });
+    expect(withActions.actions![0]!.id).toBe('change_price');
+
     // A change reported without anything shown is a legitimate acknowledgement.
     const changedOnly = uiCommandResultSchema.parse({
       commandId: 'uic_12345678',
@@ -1000,12 +1022,20 @@ function fakeScreen(opts: {
   cell?: { text: string; rect?: { top: number; left: number; width: number; height: number } } | null;
   /** Whether the tab paints: a hidden tab never calls back. */
   frames?: 'paint' | 'never';
+  /**
+   * The table is being read again — as it is right after a record action —
+   * until `settlesAfterMs`, when it shows `settledValue` instead.
+   */
+  refreshingForMs?: number;
+  settledValue?: { text: string; raw: string };
 }) {
   const location = { pathname: '/data', search: opts.search };
   const marks: string[] = [];
   const cell = opts.cell
     ? {
-        textContent: opts.cell.text,
+        get textContent() {
+          return current().text;
+        },
         getBoundingClientRect: () => opts.cell!.rect ?? { top: 100, left: 100, width: 80, height: 20 },
         scrollIntoView: () => {},
         setAttribute: (name: string, value: string) => marks.push(`${name}=${value}`),
@@ -1033,6 +1063,10 @@ function fakeScreen(opts: {
     getComputedStyle: () => ({ overflowX: 'visible', overflowY: 'visible' }),
   });
 
+  const startedAt = Date.now();
+  const refreshing = () => Date.now() - startedAt < (opts.refreshingForMs ?? 0);
+  const current = () => (refreshing() || !opts.settledValue ? { text: opts.cell?.text ?? '', raw: '5213456789' } : opts.settledValue);
+
   const FILTER_FIELDS = [{ field: 'country', label: 'Kraj (kod ISO)' }];
   const names = FILTER_FIELDS.map((f) => f.field);
   const hidden = { field: 'country', op: 'eq' as const, value: 'PL' };
@@ -1054,7 +1088,7 @@ function fakeScreen(opts: {
         const page = Number(search.page ?? '1');
         return {
           status: 'present',
-          record: { id: 'pcs_1', taxId: '5213456789' },
+          record: { id: 'pcs_1', taxId: current().raw },
           field: { field: 'taxId', label: 'NIP', type: 'text' },
           page: 2,
           pageShown: page,
@@ -1064,6 +1098,7 @@ function fakeScreen(opts: {
         };
       },
       showPage: null,
+      refreshing: refreshing(),
     };
   };
   const withdraw = registerRevealTarget(table);
@@ -1173,6 +1208,36 @@ describe('zmiana prezentacji przezywa odmowe', () => {
     expect(result).toMatchObject({ executed: false, reason: UI_COMMAND_FAILURES.notVisible, highlighted: false });
     expect(result.adjustments?.map((a) => a.kind)).toEqual(['filter_cleared', 'page_changed']);
     expect(screen.marks).toEqual([]);
+  });
+
+  it('tabela w trakcie ponownego odczytu: wskazana jest wartosc po odswiezeniu, nie ta sprzed akcji', async () => {
+    /*
+     * A record action invalidates the table's read, and the rows on screen are
+     * the ones about to be replaced. Reading them now and comparing them with
+     * the backend would compare a value the user is about to stop seeing.
+     */
+    screen = fakeScreen({
+      search: '?country=PL',
+      cell: { text: 'stara' },
+      refreshingForMs: 250,
+      settledValue: { text: 'nowa', raw: '9999' },
+    });
+    const result = await reveal();
+
+    expect(result).toMatchObject({ executed: true, highlighted: true });
+    expect(result.revealed).toMatchObject({ displayedText: 'nowa', rawValue: '9999' });
+  });
+
+  it('tabela, ktora nie przestaje sie odswiezac: not_applied, nie falszywe wskazanie', async () => {
+    screen = fakeScreen({
+      search: '?country=PL',
+      cell: { text: 'stara' },
+      refreshingForMs: 60_000,
+      settledValue: { text: 'nowa', raw: '9999' },
+    });
+    const result = await reveal();
+    expect(result).toMatchObject({ executed: false, reason: UI_COMMAND_FAILURES.notApplied });
+    expect(result.revealed).toBeUndefined();
   });
 
   it('komorka w widoku: wskazana, podswietlona, a zmiany sa w wyniku i w pasku', async () => {

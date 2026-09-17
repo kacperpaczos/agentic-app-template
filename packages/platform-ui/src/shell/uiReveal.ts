@@ -349,7 +349,14 @@ export async function performReveal(
   const settledTable = () =>
     poll(() => {
       const table = findTable(reveal);
-      if (!table || table.locate(reveal.recordId, reveal.field).status === 'unavailable') return null;
+      /*
+       * A table being read again is not a table to take values from: a record
+       * action invalidates its read, and the rows on screen are the ones about
+       * to be replaced. Waiting here is what keeps a value that is already old
+       * from being compared with the backend and called a match.
+       */
+      if (!table || table.refreshing) return null;
+      if (table.locate(reveal.recordId, reveal.field).status === 'unavailable') return null;
       if (table.address) {
         const names = table.address.filterFields.map((f) => f.field);
         if (table.address.key !== viewAddressKey(parseAddressSearch(window.location.search), names)) return null;
@@ -357,7 +364,9 @@ export async function performReveal(
       return table;
     });
   const table = await settledTable();
-  if (!table) return refuse(UI_COMMAND_FAILURES.notPresent);
+  // Still being read when the budget ran out: the screen never reached a state
+  // this command could confirm, which is not the same as the record missing.
+  if (!table) return refuse(findTable(reveal)?.refreshing ? UI_COMMAND_FAILURES.notApplied : UI_COMMAND_FAILURES.notPresent);
 
   const labels = new Map(table.address?.filterFields.map((f) => [f.field, f.label]) ?? []);
   const plan = planReveal({
@@ -398,8 +407,9 @@ export async function performReveal(
   /* The record on the page shown, and its cell. */
   const shown = await poll(() => {
     const now = findTable(reveal);
-    const at = now?.locate(reveal.recordId, reveal.field);
-    if (!now || at?.status !== 'present' || (at.page !== null && at.page !== at.pageShown)) return null;
+    if (!now || now.refreshing) return null;
+    const at = now.locate(reveal.recordId, reveal.field);
+    if (at.status !== 'present' || (at.page !== null && at.page !== at.pageShown)) return null;
     if (now.address) {
       const names = now.address.filterFields.map((f) => f.field);
       if (now.address.key !== viewAddressKey(parseAddressSearch(window.location.search), names)) return null;
@@ -410,7 +420,7 @@ export async function performReveal(
     );
     return cell ? { at, cell } : null;
   });
-  if (!shown) return refuse(UI_COMMAND_FAILURES.notPresent);
+  if (!shown) return refuse(findTable(reveal)?.refreshing ? UI_COMMAND_FAILURES.notApplied : UI_COMMAND_FAILURES.notPresent);
   const { at, cell } = shown;
 
   const visible = await bringIntoView(cell, reveal, adjustments, deps.until);
