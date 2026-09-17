@@ -382,6 +382,64 @@ describe('narzedzia widokow agenta', () => {
     ]);
   });
 
+  /*
+   * From `run_96c52b19607e4a21a589`: the tool answered success for a chart the
+   * component then refused to draw ("laczy rozne jednostki (PLN, EUR)"), and
+   * the model told the user the chart was in the view. The answer now says what
+   * it is an answer about — the composition was stored, not drawn — and warns
+   * where drawing is the only place the question can be settled.
+   */
+  it('wynik mowi, ze kompozycja jest ZAPISANA a nie narysowana, i ostrzega o serii z jednostka z rekordu', async () => {
+    const conv = newConversation();
+    const ctx = context(conv.id);
+
+    // A money series whose unit is a property of each record: uniformity is a
+    // fact about the rows at drawing time, so it is warned about, not refused.
+    const money = await call(
+      'agent_view_create',
+      { title: 'Sumy', source: `root = DataChart(${comparison()}, "bar", "supplierName", ["totalMinor"])` },
+      ctx,
+    );
+    expect(money.ok, JSON.stringify(money.body)).toBe(true);
+    expect(money.body.rendered).toBe(false);
+    expect(money.body.readBack).toContain('ZAPISANA, ale nie narysowana');
+    expect(money.body.readBack).toContain('mcp__app__ui_state');
+    expect(money.body.warnings).toHaveLength(1);
+    expect(money.body.warnings[0]).toMatchObject({ code: 'unit_from_record', statementId: 'root' });
+    expect(money.body.warnings[0].message).toContain('Suma (jednostka z pola currency)');
+    // A warning, never a refusal: the card is stored and shows the composition.
+    expect((h.platform.services.canvas.getCard(money.body.cardId, h.ownerId).spec as { source: string }).source).toContain(
+      'DataChart',
+    );
+
+    // A numeric series carrying no unit of its own: nothing that could surprise.
+    const score = await call(
+      'agent_view_create',
+      { title: 'Wyniki', source: `root = DataChart(${comparison()}, "bar", "supplierName", ["score"])` },
+      ctx,
+    );
+    expect(score.body).toMatchObject({ rendered: false, warnings: [] });
+
+    // The same on a change — and on a change that changes nothing, where the
+    // model is just as far from having looked at the screen.
+    const patch = `root = DataChart(${comparison()}, "bar", "supplierName", ["totalMinor"])`;
+    const changed = await call('agent_view_update', { cardId: score.body.cardId, patch }, ctx);
+    expect(changed.body).toMatchObject({ unchanged: false, rendered: false });
+    expect(changed.body.warnings.map((w: { code: string }) => w.code)).toEqual(['unit_from_record']);
+    const again = await call('agent_view_update', { cardId: score.body.cardId, patch }, ctx);
+    expect(again.body).toMatchObject({ unchanged: true, rendered: false });
+    expect(again.body.warnings.map((w: { code: string }) => w.code)).toEqual(['unit_from_record']);
+    expect(again.body.readBack).toContain('mcp__app__ui_state');
+
+    // A table over the same read is not a chart: no unit warning.
+    const table = await call(
+      'agent_view_create',
+      { title: 'Tabela', source: `root = DataTable(${comparison()}, ["supplierName", "totalMinor"])` },
+      ctx,
+    );
+    expect(table.body).toMatchObject({ rendered: false, warnings: [] });
+  });
+
   it('patch zmienia tylko wskazana instrukcje, a pozostale instrukcje, geometria i inne widoki zostaja', async () => {
     const conv = newConversation();
     const ctx = context(conv.id);
@@ -817,5 +875,23 @@ describe('narzedzia widokow agenta', () => {
     expect(prompt).toContain(
       'tabela = DataTable({operation: "modul.operacja", input: {}}, ["poleA", "poleB"], "Tytul", null, null, {field: "poleB", direction: "desc"}, "poleA")',
     );
+
+    /*
+     * The two rules real turns showed missing. Asserted on the prompt because
+     * that is where they live; whether the model then obeys them is what
+     * `e2e/bl01-bl02-model.spec.ts` spends a turn on.
+     */
+    // A business code the user typed is not a record id (`run_39bc79cc133d4bce8fcc`).
+    expect(prompt).toContain('Identyfikatory w source.input musza pochodzic z ODCZYTU');
+    expect(prompt).toContain('kodu biznesowego, ktory uzytkownik wpisal w rozmowie (np. "PC-2026-01")');
+    expect(prompt).toContain('Walidator sprawdza schemat kompozycji, a NIE istnienie rekordu');
+    // What a refused read looks like, so a refusal is recognised instead of assumed away.
+    expect(prompt).toMatch(/instancja ma state = forbidden/);
+    expect(prompt).toMatch(/error\.code not_found lub forbidden/);
+    // Stored is not drawn (`run_96c52b19607e4a21a589`).
+    expect(prompt).toContain('## Po utworzeniu albo zmianie widoku');
+    expect(prompt).toContain('mowi tylko, ze kompozycja zostala ZAPISANA');
+    expect(prompt).toMatch(/NIGDY nie twierdz, ze wykres, tabela albo podsumowanie cos pokazuje, jesli tego nie odczytales/);
+    expect(prompt).toContain('mcp__app__ui_state');
   });
 });

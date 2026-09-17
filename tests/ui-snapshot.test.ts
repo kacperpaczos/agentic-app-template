@@ -1878,4 +1878,29 @@ describe('Merge round — fix L1', () => {
     });
     expect(prompt).toContain('cards: null znaczy „nie wiadomo” (cardsState loading albo error), nie „brak kart”');
   });
+
+  /*
+   * The read-back rule listed only the interface commands, so a view the agent
+   * had just composed was described from what it had asked for. In
+   * `run_96c52b19607e4a21a589` that produced "Dodano wykres slupkowy cen
+   * jednostkowych do widoku." for a chart the component had refused to draw.
+   */
+  it('prompt: po agent_view_create / agent_view_update tez odczytaj ekran, zanim powiesz, co widok pokazuje', () => {
+    const prompt = buildSystemPrompt({
+      registry: h.platform.registry,
+      catalog: h.platform.services.catalog,
+      appContext: context(),
+      resourceSummary: null,
+      workspaceDir: null,
+      stagedFiles: [],
+      toolkit: [],
+    });
+    const screen = prompt.slice(prompt.indexOf('## Stan ekranu'), prompt.indexOf('## Pokazanie wartosci pola rekordu'));
+    expect(screen).toContain('Po agent_view_create i agent_view_update tez odczytaj ui_state');
+    // They store, they do not render — and they have no version to wait for.
+    expect(screen).toContain('ZAPISUJA kompozycje, nie rysuja jej, i nie zwracaja uiVersion');
+    expect(screen).toMatch(/NIE mow, ze wykres, tabela albo podsumowanie cos pokazuje, jesli nie odczytales tego z opisu ekranu/);
+    // The honest answer when the user is looking at another screen entirely.
+    expect(screen).toContain('nie opisuj, co przedstawia');
+  });
 });
