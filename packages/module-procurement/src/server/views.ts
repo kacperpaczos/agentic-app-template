@@ -1,5 +1,5 @@
 import type { ReadResultDescriptor, ViewDefinition } from '@platform/contracts';
-import { MODULE_ID } from '../shared/index.ts';
+import { MODULE_ID, PRICE_BASIS_LABELS } from '../shared/index.ts';
 
 /**
  * What this module's reads return and how its screens are composed from them.
@@ -44,10 +44,7 @@ export const caseRecords: ReadResultDescriptor = {
       field: 'priceBasis',
       label: 'Ceny',
       type: 'enum',
-      values: [
-        { value: 'net', label: 'netto' },
-        { value: 'gross', label: 'brutto' },
-      ],
+      values: PRICE_BASIS_LABELS,
     },
     { field: 'offerCount', label: 'Oferty', type: 'number', sortable: true },
     { field: 'requirementCount', label: 'Pozycje', type: 'number', sortable: true },
@@ -66,10 +63,7 @@ export const comparisonRecords: ReadResultDescriptor = {
       field: 'priceBasis',
       label: 'Ceny',
       type: 'enum',
-      values: [
-        { value: 'net', label: 'netto' },
-        { value: 'gross', label: 'brutto' },
-      ],
+      values: PRICE_BASIS_LABELS,
     },
     { field: 'totalMinor', label: 'Suma', type: 'money_minor', unitField: 'currency', sortable: true },
     { field: 'completenessPct', label: 'Kompletnosc', type: 'number', unit: '%', sortable: true },
@@ -95,6 +89,27 @@ export const requirementRecords: ReadResultDescriptor = {
   ],
 };
 
+/**
+ * One offer item, flattened across every offer of a case, with the supplier
+ * and currency that would otherwise only be known from its parent offer.
+ *
+ * `idField` is the item's own id ("idField pozycji" from the brief): a case
+ * has several offers and each offer several items, so nothing shorter than the
+ * item itself identifies a row of this table uniquely.
+ */
+export const caseOfferItemRecords: ReadResultDescriptor = {
+  collection: 'items',
+  record: { kind: 'offer_item', idField: 'id' },
+  fields: [
+    { field: 'supplierName', label: 'Dostawca', type: 'text', sortable: true },
+    { field: 'name', label: 'Nazwa', type: 'text', sortable: true },
+    { field: 'unit', label: 'Jednostka', type: 'text' },
+    { field: 'quantityMilli', label: 'Ilosc', type: 'quantity_milli', unitField: 'unit' },
+    { field: 'unitPriceMinor', label: 'Cena jednostkowa', type: 'money_minor', unitField: 'currency' },
+    { field: 'currency', label: 'Waluta', type: 'text', sortable: true },
+  ],
+};
+
 const op = (name: string) => `${MODULE_ID}.${name}`;
 
 /*
@@ -103,6 +118,12 @@ const op = (name: string) => `${MODULE_ID}.${name}`;
  * no data of its own and shows exactly what `POST /api/read` returns for the
  * signed-in owner. Positional arguments follow `dataTablePropsSchema`:
  * `DataTable(source, columns, title, pageSize, filter, sort)`.
+ *
+ * The two detail screens below are reached from a record's own `route` (the
+ * case's title link, the "pochodzenie" link of an item), never from the left
+ * navigation, so — unlike `procurement.data` and `procurement.cases` — they
+ * name no `primaryOperation` and have no matching `UiTarget`: there is nothing
+ * to narrow on a screen that already names one record.
  */
 export const procurementViews: ViewDefinition[] = [
   {
@@ -124,5 +145,25 @@ export const procurementViews: ViewDefinition[] = [
       'lead = TextContent("Kazda sprawa ustala podstawe porownania: walute i to, czy ceny sa netto czy brutto.")',
       `cases = DataTable({operation: "${op('cases')}"}, ["code", "title", "status", "currency", "priceBasis", "offerCount", "requirementCount"])`,
     ].join('\n'),
+  },
+  {
+    id: 'procurement.case.detail',
+    title: 'Szczegoly sprawy',
+    params: ['caseId'],
+    composition: [
+      'root = Stack([header, reqHeading, requirements, offersHeading, offerItems, offerSources])',
+      'header = CaseHeader($caseId)',
+      'reqHeading = SectionHeading("Pozycje wymagane")',
+      `requirements = DataTable({operation: "${op('case_overview')}", input: {caseId: $caseId}}, ["position", "name", "quantityMilli", "spec"])`,
+      'offersHeading = SectionHeading("Oferty")',
+      `offerItems = DataTable({operation: "${op('case_offer_items')}", input: {caseId: $caseId}}, ["supplierName", "name", "unit", "quantityMilli", "unitPriceMinor", "currency"])`,
+      'offerSources = CaseOfferSources($caseId)',
+    ].join('\n'),
+  },
+  {
+    id: 'procurement.item.provenance',
+    title: 'Pochodzenie wartosci',
+    params: ['itemId'],
+    composition: 'root = ItemProvenance($itemId)',
   },
 ];

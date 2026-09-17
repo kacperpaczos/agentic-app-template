@@ -238,3 +238,131 @@ test.describe('widoki modulu jako kompozycje OpenUI', () => {
     await expect(box.locator(`dd[data-record-id="${projector.id}"][data-field="quantityMilli"]`)).toHaveText('2 szt');
   });
 });
+
+test.describe('ekrany szczegolow modulu: sprawa i pochodzenie pozycji', () => {
+  test('szczegoly sprawy: naglowek i obie tabele rowne backendowi', async ({ page, request }) => {
+    await signIn(request);
+    const { cases } = await (await request.get('/api/m/procurement/cases')).json();
+    const caseId = cases[0].id as string;
+    const overview = await readBackend(request, 'procurement.case_overview', { caseId });
+    const c = (
+      overview.result as { procurementCase: { code: string; title: string; description: string; priceBasis: string } }
+    ).procurementCase;
+    // The label "netto"/"brutto" comes from the same registered descriptor
+    // `DataTable` would use for this field (procurement.cases), never a
+    // hand-typed ternary in the screen.
+    const casesRead = await readBackend(request, 'procurement.cases');
+    const priceBasisField = casesRead.descriptor!.fields.find((f) => f.field === 'priceBasis')!;
+    const priceBasisLabel = formatFieldValue({ priceBasis: c.priceBasis }, priceBasisField);
+
+    await page.goto(`/cases/${caseId}`);
+    const detailPage = page.getByTestId('case-detail-page');
+    await expect(detailPage).toBeVisible();
+    const view = detailPage.getByTestId('composed-view');
+    await expect(view).toHaveAttribute('data-view-id', 'procurement.case.detail');
+    await expect(view).toHaveAttribute('data-state', 'ready');
+
+    // The header is its own OpenUI component (CaseHeader), not a table, but
+    // still the backend's own record — not a copy typed into the composition.
+    const heading = detailPage.getByRole('heading', { level: 1 });
+    await expect(heading).toContainText(c.code);
+    await expect(heading).toContainText(c.title);
+    await expect(detailPage.locator('.pf-page__lead')).toContainText(c.description);
+    await expect(detailPage.locator('.pf-page__lead')).toContainText(`ceny ${priceBasisLabel}`);
+
+    // Real headings for the document outline (SectionHeading -> <h2>), not
+    // `TextContent`'s plain <div>: an assistive-technology user can jump to
+    // either section the same way they could on the pre-composition markup.
+    await expect(detailPage.getByRole('heading', { level: 2, name: 'Pozycje wymagane' })).toBeVisible();
+    await expect(detailPage.getByRole('heading', { level: 2, name: 'Oferty' })).toBeVisible();
+
+    // Pozycje wymagane: DataTable on the existing procurement.case_overview read.
+    const requirementsTable = view.locator(
+      '[data-operation="procurement.case_overview"][data-component="DataTable"]',
+    );
+    await expect(requirementsTable).toHaveAttribute('data-state', 'ready');
+    await expectTableMatchesBackend(requirementsTable, overview, ['position', 'name', 'quantityMilli', 'spec']);
+
+    // Oferty: DataTable on the new procurement.case_offer_items read, one row
+    // per item across every offer, with the offer's own supplier and currency.
+    const items = await readBackend(request, 'procurement.case_offer_items', { caseId });
+    const itemsTable = view.locator('[data-operation="procurement.case_offer_items"][data-component="DataTable"]');
+    await expect(itemsTable).toHaveAttribute('data-state', 'ready');
+    await expectTableMatchesBackend(itemsTable, items, [
+      'supplierName',
+      'name',
+      'unit',
+      'quantityMilli',
+      'unitPriceMinor',
+      'currency',
+    ]);
+
+    // The non-tabular part (CaseOfferSources) still carries the exact link text
+    // and download links the rest of the suite (e2e/app.spec.ts) depends on.
+    await expect(detailPage.getByRole('link', { name: 'pochodzenie' }).first()).toBeVisible();
+    await expect(detailPage.getByRole('link', { name: 'zalacznik zrodlowy' }).first()).toBeVisible();
+  });
+
+  test('pochodzenie pozycji: wartosci rowne trasie modulu, data-view-id widoku', async ({ page, request }) => {
+    await signIn(request);
+    const { cases } = await (await request.get('/api/m/procurement/cases')).json();
+    const caseId = cases[0].id as string;
+    const overview = await readBackend(request, 'procurement.case_overview', { caseId });
+    const firstItemId = (
+      overview.result as { offers: Array<{ items: Array<{ id: string }> }> }
+    ).offers[0]!.items[0]!.id;
+
+    const backendRes = await request.get(`/api/m/procurement/items/${firstItemId}/provenance`);
+    expect(backendRes.status()).toBe(200);
+    const backend = (await backendRes.json()) as {
+      item: { name: string; unitPriceMinor: number | null };
+      offer: { reference: string; currency: string };
+      supplier: { name: string };
+      provenance: Array<{ file: { filename: string } }>;
+    };
+
+    const items = await readBackend(request, 'procurement.case_offer_items', { caseId });
+    const priceField = items.descriptor!.fields.find((f) => f.field === 'unitPriceMinor')!;
+    const expectedPrice = formatFieldValue(
+      { unitPriceMinor: backend.item.unitPriceMinor, currency: backend.offer.currency },
+      priceField,
+    );
+
+    await page.goto(`/items/${firstItemId}`);
+    const provenancePage = page.getByTestId('provenance-page');
+    await expect(provenancePage).toBeVisible();
+    const view = provenancePage.getByTestId('composed-view');
+    await expect(view).toHaveAttribute('data-view-id', 'procurement.item.provenance');
+    await expect(view).toHaveAttribute('data-state', 'ready');
+
+    const dd = view.locator('dl.pf-kv dd');
+    await expect(dd.nth(0)).toHaveText(backend.item.name);
+    await expect(dd.nth(1)).toHaveText(expectedPrice);
+    await expect(dd.nth(2)).toHaveText(backend.supplier.name);
+    await expect(dd.nth(3)).toHaveText(backend.offer.reference);
+
+    expect(backend.provenance.length).toBeGreaterThan(0);
+    for (const p of backend.provenance) {
+      await expect(view.getByRole('link', { name: p.file.filename })).toBeVisible();
+    }
+  });
+
+  test('sprawa i pozycja, ktore nie istnieja: stan "nie istnieje", nie pusta ramka ekranu', async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+
+    await page.goto('/cases/nie-ma-takiej-sprawy');
+    const caseDenied = page.getByTestId('access-denied');
+    await expect(caseDenied).toBeVisible();
+    await expect(caseDenied).toHaveAttribute('data-error-code', 'not_found');
+    await expect(page.getByTestId('case-detail-page')).toHaveCount(0);
+
+    await page.goto('/items/nie-ma-takiej-pozycji');
+    const itemDenied = page.getByTestId('access-denied');
+    await expect(itemDenied).toBeVisible();
+    await expect(itemDenied).toHaveAttribute('data-error-code', 'not_found');
+    await expect(page.getByTestId('provenance-page')).toHaveCount(0);
+  });
+});

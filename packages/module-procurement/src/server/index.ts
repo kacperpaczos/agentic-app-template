@@ -8,6 +8,7 @@ import { seedProcurement } from './seed.ts';
 import { ProcurementService } from './services.ts';
 import { procurementTools } from './tools.ts';
 import {
+  caseOfferItemRecords,
   caseRecords,
   comparisonRecords,
   procurementViews,
@@ -191,6 +192,14 @@ export function createProcurementModule(platform: PlatformServices): ServerModul
         inputSchema: caseRef,
         run: async (i: { caseId: string }, ctx) => service.getCaseDetail(i.caseId, ctx.ownerId),
         result: requirementRecords,
+      },
+      {
+        name: 'case_offer_items',
+        description:
+          'Pozycje ofert w sprawie, jedna na wiersz: dostawca, nazwa, jednostka, ilosc, cena jednostkowa i waluta.',
+        inputSchema: caseRef,
+        run: async (i: { caseId: string }, ctx) => ({ items: service.listCaseOfferItems(i.caseId, ctx.ownerId) }),
+        result: caseOfferItemRecords,
       },
       /*
        * The two lists behind the module's list screens. The same service calls
