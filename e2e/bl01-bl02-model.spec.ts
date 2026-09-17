@@ -299,7 +299,7 @@ async function expectInstanceMatchesBackend(
   page: Page,
   scope: Page | Locator,
   instance: any,
-): Promise<{ operation: string; records: DataRecord[] }> {
+): Promise<{ operation: string; records: DataRecord[]; descriptor: ReadResultDescriptor }> {
   /*
    * What the instance says about itself comes first. A component whose read
    * failed has nothing to compare with the backend, and the reason it failed —
@@ -338,7 +338,7 @@ async function expectInstanceMatchesBackend(
       expect(text, `${id}.${field}`).toBe(formatFieldValue(record, fieldOf(descriptor, field)).trim());
     }
   }
-  return { operation: instance.source.operation, records: kept };
+  return { operation: instance.source.operation, records: kept, descriptor };
 }
 
 /** A chart's caption states the range of each series; the range comes from the backend. */
@@ -395,18 +395,49 @@ async function instancesOnAgentViews(page: Page, snapshot: any): Promise<any[]> 
   return out;
 }
 
+/**
+ * The instances described on "Widoki agenta", once the description has caught up.
+ *
+ * The description is published with a debounce and always describes the screen
+ * as it was: opening the page and reading it in the same breath yields the
+ * *previous* screen's instances. One run of this proba failed on exactly that
+ * while the card, the composition and the data were all correct.
+ */
+async function describedOnAgentViews(
+  page: Page,
+  what: string,
+  want: (all: any[]) => boolean = () => true,
+): Promise<any[]> {
+  let latest: any[] = [];
+  await expect
+    .poll(
+      async () => {
+        latest = await instancesOnAgentViews(page, await publishedSnapshot(page));
+        return latest.length > 0 && latest.every((i) => i.state !== 'loading') && want(latest);
+      },
+      { timeout: 30_000, message: what },
+    )
+    .toBe(true);
+  return latest;
+}
+
+const has = (component: string) => (all: any[]) => all.some((i) => i.component === component);
+
 /** Changes one record's unit price through the record action, from the interface. */
 async function changeUnitPrice(page: Page, table: Locator, recordId: string, typed: string) {
   const button = table.locator(
     `tr[data-record-id="${recordId}"] button[data-record-action="change_unit_price"]`,
   );
   await expect(button).toHaveCount(1);
-  await button.click();
+  await button.scrollIntoViewIfNeeded();
+  await button.focus();
+  await page.keyboard.press('Enter');
   const form = table.getByTestId('record-action-form');
   await expect(form).toHaveAttribute('data-record-id', recordId);
-  await form.getByLabel('Nowa cena jednostkowa').fill(typed);
+  await expect(form.getByLabel('Nowa cena jednostkowa')).toBeFocused();
+  await page.keyboard.type(typed);
   const response = page.waitForResponse((r) => r.url().endsWith('/api/actions'));
-  await form.getByRole('button', { name: 'Zapisz' }).click();
+  await page.keyboard.press('Enter');
   expect((await response).status()).toBe(200);
   await expect(table.getByTestId('record-action-status')).toContainText('Zmien cene: zapisano.');
   await expect(form).toHaveCount(0);
@@ -793,8 +824,11 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       const tableCard = page.getByTestId(`card-${tableCardId}`);
       await expect(tableCard).toBeVisible();
 
-      let snapshot = await publishedSnapshot(page);
-      let onPage = await instancesOnAgentViews(page, snapshot);
+      let onPage = await describedOnAgentViews(
+        page,
+        'opis ekranu Widokow agenta po zestawieniu',
+        has('DataTable'),
+      );
       let tableInstance = onPage.find((i: any) => i.component === 'DataTable');
       expect(tableInstance, 'karta nie zamontowala tabeli danych').toBeTruthy();
       // The described table really is inside the card this run created.
@@ -826,8 +860,11 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       for (const id of created1) expect(state2.cards.some((c) => c.id === id)).toBe(true);
       await expect(tableCard).toBeVisible();
 
-      snapshot = await publishedSnapshot(page);
-      onPage = await instancesOnAgentViews(page, snapshot);
+      onPage = await describedOnAgentViews(
+        page,
+        'opis ekranu Widokow agenta po dodaniu wykresu',
+        (all) => has('DataChart')(all) && has('DataTable')(all),
+      );
       const chartInstance = onPage.find((i: any) => i.component === 'DataChart');
       expect(chartInstance, 'wykonanie nie dodalo wykresu').toBeTruthy();
       const chartCardId = state2.cards.find((c) =>
@@ -857,15 +894,19 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       for (const id of [...created1, chartCardId!]) {
         expect(state3.cards.some((c) => c.id === id), `karta ${id} zniknela`).toBe(true);
       }
-      snapshot = await publishedSnapshot(page);
-      onPage = await instancesOnAgentViews(page, snapshot);
+      onPage = await describedOnAgentViews(
+        page,
+        'opis ekranu Widokow agenta po zmianie zakresu',
+        has('DataTable'),
+      );
       tableInstance =
         onPage.find((i: any) => i.component === 'DataTable' && i.instanceId === tableInstance.instanceId) ??
         onPage.find((i: any) => i.component === 'DataTable');
       const narrowed = await expectInstanceMatchesBackend(page, viewsPage(page), tableInstance);
+      const idField = narrowed.descriptor.record.idField;
       const supplierNames = new Set(
         tableInstance.visibleRecordIds.map(
-          (id: string) => narrowed.records.find((r) => String(r.id) === id)!.supplierName,
+          (id: string) => narrowed.records.find((r) => String(r[idField]) === id)?.supplierName ?? '?',
         ),
       );
       expect([...supplierNames], 'zakres zestawienia nie zostal ograniczony do jednego dostawcy').toEqual([
@@ -970,10 +1011,7 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
           tableCard.locator(`td[data-record-id="${targetId}"][data-field="unitPriceMinor"]`),
         ).toHaveText(newText);
       }
-      // The published description is debounced; let it catch up before reading it.
-      await page.waitForTimeout(1200);
-      snapshot = await publishedSnapshot(page);
-      for (const instance of await instancesOnAgentViews(page, snapshot)) {
+      for (const instance of await describedOnAgentViews(page, 'opis ekranu Widokow agenta po zmianie danych')) {
         if (instance.component === 'DataTable') await expectInstanceMatchesBackend(page, viewsPage(page), instance);
         if (instance.component === 'DataChart') await expectChartMatchesBackend(page, viewsPage(page), instance);
       }
@@ -992,9 +1030,7 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       const afterReload = await agentViewsOf(page, conversationId);
       expect(afterReload.cards.map((c) => c.id).sort()).toEqual(state3.cards.map((c) => c.id).sort());
       for (const card of afterReload.cards) await expect(page.getByTestId(`card-${card.id}`)).toBeVisible();
-      await page.waitForTimeout(1200);
-      snapshot = await publishedSnapshot(page);
-      const restored = await instancesOnAgentViews(page, snapshot);
+      const restored = await describedOnAgentViews(page, 'opis ekranu Widokow agenta po przeladowaniu');
       expect(restored.length, 'po przeladowaniu zadna karta nie zamontowala komponentu danych').toBeGreaterThan(0);
       for (const instance of restored) {
         if (instance.component === 'DataTable') await expectInstanceMatchesBackend(page, viewsPage(page), instance);
