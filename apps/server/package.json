@@ -18,6 +18,7 @@
     "@mastra/core": "1.66.0",
     "@module/devkit-probe": "workspace:*",
     "@module/procurement": "workspace:*",
+    "@openuidev/lang-core": "0.2.18",
     "@platform/contracts": "workspace:*",
     "@platform/server": "workspace:*",
     "better-sqlite3": "13.0.3",

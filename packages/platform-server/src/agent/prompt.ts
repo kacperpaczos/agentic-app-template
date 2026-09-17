@@ -9,6 +9,7 @@ import type { ServerModuleRegistry } from '../registry/modules.ts';
 import { describeReadOperations } from '../registry/read-operations.ts';
 import { sortableFieldsOfTarget } from '../registry/view-sorting.ts';
 import { mcpToolName } from './mcp.ts';
+import { agentViewsPromptSection } from './tools/agent-views.ts';
 
 export interface PromptInput {
   registry: ServerModuleRegistry;
@@ -142,6 +143,7 @@ export function buildSystemPrompt(input: PromptInput): string {
       'danych (kolumny, serie, pola, filtr, sortowanie) wskazujesz wylacznie wymienione pola rekordow.',
       ...readOperations.map(describeReadOperationLine),
     );
+    parts.push(...agentViewsPromptSection(input.catalog.openui));
   }
 
   /*

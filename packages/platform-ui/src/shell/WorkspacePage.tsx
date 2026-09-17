@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router';
+import { AGENT_VIEWS_SCOPE_KIND } from '@platform/contracts';
 import { useSpaces } from '../api/queries.ts';
 import { useAppState } from '../state/appState.ts';
 import { QueryErrorState } from '../components/ErrorState.tsx';
@@ -17,6 +18,8 @@ export function WorkspacePage() {
 
   if (isLoading) return <div className="pf-state">Wczytywanie przestrzeni…</div>;
   if (error) return <QueryErrorState error={error} what="listy przestrzeni" />;
+  // Agent views belong to their conversation and are shown on their own page.
+  const spaces = data?.spaces.filter((s) => s.scopeKind !== AGENT_VIEWS_SCOPE_KIND) ?? [];
 
   return (
     <div className="pf-page" data-testid="workspace-page">
@@ -25,9 +28,9 @@ export function WorkspacePage() {
         Zapisane kompozycje canvasu. Uklad, rozmiary kart i widok sa trwale i wracaja po restarcie.
       </p>
 
-      {data?.spaces.length ? (
+      {spaces.length ? (
         <div className="pf-cards-grid">
-          {data.spaces.map((s) => (
+          {spaces.map((s) => (
             <Link
               key={s.id}
               to="/"

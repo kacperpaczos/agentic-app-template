@@ -1,4 +1,4 @@
-import { AppError, type Conversation, type StoredMessage } from '@platform/contracts';
+import { AGENT_VIEWS_SCOPE_KIND, AppError, type Conversation, type StoredMessage } from '@platform/contracts';
 import type { Db } from '../db/client.ts';
 import { newId, nowIso } from '../util/id.ts';
 
@@ -145,14 +145,28 @@ export class ConversationService {
    * CASCADE) and detaches its artifacts (ON DELETE SET NULL) so published work
    * survives. The Claude session id is dropped with the row; the SDK's own
    * transcript is left alone because it is not ours to delete.
+   *
+   * The conversation's agent views space goes with it, cards included (they
+   * cascade from the space). It is bound to the conversation by scope rather
+   * than by a foreign key — spaces are scoped by opaque strings — so it is
+   * deleted here, in the same transaction, instead of being left orphaned.
    */
-  delete(id: string, ownerId: string): { deleted: string; detachedArtifacts: number } {
+  delete(
+    id: string,
+    ownerId: string,
+  ): { deleted: string; detachedArtifacts: number; removedViewSpaces: number } {
     this.#row(id, ownerId);
     const artifacts = this.db.$client
       .prepare('SELECT COUNT(*) AS n FROM artifacts WHERE conversation_id = ?')
       .get(id) as { n: number };
-    this.db.$client.prepare('DELETE FROM conversations WHERE id = ?').run(id);
-    return { deleted: id, detachedArtifacts: artifacts.n };
+    const removedViewSpaces = this.db.$client.transaction(() => {
+      const spaces = this.db.$client
+        .prepare('DELETE FROM canvas_spaces WHERE owner_id = ? AND scope_kind = ? AND scope_id = ?')
+        .run(ownerId, AGENT_VIEWS_SCOPE_KIND, id);
+      this.db.$client.prepare('DELETE FROM conversations WHERE id = ?').run(id);
+      return spaces.changes;
+    })();
+    return { deleted: id, detachedArtifacts: artifacts.n, removedViewSpaces };
   }
 
   messages(id: string, ownerId: string): StoredMessage[] {

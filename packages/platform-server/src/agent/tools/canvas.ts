@@ -6,7 +6,7 @@ import {
   type ModuleToolDefinition,
   type ToolCallContext,
 } from '@platform/contracts';
-import type { PlatformServices } from '../../services/index.ts';
+import { assertOwnConversationViews, type PlatformServices } from '../../services/index.ts';
 
 const requireSpace = (ctx: ToolCallContext, explicit?: string | null): string => {
   const spaceId = explicit ?? ctx.appContext.spaceId;
@@ -21,6 +21,22 @@ const requireSpace = (ctx: ToolCallContext, explicit?: string | null): string =>
  * belongs to the user, and an edit of its content must not move it.
  */
 export function canvasTools(services: PlatformServices): Array<ModuleToolDefinition<any>> {
+  /*
+   * Every space and card id these tools take is checked against the run's
+   * conversation: another conversation's agent views are not this run's to
+   * read or change (`assertOwnConversationViews`).
+   */
+  const spaceFor = (ctx: ToolCallContext, spaceId: string) => {
+    const space = services.canvas.getSpace(spaceId, ctx.ownerId);
+    assertOwnConversationViews(space, ctx.conversationId);
+    return space;
+  };
+  const spaceOfCard = (ctx: ToolCallContext, cardId: string) => {
+    const space = services.canvas.spaceOfCard(cardId, ctx.ownerId);
+    assertOwnConversationViews(space, ctx.conversationId);
+    return space;
+  };
+
   return [
     {
       name: 'canvas_list_cards',
@@ -28,7 +44,7 @@ export function canvasTools(services: PlatformServices): Array<ModuleToolDefinit
       effect: 'read',
       inputSchema: z.object({ spaceId: z.string().optional() }),
       handler: async (input: { spaceId?: string }, ctx: ToolCallContext) => {
-        const state = services.canvas.getState(requireSpace(ctx, input.spaceId), ctx.ownerId);
+        const state = services.canvas.getState(spaceFor(ctx, requireSpace(ctx, input.spaceId)).id, ctx.ownerId);
         return {
           space: { id: state.space.id, title: state.space.title },
           cards: state.cards.map((c) => ({
@@ -61,8 +77,10 @@ export function canvasTools(services: PlatformServices): Array<ModuleToolDefinit
         operationId: z.string().min(8).max(200).optional(),
       }),
       handler: async (input: any, ctx: ToolCallContext) => {
-        const spaceId = requireSpace(ctx, input.spaceId);
-        const spec = services.catalog.validate(input.spec);
+        const spaceId = spaceFor(ctx, requireSpace(ctx, input.spaceId)).id;
+        const spec = services.catalog.validate(input.spec, {
+          mode: services.canvas.compositionModeOfSpace(spaceId, ctx.ownerId),
+        });
         const card = await services.canvas.addCard(
           { spaceId, title: input.title, spec, geometry: input.geometry, operationId: input.operationId },
           ctx.ownerId,
@@ -84,7 +102,10 @@ export function canvasTools(services: PlatformServices): Array<ModuleToolDefinit
         operationId: z.string().min(8).max(200).optional(),
       }),
       handler: async (input: any, ctx: ToolCallContext) => {
-        const spec = services.catalog.validate(input.spec);
+        spaceOfCard(ctx, input.cardId);
+        const spec = services.catalog.validate(input.spec, {
+          mode: services.canvas.compositionModeOfCard(input.cardId, ctx.ownerId),
+        });
         const card = await services.canvas.updateSpec({ ...input, spec }, ctx.ownerId);
         ctx.emit({ type: 'canvas_changed', spaceId: card.spaceId });
         return { cardId: card.id, specVersion: card.specVersion };
@@ -100,6 +121,7 @@ export function canvasTools(services: PlatformServices): Array<ModuleToolDefinit
         geometry: cardGeometrySchema.partial(),
       }),
       handler: async (input: any, ctx: ToolCallContext) => {
+        spaceOfCard(ctx, input.cardId);
         const card = services.canvas.updateGeometry(input, ctx.ownerId);
         ctx.emit({ type: 'canvas_changed', spaceId: card.spaceId });
         return { cardId: card.id, geometry: card.geometry, geometryVersion: card.geometryVersion };
@@ -114,9 +136,9 @@ export function canvasTools(services: PlatformServices): Array<ModuleToolDefinit
         operationId: z.string().min(8).max(200).optional(),
       }),
       handler: async (input: any, ctx: ToolCallContext) => {
-        const state = services.canvas.getState(requireSpace(ctx), ctx.ownerId);
+        const space = spaceOfCard(ctx, input.cardId);
         const removed = await services.canvas.removeCard(input, ctx.ownerId);
-        ctx.emit({ type: 'canvas_changed', spaceId: state.space.id });
+        ctx.emit({ type: 'canvas_changed', spaceId: space.id });
         return removed;
       },
     },

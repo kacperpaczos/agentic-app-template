@@ -12,6 +12,7 @@ import type { MenuItemContribution } from '@platform/contracts';
 const platformMenu: MenuItemContribution[] = [
   { id: 'platform.canvas', section: 'workspace', label: 'Canvas', to: '/', order: 1 },
   { id: 'platform.spaces', section: 'workspace', label: 'Zapisane kompozycje', to: '/spaces', order: 2 },
+  { id: 'platform.agentViews', section: 'workspace', label: 'Widoki agenta', to: '/agent-views', order: 3 },
   { id: 'platform.files', section: 'files', label: 'Pliki i raporty', to: '/files', order: 1 },
   { id: 'platform.settings', section: 'settings', label: 'Ustawienia', to: '/settings', order: 1 },
 ];

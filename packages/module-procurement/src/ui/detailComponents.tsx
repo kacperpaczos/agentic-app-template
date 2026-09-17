@@ -2,12 +2,7 @@ import { Link } from '@tanstack/react-router';
 import { defineComponent } from '@openuidev/react-lang';
 import { formatFieldValue, type RecordField } from '@platform/contracts';
 import { QueryErrorState, useModuleData, useReadOperation } from '@platform/ui';
-import {
-  caseHeaderPropsSchema,
-  caseOfferSourcesPropsSchema,
-  itemProvenancePropsSchema,
-  sectionHeadingPropsSchema,
-} from '../shared/openui-components.ts';
+import { PROCUREMENT_OPENUI_COMPONENTS } from '../shared/openui-components.ts';
 import { MODULE_ID, PRICE_BASIS_LABELS } from '../shared/index.ts';
 
 /**
@@ -188,33 +183,32 @@ function ItemProvenanceView({ itemId }: { itemId: string }) {
   );
 }
 
+/* Name, description and props schema: `shared/openui-components.ts`, shared with the server. */
+const { SectionHeading, CaseHeader, CaseOfferSources, ItemProvenance } = PROCUREMENT_OPENUI_COMPONENTS;
+
 export const procurementDetailOpenuiComponents = [
   defineComponent({
-    name: 'SectionHeading',
-    description: 'Naglowek sekcji ekranu (poziom h2) o podanej, stalej tresci — nie wartosc rekordu.',
-    props: sectionHeadingPropsSchema,
+    name: SectionHeading.name,
+    description: SectionHeading.description,
+    props: SectionHeading.propsSchema,
     component: ({ props }) => <SectionHeadingView text={String(props.text)} />,
   }),
   defineComponent({
-    name: 'CaseHeader',
-    description: 'Naglowek sprawy zakupowej: kod, tytul, opis i podstawa porownania. Podaj wylacznie identyfikator sprawy.',
-    props: caseHeaderPropsSchema,
+    name: CaseHeader.name,
+    description: CaseHeader.description,
+    props: CaseHeader.propsSchema,
     component: ({ props }) => <CaseHeaderView caseId={String(props.caseId)} />,
   }),
   defineComponent({
-    name: 'CaseOfferSources',
-    description:
-      'Oferty sprawy pogrupowane po dostawcy, z lacza do pochodzenia kazdej pozycji i zalacznikami zrodlowymi. ' +
-      'Podaj wylacznie identyfikator sprawy.',
-    props: caseOfferSourcesPropsSchema,
+    name: CaseOfferSources.name,
+    description: CaseOfferSources.description,
+    props: CaseOfferSources.propsSchema,
     component: ({ props }) => <CaseOfferSourcesView caseId={String(props.caseId)} />,
   }),
   defineComponent({
-    name: 'ItemProvenance',
-    description:
-      'Pochodzenie wartosci jednej pozycji oferty: pozycja, cena, dostawca, oferta i lista zrodel z lacza do pliku. ' +
-      'Podaj wylacznie identyfikator pozycji.',
-    props: itemProvenancePropsSchema,
+    name: ItemProvenance.name,
+    description: ItemProvenance.description,
+    props: ItemProvenance.propsSchema,
     component: ({ props }) => <ItemProvenanceView itemId={String(props.itemId)} />,
   }),
 ];

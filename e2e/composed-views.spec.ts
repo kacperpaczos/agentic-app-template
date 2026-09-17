@@ -13,7 +13,8 @@ import { formatFieldValue, recordsOf, type ReadResponse } from '@platform/contra
  * formatter agreeing with itself cannot pass on its own.
  *
  * The last two tests put data components in `openui` canvas cards: a table
- * naming an operation nobody registered must say so, not render an empty box.
+ * naming an operation nobody registered is not stored at all, and a read that
+ * fails must say so, not render an empty box.
  */
 
 async function signIn(request: APIRequestContext) {
@@ -138,16 +139,38 @@ test.describe('widoki modulu jako kompozycje OpenUI', () => {
     expect(new URL(page.url()).pathname).toBe(`/cases/${first.id}`);
   });
 
-  test('karta openui z niezarejestrowana operacja pokazuje blad, nie puste pole', async ({ page, request }) => {
+  test('karta openui z niezarejestrowana operacja nie jest zapisana; odczyt, ktory zawodzi, pokazuje blad, nie puste pole', async ({
+    page,
+    request,
+  }) => {
     await signIn(request);
     const space = await (
       await request.post('/api/canvas/spaces', { data: { title: `Kompozycje ${Date.now()}` } })
     ).json();
-    const broken = await addOpenUiCard(
+    /*
+     * A composition naming an operation nobody registered is refused before it
+     * is stored (server-side validation of OpenUI compositions), so it can no
+     * longer reach the screen as a card. The browser's own handling of such a
+     * source — a composition in a chat answer — is covered by
+     * `agent-views.spec.ts`.
+     */
+    const refused = await request.post('/api/canvas/cards', {
+      data: {
+        spaceId: space.id,
+        title: 'Nieznana operacja',
+        spec: { kind: 'openui', source: 'root = DataTable({operation: "nie.istnieje"})' },
+        geometry: { x: 40, y: 40, width: 520, height: 260 },
+      },
+    });
+    expect(refused.status()).toBe(400);
+    expect((await refused.json()).error.details.reason).toBe('unknown_operation');
+
+    // A registered read for a record that does not exist is valid to store and fails when read.
+    const missing = await addOpenUiCard(
       request,
       space.id,
-      'Nieznana operacja',
-      'root = DataTable({operation: "nie.istnieje"})',
+      'Brak rekordu',
+      'root = DataTable({operation: "procurement.comparison", input: {caseId: "cas_nie_istnieje"}}, ["supplierName"])',
       { x: 40, y: 40, width: 520, height: 260 },
     );
     // Same component, a registered read: the failure above is about the source.
@@ -160,12 +183,15 @@ test.describe('widoki modulu jako kompozycje OpenUI', () => {
     );
 
     await openSpace(page, space.id);
+    expect(
+      ((await (await request.get(`/api/canvas/spaces/${space.id}`)).json()).cards as Array<{ id: string }>).map((c) => c.id),
+    ).toEqual([missing.id, working.id]);
 
-    const brokenTable = page.getByTestId(`card-${broken.id}`).locator('[data-component="DataTable"]');
-    await expect(brokenTable).toHaveAttribute('data-state', 'error');
-    await expect(brokenTable.getByRole('alert')).toContainText('Nieznana operacja odczytu "nie.istnieje"');
-    await expect(brokenTable.locator('table')).toHaveCount(0);
-    await expect(page.getByTestId(`card-${broken.id}`).locator('[data-state="empty"]')).toHaveCount(0);
+    const failedTable = page.getByTestId(`card-${missing.id}`).locator('[data-component="DataTable"]');
+    await expect(failedTable).toHaveAttribute('data-state', 'forbidden');
+    await expect(failedTable.getByRole('alert')).toContainText('Zasob nie istnieje');
+    await expect(failedTable.locator('table')).toHaveCount(0);
+    await expect(page.getByTestId(`card-${missing.id}`).locator('[data-state="empty"]')).toHaveCount(0);
 
     const workingTable = page.getByTestId(`card-${working.id}`).locator('[data-component="DataTable"]');
     await expect(workingTable).toHaveAttribute('data-state', 'ready');

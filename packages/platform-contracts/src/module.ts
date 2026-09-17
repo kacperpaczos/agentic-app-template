@@ -238,6 +238,25 @@ export interface CardComponentDescriptor {
   usage: string;
 }
 
+/**
+ * Server-side declaration of an OpenUI Lang component the module adds to the
+ * shared catalog (`UiModule.openuiComponents` in the browser).
+ *
+ * The browser renders the component; the server has to know it exists and what
+ * its props are, or it could not validate a composition that uses it — every
+ * `openui` card and module view is checked before it is stored. The props
+ * schema belongs in a React-free file of the module that both halves import,
+ * so the name and the positional argument order cannot differ between them
+ * (checked by a catalog parity test).
+ */
+export interface OpenUiComponentDeclaration {
+  /** Component name as written in OpenUI Lang, e.g. `Thing`. */
+  name: string;
+  description: string;
+  /** Key order is the positional argument order in OpenUI Lang. */
+  propsSchema: z.ZodObject<ToolInputShape>;
+}
+
 export interface ServerModule {
   meta: ModuleMeta;
   migrations: ModuleMigration[];
@@ -270,6 +289,12 @@ export interface ServerModule {
    * startup otherwise. Served to the browser by `GET /api/ui/views`.
    */
   views?: ViewDefinition[];
+  /**
+   * OpenUI Lang components this module's browser half adds to the catalog.
+   * Without a declaration here a composition using one is refused as an
+   * unknown component. See {@link OpenUiComponentDeclaration}.
+   */
+  openuiComponents?: OpenUiComponentDeclaration[];
   cardComponents?: CardComponentDescriptor[];
   routes?: (register: RouteRegistrar) => void;
   /**

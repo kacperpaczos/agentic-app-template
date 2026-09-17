@@ -4,6 +4,7 @@ import { getCookie, setCookie } from 'hono/cookie';
 import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import {
+  AGENT_VIEWS_SCOPE_KIND,
   AppError,
   appContextSchema,
   addCardInputSchema,
@@ -263,6 +264,25 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
     json(c, services.conversations.get(c.req.param('id'), c.get('ownerId'))),
   );
 
+  /**
+   * The conversation's agent views: its space and cards, or no space yet.
+   *
+   * Read-only on purpose — opening the page must not create a space; the agent
+   * creates it with its first view. Under the conversation, so the owner check
+   * is the conversation's and a view is never looked up by a space id the
+   * client could have picked.
+   */
+  app.get('/api/conversations/:id/agent-views', (c) => {
+    const ownerId = c.get('ownerId');
+    const conversation = services.conversations.get(c.req.param('id'), ownerId);
+    const space = services.canvas.findScopedSpace(ownerId, AGENT_VIEWS_SCOPE_KIND, conversation.id);
+    return json(c, {
+      conversationId: conversation.id,
+      space,
+      cards: space ? services.canvas.getState(space.id, ownerId).cards : [],
+    });
+  });
+
   app.get('/api/conversations/:id/runs', (c) =>
     json(c, { runs: services.runs.listForConversation(c.req.param('id'), c.get('ownerId')) }),
   );
@@ -503,6 +523,21 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
 
   /* ------------------------------- canvas ------------------------------- */
 
+  /*
+   * A conversation's agent views space is created with its first view and
+   * deleted with the conversation. One created through these routes could name
+   * any id — a conversation that never existed or belongs to someone else — and
+   * would outlive every deletion, so the scope is refused on them.
+   */
+  const refuseReservedScope = (scopeKind: string | null | undefined) => {
+    if (scopeKind !== AGENT_VIEWS_SCOPE_KIND) return;
+    throw new AppError(
+      'validation_failed',
+      `Zakres "${AGENT_VIEWS_SCOPE_KIND}" jest zarezerwowany: przestrzen widokow agenta powstaje z pierwszym widokiem rozmowy.`,
+      { reason: 'reserved_scope' },
+    );
+  };
+
   app.get('/api/canvas/spaces', (c) =>
     json(c, { spaces: services.canvas.listSpaces(c.get('ownerId')) }),
   );
@@ -516,6 +551,7 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
         scopeId: z.string().max(128).nullable().optional(),
       })
       .parse(await c.req.json());
+    refuseReservedScope(body.scopeKind);
     return json(c, services.canvas.createSpace({ ownerId, ...body }), 201);
   });
 
@@ -529,6 +565,7 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
     const body = z
       .object({ kind: z.string().max(80), id: z.string().max(128), title: z.string().max(200) })
       .parse(await c.req.json());
+    refuseReservedScope(body.kind);
     const { space, created } = services.canvas.ensureScopedSpace({
       ownerId,
       title: body.title,
@@ -563,7 +600,9 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
   app.post('/api/canvas/cards', async (c) => {
     const ownerId = c.get('ownerId');
     const body = addCardInputSchema.parse(await c.req.json());
-    const spec = services.catalog.validate(body.spec);
+    const spec = services.catalog.validate(body.spec, {
+      mode: services.canvas.compositionModeOfSpace(body.spaceId, ownerId),
+    });
     return json(c, await services.canvas.addCard({ ...body, spec }, ownerId), 201);
   });
 
@@ -574,7 +613,9 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
       ...(await c.req.json()),
       cardId: c.req.param('id'),
     });
-    const spec = services.catalog.validate(body.spec);
+    const spec = services.catalog.validate(body.spec, {
+      mode: services.canvas.compositionModeOfCard(body.cardId, ownerId),
+    });
     return json(c, await services.canvas.updateSpec({ ...body, spec }, ownerId));
   });
 

@@ -16,6 +16,7 @@ import { useDescribeInstance } from '../state/uiSemantics.ts';
 import { useViewAddress } from '../state/viewFilter.ts';
 import { DataFrame, EmptyBody, FailureBody, LoadingBody } from './DataFrame.tsx';
 import { FilterBar, HeaderCell, Pager, nextSort } from './DataTableControls.tsx';
+import { withGrouping } from './grouping.ts';
 import { buildDataModel, describeDataInstance } from './model.ts';
 import { useDataModel } from './useDataModel.ts';
 import { useComposedView, useInstanceId } from './viewContext.ts';
@@ -40,6 +41,14 @@ import { useComposedView, useInstanceId } from './viewContext.ts';
  *
  * Any other table — in a card, in the chat — applies only its composition's
  * `filter` and `sort`, and pages in memory: it has no address of its own.
+ *
+ * **Grouping.** `groupBy` shows the rows of the page on screen in groups by one
+ * declared field, each under a heading with its value, the number of its rows
+ * on this page and — when the page shows only part of the group — how many
+ * the whole matched set has (`grouping.ts`). Groups follow the rows, not the
+ * other way round: paging and order stay exactly as without grouping, so the
+ * page, the pager and the semantic description (which lists the page's rows)
+ * keep describing the same records.
  */
 export function DataTableView(props: DataTableProps) {
   const instanceId = useInstanceId('DataTable');
@@ -57,19 +66,22 @@ export function DataTableView(props: DataTableProps) {
   const { state, model, error, response } = useDataModel(
     props.source,
     (response) =>
-      buildDataModel({
-        response,
-        fieldNames: props.columns,
-        filter: props.filter,
-        sort: props.sort,
-        narrowing,
-        addressSort: address?.sort ?? null,
-        pageSize: props.pageSize,
-        page: address ? address.page : localPage,
-      }),
+      withGrouping(
+        buildDataModel({
+          response,
+          fieldNames: props.columns,
+          filter: props.filter,
+          sort: props.sort,
+          narrowing,
+          addressSort: address?.sort ?? null,
+          pageSize: props.pageSize,
+          page: address ? address.page : localPage,
+        }),
+        props.groupBy,
+      ),
     // The renderer re-evaluates props on every render; compare them by value.
     [
-      JSON.stringify([props.columns, props.filter, props.sort, props.pageSize]),
+      JSON.stringify([props.columns, props.filter, props.sort, props.pageSize, props.groupBy]),
       address ? `${address.targetId}|${address.key}` : null,
       localPage,
     ],
@@ -149,6 +161,33 @@ export function DataTableView(props: DataTableProps) {
     : null;
   const onPage = address ? (index: number) => address.change({ page: index }) : setLocalPage;
 
+  const renderRow = (record: DataRecord, index: number) => {
+    const id = recordIdOf(record, descriptor);
+    return (
+      <tr
+        key={id ?? `row-${index}`}
+        data-record-kind={descriptor.record.kind}
+        data-record-id={id ?? undefined}
+      >
+        {model.fields.map((f) => (
+          <td
+            key={f.field}
+            className={isNumericField(f) ? 'pf-num' : undefined}
+            data-record-kind={descriptor.record.kind}
+            data-record-id={id ?? undefined}
+            data-field={f.field}
+          >
+            {f.field === linkField ? (
+              <RecordLink record={record} descriptor={descriptor} field={f} id={id} />
+            ) : (
+              formatFieldValue(record, f)
+            )}
+          </td>
+        ))}
+      </tr>
+    );
+  };
+
   /*
    * One frame for the ready and the empty state, with the controls at the same
    * place in both: narrowing to nothing must leave the user the fields to
@@ -174,34 +213,33 @@ export function DataTableView(props: DataTableProps) {
               ))}
             </tr>
           </thead>
-          <tbody>
-            {model.shown.map((record, index) => {
-              const id = recordIdOf(record, descriptor);
-              return (
-                <tr
-                  key={id ?? `row-${index}`}
-                  data-record-kind={descriptor.record.kind}
-                  data-record-id={id ?? undefined}
-                >
-                  {model.fields.map((f) => (
-                    <td
-                      key={f.field}
-                      className={isNumericField(f) ? 'pf-num' : undefined}
-                      data-record-kind={descriptor.record.kind}
-                      data-record-id={id ?? undefined}
-                      data-field={f.field}
+          {model.grouping ? (
+            /*
+             * One body per group of the page's rows, headed by the value and its
+             * count. The rows are the same rows as ungrouped — same attributes,
+             * same cells.
+             */
+            model.grouping.groups.map((group) => (
+              <tbody key={group.key} data-group-field={model.grouping!.field.field} data-group-key={group.key}>
+                <tr className="pf-table__group">
+                  <th colSpan={model.fields.length} scope="rowgroup">
+                    {model.grouping!.field.label}: {group.label}{' '}
+                    <span
+                      className="pf-muted"
+                      data-group-count={group.records.length}
+                      data-group-total={group.total}
                     >
-                      {f.field === linkField ? (
-                        <RecordLink record={record} descriptor={descriptor} field={f} id={id} />
-                      ) : (
-                        formatFieldValue(record, f)
-                      )}
-                    </td>
-                  ))}
+                      ({group.records.length}
+                      {group.total !== group.records.length ? ` z ${group.total}` : ''})
+                    </span>
+                  </th>
                 </tr>
-              );
-            })}
-          </tbody>
+                {group.records.map((record, index) => renderRow(record, index))}
+              </tbody>
+            ))
+          ) : (
+            <tbody>{model.shown.map((record, index) => renderRow(record, index))}</tbody>
+          )}
         </table>
       )}
       {model.page && (model.page.count > 1 || model.page.clamped) && (
