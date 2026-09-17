@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   AGUI_EVENTS,
   AppError,
+  DATA_COMPONENT_PROPS,
   PLATFORM_CUSTOM_EVENTS,
   SEMANTIC_VISIBLE_RECORDS_LIMIT,
   applyViewFilter,
@@ -22,6 +23,7 @@ import {
 import {
   AgentRuntime,
   ServerModuleRegistry,
+  assertMcpCompatibleShape,
   buildSystemPrompt,
   collectToolEntries,
   createPlatform,
@@ -560,6 +562,13 @@ describe('szew narzedzi i prompt', () => {
       'artifact_create',
       'artifact_publish_file',
     ]);
+  });
+
+  it('schematy propsow komponentow danych mozna wystawic modelowi przez MCP', () => {
+    // No z.record(), no .default(): the same guard every tool input passes.
+    for (const [name, schema] of Object.entries(DATA_COMPONENT_PROPS)) {
+      expect(() => assertMcpCompatibleShape(name, schema.shape as Record<string, unknown>)).not.toThrow();
+    }
   });
 
   it('prompt wypisuje pola deskryptora operacji odczytu', () => {
