@@ -1,6 +1,6 @@
 {
-  "budzet": 18,
-  "wydane": 19,
+  "budzet": 22,
+  "wydane": 18,
   "tury": [
     {
       "nr": 1,
@@ -135,13 +135,30 @@
       "polecenie": "Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.",
       "etap": "dokonczenie-T27-po-Task-9",
       "runId": "run_94540037b0394f86878f"
-    },
+    }
+  ],
+  "odrzuconeBezWyslania": [
     {
-      "nr": 19,
-      "o": "2026-09-17T21:06:07.630Z",
       "proba": "T27",
       "polecenie": "Dodaj do tego wykres cen jednostkowych tych pozycji.",
-      "etap": "dokonczenie-T27-po-Task-9"
+      "powod": "Strażnik budżetu odmówił wysłania: stała MODEL_TURN_BUDGET nadal wynosiła 18, a przyznany przez koordynatora trzeci grant (4 tury) podnosi sufit do 22. Polecenie nie opuściło przeglądarki, więc nie jest turą. Kolejność w sendForRun poprawiona: najpierw odmowa, potem zapis."
+    }
+  ],
+  "granty": [
+    {
+      "etap": "task-8",
+      "tury": "1-11",
+      "przyznane": 12
+    },
+    {
+      "etap": "dokonczenie-T27-po-Task-9",
+      "tury": "12-17",
+      "przyznane": 6
+    },
+    {
+      "etap": "domkniecie-T27-krok-2-i-krok-6",
+      "tury": "18-",
+      "przyznane": 4
     }
   ]
 }

@@ -53,12 +53,13 @@ const AGENT_TIMEOUT = 420_000;
 /**
  * Turns of the subscription this file may spend, retries included.
  *
- * 12 for Task 8 (T25, T26 and the first reading of T27) and 6 more granted for
- * finishing T27 once Task 9 had fixed the two findings the first reading
- * produced. The ledger on disk carries both, turn by turn, so the second number
- * cannot quietly become a fresh start.
+ * 12 for Task 8 (T25, T26 and the first reading of T27), 6 more for finishing
+ * T27 once Task 9 had fixed the two findings the first reading produced, and a
+ * final 4 for correcting the step-2 expectation and proving step 6 — the last
+ * subscription spend of the plan. The ledger on disk carries all three, turn by
+ * turn, so a later grant cannot quietly become a fresh start.
  */
-const MODEL_TURN_BUDGET = 18;
+const MODEL_TURN_BUDGET = 22;
 
 const EVIDENCE_DIR = resolve(process.cwd(), 'docs/evidence/bl01-bl02-2026-09-17');
 const CODE_COMMIT = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: process.cwd() }).toString().trim();
@@ -81,7 +82,7 @@ interface TurnLedger {
 }
 
 /** Which grant a turn is spent from; written next to every turn in the ledger. */
-const TURN_STAGE = process.env.APP_T8_STAGE ?? 'dokonczenie-T27-po-Task-9';
+const TURN_STAGE = process.env.APP_T8_STAGE ?? 'domkniecie-T27-krok-2-i-krok-6';
 
 function readLedger(): TurnLedger {
   if (!existsSync(LEDGER)) return { budzet: MODEL_TURN_BUDGET, wydane: 0, tury: [] };
@@ -156,13 +157,18 @@ async function openApp(page: Page, path = '/'): Promise<void> {
 async function sendForRun(page: Page, text: string, proba = ''): Promise<{ runId: string; context: any }> {
   const ledger = readLedger();
   const nr = ledger.wydane + 1;
+  /*
+   * Refuse first, write second. The other order books a turn that never leaves
+   * the browser: the guard stopped turn 19 of this file and the ledger had
+   * already counted it, which then has to be unpicked by hand.
+   */
+  expect(nr, `budzet Task 8 to ${MODEL_TURN_BUDGET} tur modelu — proba wyslania tury ${nr}`).toBeLessThanOrEqual(
+    MODEL_TURN_BUDGET,
+  );
   ledger.wydane = nr;
   ledger.tury.push({ nr, o: new Date().toISOString(), proba, polecenie: text, etap: TURN_STAGE });
   ledger.budzet = MODEL_TURN_BUDGET;
   writeLedger(ledger);
-  expect(nr, `budzet Task 8 to ${MODEL_TURN_BUDGET} tur modelu — proba wyslania tury ${nr}`).toBeLessThanOrEqual(
-    MODEL_TURN_BUDGET,
-  );
 
   const request = page.waitForRequest((r) => r.url().endsWith('/api/agui/run') && r.method() === 'POST');
   const composer = page.locator('.openui-agent-thread-composer__input');
