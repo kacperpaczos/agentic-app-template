@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import { resolveTestInstance } from './e2e/support/isolation.ts';
+import { MODEL_SPEC_PATTERNS, modelSpecsRequested } from './e2e/support/model-turns.ts';
 
 /**
  * Browser acceptance.
@@ -35,7 +36,19 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'off',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  /*
+   * The specs answered by the real model are not part of the default run, and
+   * not by convention: with `APP_E2E_MODEL` unset there is no project whose
+   * files include them, so no argument, filter or grep can reach them. Naming
+   * them as a second project would not do — Playwright runs every project by
+   * default, which is how a routine `pnpm test:e2e` came to spend subscription
+   * turns and overwrite the recorded acceptance evidence with its own failures.
+   *
+   * `pnpm test:e2e:model` sets the switch and runs exactly those three.
+   */
+  projects: modelSpecsRequested()
+    ? [{ name: 'model', testMatch: MODEL_SPEC_PATTERNS, use: { ...devices['Desktop Chrome'] } }]
+    : [{ name: 'chromium', testIgnore: MODEL_SPEC_PATTERNS, use: { ...devices['Desktop Chrome'] } }],
   webServer: {
     // Prepares the test database and then starts the production bundle on it,
     // in one process. Playwright runs `webServer` before `globalSetup`, so

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -17,6 +17,21 @@ import {
   TEST_PORT_RANGE,
   TestIsolationError,
 } from '../e2e/support/isolation.ts';
+import {
+  EVIDENCE_ROOT,
+  MODEL_OPT_IN_ENV,
+  MODEL_SPEC_FILES,
+  MODEL_SPEC_PATTERNS,
+  MODEL_TURNS_PER_RUN,
+  RECORDED_LEDGER,
+  RUN_STAMP,
+  WORKING_LEDGER,
+  evidencePath,
+  modelSpecsNotice,
+  modelSpecsRequested,
+  readLedger,
+  runEvidenceDir,
+} from '../e2e/support/model-turns.ts';
 
 /**
  * The isolation guard, tested against the configurations that actually caused
@@ -213,5 +228,69 @@ describe('serwer odmawia startu przy niezgodnej konfiguracji', () => {
     } as NodeJS.ProcessEnv);
     expect(config.instanceLabel).toBe(TEST_INSTANCE_LABEL);
     expect(config.dataDir).toBe(dir);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The other thing a browser run must not destroy: the record of what the
+ * subscription already paid for.
+ *
+ * `pnpm test:e2e` used to run the three model specs with everything else. On the
+ * committed state that meant spending turn 22 of a 22-turn budget in T25, then
+ * failing the guard in T26 and T27 — whose `finally` blocks write the proba's
+ * verdict — so a routine full run turned three recorded "zaliczona" into
+ * "niezaliczona" and rewrote the ledger of a closed grant. Every assertion here
+ * is one half of that: not reachable by default, not counted in the evidence,
+ * not written over the evidence.
+ */
+describe('spece z prawdziwym modelem: opt-in i nienaruszalnosc dowodow', () => {
+  it('domyslny przebieg nie ma projektu, ktory obejmuje spece modelowe; opt-in ma tylko je', async () => {
+    const { default: config } = await import('../playwright.config.ts');
+    const projects = config.projects!;
+    expect(projects).toHaveLength(1);
+    expect(projects[0]!.name).toBe('chromium');
+    // Excluded by the project's own file set: no argument or grep can reach them.
+    expect(projects[0]!.testIgnore).toEqual(MODEL_SPEC_PATTERNS);
+    expect(projects[0]!.testMatch).toBeUndefined();
+    expect(MODEL_SPEC_PATTERNS).toEqual([
+      '**/bl01-bl02-model.spec.ts',
+      '**/agent-ui.spec.ts',
+      '**/files-agent.spec.ts',
+    ]);
+    expect(modelSpecsRequested({} as NodeJS.ProcessEnv)).toBe(false);
+    expect(modelSpecsRequested({ [MODEL_OPT_IN_ENV]: '1' } as NodeJS.ProcessEnv)).toBe(true);
+  });
+
+  it('pominiecie jest powiedziane, z kosztem w turach', () => {
+    const skipped = modelSpecsNotice({} as NodeJS.ProcessEnv);
+    for (const file of MODEL_SPEC_FILES) expect(skipped).toContain(file);
+    expect(skipped).toContain(String(MODEL_TURNS_PER_RUN));
+    expect(skipped).toContain('pnpm test:e2e:model');
+    expect(modelSpecsNotice({ [MODEL_OPT_IN_ENV]: '1' } as NodeJS.ProcessEnv)).toContain('wyda do');
+  });
+
+  it('licznik tur jest w kopii roboczej (ignorowanej przez git), a nie w dowodach', () => {
+    expect(WORKING_LEDGER.startsWith(resolve(REPO, '.e2e-model-turns'))).toBe(true);
+    expect(WORKING_LEDGER.startsWith(EVIDENCE_ROOT)).toBe(false);
+    expect(readFileSync(resolve(REPO, '.gitignore'), 'utf8')).toContain('.e2e-model-turns/');
+    // The closed grant is the starting count, never a file this suite writes.
+    expect(RECORDED_LEDGER).toBe(resolve(EVIDENCE_ROOT, 'tury-modelu.json'));
+    const seeded = readLedger(22);
+    const recorded = JSON.parse(readFileSync(RECORDED_LEDGER, 'utf8')) as { wydane: number };
+    expect(seeded.wydane).toBe(recorded.wydane);
+  });
+
+  it('dowody przebiegu ida pod stempel przebiegu — zapisane werdykty sa nie do nadpisania', () => {
+    for (const name of ['t25-wskazanie-wartosci.json', 't26-zawezenie-rozmowa.json', 't27-widoki-agenta.json', 'tury-modelu.json']) {
+      const recorded = resolve(EVIDENCE_ROOT, name);
+      expect(evidencePath(name)).not.toBe(recorded);
+      expect(evidencePath(name).startsWith(resolve(EVIDENCE_ROOT, 'runs'))).toBe(true);
+    }
+    expect(runEvidenceDir()).toBe(resolve(EVIDENCE_ROOT, 'runs', RUN_STAMP));
+    // A name that could climb out of the run's directory is not a file name.
+    expect(() => evidencePath('../t25-wskazanie-wartosci.json')).toThrow(/zwykla nazwa pliku/);
+    expect(() => evidencePath('runs/../t25.json')).toThrow(/zwykla nazwa pliku/);
   });
 });
