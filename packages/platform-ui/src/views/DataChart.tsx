@@ -28,7 +28,7 @@ export function DataChartView(props: DataChartProps) {
   const instanceId = useInstanceId('DataChart');
   const view = useComposedView();
 
-  const { state, model, error } = useDataModel(
+  const { state, model, error, response } = useDataModel(
     props.source,
     (response) => {
       const data = buildDataModel({
@@ -42,18 +42,22 @@ export function DataChartView(props: DataChartProps) {
     [JSON.stringify([props.x, props.series, props.filter, props.sort])],
   );
 
+  const shownState = model && model.data.records.length === 0 ? 'empty' : state;
   useDescribeInstance(
-    model
-      ? describeDataInstance({
-          instanceId,
-          component: 'DataChart',
-          viewId: view?.viewId ?? null,
-          source: props.source,
-          model: model.data,
-          sort: props.sort ?? null,
-          actions: [],
-        })
-      : null,
+    describeDataInstance({
+      instanceId,
+      component: 'DataChart',
+      viewId: view?.viewId ?? null,
+      source: props.source,
+      state: shownState,
+      model: model?.data,
+      descriptor: response?.descriptor,
+      fieldNames: [props.x, ...props.series],
+      filter: props.filter,
+      sort: props.sort ?? null,
+      error,
+      actions: [],
+    }),
   );
 
   const frame = {
@@ -81,7 +85,7 @@ export function DataChartView(props: DataChartProps) {
       </DataFrame>
     );
   }
-  if (model.data.records.length === 0) {
+  if (shownState === 'empty') {
     return (
       <DataFrame {...frame} state="empty">
         {heading}

@@ -126,11 +126,14 @@ export function buildSystemPrompt(input: PromptInput): string {
       'Uzywaj mode="live" dla zestawien, ktore maja pozostac aktualne, a mode="snapshot" dla raportu z konkretnej chwili.',
       /*
        * The fields come from the operation's own result descriptor — the list
-       * data components are validated against — so a field named here is one a
-       * view can actually show, and one not named here does not exist.
+       * data components are validated against. They describe the records of
+       * one collection, not the whole result: a result may carry more (a
+       * comparison's criteria, a case's offers), so the rule stated is where
+       * these names may be used, not that nothing else exists.
        */
-      'Przy operacjach z deskryptorem wyniku podane sa rekord i jego pola (nazwa: etykieta, typ) —',
-      'tylko tych nazw pol mozna uzywac; innych pol wynik nie ma.',
+      'Przy operacjach z deskryptorem wyniku podana jest kolekcja rekordow i pola tych rekordow',
+      '(nazwa: etykieta, typ). Wynik moze zawierac takze inne dane poza ta kolekcja, ale w komponentach',
+      'danych (kolumny, serie, pola, filtr, sortowanie) wskazujesz wylacznie wymienione pola rekordow.',
       ...readOperations.map(describeReadOperationLine),
     );
   }
@@ -211,6 +214,9 @@ function describeReadOperationLine(op: ReadOperationSummary): string {
   const fields = d.fields
     .map((f) => `${f.field}: ${f.label}, ${f.type}${f.unit ? ` [${f.unit}]` : ''}`)
     .join('; ');
-  const where = d.collection ? `kolekcja ${d.collection}` : 'wynik';
-  return `${line}\n  ${where}, rekord ${d.record.kind} (id: ${d.record.idField}); pola: ${fields}`;
+  const where = d.collection ? `rekordy kolekcji ${d.collection}` : 'rekordy wyniku';
+  return (
+    `${line}\n  ${where} (rodzaj ${d.record.kind}, id: ${d.record.idField}) maja pola: ${fields}` +
+    '; tylko te pola wskazujesz w komponentach danych'
+  );
 }

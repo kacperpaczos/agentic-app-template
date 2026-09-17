@@ -25,23 +25,29 @@ export function DataSummaryView(props: DataSummaryProps) {
   const instanceId = useInstanceId('DataSummary');
   const view = useComposedView();
 
-  const { state, model, error } = useDataModel(
+  const { state, model, error, response } = useDataModel(
     props.source,
     (response) => buildDataModel({ response, fieldNames: props.fields }),
     [JSON.stringify(props.fields)],
   );
 
+  const shownState = model && model.records.length === 0 ? 'empty' : state;
   useDescribeInstance(
-    model
-      ? describeDataInstance({
-          instanceId,
-          component: 'DataSummary',
-          viewId: view?.viewId ?? null,
-          source: props.source,
-          model: { ...model, records: model.records.slice(0, SUMMARY_RECORDS_LIMIT) },
-          actions: model.descriptor.record.route ? ['open_record'] : [],
-        })
-      : null,
+    describeDataInstance({
+      instanceId,
+      component: 'DataSummary',
+      viewId: view?.viewId ?? null,
+      source: props.source,
+      state: shownState,
+      // The whole model: `matched` counts every record, `visibleLimit` only
+      // bounds which of them are listed as on screen.
+      model,
+      visibleLimit: SUMMARY_RECORDS_LIMIT,
+      descriptor: response?.descriptor,
+      fieldNames: props.fields,
+      error,
+      actions: model?.descriptor.record.route ? ['open_record'] : [],
+    }),
   );
 
   const frame = { instanceId, component: 'DataSummary', operation: props.source.operation, title: props.title };
@@ -53,7 +59,7 @@ export function DataSummaryView(props: DataSummaryProps) {
       </DataFrame>
     );
   }
-  if (model.records.length === 0) {
+  if (shownState === 'empty') {
     return (
       <DataFrame {...frame} state="empty">
         <EmptyBody total={model.total} matched={0} />

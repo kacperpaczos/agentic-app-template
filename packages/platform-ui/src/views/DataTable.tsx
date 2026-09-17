@@ -48,7 +48,7 @@ export function DataTableView(props: DataTableProps) {
   const primary = Boolean(view && view.primaryOperation === props.source.operation);
   const narrowing = primary && active && active.targetId === view!.viewId ? active : null;
 
-  const { state, model, error } = useDataModel(
+  const { state, model, error, response } = useDataModel(
     props.source,
     (response) =>
       buildDataModel({
@@ -68,21 +68,24 @@ export function DataTableView(props: DataTableProps) {
   }, [outcome, reportFilterOutcome]);
 
   const filterable = primary && Boolean(targets.data?.find((t) => t.id === view!.viewId)?.filter);
+  const shownState = model && model.records.length === 0 ? 'empty' : state;
   useDescribeInstance(
-    model
-      ? describeDataInstance({
-          instanceId,
-          component: 'DataTable',
-          viewId: view?.viewId ?? null,
-          source: props.source,
-          model,
-          sort: props.sort ?? null,
-          actions: [
-            ...(filterable ? ['filter'] : []),
-            ...(model.descriptor.record.route ? ['open_record'] : []),
-          ],
-        })
-      : null,
+    describeDataInstance({
+      instanceId,
+      component: 'DataTable',
+      viewId: view?.viewId ?? null,
+      source: props.source,
+      state: shownState,
+      model,
+      descriptor: response?.descriptor,
+      fieldNames: props.columns,
+      filter: [...(props.filter ?? []), ...(narrowing?.predicates ?? [])],
+      sort: props.sort ?? null,
+      error,
+      actions: model
+        ? [...(filterable ? ['filter'] : []), ...(model.descriptor.record.route ? ['open_record'] : [])]
+        : [],
+    }),
   );
 
   const frame = { instanceId, component: 'DataTable', operation: props.source.operation, title: props.title };
@@ -94,7 +97,7 @@ export function DataTableView(props: DataTableProps) {
       </DataFrame>
     );
   }
-  if (model.records.length === 0) {
+  if (shownState === 'empty') {
     return (
       <DataFrame {...frame} state="empty">
         <EmptyBody total={outcome?.total ?? model.total} matched={0} />

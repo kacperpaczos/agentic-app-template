@@ -1,5 +1,6 @@
 import {
   AppError,
+  SEMANTIC_ERROR_MESSAGE_LIMIT,
   SEMANTIC_VISIBLE_RECORDS_LIMIT,
   applyViewFilter,
   fieldUnitOf,
@@ -11,6 +12,7 @@ import {
   recordsOf,
   rowMatchesFilter,
   sortRecords,
+  type DataInstanceState,
   type DataRecord,
   type DataSort,
   type DataSource,
@@ -195,42 +197,110 @@ function unitAcross(records: readonly DataRecord[], field: RecordField): string 
   return units.size === 1 ? [...units][0] : undefined;
 }
 
+/** An error as a description may carry it: code and a shortened message. */
+function describeError(error: unknown): NonNullable<SemanticInstance['error']> {
+  const e = AppError.from(error);
+  const message = e.message.length > SEMANTIC_ERROR_MESSAGE_LIMIT
+    ? `${e.message.slice(0, SEMANTIC_ERROR_MESSAGE_LIMIT - 1)}…`
+    : e.message;
+  return { code: e.code, message };
+}
+
 /**
- * The description a mounted data component registers in `uiSemantics`.
+ * The description a mounted data component registers in `uiSemantics`, in
+ * whatever state it is in.
  *
- * Built from the same model the component renders, so the description cannot
- * name a record or a field the screen does not show.
+ * With a model (`ready`, `empty`) it is built from the same model the
+ * component renders, so it cannot name a record or a field the screen does not
+ * show: `matched` counts every record left after the predicates, while
+ * `visibleRecordIds` lists only records actually drawn — the first
+ * `visibleLimit` when the component draws fewer than it has, and never more
+ * than the schema's limit (a summary that draws 20 of 30 records lists 20 and
+ * still says 30 matched).
+ *
+ * Without one (`loading`, `error`, `forbidden`) nothing was counted, so
+ * `matched`, `total` and `record` are null — or `record` and the requested
+ * fields come from the descriptor when a response carried one — and an
+ * `error` / `forbidden` instance says why, by code and message.
  */
 export function describeDataInstance(input: {
   instanceId: string;
   component: string;
   viewId: string | null;
   source: DataSource;
-  model: DataModel;
+  state: DataInstanceState;
+  /** Present exactly when the component renders records or an empty result. */
+  model?: DataModel | null;
+  /** Descriptor known without a model, e.g. from a response whose composition was refused. */
+  descriptor?: ReadResultDescriptor | null;
+  /** Fields the component asked for, described when there is no model. */
+  fieldNames?: readonly string[];
+  /** Predicates the component applies, described when there is no model. */
+  filter?: readonly ViewFilterPredicate[];
   sort?: DataSort | null;
   page?: SemanticInstance['page'];
+  /** Most records the component draws (absent: all). Listed identifiers stop at the schema's limit too. */
+  visibleLimit?: number;
+  error?: unknown;
   actions: string[];
 }): SemanticInstance {
-  const { model } = input;
-  const ids = model.records
-    .map((r) => recordIdOf(r, model.descriptor))
-    .filter((id): id is string => id !== null);
-  return {
+  const base = {
     instanceId: input.instanceId,
     component: input.component,
     viewId: input.viewId,
     source: input.source,
-    record: { kind: model.descriptor.record.kind, idField: model.descriptor.record.idField },
-    fields: model.fields.map((f) => {
-      const unit = unitAcross(model.records, f);
-      return { field: f.field, label: f.label, type: f.type, ...(unit ? { unit } : {}) };
-    }),
-    filter: model.predicates,
+    state: input.state,
     sort: input.sort ?? null,
     page: input.page ?? null,
-    visibleRecordIds: ids.slice(0, SEMANTIC_VISIBLE_RECORDS_LIMIT),
-    matched: model.records.length,
-    total: model.total,
-    actions: input.actions,
+  };
+  const { model } = input;
+
+  if (model && (input.state === 'ready' || input.state === 'empty')) {
+    const drawn =
+      input.state !== 'ready'
+        ? []
+        : input.visibleLimit !== undefined
+          ? model.records.slice(0, input.visibleLimit)
+          : model.records;
+    return {
+      ...base,
+      error: null,
+      record: { kind: model.descriptor.record.kind, idField: model.descriptor.record.idField },
+      fields: model.fields.map((f) => {
+        const unit = unitAcross(drawn.length ? drawn : model.records, f);
+        return { field: f.field, label: f.label, type: f.type, ...(unit ? { unit } : {}) };
+      }),
+      filter: model.predicates,
+      visibleRecordIds: drawn
+        .map((r) => recordIdOf(r, model.descriptor))
+        .filter((id): id is string => id !== null)
+        .slice(0, SEMANTIC_VISIBLE_RECORDS_LIMIT),
+      matched: model.records.length,
+      total: model.total,
+      actions: input.actions,
+    };
+  }
+
+  const descriptor = input.descriptor ?? null;
+  const declared = descriptor ? new Map(descriptor.fields.map((f) => [f.field, f])) : null;
+  const requested = descriptor
+    ? (input.fieldNames ?? descriptor.fields.map((f) => f.field))
+        .map((name) => declared!.get(name))
+        .filter((f): f is RecordField => Boolean(f))
+    : [];
+  const failed = input.state === 'error' || input.state === 'forbidden';
+  return {
+    ...base,
+    // A model-less description of a ready/empty state is not a thing the
+    // components produce; it is reported as loading rather than invented.
+    state: failed ? input.state : 'loading',
+    error: failed ? describeError(input.error) : null,
+    record: descriptor ? { kind: descriptor.record.kind, idField: descriptor.record.idField } : null,
+    fields: requested.map((f) => ({ field: f.field, label: f.label, type: f.type, ...(f.unit ? { unit: f.unit } : {}) })),
+    filter: [...(input.filter ?? [])],
+    visibleRecordIds: [],
+    matched: null,
+    total: null,
+    actions: [],
   };
 }

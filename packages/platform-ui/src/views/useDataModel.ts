@@ -16,7 +16,13 @@ export function useDataModel<T>(
   source: DataSource,
   build: (response: ReadResponse) => T,
   deps: readonly unknown[],
-): { state: Exclude<DataState, 'empty'>; model: T | null; error: unknown } {
+): {
+  state: Exclude<DataState, 'empty'>;
+  model: T | null;
+  error: unknown;
+  /** Last response, when there is one — its descriptor describes a failed composition too. */
+  response: ReadResponse | null;
+} {
   const read = useReadOperation(source);
 
   const built = useMemo((): { model: T | null; error: unknown } => {
@@ -29,10 +35,11 @@ export function useDataModel<T>(
     // `build` is a fresh closure every render; `deps` names what it reads.
   }, [read.data, ...deps]);
 
+  const response = read.data ?? null;
   if (read.error) {
-    return { state: isAccessFailure(read.error) ? 'forbidden' : 'error', model: null, error: read.error };
+    return { state: isAccessFailure(read.error) ? 'forbidden' : 'error', model: null, error: read.error, response };
   }
-  if (built.error) return { state: 'error', model: null, error: built.error };
-  if (!built.model) return { state: 'loading', model: null, error: null };
-  return { state: 'ready', model: built.model, error: null };
+  if (built.error) return { state: 'error', model: null, error: built.error, response };
+  if (!built.model) return { state: 'loading', model: null, error: null, response };
+  return { state: 'ready', model: built.model, error: null, response };
 }

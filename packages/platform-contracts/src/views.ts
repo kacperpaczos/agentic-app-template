@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { APP_ERROR_CODES } from './errors.ts';
 import { viewFilterPredicateSchema } from './ui.ts';
 
 /**
@@ -135,6 +136,30 @@ export const readResultDescriptorSchema = z
         path: ['record', 'titleField'],
         message: `titleField ${d.record.titleField} nie jest zadeklarowanym polem.`,
       });
+    }
+    /*
+     * A misspelt `unitField` is not harmless: the unit silently falls back to
+     * the fixed one (or none), amounts lose their currency, and a chart can no
+     * longer see that two records are in different currencies. So it must name
+     * a declared field, like everything else a descriptor points at.
+     */
+    d.fields.forEach((f, i) => {
+      if (f.unitField && !seen.has(f.unitField)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['fields', i, 'unitField'],
+          message: `Pole ${f.field}: unitField ${f.unitField} nie jest zadeklarowanym polem.`,
+        });
+      }
+    });
+    for (const [, name] of (d.record.route ?? '').matchAll(ROUTE_PLACEHOLDER)) {
+      if (name && !seen.has(name) && name !== d.record.idField) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['record', 'route'],
+          message: `record.route: {${name}} nie jest zadeklarowanym polem ani idField.`,
+        });
+      }
     }
   });
 export type ReadResultDescriptor = z.infer<typeof readResultDescriptorSchema>;
@@ -285,6 +310,18 @@ export const DATA_COMPONENT_PROPS = {
 export const SEMANTIC_VISIBLE_RECORDS_LIMIT = 50;
 
 /**
+ * What a data component is doing, as its frame says (`data-state`):
+ * `loading` — no answer yet; `ready` — records shown; `empty` — the read
+ * answered and nothing is left to show; `error` — the read or the composition
+ * failed; `forbidden` — the owner may not see the source.
+ */
+export const DATA_INSTANCE_STATES = ['loading', 'ready', 'empty', 'error', 'forbidden'] as const;
+export type DataInstanceState = (typeof DATA_INSTANCE_STATES)[number];
+
+/** Longest error message a description carries. */
+export const SEMANTIC_ERROR_MESSAGE_LIMIT = 300;
+
+/**
  * What one mounted data component says it is showing.
  *
  * Rendering a composition does not tell anyone what is on screen. Each data
@@ -293,44 +330,88 @@ export const SEMANTIC_VISIBLE_RECORDS_LIMIT = 50;
  * descriptor declares — so the application can describe the active interface
  * without scraping its markup.
  */
-export const semanticInstanceSchema = z.object({
-  /** Unique among the instances mounted at once; also `data-ui-instance`. */
-  instanceId: z.string().min(1).max(120),
-  component: z.string().min(1).max(80),
-  /** Module view the instance is part of, or null outside one (card, chat). */
-  viewId: z.string().max(120).nullable(),
-  source: dataSourceSchema,
-  record: z.object({ kind: z.string().max(80), idField: z.string().max(80) }),
-  /** Fields as rendered, with their labels and the unit in force. */
-  fields: z
-    .array(
-      z.object({
-        field: z.string().max(80),
-        label: z.string().max(120),
-        type: z.enum(FIELD_TYPES),
-        unit: z.string().max(40).optional(),
-      }),
-    )
-    .max(60),
-  /** Every predicate in force: the composition's own and the address bar's. */
-  filter: z.array(viewFilterPredicateSchema).max(28),
-  sort: dataSortSchema.nullable(),
-  /** `index` counts from 1. Null when the instance does not paginate. */
-  page: z
-    .object({
-      index: z.number().int().min(1),
-      size: z.number().int().min(1),
-      count: z.number().int().min(0),
-    })
-    .nullable(),
-  visibleRecordIds: z.array(z.string().max(128)).max(SEMANTIC_VISIBLE_RECORDS_LIMIT),
-  /** Records left after every predicate. */
-  matched: z.number().int().nonnegative(),
-  /** Records the read returned, before any predicate. */
-  total: z.number().int().nonnegative(),
-  /** Interactions the instance offers right now, e.g. `filter`, `open_record`. */
-  actions: z.array(z.string().max(80)).max(20),
-});
+export const semanticInstanceSchema = z
+  .object({
+    /** Unique among the instances mounted at once; also `data-ui-instance`. */
+    instanceId: z.string().min(1).max(120),
+    component: z.string().min(1).max(80),
+    /** Module view the instance is part of, or null outside one (card, chat). */
+    viewId: z.string().max(120).nullable(),
+    source: dataSourceSchema,
+    /**
+     * Described in every state, so "the table on screen is still loading /
+     * failed / may not be read" is something the application can say.
+     */
+    state: z.enum(DATA_INSTANCE_STATES),
+    /**
+     * Why an `error` or `forbidden` instance shows no records: the error code
+     * and its message, shortened. Messages come from `AppError`, which never
+     * carries secrets. Null in every other state.
+     */
+    error: z
+      .object({ code: z.enum(APP_ERROR_CODES), message: z.string().max(SEMANTIC_ERROR_MESSAGE_LIMIT) })
+      .nullable(),
+    /** From the read's descriptor; null while it is not known (loading, a failed read). */
+    record: z.object({ kind: z.string().max(80), idField: z.string().max(80) }).nullable(),
+    /**
+     * Fields as rendered, with their labels and the unit in force. Before
+     * records are shown: the requested fields the descriptor declares, with
+     * their fixed unit, or none while the descriptor is not known.
+     */
+    fields: z
+      .array(
+        z.object({
+          field: z.string().max(80),
+          label: z.string().max(120),
+          type: z.enum(FIELD_TYPES),
+          unit: z.string().max(40).optional(),
+        }),
+      )
+      .max(60),
+    /** Every predicate in force: the composition's own and the address bar's. */
+    filter: z.array(viewFilterPredicateSchema).max(28),
+    sort: dataSortSchema.nullable(),
+    /** `index` counts from 1. Null when the instance does not paginate. */
+    page: z
+      .object({
+        index: z.number().int().min(1),
+        size: z.number().int().min(1),
+        count: z.number().int().min(0),
+      })
+      .nullable(),
+    /** Records on screen, at most the limit. Empty unless `ready`. */
+    visibleRecordIds: z.array(z.string().max(128)).max(SEMANTIC_VISIBLE_RECORDS_LIMIT),
+    /**
+     * Records left after every predicate — all of them, not only those listed
+     * or drawn. Null unless `ready` or `empty`: nothing was counted.
+     */
+    matched: z.number().int().nonnegative().nullable(),
+    /** Records the read returned, before any predicate. Null unless `ready` or `empty`. */
+    total: z.number().int().nonnegative().nullable(),
+    /** Interactions the instance offers right now, e.g. `filter`, `open_record`. */
+    actions: z.array(z.string().max(80)).max(20),
+  })
+  .superRefine((d, ctx) => {
+    const counted = d.state === 'ready' || d.state === 'empty';
+    const bothCounted = d.matched !== null && d.total !== null;
+    const noneCounted = d.matched === null && d.total === null;
+    if (counted ? !bothCounted : !noneCounted) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['matched'],
+        message: `Stan ${d.state}: matched i total ${counted ? 'sa wymagane' : 'musza byc null'}.`,
+      });
+    }
+    if ((d.state === 'error' || d.state === 'forbidden') !== (d.error !== null)) {
+      ctx.addIssue({ code: 'custom', path: ['error'], message: `Stan ${d.state}: niezgodne pole error.` });
+    }
+    if (d.state !== 'ready' && d.visibleRecordIds.length > 0) {
+      ctx.addIssue({ code: 'custom', path: ['visibleRecordIds'], message: `Stan ${d.state} nie pokazuje rekordow.` });
+    }
+    if (d.state === 'empty' && d.matched !== 0) {
+      ctx.addIssue({ code: 'custom', path: ['matched'], message: 'Stan empty oznacza matched = 0.' });
+    }
+  });
 export type SemanticInstance = z.infer<typeof semanticInstanceSchema>;
 
 /* -------------------------------------------------------------------------- */

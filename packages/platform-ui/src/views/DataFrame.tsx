@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { AppError } from '@platform/contracts';
+import { AppError, type DataInstanceState } from '@platform/contracts';
 import { QueryErrorState } from '../components/ErrorState.tsx';
 
 /**
@@ -12,7 +12,7 @@ import { QueryErrorState } from '../components/ErrorState.tsx';
  * failed and a table the owner may not see must never look alike, and none of
  * them may look like a table with no rows in it by accident.
  */
-export type DataState = 'loading' | 'ready' | 'empty' | 'error' | 'forbidden';
+export type DataState = DataInstanceState;
 
 export function DataFrame(props: {
   instanceId: string;

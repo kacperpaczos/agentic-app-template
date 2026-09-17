@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { create } from 'zustand';
 import { semanticInstanceSchema, type SemanticInstance } from '@platform/contracts';
 
@@ -21,17 +21,26 @@ import { semanticInstanceSchema, type SemanticInstance } from '@platform/contrac
 interface UiSemanticsState {
   /** Mounted instances by `instanceId`. */
   instances: Record<string, SemanticInstance>;
+  /**
+   * Registration order. Kept explicitly rather than trusting object key order,
+   * which puts integer-like keys first. Replacing a description keeps its
+   * position, so a list read twice in a row lists the same instances in the
+   * same order unless one mounted or unmounted.
+   */
+  order: string[];
 }
 
-export const useUiSemantics = create<UiSemanticsState>(() => ({ instances: {} }));
+export const useUiSemantics = create<UiSemanticsState>(() => ({ instances: {}, order: [] }));
 
 /**
- * Records, or replaces, one instance's description.
+ * Records one instance's description, or replaces it in place.
  *
  * Validated against the contract at runtime: a description that does not fit
  * it is refused, reported to the console with the reason, and not recorded —
  * a malformed entry would otherwise travel on to whatever reads the list.
- * Returns whether it was recorded.
+ * A description equal to the one already recorded changes nothing, so readers
+ * that version the list do not see a change that did not happen.
+ * Returns whether the description is now recorded.
  */
 export function registerInstance(description: SemanticInstance): boolean {
   const parsed = semanticInstanceSchema.safeParse(description);
@@ -43,8 +52,12 @@ export function registerInstance(description: SemanticInstance): boolean {
     );
     return false;
   }
+  const current = useUiSemantics.getState().instances[parsed.data.instanceId];
+  if (current && JSON.stringify(current) === JSON.stringify(parsed.data)) return true;
+  const id = parsed.data.instanceId;
   useUiSemantics.setState((s) => ({
-    instances: { ...s.instances, [parsed.data.instanceId]: parsed.data },
+    instances: { ...s.instances, [id]: parsed.data },
+    order: id in s.instances ? s.order : [...s.order, id],
   }));
   return true;
 }
@@ -54,29 +67,65 @@ export function unregisterInstance(instanceId: string): void {
     if (!(instanceId in s.instances)) return s;
     const next = { ...s.instances };
     delete next[instanceId];
-    return { instances: next };
+    return { instances: next, order: s.order.filter((id) => id !== instanceId) };
   });
 }
 
-/** Every instance mounted right now, in mount order. */
+/** Every instance mounted right now, in registration order. */
 export function listInstances(): SemanticInstance[] {
-  return Object.values(useUiSemantics.getState().instances);
+  const { instances, order } = useUiSemantics.getState();
+  return order.map((id) => instances[id]!);
+}
+
+/**
+ * The registration lifecycle of one mounted component, without React.
+ *
+ * `update` records the latest description in place — an instance never
+ * disappears from the list because its content changed, and keeps its
+ * position. The entry is removed only by `dispose` (unmount), by `update`
+ * with another `instanceId` (the old one goes), by `update(null)`, or when a
+ * new description is refused: a stale description would describe a screen
+ * that no longer exists.
+ */
+export interface InstanceDescriber {
+  update(description: SemanticInstance | null): void;
+  dispose(): void;
+}
+
+export function createInstanceDescriber(): InstanceDescriber {
+  let registered: string | null = null;
+  const drop = () => {
+    if (registered) unregisterInstance(registered);
+    registered = null;
+  };
+  return {
+    update(description) {
+      if (!description) return drop();
+      if (registered && registered !== description.instanceId) drop();
+      if (registerInstance(description)) {
+        registered = description.instanceId;
+      } else {
+        unregisterInstance(description.instanceId);
+        registered = null;
+      }
+    },
+    dispose: drop,
+  };
 }
 
 /**
  * Keeps one component's description registered for as long as it is mounted.
  *
- * Pass `null` while there is nothing truthful to say (loading, failed): an
- * instance that has not shown records does not claim any. The description is
- * compared by value, so re-rendering with the same content does not churn the
- * registry.
+ * Content changes update the entry in place; only unmounting (or a new
+ * `instanceId`) removes it. The description is compared by value, so
+ * re-rendering with the same content does not touch the registry.
  */
 export function useDescribeInstance(description: SemanticInstance | null): void {
+  const [describer] = useState(createInstanceDescriber);
   const key = description ? JSON.stringify(description) : null;
   useEffect(() => {
-    if (!description) return;
-    registerInstance(description);
-    return () => unregisterInstance(description.instanceId);
+    describer.update(description);
     // `key` carries the description's content; the object itself is new on every render.
-  }, [key]);
+  }, [describer, key]);
+  useEffect(() => () => describer.dispose(), [describer]);
 }

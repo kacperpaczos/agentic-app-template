@@ -30,7 +30,16 @@ import {
   platformTools,
 } from '@platform/server';
 import { createProcurementModule } from '@module/procurement/server';
-import { applyRunEvent, listInstances, qk, registerInstance, setAccessContext, unregisterInstance } from '@platform/ui';
+import {
+  applyRunEvent,
+  createInstanceDescriber,
+  listInstances,
+  qk,
+  registerInstance,
+  setAccessContext,
+  unregisterInstance,
+  useUiSemantics,
+} from '@platform/ui';
 import { buildChartModel, buildDataModel, describeDataInstance } from '../packages/platform-ui/src/views/model.ts';
 import { scriptedAgent, type Step } from '../e2e/support/scripted-agent.ts';
 import { createHarness, login, type Harness } from './helpers.ts';
@@ -275,6 +284,55 @@ describe('zgodnosc zawezania UiTarget z deskryptorem widoku przy starcie', () =>
     expect(() => new ServerModuleRegistry().register(noDescriptor)).toThrowError(/nie deklaruje deskryptora wyniku/);
   });
 
+  it('unitField i pola trasy rekordu musza byc zadeklarowane — odmowa z nazwa pola', () => {
+    const base: ReadResultDescriptor = {
+      collection: 'rows',
+      record: { kind: 'thing', idField: 'id', route: '/things/{id}/{code}' },
+      fields: [
+        { field: 'code', label: 'Kod', type: 'text' },
+        { field: 'total', label: 'Suma', type: 'money_minor', unitField: 'currency' },
+        { field: 'currency', label: 'Waluta', type: 'text' },
+      ],
+    };
+    // idField and a declared field may both appear in the route.
+    expect(readResultDescriptorSchema.safeParse(base).success).toBe(true);
+
+    const typo = readResultDescriptorSchema.safeParse({
+      ...base,
+      fields: base.fields.map((f) => (f.field === 'total' ? { ...f, unitField: 'currencyy' } : f)),
+    });
+    expect(typo.success).toBe(false);
+    expect(typo.error!.issues.map((i) => i.message)).toContain(
+      'Pole total: unitField currencyy nie jest zadeklarowanym polem.',
+    );
+    expect(typo.error!.issues[0]!.path).toEqual(['fields', 1, 'unitField']);
+
+    const route = readResultDescriptorSchema.safeParse({ ...base, record: { ...base.record, route: '/things/{slug}' } });
+    expect(route.success).toBe(false);
+    expect(route.error!.issues.map((i) => i.message)).toContain(
+      'record.route: {slug} nie jest zadeklarowanym polem ani idField.',
+    );
+
+    // And the same refusal stops the module at startup, naming the field.
+    const mod = variant((m) => ({
+      ...m,
+      readOperations: m.readOperations!.map((op) =>
+        op.name === 'comparison'
+          ? {
+              ...op,
+              result: {
+                ...op.result!,
+                fields: op.result!.fields.map((f) => (f.field === 'totalMinor' ? { ...f, unitField: 'currencyy' } : f)),
+              },
+            }
+          : op,
+      ),
+    }));
+    expect(() => new ServerModuleRegistry().register(mod)).toThrowError(
+      /procurement\.comparison: niepoprawny deskryptor wyniku — fields\.4\.unitField: Pole totalMinor: unitField currencyy/,
+    );
+  });
+
   it('niepoprawny deskryptor i powtorzony widok sa odrzucane przy rejestracji', () => {
     const badDescriptor = variant((m) => ({
       ...m,
@@ -426,6 +484,7 @@ describe('model komponentow danych', () => {
       component: 'DataTable',
       viewId: 'procurement.data',
       source: { operation: 'procurement.suppliers' },
+      state: 'ready',
       model,
       actions: ['filter'],
     });
@@ -442,12 +501,98 @@ describe('model komponentow danych', () => {
       component: 'DataTable',
       viewId: null,
       source: { operation: 'procurement.suppliers' },
+      state: 'ready',
       model: buildDataModel({ response: many }),
       actions: [],
     });
     expect(big.visibleRecordIds).toHaveLength(SEMANTIC_VISIBLE_RECORDS_LIMIT);
     expect(big.matched).toBe(120);
     expect(semanticInstanceSchema.safeParse(big).success).toBe(true);
+  });
+
+  it('podsumowanie rysujace czesc rekordow podaje wszystkie dopasowane, a wymienia tylko narysowane', () => {
+    // 30 records, no predicate, a component that draws the first 20 (DataSummary).
+    const thirty = {
+      ...suppliers,
+      result: { suppliers: Array.from({ length: 30 }, (_, i) => ({ id: `s${i}`, name: `n${i}`, country: 'PL' })) },
+    };
+    const summary = describeDataInstance({
+      instanceId: 'DataSummary-r1',
+      component: 'DataSummary',
+      viewId: null,
+      source: { operation: 'procurement.suppliers' },
+      state: 'ready',
+      model: buildDataModel({ response: thirty, fieldNames: ['name'] }),
+      visibleLimit: 20,
+      actions: [],
+    });
+    expect(summary.matched).toBe(30);
+    expect(summary.total).toBe(30);
+    expect(summary.filter).toEqual([]);
+    expect(summary.visibleRecordIds).toEqual(Array.from({ length: 20 }, (_, i) => `s${i}`));
+    expect(semanticInstanceSchema.safeParse(summary).success).toBe(true);
+  });
+
+  it('opis w kazdym stanie: ladowanie, pusty, blad, brak dostepu', () => {
+    const common = {
+      instanceId: 'DataTable-stany',
+      component: 'DataTable',
+      viewId: 'procurement.data',
+      source: { operation: 'procurement.suppliers' },
+      fieldNames: ['name', 'country'],
+      filter: [{ field: 'country', op: 'eq' as const, value: 'PL' }],
+      actions: [],
+    };
+
+    const loading = describeDataInstance({ ...common, state: 'loading' });
+    expect(loading).toMatchObject({ state: 'loading', error: null, record: null, fields: [], matched: null, total: null });
+    expect(loading.visibleRecordIds).toEqual([]);
+
+    // The read failed before any descriptor was known.
+    const unknownOp = describeDataInstance({
+      ...common,
+      source: { operation: 'nie.istnieje' },
+      state: 'error',
+      error: new AppError('validation_failed', 'Nieznana operacja odczytu "nie.istnieje". ' + 'x'.repeat(400)),
+    });
+    expect(unknownOp.state).toBe('error');
+    expect(unknownOp.error!.code).toBe('validation_failed');
+    expect(unknownOp.error!.message).toMatch(/^Nieznana operacja odczytu "nie.istnieje"/);
+    expect(unknownOp.error!.message.length).toBeLessThanOrEqual(300);
+    expect(unknownOp).toMatchObject({ record: null, matched: null, total: null });
+
+    const forbidden = describeDataInstance({
+      ...common,
+      state: 'forbidden',
+      error: new AppError('forbidden', 'Sprawa nalezy do innego wlasciciela.'),
+    });
+    expect(forbidden.error).toEqual({ code: 'forbidden', message: 'Sprawa nalezy do innego wlasciciela.' });
+
+    // The read answered but the composition was refused: the descriptor is known.
+    const refused = describeDataInstance({
+      ...common,
+      fieldNames: ['name', 'wojewodztwo'],
+      state: 'error',
+      descriptor: suppliers.descriptor,
+      error: new AppError('validation_failed', 'Pola wojewodztwo nie sa zadeklarowane'),
+    });
+    expect(refused.record).toEqual({ kind: 'supplier', idField: 'id' });
+    expect(refused.fields.map((f) => f.field)).toEqual(['name']);
+
+    const empty = describeDataInstance({
+      ...common,
+      state: 'empty',
+      model: buildDataModel({ response: suppliers, filter: [{ field: 'country', op: 'eq', value: 'SE' }] }),
+    });
+    expect(empty).toMatchObject({ state: 'empty', matched: 0, total: 4, error: null, visibleRecordIds: [] });
+
+    for (const d of [loading, unknownOp, forbidden, refused, empty]) {
+      expect(semanticInstanceSchema.safeParse(d).success, d.state).toBe(true);
+    }
+    // The contract refuses descriptions whose state and counts disagree.
+    expect(semanticInstanceSchema.safeParse({ ...empty, state: 'ready', matched: null }).success).toBe(false);
+    expect(semanticInstanceSchema.safeParse({ ...forbidden, error: null }).success).toBe(false);
+    expect(semanticInstanceSchema.safeParse({ ...loading, visibleRecordIds: ['s1'] }).success).toBe(false);
   });
 
   it('rejestr uiSemantics przyjmuje poprawny opis i odrzuca niepoprawny', () => {
@@ -457,6 +602,7 @@ describe('model komponentow danych', () => {
       component: 'DataTable',
       viewId: null,
       source: { operation: 'procurement.suppliers' },
+      state: 'ready',
       model,
       actions: [],
     });
@@ -475,6 +621,67 @@ describe('model komponentow danych', () => {
     }
     expect(errors).toHaveLength(1);
     expect(listInstances().map((i) => i.instanceId)).not.toContain('zly');
+  });
+
+  it('zmiana opisu aktualizuje wpis w miejscu: bez znikania, z ta sama kolejnoscia', () => {
+    const describe = (instanceId: string, state: 'loading' | 'ready', model = buildDataModel({ response: suppliers })) =>
+      describeDataInstance({
+        instanceId,
+        component: 'DataTable',
+        viewId: null,
+        source: { operation: 'procurement.suppliers' },
+        state,
+        model: state === 'ready' ? model : null,
+        actions: [],
+      });
+    const a = createInstanceDescriber();
+    const b = createInstanceDescriber();
+    a.update(describe('DataTable-A', 'loading'));
+    b.update(describe('DataTable-B', 'loading'));
+
+    // Every state the store passes through while A changes content.
+    const snapshots: string[][] = [];
+    const stop = useUiSemantics.subscribe((st) => snapshots.push(st.order.filter((id) => id.startsWith('DataTable-'))));
+    try {
+      a.update(describe('DataTable-A', 'ready'));
+      a.update(describe('DataTable-A', 'ready')); // same content: no change at all
+      a.update(
+        describe(
+          'DataTable-A',
+          'ready',
+          buildDataModel({ response: suppliers, filter: [{ field: 'country', op: 'eq', value: 'FI' }] }),
+        ),
+      );
+    } finally {
+      stop();
+    }
+    expect(snapshots).toEqual([
+      ['DataTable-A', 'DataTable-B'],
+      ['DataTable-A', 'DataTable-B'],
+    ]);
+    const ids = () => listInstances().map((i) => i.instanceId).filter((id) => id.startsWith('DataTable-'));
+    expect(ids()).toEqual(['DataTable-A', 'DataTable-B']);
+    expect(listInstances().find((i) => i.instanceId === 'DataTable-A')!.matched).toBe(1);
+
+    // A new identity replaces the old entry; unmounting removes it.
+    a.update(describe('DataTable-A2', 'loading'));
+    expect(ids()).toEqual(['DataTable-B', 'DataTable-A2']);
+    a.dispose();
+    b.dispose();
+    expect(ids()).toEqual([]);
+
+    // A refused description does not leave the previous, now untrue one behind.
+    const c = createInstanceDescriber();
+    c.update(describe('DataTable-C', 'loading'));
+    const original = console.error;
+    console.error = () => {};
+    try {
+      c.update({ ...describe('DataTable-C', 'loading'), matched: 5 });
+    } finally {
+      console.error = original;
+    }
+    expect(ids()).toEqual([]);
+    c.dispose();
   });
 
   it('wykres: serie liczbowe w jednej jednostce, zakres jak w komorce tabeli', () => {
@@ -592,9 +799,14 @@ describe('szew narzedzi i prompt', () => {
     const line = prompt.split('\n').findIndex((l) => l.startsWith('- procurement.suppliers:'));
     expect(line).toBeGreaterThan(-1);
     const fieldsLine = prompt.split('\n')[line + 1]!;
-    expect(fieldsLine).toContain('kolekcja suppliers, rekord supplier (id: id)');
+    expect(fieldsLine).toContain('rekordy kolekcji suppliers (rodzaj supplier, id: id) maja pola:');
     expect(fieldsLine).toContain('country: Kraj, text');
+    expect(fieldsLine).toContain('tylko te pola wskazujesz w komponentach danych');
     expect(prompt).toContain('totalMinor: Suma, money_minor');
+    // The comparison result carries more than its rows (criteria, excluded, notes):
+    // the prompt must not claim the listed fields are all the result has.
+    expect(prompt).not.toMatch(/innych pol wynik nie ma/);
+    expect(prompt).toContain('Wynik moze zawierac takze inne dane poza ta kolekcja');
   });
 });
 
