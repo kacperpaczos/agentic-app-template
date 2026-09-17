@@ -110,10 +110,6 @@ export function UiCommandRunner() {
         return { ...base, executed: false, reason: UI_COMMAND_FAILURES.unknownTarget };
       }
 
-      // Switching workspace is a state change, and the URL follows it through
-      // `SpaceSync`, so Back returns to the previous one.
-      if (command.spaceId) setSpace(command.spaceId);
-
       /*
        * A narrowing and an order are changes of address, not of client state.
        *
@@ -135,6 +131,11 @@ export function UiCommandRunner() {
       });
       if (plan.kind === 'refuse') return { ...base, executed: false, reason: plan.reason };
       const { filterFields, reportingView, samePath, patch, expected, expectedKey, unchanged, awaitsView } = plan;
+
+      // Switching workspace is a state change, and the URL follows it through
+      // `SpaceSync`, so Back returns to the previous one. Only after every
+      // refusal above: a command that is not performed changes nothing.
+      if (plan.switchSpace) setSpace(plan.switchSpace);
 
       /*
        * The same state asked for again changes nothing in the address, so no

@@ -281,15 +281,16 @@ describe('zawezanie widoku przez agenta', () => {
     expect(String((error as Error).message)).toContain('clear=true');
   });
 
-  it('clear=true przywraca pelny widok i dziala na kazdym celu', async () => {
+  it('clear=true przywraca pelny widok celu z zawezeniem, a cel bez zawezenia odmawia bez komendy', async () => {
+    // A view that declares a narrowing is cleared, whatever its address holds.
     const { result, emitted } = await callFilter(
-      { targetId: 'platform.settings', clear: true },
+      { targetId: 'procurement.data', clear: true },
       async (command, runtime) => {
         runtime.acknowledgeUiCommand({
           commandId: command.commandId,
           targetId: command.targetId,
           executed: true,
-          url: '/settings',
+          url: '/data',
         });
       },
     );
@@ -298,6 +299,20 @@ describe('zawezanie widoku przez agenta', () => {
     expect(emitted[0]!.filter).toBeNull();
     expect(result.executed).toBe(true);
     expect(result.cleared).toBe(true);
+
+    /*
+     * A target that declares none has nothing to clear. Answering "cleared"
+     * would be a success nothing applied — and performing it moved the user to
+     * that target's screen.
+     */
+    const refused = await callFilter({ targetId: 'platform.settings', clear: true }, applies(1, 1));
+    expect(refused.result).toEqual({
+      executed: false,
+      reason: UI_COMMAND_FAILURES.notFilterable,
+      targetId: 'platform.settings',
+      label: 'Ustawienia',
+    });
+    expect(refused.emitted).toHaveLength(0);
   });
 
   it('odmowa klienta jest raportowana, nie nadpisywana', async () => {

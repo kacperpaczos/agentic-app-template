@@ -59,6 +59,11 @@ export type ViewCommandPlan =
       unchanged: boolean;
       /** The outcome must be confirmed by a view before answering. */
       awaitsView: boolean;
+      /**
+       * Workspace to switch to. Only an applied command carries it: a refused
+       * one must leave the user's workspace where it was.
+       */
+      switchSpace: string | null;
     };
 
 /**
@@ -72,7 +77,7 @@ export type ViewCommandPlan =
  * not need them.
  */
 export function planViewCommand(input: {
-  command: Pick<UiCommand, 'filter' | 'sort'>;
+  command: Pick<UiCommand, 'filter' | 'sort' | 'spaceId'>;
   target: UiTarget;
   views: ViewDefinition[] | null;
   location: { pathname: string; search: string };
@@ -83,12 +88,16 @@ export function planViewCommand(input: {
   const changesView = narrowing !== undefined || ordering !== undefined;
   const filterFields = (target.filter?.fields ?? []).map((f) => f.field);
 
+  /*
+   * A narrowing belongs to a screen, and this target declares none — or has no
+   * screen of its own to narrow. That holds for clearing too: a target without
+   * a narrowing has none to clear, and "cleared" would move the user there for
+   * nothing. A target that declares one is cleared whatever its address holds.
+   */
+  if (narrowing !== undefined && (!target.filter || !target.to)) {
+    return { kind: 'refuse', reason: UI_COMMAND_FAILURES.notFilterable };
+  }
   if (narrowing) {
-    if (!target.filter || !target.to) {
-      // A narrowing belongs to a screen, and this target declares none — or
-      // has no screen of its own to narrow.
-      return { kind: 'refuse', reason: UI_COMMAND_FAILURES.notFilterable };
-    }
     const declared = new Set(filterFields);
     if (narrowing.predicates.some((p) => !declared.has(p.field))) {
       return { kind: 'refuse', reason: UI_COMMAND_FAILURES.unknownField };
@@ -142,5 +151,6 @@ export function planViewCommand(input: {
     awaitsView: Boolean(
       target.to && (narrowing || (reportingView && (narrowing === null || ordering !== undefined))),
     ),
+    switchSpace: input.command.spaceId ?? null,
   };
 }

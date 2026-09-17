@@ -752,6 +752,36 @@ describe('plan polecenia UI w przegladarce (UiCommandRunner)', () => {
     expect(fromCases).toMatchObject({ kind: 'apply', samePath: false, expected: { sort: 'name' } });
   });
 
+  it('czyszczenie zawezenia celu bez zawezenia: not_filterable, bez nawigacji, niezaleznie od widokow i adresu', () => {
+    for (const views_ of [views, null]) {
+      expect(planViewCommand({ command: { filter: null }, target: settingsTarget, views: views_, location: onData })).toEqual({
+        kind: 'refuse',
+        reason: 'not_filterable',
+      });
+    }
+    // A target that declares a narrowing is cleared whatever its address holds — even nothing.
+    const clean = planViewCommand({ command: { filter: null }, target: dataTarget, views, location: { pathname: '/data', search: '' } });
+    expect(clean).toMatchObject({ kind: 'apply', awaitsView: true });
+    if (clean.kind === 'apply') expect(clean.patch).toStrictEqual({ country: undefined, name: undefined, page: undefined });
+  });
+
+  it('przestrzen pracy przelacza tylko polecenie wykonywane, nigdy odrzucone', () => {
+    const refused = planViewCommand({ command: { sort: null, spaceId: 'sp_inna' }, target: settingsTarget, views, location: onData });
+    // A refusal carries nothing to switch to.
+    expect(refused).toEqual({ kind: 'refuse', reason: 'not_sortable' });
+    expect(
+      planViewCommand({ command: { filter: null, spaceId: 'sp_inna' }, target: dataTarget, views: null, location: onData }),
+    ).toEqual({ kind: 'refuse', reason: 'views_unavailable' });
+    expect(planViewCommand({ command: { spaceId: 'sp_inna' }, target: settingsTarget, views: [], location: onData })).toMatchObject({
+      kind: 'apply',
+      switchSpace: 'sp_inna',
+    });
+    expect(planViewCommand({ command: {}, target: settingsTarget, views: [], location: onData })).toMatchObject({
+      kind: 'apply',
+      switchSpace: null,
+    });
+  });
+
   it('czyszczenie porzadku celu bez widoku z rekordami: not_sortable, bez nawigacji', () => {
     expect(planViewCommand({ command: { sort: null }, target: settingsTarget, views, location: onData })).toEqual({
       kind: 'refuse',

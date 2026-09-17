@@ -125,6 +125,7 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
         'uzytkownik ma je zobaczyc w widoku. Pola do zawezania podaje ui_catalog jako ' +
         'filterableFields; pole spoza tej listy jest odrzucane. Zawsze podaj label — krotkie zdanie ' +
         'po polsku, ktore uzytkownik zobaczy nad widokiem. Przekaz clear=true, zeby przywrocic ' +
+        '(tylko widok z filterableFields; inny cel odpowiada not_filterable i nic nie zmienia) ' +
         'pelny widok. Zwraca to, co KLIENT faktycznie pokazal, razem z liczba wierszy ' +
         '(filtered.matched z filtered.total) i strona (page) — podaj te liczby uzytkownikowi zamiast ' +
         'zgadywac. Zawezenie zmienia tylko prezentacje, nie dane.',
@@ -166,19 +167,25 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
         }
 
         /*
-         * Clearing is allowed on any view — putting a screen back the way it
-         * was must never depend on the view still declaring what it accepts.
+         * A target that declares no narrowing has nothing to narrow — and
+         * nothing to clear. Answered here, before the browser is asked: a
+         * "cleared" for it would be a success nothing applied, and performing it
+         * would move the user to that target's screen for nothing.
+         *
+         * On a view that does declare one, clearing always goes through,
+         * whatever its address holds at the moment — putting a screen back the
+         * way it was must never depend on first working out what is applied.
          */
         const clearing = input.clear === true;
+        if (!known.filter) {
+          return {
+            executed: false,
+            reason: UI_COMMAND_FAILURES.notFilterable,
+            targetId: known.id,
+            label: known.label,
+          };
+        }
         if (!clearing) {
-          if (!known.filter) {
-            return {
-              executed: false,
-              reason: UI_COMMAND_FAILURES.notFilterable,
-              targetId: known.id,
-              label: known.label,
-            };
-          }
           const predicates = input.predicates ?? [];
           if (predicates.length === 0) {
             throw new AppError(
