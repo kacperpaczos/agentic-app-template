@@ -171,6 +171,16 @@ describe('walidator kompozycji OpenUI', () => {
     );
   });
 
+  it('porzadek kompozycji tylko po polu sortowalnym — ta sama regula co komponent', () => {
+    expectRefused(
+      'root = DataTable({operation: "procurement.suppliers"}, null, null, null, null, {field: "contactEmail", direction: "asc"})',
+      'unsortable_field',
+      /sort: pole contactEmail jest oznaczone jako niesortowalne/,
+      'catalog',
+    );
+    expect(reasons('root = DataTable({operation: "procurement.suppliers"}, null, null, null, null, {field: "name", direction: "asc"})')).toEqual([]);
+  });
+
   it('seria wykresu musi byc polem liczbowym', () => {
     expectRefused(`root = DataChart(${comparison()}, "bar", "supplierName", ["reference"])`, 'non_numeric_series', /reference \(text\)/);
   });
@@ -504,6 +514,58 @@ describe('narzedzia widokow agenta', () => {
       `tabela = DataTable(${comparison()}, ["supplierName", "totalMinor"])`,
       `wykres2 = ${chart}`,
     ]);
+  });
+
+  it('patch: linia, ktorej nie da sie odczytac, zmiana tylko ukladu i nieaktualna wersja przy braku zmian', async () => {
+    const conv = newConversation();
+    const ctx = context(conv.id);
+    // Stored with a blank line and a comment: layout the merge does not keep.
+    const source = [
+      'root = Stack([opis, tabela])',
+      '',
+      '// opis nad tabela',
+      'opis = TextContent("Oferty w sprawie")',
+      `tabela = DataTable(${comparison()}, ["supplierName", "totalMinor"])`,
+    ].join('\n');
+    const created = await call('agent_view_create', { title: 'T', source }, ctx);
+    expect(created.ok, JSON.stringify(created.body)).toBe(true);
+    const cardId = created.body.cardId as string;
+
+    // M1: a statement-shaped line lang-core cannot read, for a name that exists, is not "applied".
+    for (const unreadable of [
+      `opis = TextContent("Nowy")\ntabela == DataTable(${comparison()}, ["supplierName"])`,
+      'tabela = @@@ ###',
+    ]) {
+      const out = await call('agent_view_update', { cardId, patch: unreadable }, ctx);
+      expect(out.ok, unreadable).toBe(false);
+      expect(out.body.details.reason, unreadable).toBe('syntax');
+      expect(out.body.message, unreadable).toMatch(/Instrukcji tabela z patcha nie da sie odczytac/);
+    }
+    expect(h.platform.services.canvas.getCard(cardId, h.ownerId)).toMatchObject({ spec: { kind: 'openui', source }, specVersion: 1 });
+
+    // M2: the same statements, re-sent — as a patch or as a whole source laid out differently — change nothing.
+    const samePatch = await call('agent_view_update', { cardId, patch: 'opis   =   TextContent( "Oferty w sprawie" )' }, ctx);
+    expect(samePatch.body).toMatchObject({ unchanged: true, specVersion: 1 });
+    const sameSource = await call(
+      'agent_view_update',
+      { cardId, source: `root = Stack([opis, tabela])\nopis = TextContent("Oferty w sprawie")\ntabela = DataTable(${comparison()}, ["supplierName", "totalMinor"])` },
+      ctx,
+    );
+    expect(sameSource.body).toMatchObject({ unchanged: true, specVersion: 1 });
+    // ...while a change inside a string is a change.
+    const inString = await call('agent_view_update', { cardId, patch: 'opis = TextContent("Oferty  w sprawie")' }, ctx);
+    expect(inString.body).toMatchObject({ unchanged: false, specVersion: 2 });
+
+    // M4: a stale expected version is a conflict even when nothing would change.
+    const stale = await call(
+      'agent_view_update',
+      { cardId, patch: 'opis = TextContent("Oferty  w sprawie")', expectedSpecVersion: 1 },
+      ctx,
+    );
+    expect(stale.body.error).toBe('conflict');
+    expect(stale.body.details.currentSpecVersion).toBe(2);
+    const current = await call('agent_view_update', { cardId, patch: 'opis = TextContent("Oferty  w sprawie")', expectedSpecVersion: 2 }, ctx);
+    expect(current.body).toMatchObject({ unchanged: true, specVersion: 2 });
   });
 
   it('widok innej rozmowy lub innego wlasciciela jest odrzucany; bez rozmowy nie ma widokow', async () => {

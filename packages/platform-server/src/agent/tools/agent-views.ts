@@ -13,6 +13,7 @@ import {
   applyCompositionPatch,
   compositionRefusal,
   normalizeCompositionSource,
+  sameComposition,
   type OpenUiServerCatalog,
 } from '../../registry/openui-validation.ts';
 import type { PlatformServices } from '../../services/index.ts';
@@ -187,9 +188,16 @@ export function agentViewTools(services: PlatformServices): Array<ModuleToolDefi
           // A patch that would lose a statement, or cannot be read as written, is refused before merging.
           const patched = applyCompositionPatch(current, input.patch);
           if (patched.problems.length > 0) throw compositionRefusal(patched.problems);
-          next = patched.source;
+          next = patched.unchanged ? current : patched.source;
         } else if (input.source !== undefined) {
-          next = normalizeCompositionSource(input.source);
+          const source = normalizeCompositionSource(input.source);
+          next = sameComposition(source, current) ? current : source;
+        }
+        // A stale version is a conflict whether or not anything would change.
+        if (input.expectedSpecVersion !== undefined && input.expectedSpecVersion !== card.specVersion) {
+          throw new AppError('conflict', 'Card content changed since it was read.', {
+            currentSpecVersion: card.specVersion,
+          });
         }
         /*
          * Nothing would change: no write, no new version, no event — and the

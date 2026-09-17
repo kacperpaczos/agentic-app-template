@@ -5,6 +5,7 @@ import {
   defineComponent,
   isASTNode,
   mergeStatements,
+  tokenize,
   walkAST,
   type ASTNode,
   type ElementNode,
@@ -13,6 +14,7 @@ import {
 } from '@openuidev/lang-core';
 import {
   AppError,
+  checkSortField,
   DATA_COMPONENT_DESCRIPTIONS,
   DATA_COMPONENT_PROPS,
   DATA_COMPONENTS,
@@ -77,6 +79,7 @@ export const COMPOSITION_REFUSALS = [
   'invalid_input',
   'no_descriptor',
   'undeclared_field',
+  'unsortable_field',
   'non_numeric_series',
   'primary_operation_missing',
 ] as const;
@@ -300,6 +303,29 @@ export function statementsOf(source: string): { ids: string[]; deletions: string
   return { ids, deletions, problems };
 }
 
+/**
+ * Each statement's text as the parser reads it — its tokens, without the
+ * whitespace and line breaks between them — by name, in order. Two sources
+ * with equal lists say the same thing, however they are laid out; a string's
+ * contents stay exact.
+ */
+function statementTexts(source: string): Map<string, string> {
+  const texts = new Map<string, string>();
+  for (const chunk of topLevelChunks(source)) {
+    const head = STATEMENT_HEAD.exec(chunk);
+    if (!head || texts.has(head[1]!)) continue;
+    texts.set(head[1]!, JSON.stringify(tokenize(chunk).filter((t) => t.t !== 0 /* newline */)));
+  }
+  return texts;
+}
+
+/** Whether two compositions have the same statements, in the same order, saying the same thing. */
+export function sameComposition(a: string, b: string): boolean {
+  const left = [...statementTexts(a)];
+  const right = [...statementTexts(b)];
+  return left.length === right.length && left.every(([id, text], i) => right[i]![0] === id && right[i]![1] === text);
+}
+
 /** The source without an enclosing ``` fence, which the renderer strips too. */
 export function normalizeCompositionSource(source: string): string {
   const trimmed = source.trim();
@@ -495,6 +521,18 @@ function checkDataComponent(el: ElementNode, name: DataComponentName, ctx: WalkC
   for (const [prop, names] of fieldGroups) {
     try {
       const fields = pickFields(descriptor, names);
+      if (prop === 'sort') {
+        // The same rule the component applies to its composition's own order.
+        const check = checkSortField(descriptor, names[0]!);
+        if (!check.ok) {
+          fieldsOk = false;
+          fail(
+            'unsortable_field',
+            `sort: pole ${names[0]} jest oznaczone jako niesortowalne. Mozna sortowac po: ` +
+              `${check.available.map((f) => f.field).join(', ') || '(brak pol)'}.`,
+          );
+        }
+      }
       if (name === 'DataChart' && prop === 'series') {
         const textual = fields.filter((f) => !isNumericField(f));
         if (textual.length > 0) {
@@ -674,7 +712,9 @@ export function validateComposition(input: ValidateCompositionInput): ValidatedC
  * must be in the result, and every statement of the stored composition must be
  * too unless the patch deleted it by name.
  *
- * `unchanged` is true when the result is the stored composition, byte for byte.
+ * `unchanged` is true when the result has the stored composition's statements,
+ * in its order, with the same text — layout (blank lines, spacing, comments)
+ * aside.
  */
 export function applyCompositionPatch(
   current: string,
@@ -691,6 +731,25 @@ export function applyCompositionPatch(
   const merged = mergeStatements(current, patch);
   const after = new Set(statementsOf(merged).ids);
   const problems: CompositionProblem[] = [];
+
+  /*
+   * A line that has the shape of a statement but that the merge cannot read
+   * (`tabela == DataTable(...)`, `tabela = @@@`) is skipped by it, and a
+   * statement of that name already stored stays as it was — so every statement
+   * the patch sets must be in the result with the patch's own text.
+   */
+  const patchTexts = statementTexts(patch);
+  const mergedTexts = statementTexts(merged);
+  for (const id of written.ids) {
+    if (written.deletions.includes(id) || !after.has(id)) continue;
+    if (mergedTexts.get(id) !== patchTexts.get(id)) {
+      problems.push({
+        reason: 'syntax',
+        statementId: id,
+        message: `Instrukcji ${id} z patcha nie da sie odczytac, wiec nie zostalaby zastosowana. Popraw jej zapis.`,
+      });
+    }
+  }
 
   for (const id of written.deletions) {
     if (!before.includes(id)) {
@@ -721,7 +780,8 @@ export function applyCompositionPatch(
         `Zachowaj odwolanie albo usun ja jawnie: ${id} = null.`,
     });
   }
-  return { source: merged, problems, unchanged: problems.length === 0 && merged === current };
+  // Unchanged when it says the same thing: a merge re-joins statements, which alone is no edit.
+  return { source: merged, problems, unchanged: problems.length === 0 && sameComposition(merged, current) };
 }
 
 /**

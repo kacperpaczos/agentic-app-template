@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import type { ReadResultDescriptor } from '@platform/contracts';
-import { OpenUiServerCatalog } from '@platform/server';
+import { OpenUiServerCatalog, ServerModuleRegistry } from '@platform/server';
 import { createProcurementModule } from '@module/procurement/server';
 import { buildRegistry, groupRecords, platformCardRenderers, readGate, withGrouping, type UiModule } from '@platform/ui';
 import { buildDataModel } from '../packages/platform-ui/src/views/model.ts';
@@ -50,10 +50,44 @@ describe('zgodnosc katalogu OpenUI przegladarki i serwera', () => {
         expect(Object.keys(serverDefs[name]!.properties ?? {}), name).toEqual(Object.keys(def.properties ?? {}));
         expect(serverDefs[name], name).toEqual(def);
       }
-      // The procurement module's own components are on both sides.
-      expect(Object.keys(serverDefs)).toEqual(expect.arrayContaining(['OfferComparison', 'OfferCostChart', 'DataTable']));
+      // Every procurement module component is on both sides, declared in one place.
+      const moduleNames = ['SectionHeading', 'CaseHeader', 'CaseOfferSources', 'ItemProvenance', 'OfferComparison', 'OfferCostChart'];
+      expect([...server.moduleComponents].sort()).toEqual([...moduleNames].sort());
+      expect(Object.keys(browserDefs)).toEqual(expect.arrayContaining([...moduleNames, 'DataTable']));
       // And the platform's live catalog is built from the same declarations.
       expect(h.platform.services.catalog.openui.names().sort()).toEqual(Object.keys(browserDefs).sort());
+    } finally {
+      h.dispose();
+    }
+  });
+
+  it('widoki szczegolow modulu przechodza walidacje startowa tylko z deklaracjami swoich komponentow', async () => {
+    const h = await createHarness({ seed: false });
+    try {
+      const mod = createProcurementModule(h.platform.services);
+      const detail = mod.views!.find((v) => v.id === 'procurement.case.detail')!;
+      const provenance = mod.views!.find((v) => v.id === 'procurement.item.provenance')!;
+      expect(detail.params).toEqual(['caseId']);
+      // Registered as shipped: `$caseId` / `$itemId` as source input and component props, module components known.
+      expect(() => new ServerModuleRegistry().register(mod)).not.toThrow();
+      // Without the server declaration of a component the view uses, the module does not start.
+      expect(() =>
+        new ServerModuleRegistry().register({
+          ...mod,
+          openuiComponents: mod.openuiComponents!.filter((c) => c.name !== 'CaseHeader'),
+        }),
+      ).toThrowError(/widok procurement\.case\.detail: .*nieznany komponent CaseHeader/);
+      expect(() =>
+        new ServerModuleRegistry().register({
+          ...mod,
+          openuiComponents: mod.openuiComponents!.filter((c) => c.name !== 'ItemProvenance'),
+        }),
+      ).toThrowError(/widok procurement\.item\.provenance: .*nieznany komponent ItemProvenance/);
+      // A route parameter the view does not declare is refused as input.
+      expect(() =>
+        new ServerModuleRegistry().register({ ...mod, views: mod.views!.map((v) => (v === detail ? { ...v, params: [] } : v)) }),
+      ).toThrowError(/widok procurement\.case\.detail: .*musi byc stala/);
+      expect(provenance.params).toEqual(['itemId']);
     } finally {
       h.dispose();
     }
@@ -107,6 +141,30 @@ describe('grupowanie wierszy tabeli', () => {
       ['100|PLN', '1,00 PLN', 2],
       ['100|EUR', '1,00 EUR', 1],
       ['250|PLN', '2,50 PLN', 1],
+    ]);
+  });
+
+  it('grupy tworzy strona pokazana, a liczy caly dopasowany zbior; porzadek i strony bez zmian', () => {
+    const many = Array.from({ length: 7 }, (_, i) => ({
+      id: String(i + 1),
+      name: `N${i + 1}`,
+      basis: i % 2 === 0 ? 'net' : 'gross',
+      total: 100 * (i + 1),
+      currency: 'PLN',
+    }));
+    const paged = buildDataModel({
+      response: { operation: 'm.rows', result: { rows: many }, descriptor, resolvedAt: '' },
+      sort: { field: 'total', direction: 'desc' },
+      pageSize: 3,
+      page: 2,
+    });
+    const grouped = withGrouping(paged, 'basis');
+    // The page is the same with or without grouping: records 4, 3, 2 by total descending.
+    expect(grouped.shown.map((r) => r.id)).toEqual(['4', '3', '2']);
+    expect(grouped.page).toEqual(paged.page);
+    expect(grouped.grouping!.groups.map((g) => [g.label, g.records.map((r) => r.id), g.total])).toEqual([
+      ['brutto', ['4', '2'], 3],
+      ['netto', ['3'], 4],
     ]);
   });
 
