@@ -940,23 +940,39 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
         page.getByTestId(`card-${chartCardId}`).locator(`[data-ui-instance="${chartInstance.instanceId}"]`),
       ).toHaveCount(1);
       /*
-       * The chart's *values* are judged after the next turn, not here.
+       * A chart that draws, or a refusal that says why — and nothing in between.
        *
-       * The case's sixteen items are priced in PLN and in EUR, so there is no
-       * correct single chart of all of them: a money series carries the
-       * record's own currency and `buildChartModel` refuses to put two on one
-       * axis. Task 9 made the tool warn about exactly this shape of series
-       * (`unit_from_record`) and made the agent read the screen back, and the
-       * run that first showed it does now say so in the conversation and asks
-       * which narrowing the user wants (`run_3213d8f04366476f91d7`).
+       * The case's sixteen items are priced in PLN and in EUR. A money series
+       * carries the record's own currency, so `buildChartModel` will not put two
+       * units on one axis; whether the agent hits that depends on whether it
+       * narrows the series itself, and both outcomes are honest. What must never
+       * happen is the third thing: an empty card, invented numbers, or a stored
+       * composition reported as a drawn chart.
        *
-       * So this step asserts what this step is about — the agent added a chart
-       * to its own view, as a card that is mounted on screen, without losing the
-       * table — and records the state the component ended up in. What the chart
-       * *shows* is asserted after the scope is settled by the conversation,
-       * which is the next step of the proba and the answer to the agent's own
-       * question.
+       * So both arms are asserted, and the assertions are the same strength:
+       *
+       *   ready  → the series range equals `POST /api/read` for its own source;
+       *   error  → the component states the refusal on screen, draws no series
+       *            and no chart body, the tool's answer said `rendered: false`
+       *            with the `unit_from_record` warning that predicted it, and
+       *            the run read the screen back before answering.
+       *
+       * Step 3 then requires that after the scope is settled by conversation,
+       * this same card is `ready` with the backend's range — so the refusal path
+       * cannot be an end state either.
        */
+      const chartFigure = viewsPage(page).locator(`[data-ui-instance="${chartInstance.instanceId}"]`);
+      const storedChart = [
+        ...allResultsOf(results2, 'agent_view_create'),
+        ...allResultsOf(results2, 'agent_view_update'),
+      ];
+      expect(storedChart.length, 'wykonanie nie zapisalo kompozycji z wykresem').toBeGreaterThan(0);
+      // Storing a composition is not drawing it, and every answer has to say so.
+      for (const stored of storedChart) {
+        expect(stored.rendered, 'wynik narzedzia twierdzi, ze karta narysowala kompozycje').toBe(false);
+        expect(typeof stored.readBack === 'string' && stored.readBack.length > 0).toBe(true);
+      }
+
       evidence.wykres = {
         kartaWykresu: chartCardId,
         nowaKarta: !created1.includes(chartCardId!),
@@ -964,7 +980,43 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
         serie: chartInstance.fields.slice(1).map((f: any) => f.field),
         stanPoDodaniu: chartInstance.state,
         bladPoDodaniu: chartInstance.error,
+        odczytalEkranPoZapisie: readBackAfterViewTool(results2),
       };
+
+      if (chartInstance.state === 'ready') {
+        await expectChartMatchesBackend(page, viewsPage(page), chartInstance);
+        evidence.wykres.sciezka = 'narysowany od razu (model sam zawezil serie do jednej jednostki)';
+      } else {
+        expect(
+          chartInstance.state,
+          `wykres ani nie rysuje, ani nie odmawia: ${JSON.stringify(chartInstance.error)}`,
+        ).toBe('error');
+        expect(chartInstance.error?.code).toBe('validation_failed');
+        expect(chartInstance.error?.message, 'odmowa nie mowi o jednostkach').toMatch(/jednostk/);
+
+        // On screen: the refusal is stated where the chart would have been...
+        await expect(chartFigure).toHaveAttribute('data-state', 'error');
+        const alert = chartFigure.locator('[role="alert"][data-testid="query-error"]');
+        await expect(alert).toHaveAttribute('data-error-code', 'validation_failed');
+        await expect(alert).toContainText(chartInstance.error.message);
+        // ...and nothing is drawn, summarised or invented in its place.
+        await expect(chartFigure.locator('figcaption [data-series]')).toHaveCount(0);
+        await expect(chartFigure.locator('.pf-data__chart')).toHaveCount(0);
+        expect(chartInstance.visibleRecordIds).toEqual([]);
+
+        // The warning that predicted it travelled with the tool's own answer...
+        expect(
+          storedChart.some((r: any) => (r.warnings ?? []).some((w: any) => w.code === 'unit_from_record')),
+          'zapis serii z jednostka z rekordu nie zostal ostrzezony',
+        ).toBe(true);
+        // ...and the run read the screen back instead of reporting a drawn chart.
+        expect(
+          readBackAfterViewTool(results2),
+          'wykonanie nie odczytalo ekranu po zapisaniu kompozycji',
+        ).toBe(true);
+        evidence.wykres.sciezka = 'odmowa rysowania, opisana na ekranie i odczytana przez wykonanie';
+      }
+
       await shot(page, 't27-wykres.png');
 
       /* ----------------------- 3. the scope, by talking ---------------------- */
@@ -1016,6 +1068,10 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
         onPage.find((i: any) => i.component === 'DataChart' && i.instanceId === chartInstance.instanceId) ??
         onPage.find((i: any) => i.component === 'DataChart');
       expect(chartAfter, 'wykres zniknal przy zmianie zakresu').toBeTruthy();
+      // The same card, not a new one put in its place.
+      await expect(
+        page.getByTestId(`card-${chartCardId}`).locator(`[data-ui-instance="${chartAfter.instanceId}"]`),
+      ).toHaveCount(1);
       await expectChartMatchesBackend(page, viewsPage(page), chartAfter);
       evidence.wykres.stanPoZmianieZakresu = chartAfter.state;
 
