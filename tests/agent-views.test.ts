@@ -96,6 +96,34 @@ describe('walidator kompozycji OpenUI', () => {
     expect(table.component === 'DataTable' && 'pageSize' in table.props).toBe(false);
   });
 
+  it('null pomija opcjonalny argument pozycyjny, a zly typ i null wymaganego argumentu sa nadal odrzucane', () => {
+    const suppliers = '{operation: "procurement.suppliers"}';
+    // `null` before a present argument, as the renderer reads it: not given.
+    for (const mode of ['catalog', 'agent-views'] as const) {
+      const ok = check(`root = DataTable(${suppliers}, ["name", "country"], null, 10)`, mode);
+      expect(ok.problems, mode).toEqual([]);
+      expect(ok.instances[0]!.props).toEqual({ source: { operation: 'procurement.suppliers' }, columns: ['name', 'country'], pageSize: 10 });
+      expect(check(`root = DataTable(${suppliers}, null, null, null, null, {field: "name", direction: "asc"}, "country")`, mode).problems).toEqual([]);
+    }
+    // The same positions with a value of the wrong type are refused.
+    expect(reasons(`root = DataTable(${suppliers}, ["name"], null, "dziesiec")`, 'catalog')).toContain('invalid_props');
+    expect(reasons(`root = DataTable(${suppliers}, ["name"], null, 0)`, 'catalog')).toContain('invalid_props');
+    expect(reasons(`root = DataTable(${suppliers}, null, 5)`, 'catalog')).toContain('invalid_props');
+    // A required argument cannot be skipped.
+    expect(reasons('root = DataTable(null, ["name"])', 'catalog')).toContain('invalid_props');
+    expect(reasons(`root = DataChart({operation: "procurement.comparison", input: {caseId: "${caseId}"}}, null, "supplierName", ["totalMinor"])`, 'catalog')).toContain('invalid_props');
+
+    // And a module view written that way starts.
+    const mod = createProcurementModule(h.platform.services);
+    const view = mod.views![0]!;
+    expect(() =>
+      new ServerModuleRegistry().register({
+        ...mod,
+        views: [{ ...view, composition: `root = Stack([t])\nt = DataTable(${suppliers}, ["name", "country"], null, 10, null, {field: "name", direction: "asc"})` }, mod.views![1]!],
+      }),
+    ).not.toThrow();
+  });
+
   it('nieznany komponent jest zawsze odrzucany z nazwa', () => {
     for (const mode of ['catalog', 'agent-views'] as const) {
       expectRefused('root = Stack([x])\nx = Wykresik("a")', 'unknown_component', /nieznany komponent Wykresik/, mode);
