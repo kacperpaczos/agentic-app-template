@@ -95,6 +95,15 @@ export class RunEventStream {
         if (this.#buffer.every((e) => e.seq <= cursor)) return;
         continue;
       }
+      /*
+       * An event emitted while the consumer was still busy with the previous one
+       * (writing it to a socket, say) found no waiter to wake. Waiting now would
+       * hold it back until some later event — and a UI command is followed by no
+       * event at all until the browser acknowledges it, which it cannot do
+       * before receiving it: the run timed out as `no_client` while the command
+       * sat in the buffer.
+       */
+      if ((this.#buffer.at(-1)?.seq ?? 0) > cursor) continue;
       await new Promise<void>((resolve) => this.#waiters.push(resolve));
     }
   }
