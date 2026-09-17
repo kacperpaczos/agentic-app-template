@@ -523,6 +523,21 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
 
   /* ------------------------------- canvas ------------------------------- */
 
+  /*
+   * A conversation's agent views space is created with its first view and
+   * deleted with the conversation. One created through these routes could name
+   * any id — a conversation that never existed or belongs to someone else — and
+   * would outlive every deletion, so the scope is refused on them.
+   */
+  const refuseReservedScope = (scopeKind: string | null | undefined) => {
+    if (scopeKind !== AGENT_VIEWS_SCOPE_KIND) return;
+    throw new AppError(
+      'validation_failed',
+      `Zakres "${AGENT_VIEWS_SCOPE_KIND}" jest zarezerwowany: przestrzen widokow agenta powstaje z pierwszym widokiem rozmowy.`,
+      { reason: 'reserved_scope' },
+    );
+  };
+
   app.get('/api/canvas/spaces', (c) =>
     json(c, { spaces: services.canvas.listSpaces(c.get('ownerId')) }),
   );
@@ -536,6 +551,7 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
         scopeId: z.string().max(128).nullable().optional(),
       })
       .parse(await c.req.json());
+    refuseReservedScope(body.scopeKind);
     return json(c, services.canvas.createSpace({ ownerId, ...body }), 201);
   });
 
@@ -549,6 +565,7 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
     const body = z
       .object({ kind: z.string().max(80), id: z.string().max(128), title: z.string().max(200) })
       .parse(await c.req.json());
+    refuseReservedScope(body.kind);
     const { space, created } = services.canvas.ensureScopedSpace({
       ownerId,
       title: body.title,

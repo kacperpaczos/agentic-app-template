@@ -1,8 +1,10 @@
 import {
+  autoClose,
   createLibrary,
   createParser,
   defineComponent,
   isASTNode,
+  mergeStatements,
   walkAST,
   type ASTNode,
   type ElementNode,
@@ -98,7 +100,12 @@ export interface CompositionProblem {
  * its `Series`/`Slice`/`Point` (literal data), `Tag`/`TagBlock` (values dressed
  * as labels), forms, inputs and buttons (actions that bypass the domain
  * operations), `Image*` (external addresses), `Modal`/`Callout` (need state
- * bindings), `Steps`, `Carousel` and `CodeBlock` (not needed to present data).
+ * bindings), `Steps`, `Carousel` and `CodeBlock` (not needed to present data),
+ * and `MarkDownRenderer`: it renders images and links to any address (a
+ * resource loaded from outside the application) and lists and tables of
+ * whatever the model types — the easiest way to put values into a view
+ * without a read. Plain text in `TextContent`, `TextCallout` and `CardHeader`
+ * is enough for titles and explanations.
  */
 export const AGENT_VIEW_LAYOUT_COMPONENTS: Readonly<Record<string, string>> = {
   Stack: 'uklad: kolumna lub wiersz innych komponentow',
@@ -111,7 +118,6 @@ export const AGENT_VIEW_LAYOUT_COMPONENTS: Readonly<Record<string, string>> = {
   Separator: 'uklad: linia oddzielajaca',
   TextContent: 'tekst: opis lub komentarz',
   TextCallout: 'tekst: wyrozniona uwaga',
-  MarkDownRenderer: 'tekst: dluzszy opis w Markdown',
 };
 
 /** One data component instance found in a composition, with its checked props. */
@@ -246,6 +252,52 @@ function topLevelChunks(source: string): string[] {
   }
   chunks.push(source.slice(start));
   return chunks.map((c) => c.trim()).filter((c) => c && !c.startsWith('//') && !c.startsWith('#'));
+}
+
+const DELETION = /^(\$?[A-Za-z_][A-Za-z0-9_]*)\s*=\s*null\s*$/;
+
+/**
+ * The statements of a source as written: their names in order, the ones set to
+ * `null` (a deletion, in a patch), and what is wrong with the list itself — a
+ * line that is not a statement, a name given twice, an unclosed bracket or
+ * string. Checked on the text, because the parser forgives all of these: it
+ * skips a line, keeps the last of two definitions and closes what is open.
+ */
+export function statementsOf(source: string): { ids: string[]; deletions: string[]; problems: CompositionProblem[] } {
+  const problems: CompositionProblem[] = [];
+  const ids: string[] = [];
+  const deletions: string[] = [];
+  const counts = new Map<string, number>();
+  for (const chunk of topLevelChunks(source)) {
+    const head = STATEMENT_HEAD.exec(chunk);
+    if (!head) {
+      problems.push({
+        reason: 'syntax',
+        message: `Nie rozpoznano instrukcji "${chunk.slice(0, 80)}" — kazda linia ma postac nazwa = Komponent(...).`,
+      });
+      continue;
+    }
+    const id = head[1]!;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+    if (counts.get(id) === 1) ids.push(id);
+    if (DELETION.test(chunk)) deletions.push(id);
+  }
+  for (const [id, count] of counts) {
+    if (count > 1) {
+      problems.push({
+        reason: 'duplicate_statement',
+        statementId: id,
+        message: `Instrukcja ${id} jest zdefiniowana ${count} razy; kazda nazwa moze wystapic raz.`,
+      });
+    }
+  }
+  if (autoClose(source).wasIncomplete) {
+    problems.push({
+      reason: 'partial',
+      message: 'Kompozycja jest niekompletna: niedomkniety nawias lub cudzyslow. Zapisywana jest tylko pelna kompozycja.',
+    });
+  }
+  return { ids, deletions, problems };
 }
 
 /** The source without an enclosing ``` fence, which the renderer strips too. */
@@ -501,29 +553,9 @@ export function checkComposition(input: ValidateCompositionInput): {
     return done();
   }
 
-  const chunks = topLevelChunks(source);
-  const ids = new Map<string, number>();
-  for (const chunk of chunks) {
-    const head = STATEMENT_HEAD.exec(chunk);
-    if (!head) {
-      problems.push({
-        reason: 'syntax',
-        message: `Nie rozpoznano instrukcji "${chunk.slice(0, 80)}" — kazda linia ma postac nazwa = Komponent(...).`,
-      });
-      continue;
-    }
-    ids.set(head[1]!, (ids.get(head[1]!) ?? 0) + 1);
-  }
-  for (const [id, count] of ids) {
-    if (count > 1) {
-      problems.push({
-        reason: 'duplicate_statement',
-        statementId: id,
-        message: `Instrukcja ${id} jest zdefiniowana ${count} razy; kazda nazwa moze wystapic raz.`,
-      });
-    }
-  }
-  if (problems.length === 0 && !ids.has('root')) {
+  const statements = statementsOf(source);
+  problems.push(...statements.problems);
+  if (problems.length === 0 && !statements.ids.includes('root')) {
     problems.push({ reason: 'missing_root', message: 'Kompozycja musi miec instrukcje root = Komponent(...).' });
   }
   if (problems.length > 0) return done();
@@ -609,21 +641,87 @@ export function checkComposition(input: ValidateCompositionInput): {
 const MESSAGE_PROBLEMS = 5;
 
 /**
- * Validates a composition and returns what may be stored, or throws
- * `validation_failed` naming every problem (`details.reason` is the first one's,
- * `details.problems` lists all).
+ * The refusal for a list of problems: `validation_failed` naming every problem
+ * (`details.reason` is the first one's, `details.problems` lists all).
  */
+export function compositionRefusal(problems: readonly CompositionProblem[]): AppError {
+  const shown = problems.slice(0, MESSAGE_PROBLEMS).map((p) => p.message);
+  const more = problems.length > MESSAGE_PROBLEMS ? ` (i ${problems.length - MESSAGE_PROBLEMS} innych)` : '';
+  return new AppError('validation_failed', `Kompozycja OpenUI odrzucona: ${shown.join(' ')}${more}`, {
+    reason: problems[0]?.reason,
+    problems,
+  });
+}
+
+/** Validates a composition and returns what may be stored, or throws {@link compositionRefusal}. */
 export function validateComposition(input: ValidateCompositionInput): ValidatedComposition {
   const { source, problems, instances } = checkComposition(input);
-  if (problems.length > 0) {
-    const shown = problems.slice(0, MESSAGE_PROBLEMS).map((p) => p.message);
-    const more = problems.length > MESSAGE_PROBLEMS ? ` (i ${problems.length - MESSAGE_PROBLEMS} innych)` : '';
-    throw new AppError('validation_failed', `Kompozycja OpenUI odrzucona: ${shown.join(' ')}${more}`, {
-      reason: problems[0]!.reason,
-      problems,
+  if (problems.length > 0) throw compositionRefusal(problems);
+  return { source, instances };
+}
+
+/**
+ * A patch applied to a stored composition, refusing whatever the merge would
+ * lose without a word.
+ *
+ * `mergeStatements` replaces statements by name, removes `name = null` and then
+ * drops every statement `root` no longer reaches — and it skips a line it cannot
+ * read. Validating only the merged result would miss exactly those losses: a new
+ * chart nothing refers to vanishes, a description the new `root` no longer
+ * lists is deleted, a garbled line is ignored, and the tool reports success. So
+ * the patch is checked as written first (every line a statement, each name
+ * once, nothing left open), and after merging every statement the patch sets
+ * must be in the result, and every statement of the stored composition must be
+ * too unless the patch deleted it by name.
+ *
+ * `unchanged` is true when the result is the stored composition, byte for byte.
+ */
+export function applyCompositionPatch(
+  current: string,
+  patchSource: string,
+): { source: string; problems: CompositionProblem[]; unchanged: boolean } {
+  const patch = normalizeCompositionSource(patchSource);
+  if (!patch) {
+    return { source: current, problems: [{ reason: 'empty', message: 'Pusty patch.' }], unchanged: true };
+  }
+  const written = statementsOf(patch);
+  if (written.problems.length > 0) return { source: current, problems: written.problems, unchanged: true };
+
+  const before = statementsOf(current).ids;
+  const merged = mergeStatements(current, patch);
+  const after = new Set(statementsOf(merged).ids);
+  const problems: CompositionProblem[] = [];
+
+  for (const id of written.deletions) {
+    if (!before.includes(id)) {
+      problems.push({
+        reason: 'unresolved_reference',
+        statementId: id,
+        message: `Patch usuwa instrukcje ${id}, ktorej nie ma w kompozycji.`,
+      });
+    }
+  }
+  for (const id of written.ids) {
+    if (written.deletions.includes(id) || after.has(id)) continue;
+    problems.push({
+      reason: 'orphaned_statement',
+      statementId: id,
+      message:
+        `Instrukcja ${id} z patcha nie jest osiagalna z root, wiec nie zostalaby zapisana. ` +
+        'Dodaj odwolanie do niej, np. w root.',
     });
   }
-  return { source, instances };
+  for (const id of before) {
+    if (written.deletions.includes(id) || after.has(id)) continue;
+    problems.push({
+      reason: 'orphaned_statement',
+      statementId: id,
+      message:
+        `Instrukcja ${id} zniknelaby z widoku, bo po zmianie nic sie do niej nie odwoluje. ` +
+        `Zachowaj odwolanie albo usun ja jawnie: ${id} = null.`,
+    });
+  }
+  return { source: merged, problems, unchanged: problems.length === 0 && merged === current };
 }
 
 /**

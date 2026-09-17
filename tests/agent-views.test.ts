@@ -1,14 +1,18 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import {
   AGENT_VIEWS_SCOPE_KIND,
-  AppError,
-  PLATFORM_CUSTOM_EVENTS,
+  AGUI_EVENTS,
   type ModuleEmittedEvent,
   type ServerModule,
   type ToolCallContext,
 } from '@platform/contracts';
 import {
+  AGENT_VIEW_LAYOUT_COMPONENTS,
+  AgentRuntime,
   ServerModuleRegistry,
+  assertMcpCompatibleShape,
+  buildMcpServer,
   buildSystemPrompt,
   checkComposition,
   collectToolEntries,
@@ -19,6 +23,7 @@ import {
   type CompositionMode,
   type CompositionRefusal,
 } from '@platform/server';
+import { scriptedAgent } from '../e2e/support/scripted-agent.ts';
 import { createProcurementModule } from '@module/procurement/server';
 import { createHarness, login, type Harness } from './helpers.ts';
 
@@ -178,6 +183,15 @@ describe('walidator kompozycji OpenUI', () => {
     expectRefused('root = Table([Col("Suma", [1, 2])])', 'component_not_allowed', /Table/);
     // A module component reading its own data is allowed; so is layout and text.
     expect(reasons(`root = Stack([h, OfferCostChart("${caseId}")])\nh = CardHeader("Koszty")`)).toEqual([]);
+    // No component whose text can carry lists of values or load outside resources.
+    expectRefused(
+      'root = MarkDownRenderer("- Dostawca A: 12 345,00 PLN\\n- Dostawca B: 9 870,00 PLN\\n![x](https://example.com/p.png)")',
+      'component_not_allowed',
+      /MarkDownRenderer nie jest dozwolony w widokach agenta/,
+    );
+    expect(Object.keys(AGENT_VIEW_LAYOUT_COMPONENTS).sort()).toEqual(
+      ['Accordion', 'AccordionItem', 'Card', 'CardHeader', 'Separator', 'Stack', 'TabItem', 'Tabs', 'TextCallout', 'TextContent'].sort(),
+    );
     // Expressions, state and Query/Mutation are not.
     expectRefused('root = Stack([t])\nt = TextContent("" + @Count([1, 2]))', 'dynamic_expression', /wyrazen/);
     expectRefused('$wybor = "a"\nroot = Stack([t])\nt = TextContent("x")', 'dynamic_expression', /stanu/);
@@ -437,6 +451,61 @@ describe('narzedzia widokow agenta', () => {
     expect(h.platform.services.canvas.getState(created.body.spaceId, h.ownerId).cards).toHaveLength(1);
   });
 
+  it('patch nie gubi niczego po cichu: nieosiagalna nowa instrukcja, znikajaca instrukcja, nierozpoznana linia, powtorzona nazwa', async () => {
+    const conv = newConversation();
+    const ctx = context(conv.id);
+    const source = [
+      'root = Stack([opis, tabela])',
+      'opis = TextContent("Oferty w sprawie")',
+      `tabela = DataTable(${comparison()}, ["supplierName", "totalMinor"])`,
+    ].join('\n');
+    const created = await call('agent_view_create', { title: 'T', source }, ctx);
+    const chart = `DataChart(${comparison()}, "bar", "supplierName", ["totalMinor"])`;
+    const cases: Array<{ patch: string; reason: CompositionRefusal; text: RegExp }> = [
+      // (a) a new statement nothing refers to: the merge would drop it and report success.
+      { patch: `wykres2 = ${chart}`, reason: 'orphaned_statement', text: /Instrukcja wykres2 z patcha nie jest osiagalna z root/ },
+      // (b) a new root that no longer lists `opis`: the merge would delete it.
+      { patch: 'root = Stack([tabela])', reason: 'orphaned_statement', text: /Instrukcja opis zniknelaby z widoku.*opis = null/ },
+      // (c) a line that is not a statement: the merge would skip it.
+      { patch: 'opis = TextContent("Nowy opis")\nto nie jest instrukcja', reason: 'syntax', text: /Nie rozpoznano instrukcji "to nie jest instrukcja"/ },
+      // (d) one name twice: the merge would keep the last.
+      { patch: 'opis = TextContent("Pierwszy")\nopis = TextContent("Drugi")', reason: 'duplicate_statement', text: /Instrukcja opis jest zdefiniowana 2 razy/ },
+    ];
+    for (const c of cases) {
+      const out = await call('agent_view_update', { cardId: created.body.cardId, patch: c.patch }, ctx);
+      expect(out.ok, c.patch).toBe(false);
+      expect(out.body.details.reason, c.patch).toBe(c.reason);
+      expect(out.body.message, c.patch).toMatch(c.text);
+    }
+    // A patch deleting a statement that does not exist is refused too.
+    const ghost = await call('agent_view_update', { cardId: created.body.cardId, patch: 'duch = null' }, ctx);
+    expect(ghost.body.details.reason).toBe('unresolved_reference');
+    let card = h.platform.services.canvas.getCard(created.body.cardId, h.ownerId);
+    expect(card.spec).toEqual({ kind: 'openui', source });
+    expect(card.specVersion).toBe(1);
+
+    // A patch that changes nothing: no new version, and the answer says so.
+    const same = await call('agent_view_update', { cardId: created.body.cardId, patch: 'opis = TextContent("Oferty w sprawie")' }, ctx);
+    expect(same.ok).toBe(true);
+    expect(same.body).toMatchObject({ unchanged: true, specVersion: 1 });
+    expect(h.platform.services.canvas.getCard(created.body.cardId, h.ownerId).specVersion).toBe(1);
+
+    // The same intentions written correctly are applied: a new chart listed in root, a deletion by name.
+    const added = await call(
+      'agent_view_update',
+      { cardId: created.body.cardId, patch: `root = Stack([tabela, wykres2])\nwykres2 = ${chart}\nopis = null` },
+      ctx,
+    );
+    expect(added.ok, JSON.stringify(added.body)).toBe(true);
+    expect(added.body).toMatchObject({ unchanged: false, specVersion: 2 });
+    card = h.platform.services.canvas.getCard(created.body.cardId, h.ownerId);
+    expect((card.spec as { source: string }).source.split('\n')).toEqual([
+      'root = Stack([tabela, wykres2])',
+      `tabela = DataTable(${comparison()}, ["supplierName", "totalMinor"])`,
+      `wykres2 = ${chart}`,
+    ]);
+  });
+
   it('widok innej rozmowy lub innego wlasciciela jest odrzucany; bez rozmowy nie ma widokow', async () => {
     const a = newConversation();
     const b = newConversation();
@@ -481,6 +550,94 @@ describe('narzedzia widokow agenta', () => {
     expect(viaHttp.body.error.details.reason).toBe('component_not_allowed');
   });
 
+  it('ogolne narzedzia canvasu i interfejsu nie siegaja do widokow agenta innej rozmowy', async () => {
+    const a = newConversation();
+    const b = newConversation();
+    const inB = await call('agent_view_create', { title: 'B', source: `root = DataTable(${comparison()})` }, context(b.id));
+    const bSpace = inB.body.spaceId as string;
+    const bCard = inB.body.cardId as string;
+    const before = h.platform.services.canvas.getState(bSpace, h.ownerId);
+    const fromA = context(a.id);
+    fromA.requestUi = async () => ({ commandId: 'x', executed: true });
+
+    const attempts: Array<[string, unknown]> = [
+      ['canvas_list_cards', { spaceId: bSpace }],
+      ['canvas_add_card', { spaceId: bSpace, title: 'x', spec: { kind: 'openui', source: `root = DataTable(${comparison()})` } }],
+      ['canvas_update_card', { cardId: bCard, spec: { kind: 'openui', source: `root = DataTable(${comparison()}, ["supplierName"])` } }],
+      ['canvas_move_card', { cardId: bCard, geometry: { x: 700 } }],
+      ['canvas_remove_card', { cardId: bCard }],
+      ['ui_navigate', { targetId: 'platform.canvas', spaceId: bSpace }],
+    ];
+    for (const [name, input] of attempts) {
+      const out = await call(name, input, fromA);
+      expect(out.body.error, name).toBe('forbidden');
+      expect(out.body.details?.reason, name).toBe('other_conversation_views');
+    }
+    // Also when the run's context points at B's space (a stale or foreign screen).
+    const stale = { ...context(a.id), appContext: { ...fromA.appContext, spaceId: bSpace } };
+    expect((await call('canvas_list_cards', {}, stale)).body.error).toBe('forbidden');
+    expect(h.platform.services.canvas.getState(bSpace, h.ownerId)).toEqual(before);
+
+    // B's views are not in A's catalog; A's own are.
+    const inA = await call('agent_view_create', { title: 'A', source: `root = DataTable(${comparison()})` }, fromA);
+    const catalog = await call('ui_catalog', {}, fromA);
+    const listed = (catalog.body.spaces as Array<{ spaceId: string }>).map((sp) => sp.spaceId);
+    expect(listed).not.toContain(bSpace);
+    expect(listed).toContain(inA.body.spaceId);
+    // The run's own views stay reachable through the generic tools (with the agent-views rule).
+    expect((await call('canvas_list_cards', { spaceId: inA.body.spaceId }, fromA)).body.cards).toHaveLength(1);
+  });
+
+  it('wykonanie w tle w rozmowie A nie zmieni widokow rozmowy B ogolnym narzedziem', async () => {
+    const a = newConversation();
+    const b = newConversation();
+    const inB = await call('agent_view_create', { title: 'B', source: `root = DataTable(${comparison()})` }, context(b.id));
+    const before = h.platform.services.canvas.getState(inB.body.spaceId, h.ownerId);
+    const runtime = new AgentRuntime(
+      h.platform.services,
+      scriptedAgent(
+        [
+          { kind: 'call', name: 'canvas_remove_card', input: { cardId: inB.body.cardId } },
+          { kind: 'call', name: 'canvas_move_card', input: { cardId: inB.body.cardId, geometry: { x: 900 } } },
+        ],
+        { tools },
+      ),
+    );
+    // The user is looking at B while A's run works: B's space is the context's space.
+    const started = await runtime.start({
+      ownerId: h.ownerId,
+      conversationId: a.id,
+      prompt: 'w tle',
+      appContext: { ...context(a.id).appContext, conversationId: b.id, spaceId: inB.body.spaceId },
+    });
+    const events: Array<Record<string, any>> = [];
+    for await (const { event } of started.stream.read(0)) events.push(event as Record<string, any>);
+    await started.done;
+    const results = events.filter((e) => e.type === AGUI_EVENTS.TOOL_CALL_RESULT);
+    expect(results.map((r) => [r.isError, JSON.parse(r.content).details?.reason])).toEqual([
+      [true, 'other_conversation_views'],
+      [true, 'other_conversation_views'],
+    ]);
+    expect(h.platform.services.canvas.getState(inB.body.spaceId, h.ownerId)).toEqual(before);
+  });
+
+  it('zakres rozmowy jest zarezerwowany: API nie tworzy przestrzeni widokow agenta dla dowolnego identyfikatora', async () => {
+    const conv = newConversation();
+    for (const [path, body] of [
+      ['/api/canvas/spaces', { title: 'podrobka', scopeKind: AGENT_VIEWS_SCOPE_KIND, scopeId: conv.id }],
+      ['/api/canvas/spaces', { title: 'sierota', scopeKind: AGENT_VIEWS_SCOPE_KIND, scopeId: 'cnv_nie_istnieje' }],
+      ['/api/canvas/spaces/for-scope', { kind: AGENT_VIEWS_SCOPE_KIND, id: conv.id, title: 'podrobka' }],
+    ] as const) {
+      const res = await api(path, { method: 'POST', body: JSON.stringify(body) });
+      expect(res.status, path).toBe(400);
+      expect(res.body.error.details.reason, path).toBe('reserved_scope');
+    }
+    expect(h.platform.services.canvas.findScopedSpace(h.ownerId, AGENT_VIEWS_SCOPE_KIND, conv.id)).toBeNull();
+    expect(h.platform.services.canvas.findScopedSpace(h.ownerId, AGENT_VIEWS_SCOPE_KIND, 'cnv_nie_istnieje')).toBeNull();
+    // Other scopes are unaffected.
+    expect((await api('/api/canvas/spaces', { method: 'POST', body: JSON.stringify({ title: 'zwykla', scopeKind: 'inny', scopeId: 'x1' }) })).status).toBe(201);
+  });
+
   it('usuniecie rozmowy usuwa jej przestrzen widokow i karty, bez osieroconych rekordow', async () => {
     const conv = newConversation();
     const ctx = context(conv.id);
@@ -520,7 +677,35 @@ describe('narzedzia widokow agenta', () => {
     expect(JSON.stringify(foreign.body)).not.toContain(created.body.cardId);
   });
 
-  it('schematy wejscia narzedzi sa zgodne z MCP, a prompt opisuje widoki agenta sygnaturami z katalogu', () => {
+  it('schematy wejscia narzedzi agent_view_* przechodza kontrole MCP i tak sa wystawiane modelowi', () => {
+    const ours = platformTools(h.platform.services).filter((t) => t.name.startsWith('agent_view'));
+    expect(ours.map((t) => t.name)).toEqual(['agent_views_list', 'agent_view_create', 'agent_view_update', 'agent_view_remove']);
+    const required: Record<string, string[]> = {
+      agent_views_list: [],
+      agent_view_create: ['title', 'source'],
+      agent_view_update: ['cardId'],
+      agent_view_remove: ['cardId'],
+    };
+    for (const tool of ours) {
+      expect(() => assertMcpCompatibleShape(tool.name, tool.inputSchema.shape as Record<string, unknown>)).not.toThrow();
+      // What the model is told is required: optional fields must not be (a `.default()` would be).
+      const json = z.toJSONSchema(tool.inputSchema) as { required?: string[] };
+      expect((json.required ?? []).sort(), tool.name).toEqual([...required[tool.name]!].sort());
+    }
+    // The SDK server is built with them, under their exposed names.
+    const built = buildMcpServer({
+      registry: h.platform.registry,
+      platformTools: platformTools(h.platform.services),
+      contextFor: () => {
+        throw new Error('nie wolane w tescie');
+      },
+    });
+    expect(built.tools.map((t) => t.exposedName)).toEqual(
+      expect.arrayContaining(Object.keys(required).map((n) => `mcp__app__${n}`)),
+    );
+  });
+
+  it('prompt opisuje widoki agenta sygnaturami z katalogu', () => {
     const prompt = buildSystemPrompt({
       registry: h.platform.registry,
       catalog: h.platform.services.catalog,
@@ -538,7 +723,11 @@ describe('narzedzia widokow agenta', () => {
     expect(prompt).toMatch(/NIGDY nie wpisuj do kompozycji liczb/);
     expect(prompt).toMatch(/Nie przelaczaj ekranu uzytkownika do Widokow agenta z wlasnej inicjatywy/);
     expect(prompt).toMatch(/powiedz to wprost/);
-    expect(PLATFORM_CUSTOM_EVENTS.canvasChanged).toBeTruthy();
-    expect(AppError).toBeTruthy();
+    // The whitelist is the prompt's list: no Markdown renderer offered.
+    expect(prompt).not.toContain('MarkDownRenderer');
+    // The grouping example keeps the table's order: a patch repeats unchanged arguments.
+    expect(prompt).toContain(
+      'tabela = DataTable({operation: "modul.operacja", input: {}}, ["poleA", "poleB"], "Tytul", null, null, {field: "poleB", direction: "desc"}, "poleA")',
+    );
   });
 });

@@ -17,6 +17,30 @@ import type { CompositionMode } from '../registry/openui-validation.ts';
 import { newId, nowIso } from '../util/id.ts';
 import type { IdempotencyStore } from './idempotency.ts';
 
+/**
+ * Refuses a conversation's agent views space to a run of another conversation.
+ *
+ * Agent views belong to one conversation, and a run — possibly a background
+ * one — may change only its own. The agent view tools resolve the space from
+ * the run and never see another; the generic canvas tools take a space or card
+ * id, which a run could learn (from a stale context, from an earlier answer), so
+ * they ask this before reading or writing. `undefined` is a call from outside
+ * any run (the HTTP API acting for the user), which may.
+ */
+export function assertOwnConversationViews(
+  space: CanvasSpace,
+  runConversationId: string | null | undefined,
+): void {
+  if (runConversationId === undefined || space.scopeKind !== AGENT_VIEWS_SCOPE_KIND) return;
+  if (space.scopeId === runConversationId) return;
+  throw new AppError(
+    'forbidden',
+    'Ta przestrzen to widoki agenta innej rozmowy; zmienia je tylko wykonanie tamtej rozmowy. ' +
+      'Widoki tej rozmowy obsluguja agent_views_list i agent_view_*.',
+    { reason: 'other_conversation_views' },
+  );
+}
+
 const DEFAULT_GEOMETRY: CardGeometry = { x: 0, y: 0, width: 520, height: 360, z: 0 };
 
 interface SpaceRow {
@@ -163,6 +187,16 @@ export class CanvasService {
       .prepare('SELECT * FROM canvas_spaces WHERE owner_id = ? AND scope_kind = ? AND scope_id = ?')
       .get(ownerId, scopeKind, scopeId) as SpaceRow | undefined;
     return row ? toSpace(row) : null;
+  }
+
+  /** One space, for its owner. */
+  getSpace(spaceId: string, ownerId: string): CanvasSpace {
+    return toSpace(this.#spaceRow(spaceId, ownerId));
+  }
+
+  /** The space holding a card, for its owner. */
+  spaceOfCard(cardId: string, ownerId: string): CanvasSpace {
+    return toSpace(this.#cardRow(cardId, ownerId).space);
   }
 
   /** One card, for its owner. */

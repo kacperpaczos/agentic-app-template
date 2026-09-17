@@ -455,6 +455,34 @@ test.describe('widoki agenta', () => {
     await expect(nodes(page)).toHaveCount(3);
   });
 
+  test('pierwszy widok rozmowy pojawia sie na stronie w trakcie wykonania, nie dopiero po nim', async ({ page }) => {
+    await openApp(page);
+    await openAgentViews(page);
+    const viewsPage = page.getByTestId('agent-views-page');
+    await expect(viewsPage).toHaveAttribute('data-state', 'no-conversation');
+
+    await page.locator('.openui-agent-thread-composer__input').fill('[pierwszy] Pierwszy widok w nowej rozmowie');
+    await page.locator('.pf-chat [aria-label="Send message"]').first().click();
+    const strip = page.getByTestId('run-state');
+    await expect(strip).toHaveAttribute('data-phase', 'running', { timeout: 30_000 });
+    await expect.poll(() => urlParam(page, 'c'), { timeout: 15_000 }).toBeTruthy();
+    const conversation = urlParam(page, 'c')!;
+
+    // The view arrives through `canvas_changed` while the run is still working (it waits 8 s after creating it).
+    await expect(viewsPage).toHaveAttribute('data-state', 'ready', { timeout: 6_000 });
+    await expect(strip).toHaveAttribute('data-phase', 'running');
+    const { cards } = await agentViewsOf(page, conversation);
+    expect(cards).toHaveLength(1);
+    await expect(page.getByTestId(`card-${cards[0]!.id}`).locator('[data-component="DataTable"]')).toHaveAttribute(
+      'data-state',
+      'ready',
+    );
+    await expect(strip).toHaveAttribute('data-phase', 'running');
+
+    await expect(strip).toHaveAttribute('data-phase', 'succeeded', { timeout: 30_000 });
+    expect(await lastCreatedCardId(page)).toBe(cards[0]!.id);
+  });
+
   test('kompozycja w odpowiedzi czatu nie wysyla odczytu dla niepelnej nazwy operacji', async ({ page }) => {
     await openApp(page);
     const sent: string[] = [];

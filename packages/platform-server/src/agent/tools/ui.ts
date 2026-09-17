@@ -1,12 +1,13 @@
 import { z } from 'zod';
 import {
+  AGENT_VIEWS_SCOPE_KIND,
   AppError,
   UI_COMMAND_FAILURES,
   VIEW_FILTER_OPS,
   type ModuleToolDefinition,
   type ToolCallContext,
 } from '@platform/contracts';
-import type { PlatformServices } from '../../services/index.ts';
+import { assertOwnConversationViews, type PlatformServices } from '../../services/index.ts';
 
 /**
  * Moving the interface: the catalog of places, navigation and narrowing.
@@ -42,13 +43,17 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
             values: f.values,
           })),
         })),
-        spaces: services.canvas.listSpaces(ctx.ownerId).map((sp) => ({
-          spaceId: sp.id,
-          title: sp.title,
-          scopeKind: sp.scopeKind,
-          scopeId: sp.scopeId,
-          current: sp.id === ctx.appContext.spaceId,
-        })),
+        // Another conversation's agent views are not a place this run may take the user or edit.
+        spaces: services.canvas
+          .listSpaces(ctx.ownerId)
+          .filter((sp) => sp.scopeKind !== AGENT_VIEWS_SCOPE_KIND || sp.scopeId === ctx.conversationId)
+          .map((sp) => ({
+            spaceId: sp.id,
+            title: sp.title,
+            scopeKind: sp.scopeKind,
+            scopeId: sp.scopeId,
+            current: sp.id === ctx.appContext.spaceId,
+          })),
         currentSpaceId: ctx.appContext.spaceId,
       }),
     },
@@ -90,7 +95,7 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
         if (input.spaceId) {
           // Ownership, before anything is asked of the browser: a space the
           // owner may not see must fail here, not silently on screen.
-          services.canvas.getState(input.spaceId, ctx.ownerId);
+          assertOwnConversationViews(services.canvas.getSpace(input.spaceId, ctx.ownerId), ctx.conversationId);
         }
         const result = await ctx.requestUi({
           targetId: input.targetId,

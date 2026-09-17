@@ -50,8 +50,13 @@ export const qk = {
   read: (operation: string, input: unknown) =>
     ['read', accessScope(), operation, stableJson(input ?? {})] as const,
   readOperations: () => ['read-operations', accessScope()] as const,
-  /** Under `canvas`, so every `canvas_changed` refreshes the conversation's agent views too. */
+  /**
+   * A conversation's agent views. Under `canvas`, so the end of a run refreshes
+   * them with every other canvas read; a `canvas_changed` event during the run
+   * invalidates {@link qk.agentViewsAll} explicitly (see `runEvents.ts`).
+   */
   agentViews: (conversationId: string) => ['canvas', accessScope(), 'agent-views', conversationId] as const,
+  agentViewsAll: () => ['canvas', accessScope(), 'agent-views'] as const,
   uiTargets: () => ['ui-targets', accessScope()] as const,
   uiViews: () => ['ui-views', accessScope()] as const,
 };

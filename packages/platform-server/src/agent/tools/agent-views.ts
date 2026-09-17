@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { mergeStatements } from '@openuidev/lang-core';
 import {
   AGENT_VIEWS_SCOPE_KIND,
   AppError,
@@ -9,7 +8,13 @@ import {
   type ModuleToolDefinition,
   type ToolCallContext,
 } from '@platform/contracts';
-import { AGENT_VIEW_LAYOUT_COMPONENTS, type OpenUiServerCatalog } from '../../registry/openui-validation.ts';
+import {
+  AGENT_VIEW_LAYOUT_COMPONENTS,
+  applyCompositionPatch,
+  compositionRefusal,
+  normalizeCompositionSource,
+  type OpenUiServerCatalog,
+} from '../../registry/openui-validation.ts';
 import type { PlatformServices } from '../../services/index.ts';
 import { mcpToolName } from '../mcp.ts';
 
@@ -135,8 +140,9 @@ export function agentViewTools(services: PlatformServices): Array<ModuleToolDefi
       description:
         'Zmienia istniejacy widok agenta tej rozmowy. patch (zalecany): instrukcje OpenUI Lang, ktore zastepuja ' +
         'instrukcje o tych samych nazwach, np. tabela = DataTable(...); pozostale instrukcje zostaja bez zmian, ' +
-        'nazwa = null usuwa instrukcje. source: cala nowa kompozycja. Polozenie karty i inne widoki sie nie zmieniaja. ' +
-        'Niepoprawny wynik jest odrzucany, a widok zostaje w poprzedniej wersji.',
+        'nazwa = null usuwa instrukcje. Nowa instrukcja musi byc osiagalna z root (zmien tez root), a istniejaca ' +
+        'nie moze zniknac bez jawnego nazwa = null. source: cala nowa kompozycja. Polozenie karty i inne widoki sie ' +
+        'nie zmieniaja. Niepoprawny wynik jest odrzucany, a widok zostaje w poprzedniej wersji; brak zmiany zwraca unchanged=true.',
       effect: 'write',
       alwaysLoad: true,
       inputSchema: z.object({
@@ -176,8 +182,22 @@ export function agentViewTools(services: PlatformServices): Array<ModuleToolDefi
         }
         const card = ownCard(ctx, input.cardId);
         const current = card.spec.kind === 'openui' ? card.spec.source : '';
-        const next =
-          input.source ?? (input.patch !== undefined ? mergeStatements(current, input.patch) : current);
+        let next = current;
+        if (input.patch !== undefined) {
+          // A patch that would lose a statement, or cannot be read as written, is refused before merging.
+          const patched = applyCompositionPatch(current, input.patch);
+          if (patched.problems.length > 0) throw compositionRefusal(patched.problems);
+          next = patched.source;
+        } else if (input.source !== undefined) {
+          next = normalizeCompositionSource(input.source);
+        }
+        /*
+         * Nothing would change: no write, no new version, no event — and the
+         * answer says so, instead of reporting an edit that did not happen.
+         */
+        if (next === current && (input.title === undefined || input.title === card.title)) {
+          return { cardId: card.id, title: card.title, specVersion: card.specVersion, source: current, unchanged: true };
+        }
         const spec = validated(next);
         const updated = await services.canvas.updateSpec(
           {
@@ -195,6 +215,7 @@ export function agentViewTools(services: PlatformServices): Array<ModuleToolDefi
           title: updated.title,
           specVersion: updated.specVersion,
           source: spec.source,
+          unchanged: false,
         };
       },
     },
@@ -261,7 +282,9 @@ export function agentViewsPromptSection(catalog: OpenUiServerCatalog): string[] 
     '  Przyklad: root = Stack([opis, tabela])',
     '           opis = TextContent("Krotkie objasnienie")',
     '           tabela = DataTable({operation: "modul.operacja", input: {}}, ["poleA", "poleB"], "Tytul", null, null, {field: "poleB", direction: "desc"})',
-    '  Zmiana grupowania tej tabeli: patch "tabela = DataTable({operation: \\"modul.operacja\\", input: {}}, [\\"poleA\\", \\"poleB\\"], \\"Tytul\\", null, null, null, \\"poleA\\")".',
+    '  Zmiana grupowania tej tabeli — patch powtarza wszystkie dotychczasowe argumenty i dopisuje tylko nowy:',
+    '           tabela = DataTable({operation: "modul.operacja", input: {}}, ["poleA", "poleB"], "Tytul", null, null, {field: "poleB", direction: "desc"}, "poleA")',
+    '  Nowa instrukcja w patchu musi byc dodana tez do root (np. root = Stack([opis, tabela, wykres])); instrukcja usuwana: nazwa = null.',
     '- Odmowa narzedzia podaje przyczyne (nieznany komponent, operacja, wejscie, pole). Popraw kompozycje; poprzednia wersja widoku zostaje.',
     '- Jesli katalog nie pozwala pokazac tego, o co prosi uzytkownik (brak operacji albo pola), powiedz to wprost.',
     '  Nie obchodz ograniczenia wpisujac liczby do tekstu.',

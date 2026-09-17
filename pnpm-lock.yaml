@@ -83,6 +83,9 @@ importers:
       '@module/procurement':
         specifier: workspace:*
         version: link:../../packages/module-procurement
+      '@openuidev/lang-core':
+        specifier: 0.2.18
+        version: 0.2.18(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))(zod@4.6.5)
       '@platform/contracts':
         specifier: workspace:*
         version: link:../../packages/platform-contracts

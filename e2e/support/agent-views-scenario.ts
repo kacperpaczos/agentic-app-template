@@ -66,6 +66,21 @@ export function agentViewsScript(prompt: string): Step[] {
       { kind: 'text', text: 'Zestawienie jest w Widokach agenta.' },
     ];
   }
+  if (prompt.includes('[pierwszy]')) {
+    // The first view of a conversation, then a long pause before the run ends:
+    // the view must be on screen while the run is still going.
+    return [
+      listCases,
+      {
+        kind: 'call',
+        name: 'agent_view_create',
+        input: (calls) => ({ title: TABLE_TITLE, source: tableComposition(caseIdFrom(calls)) }),
+      },
+      { kind: 'text', text: 'Widok jest juz w Widokach agenta. ', delayMs: 100 },
+      { kind: 'wait', delayMs: 8000 },
+      { kind: 'text', text: 'Koniec pracy.' },
+    ];
+  }
   if (prompt.includes('[wykres]')) {
     return [
       listCases,
