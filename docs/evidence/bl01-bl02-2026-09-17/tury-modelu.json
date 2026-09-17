@@ -1,6 +1,6 @@
 {
   "budzet": 12,
-  "wydane": 7,
+  "wydane": 8,
   "tury": [
     {
       "nr": 1,
@@ -51,6 +51,13 @@
       "proba": "T27",
       "polecenie": "Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.",
       "runId": "run_39bc79cc133d4bce8fcc"
+    },
+    {
+      "nr": 8,
+      "o": "2026-09-17T19:53:33.357Z",
+      "proba": "T27",
+      "polecenie": "Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.",
+      "runId": "run_24132e16b1cf49a9a624"
     }
   ]
 }

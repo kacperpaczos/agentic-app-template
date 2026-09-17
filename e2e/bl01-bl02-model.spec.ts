@@ -736,9 +736,31 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       );
       const procurementCase = cases.find((c) => c.code === 'PC-2026-01')!;
 
+      /*
+       * The user opens the case first, from the interface.
+       *
+       * Two earlier runs of this proba asked for the summary while the case was
+       * only named by its code ("ze sprawy PC-2026-01"); both times the agent
+       * composed `input: {caseId: "PC-2026-01"}` — the code where the
+       * identifier belongs — and the card showed the read's refusal instead of
+       * values. That failure is recorded in
+       * `docs/evidence/bl01-bl02-2026-09-17/t27-proba-a-kod-sprawy-jako-id.json`;
+       * this scenario is the *other* half of the proba: with the case on screen,
+       * whether the agent's own space composes, redraws and survives a change of
+       * the data underneath it. It is not a retry of the same scenario.
+       */
+      await page.getByRole('link', { name: 'Wszystkie sprawy' }).click();
+      await page.getByTestId(`case-tile-${procurementCase.id}`).click();
+      await expect(page.getByTestId('case-detail-page')).toBeVisible();
+      expect(new URL(page.url()).pathname).toBe(`/cases/${procurementCase.id}`);
+      evidence.scenariusz =
+        'T27 wariant B — uzytkownik ma sprawe otwarta na ekranie; polecenie wyslane z ekranu sprawy';
+
       /* --------------------------- 1. the listing ---------------------------- */
+      // The working space as it is at the moment of the command; agent views must not move it.
+      const workspaceAtCommand = param(page, 's');
       const first =
-        'Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.';
+        'Zestaw mi w widokach agenta pozycje ofert tej sprawy: dostawca, nazwa pozycji i cena jednostkowa.';
       const run1 = await sendForRun(page, first, evidence.proba as string);
       const phase1 = await settled(page, run1.runId);
       const conversationId = param(page, 'c')!;
@@ -751,6 +773,8 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
         .filter((r) => r.name === 'mcp__app__agent_view_create')
         .map((r) => r.result.cardId as string);
       expect(created1.length, 'wykonanie nie utworzylo zadnego widoku agenta').toBeGreaterThan(0);
+      // The user opens the agent's space from the navigation to see the result.
+      await openAgentViews(page);
       const state1 = await agentViewsOf(page, conversationId);
       expect(state1.cards.length, 'przestrzen rozmowy jest pusta').toBeGreaterThan(0);
       // Every card in this conversation's space was made by the run under test —
@@ -760,7 +784,8 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       await expect(viewsPage(page)).toHaveAttribute('data-conversation-id', conversationId);
       // The conversation's space is its own, not the working space the user is in.
       expect(state1.space!.id).not.toBe(workspace);
-      expect(param(page, 's')).toBe(workspace);
+      expect(state1.space!.id).not.toBe(workspaceAtCommand);
+      expect(param(page, 's')).toBe(workspaceAtCommand);
 
       const withTable = state1.cards.find((c) => JSON.stringify(c.spec ?? {}).includes('DataTable'));
       expect(withTable, 'zestawienie nie jest tabela danych').toBeTruthy();
