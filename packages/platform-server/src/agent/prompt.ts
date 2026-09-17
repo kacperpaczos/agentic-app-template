@@ -1,6 +1,7 @@
-import { FILE_ANALYSIS, type AppContext } from '@platform/contracts';
+import { FILE_ANALYSIS, type AppContext, type ReadOperationSummary } from '@platform/contracts';
 import type { ComponentCatalog } from '../registry/catalog.ts';
 import type { ServerModuleRegistry } from '../registry/modules.ts';
+import { describeReadOperations } from '../registry/read-operations.ts';
 import { mcpToolName } from './mcp.ts';
 
 export interface PromptInput {
@@ -114,7 +115,7 @@ export function buildSystemPrompt(input: PromptInput): string {
    * what makes `mode="live"` usable at all: without it the model would have to
    * guess an operation name, and every guess would be rejected at creation.
    */
-  const readOperations = input.registry.readOperations;
+  const readOperations = describeReadOperations(input.registry);
   if (readOperations.length) {
     parts.push(
       '',
@@ -123,9 +124,14 @@ export function buildSystemPrompt(input: PromptInput): string {
       'Jako content podaj deskryptor {"operation":"<nazwa>","input":{...}} z ponizszej listy;',
       'przy kazdym otwarciu artefaktu aplikacja uruchomi te operacje ponownie i pokaze aktualny wynik.',
       'Uzywaj mode="live" dla zestawien, ktore maja pozostac aktualne, a mode="snapshot" dla raportu z konkretnej chwili.',
-      ...readOperations.map(
-        (op) => `- ${op.qualifiedName}: ${op.definition.description} (input: ${describeShape(op.definition.inputSchema)})`,
-      ),
+      /*
+       * The fields come from the operation's own result descriptor — the list
+       * data components are validated against — so a field named here is one a
+       * view can actually show, and one not named here does not exist.
+       */
+      'Przy operacjach z deskryptorem wyniku podane sa rekord i jego pola (nazwa: etykieta, typ) —',
+      'tylko tych nazw pol mozna uzywac; innych pol wynik nie ma.',
+      ...readOperations.map(describeReadOperationLine),
     );
   }
 
@@ -196,8 +202,15 @@ export function buildSystemPrompt(input: PromptInput): string {
   return parts.filter((p) => p !== '').join('\n');
 }
 
-/** One-line description of a Zod object's keys, for the prompt listing. */
-function describeShape(schema: { shape?: Record<string, unknown> }): string {
-  const keys = Object.keys(schema.shape ?? {});
-  return keys.length ? keys.join(', ') : 'brak';
+/** One read operation, with its record and fields when it declares them. */
+function describeReadOperationLine(op: ReadOperationSummary): string {
+  const input = op.inputKeys.length ? op.inputKeys.join(', ') : 'brak';
+  const line = `- ${op.name}: ${op.description} (input: ${input})`;
+  const d = op.descriptor;
+  if (!d) return line;
+  const fields = d.fields
+    .map((f) => `${f.field}: ${f.label}, ${f.type}${f.unit ? ` [${f.unit}]` : ''}`)
+    .join('; ');
+  const where = d.collection ? `kolekcja ${d.collection}` : 'wynik';
+  return `${line}\n  ${where}, rekord ${d.record.kind} (id: ${d.record.idField}); pola: ${fields}`;
 }

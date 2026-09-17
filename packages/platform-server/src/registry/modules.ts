@@ -6,9 +6,11 @@ import type {
   RouteRegistrar,
   ServerModule,
   ToolCallContext,
+  ViewDefinition,
 } from '@platform/contracts';
 import { AppError , type UiTarget } from '@platform/contracts';
 import { buildUiTargetCatalog } from './ui-targets.ts';
+import { checkReadDescriptor, checkViewAgainstTarget, checkViewShape } from './views.ts';
 
 export interface RegisteredRoute {
   method: 'get' | 'post' | 'patch' | 'delete';
@@ -22,6 +24,11 @@ export interface RegisteredReadOperation {
   qualifiedName: string;
   moduleId: string;
   definition: ModuleReadOperation<never>;
+}
+
+export interface RegisteredView {
+  moduleId: string;
+  definition: ViewDefinition;
 }
 
 export interface RegisteredTool {
@@ -43,12 +50,47 @@ export class ServerModuleRegistry {
   readonly #routes: RegisteredRoute[] = [];
   readonly #tools = new Map<string, RegisteredTool>();
   readonly #readOperations = new Map<string, RegisteredReadOperation>();
+  readonly #views = new Map<string, RegisteredView>();
 
   register(mod: ServerModule): this {
     if (this.#modules.some((m) => m.meta.id === mod.meta.id)) {
       throw new AppError('conflict', `Modul ${mod.meta.id} jest juz zarejestrowany.`);
     }
+
+    /*
+     * Everything this module declares about reads and views is checked before
+     * any of it is recorded, so a refused module leaves the registry exactly as
+     * it was rather than half-installed.
+     */
+    const readOperations = new Map<string, RegisteredReadOperation>();
+    for (const op of mod.readOperations ?? []) {
+      const qualifiedName = `${mod.meta.id}.${op.name}`;
+      if (this.#readOperations.has(qualifiedName) || readOperations.has(qualifiedName)) {
+        throw new AppError('conflict', `Operacja odczytu ${qualifiedName} juz istnieje.`);
+      }
+      checkReadDescriptor(qualifiedName, op);
+      readOperations.set(qualifiedName, { qualifiedName, moduleId: mod.meta.id, definition: op });
+    }
+
+    const views = new Map<string, RegisteredView>();
+    for (const raw of mod.views ?? []) {
+      const view = checkViewShape(mod.meta.id, raw);
+      if (this.#views.has(view.id) || views.has(view.id)) {
+        throw new AppError('conflict', `Widok ${view.id} jest juz zarejestrowany.`);
+      }
+      checkViewAgainstTarget({
+        moduleId: mod.meta.id,
+        view,
+        target: (mod.uiTargets ?? []).find((t) => t.id === view.id),
+        readOperation: (name) =>
+          (readOperations.get(name) ?? this.#readOperations.get(name))?.definition,
+      });
+      views.set(view.id, { moduleId: mod.meta.id, definition: view });
+    }
+
     this.#modules.push(mod);
+    for (const [name, entry] of readOperations) this.#readOperations.set(name, entry);
+    for (const [id, entry] of views) this.#views.set(id, entry);
 
     for (const tool of mod.tools) {
       const qualifiedName = `${mod.meta.id}_${tool.name}`;
@@ -56,18 +98,6 @@ export class ServerModuleRegistry {
         throw new AppError('conflict', `Narzedzie ${qualifiedName} juz istnieje.`);
       }
       this.#tools.set(qualifiedName, { qualifiedName, moduleId: mod.meta.id, definition: tool });
-    }
-
-    for (const op of mod.readOperations ?? []) {
-      const qualifiedName = `${mod.meta.id}.${op.name}`;
-      if (this.#readOperations.has(qualifiedName)) {
-        throw new AppError('conflict', `Operacja odczytu ${qualifiedName} juz istnieje.`);
-      }
-      this.#readOperations.set(qualifiedName, {
-        qualifiedName,
-        moduleId: mod.meta.id,
-        definition: op,
-      });
     }
 
     if (mod.routes) {
@@ -118,6 +148,15 @@ export class ServerModuleRegistry {
 
   readOperation(qualifiedName: string): RegisteredReadOperation | undefined {
     return this.#readOperations.get(qualifiedName);
+  }
+
+  /** Every module view, in registration order. */
+  views(): ViewDefinition[] {
+    return [...this.#views.values()].map((v) => v.definition);
+  }
+
+  view(id: string): RegisteredView | undefined {
+    return this.#views.get(id);
   }
 
   /**

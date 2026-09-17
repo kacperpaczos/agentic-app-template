@@ -21,6 +21,86 @@ interface BuildInput {
   contextFor: () => ToolCallContext;
 }
 
+/** One tool as the MCP server offers it. */
+export interface ToolEntry {
+  /** Name inside the MCP server; Claude sees `mcp__app__<localName>`. */
+  localName: string;
+  moduleId: string;
+  def: ModuleToolDefinition<never>;
+}
+
+/** Platform tools first, then every module's, in registration order. */
+export function collectToolEntries(input: {
+  registry: ServerModuleRegistry;
+  platformTools: ModuleToolDefinition<never>[];
+}): ToolEntry[] {
+  return [
+    ...input.platformTools.map((def) => ({ localName: def.name, moduleId: 'platform', def })),
+    ...input.registry.tools.map((t) => ({
+      localName: t.qualifiedName,
+      moduleId: t.moduleId,
+      def: t.definition,
+    })),
+  ];
+}
+
+/**
+ * What a tool call answers, in the MCP result shape. A type alias rather than an
+ * interface so it satisfies the SDK's index-signature result type.
+ */
+export type ToolInvocationResult = {
+  isError?: true;
+  content: Array<{ type: 'text'; text: string }>;
+};
+
+/**
+ * Runs one tool call: validate the arguments against the tool's schema, call
+ * its handler with the run's context, and turn the outcome into an MCP result.
+ *
+ * The only way a tool is executed, whoever asks — the MCP server the model
+ * talks to, or a scripted stand-in in a test — so a test that calls a tool
+ * exercises the validation and error mapping the model gets, not a copy.
+ */
+export async function invokeTool(
+  entry: Pick<ToolEntry, 'localName' | 'def'>,
+  args: unknown,
+  ctx: ToolCallContext,
+): Promise<ToolInvocationResult> {
+  const { localName, def } = entry;
+  try {
+    const parsed = def.inputSchema.safeParse(args ?? {});
+    if (!parsed.success) {
+      throw new AppError('validation_failed', `Nieprawidlowe wejscie narzedzia ${localName}.`, {
+        issues: parsed.error.issues.map((i) => ({
+          path: i.path.join('.'),
+          message: i.message,
+        })),
+      });
+    }
+    const result = await def.handler(parsed.data as never, ctx);
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify(result ?? null) }],
+    };
+  } catch (err) {
+    const appErr = AppError.from(err);
+    // Returned as a tool error rather than thrown, so the agent can read
+    // the reason and correct itself instead of the whole run dying.
+    return {
+      isError: true,
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify({
+            error: appErr.code,
+            message: appErr.message,
+            details: appErr.details ?? null,
+          }),
+        },
+      ],
+    };
+  }
+}
+
 /**
  * Builds the in-process MCP server exposed to the Claude Agent SDK.
  *
@@ -33,56 +113,16 @@ export function buildMcpServer(input: BuildInput): {
   server: ReturnType<typeof createSdkMcpServer>;
   tools: McpHostTool[];
 } {
-  const entries: Array<{ localName: string; moduleId: string; def: ModuleToolDefinition<never> }> = [
-    ...input.platformTools.map((def) => ({ localName: def.name, moduleId: 'platform', def })),
-    ...input.registry.tools.map((t) => ({
-      localName: t.qualifiedName,
-      moduleId: t.moduleId,
-      def: t.definition,
-    })),
-  ];
+  const entries = collectToolEntries(input);
 
-  const sdkTools = entries.map(({ localName, def }) => {
+  const sdkTools = entries.map((entry) => {
+    const { localName, def } = entry;
     assertMcpCompatibleShape(localName, def.inputSchema.shape as Record<string, unknown>);
     return tool(
       localName,
       def.description,
       def.inputSchema.shape,
-      async (args: unknown) => {
-        const ctx = input.contextFor();
-        try {
-          const parsed = def.inputSchema.safeParse(args ?? {});
-          if (!parsed.success) {
-            throw new AppError('validation_failed', `Nieprawidlowe wejscie narzedzia ${localName}.`, {
-              issues: parsed.error.issues.map((i) => ({
-                path: i.path.join('.'),
-                message: i.message,
-              })),
-            });
-          }
-          const result = await def.handler(parsed.data as never, ctx);
-          return {
-            content: [{ type: 'text' as const, text: JSON.stringify(result ?? null) }],
-          };
-        } catch (err) {
-          const appErr = AppError.from(err);
-          // Returned as a tool error rather than thrown, so the agent can read
-          // the reason and correct itself instead of the whole run dying.
-          return {
-            isError: true,
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify({
-                  error: appErr.code,
-                  message: appErr.message,
-                  details: appErr.details ?? null,
-                }),
-              },
-            ],
-          };
-        }
-      },
+      async (args: unknown) => invokeTool(entry, args, input.contextFor()),
       /*
        * `alwaysLoad` keeps a tool in the prompt instead of behind tool search.
        * See `ModuleToolDefinition.alwaysLoad` for the turn that made this

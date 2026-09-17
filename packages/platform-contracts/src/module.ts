@@ -2,6 +2,7 @@ import type { z } from 'zod';
 import type { UiCommandResult, UiTarget, ViewFilter } from './ui.ts';
 import type { AppContext } from './agent.ts';
 import type { CardSpec } from './canvas.ts';
+import type { ReadResultDescriptor, ViewDefinition } from './views.ts';
 
 /* -------------------------------------------------------------------------- */
 /*  Module identity + navigation                                              */
@@ -150,6 +151,16 @@ export interface ModuleReadOperation<TInput = unknown> {
   /** Must be a `z.object({...})`; the platform validates descriptors against it. */
   inputSchema: z.ZodObject<ToolInputShape>;
   run: (input: TInput, ctx: ReadOperationContext) => Promise<unknown>;
+  /**
+   * What the result holds: where its records are, what identifies one, and
+   * every field a view may show, with its label, type and unit.
+   *
+   * Required for a read that data components (`DataTable`, `DataChart`,
+   * `DataSummary`) render. Validated when the module registers, and checked
+   * against the result on every read: a result without the declared collection
+   * is reported as a failure, never shown as an empty list.
+   */
+  result?: ReadResultDescriptor;
 }
 
 export interface ToolCallContext {
@@ -248,6 +259,15 @@ export interface ServerModule {
    * artifact is opened. See {@link ModuleReadOperation}.
    */
   readOperations?: ModuleReadOperation<never>[];
+  /**
+   * This module's screens as OpenUI Lang compositions over the shared catalog.
+   *
+   * A view with its own screen has the `id` of its `UiTarget`. When that target
+   * declares `filter`, the view must name its `primaryOperation`, and every
+   * narrowable field must be a field of that read's descriptor — refused at
+   * startup otherwise. Served to the browser by `GET /api/ui/views`.
+   */
+  views?: ViewDefinition[];
   cardComponents?: CardComponentDescriptor[];
   routes?: (register: RouteRegistrar) => void;
   /**

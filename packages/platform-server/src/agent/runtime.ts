@@ -16,7 +16,7 @@ import { RunEventStream } from './events.ts';
 import { newId } from '../util/id.ts';
 import { ConversationProjection, type ProjectedMessage } from './projection.ts';
 import { buildMcpServer, mcpToolName } from './mcp.ts';
-import { platformTools, stageFileIntoWorkspace } from './platform-tools.ts';
+import { platformTools, stageFileIntoWorkspace } from './tools/index.ts';
 import { buildSystemPrompt } from './prompt.ts';
 import { createRunWorkspace, sandboxSettings, type RunWorkspace } from './sandbox.ts';
 import { analysisToolkit } from './toolkit.ts';
