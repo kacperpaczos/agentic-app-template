@@ -654,13 +654,15 @@ th[aria-sort='descending'] .pf-sort::after { content: '▼' / ''; opacity: 1; }
 
 /* Record actions: a button per row, a small form in the row being changed. */
 .pf-table th.pf-table__actions, .pf-table td.pf-table__actions { white-space: nowrap; width: 1%; }
-.pf-record-action { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 8px; white-space: normal; min-width: 220px; }
+/* Stacked, so an open form widens its column as little as possible. */
+.pf-record-action { display: flex; flex-direction: column; gap: 4px; white-space: normal; width: 10em; }
 .pf-record-action__field { display: flex; flex-direction: column; gap: 2px; }
 .pf-record-action__field label { font-size: 11px; color: var(--pf-muted); font-weight: 600; }
 .pf-record-action__field input {
-  border: 1px solid var(--pf-border); border-radius: 6px; padding: 3px 6px; font: inherit; font-size: 13px; width: 9em;
+  border: 1px solid var(--pf-border); border-radius: 6px; padding: 3px 6px; font: inherit; font-size: 13px;
+  width: 100%; box-sizing: border-box;
 }
 .pf-record-action__field input[aria-invalid='true'] { border-color: var(--pf-error); }
 .pf-record-action__buttons { display: flex; gap: 6px; }
-.pf-record-action__error { flex-basis: 100%; padding: 4px 8px; font-size: 12px; }
+.pf-record-action__error { padding: 4px 8px; font-size: 12px; }
 .pf-record-action__status { margin: 0 0 8px; font-size: 12px; color: var(--pf-ok); }
