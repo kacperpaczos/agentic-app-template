@@ -1,5 +1,7 @@
 # Raport konsolidacji AgenticApp w szablon `agentic-app-template`
 
+> **Aktualizacja 2026-09-17:** repozytorium jest teraz **publiczne**, a kod zawiera poprawki AgenticApp z 2026-09-17; liczby macierzy i regresji w tym raporcie dotyczą stanu z 2026-09-16. Aktualny stan: [`CONSOLIDATION-UPDATE-2026-09-17.md`](CONSOLIDATION-UPDATE-2026-09-17.md).
+
 **Data:** 2026-09-16 · **Zakres fazy:** dokumentacja, złożenie szablonu z istniejącego kodu, regresja i
 odtwarzalność istniejącej wersji, repozytorium i publikacja. Ocena 200 kryteriów służy w tej fazie
 utworzeniu backlogu — brakujące funkcje nie były implementowane. **Nie jest to odbiór 200 kryteriów.**

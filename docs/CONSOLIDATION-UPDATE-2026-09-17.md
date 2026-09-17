@@ -18,7 +18,7 @@ konsolidacji (części A–E) z nadrzędnym celem aktualizacji; wcześniejszy ra
   produkcyjny (§4). Nieudane uruchomienie sondy (błąd configu próby) jest opisane.
 - **Macierz:** 59 potwierdzonych, 118 częściowych, 15 niespełnionych, 8 niesprawdzonych z 200; 0 z 12
   warstw zamkniętych; próby 1 / 22 / 4 / 0. **L2.17 i BL-01 pozostają otwarte** (§5).
-- **Publikacja:** §6.
+- **Publikacja:** repozytorium **publiczne** i oznaczone jako GitHub template, potwierdzone bez uwierzytelnienia; `main` przesunięty fast-forward, bez przepisywania historii; kopia z GitHuba przechodzi `verify` (§6).
 
 ## 1. Stan wejściowy
 
@@ -193,7 +193,19 @@ zawężanie po stronie serwera dla dużych zbiorów, trafianie w zadeklarowane w
 
 ## 6. Publikacja
 
-_Sekcja uzupełniana po wypchnięciu i zmianie widoczności — patrz kolejny commit z tym plikiem._
+| Krok | Wynik |
+|---|---|
+| Skan przed zmianą widoczności | wszystkie pliki do commita i **każdy blob całej historii** (wszystkie commity, gałęzie i tag): klucze Anthropic/GitHub/AWS/Google, klucze prywatne, wartości `accessToken`/`refreshToken`, `Bearer`, ciasteczko sesji, hasła, adresy e-mail, ścieżki katalogów domowych, nazwa użytkownika systemu, ślady schowka i innych narzędzi, identyfikatory UUID w dokumentach. Trafienia wyłącznie niewrażliwe: nazwa konta GitHub w adresie repozytorium i syntetyczne wartości testowe `sk-ant-SYNTETYCZNY`. Binaria w historii: dwa zrzuty ekranu z danymi syntetycznymi (widoczny typ planu subskrypcji lokalnego konta). Brak plików `.env`, baz, kopii i kluczy |
+| Metadane commitów | autor `Kacper Paczos <kacperpaczos2024@proton.me>` we wszystkich commitach. Ten adres występuje już w **540 publicznych commitach** tego konta na GitHubie (wyszukiwanie `author-email`), więc zmiana widoczności nie ujawnia go po raz pierwszy — historii nie przepisywano |
+| Commity | `d142b85` — przeniesienie kodu (25 plików); `1b57f81` — dokumentacja, macierz, dowody; commit z tą sekcją — tylko ten plik |
+| Wypchnięcie | `825c086..1b57f81 main -> main` — fast-forward, bez force-push i bez przepisywania historii; gałąź robocza `update-2026-09-17` pozostała lokalna |
+| Czysta kopia z GitHuba `1b57f81` | drzewo identyczne z lokalnym; `pnpm install --frozen-lockfile` 0 (4 s); `pnpm verify` 0 (15 s; 278/278; macierz 200 kryteriów spójna, 59/118/15/8); `pnpm start` — 11/11 kroków OK |
+| Widoczność | `gh repo edit --visibility public` po skanie. Potwierdzone **bez uwierzytelnienia**: strona repozytorium HTTP 200; API `private=false`, `visibility=public`, `is_template=true`, `default_branch=main`; `git ls-remote` i `git clone` bez poświadczeń (z wyłączoną konfiguracją globalną) → `1b57f81`, tag `v0.1.0-baseline` |
+| Template | `is_template=true` (bez zmian od 2026-09-16) |
+| Licencja | brak (`license=null`) — nie wybrano jej bez decyzji właściciela; publiczne repozytorium bez licencji nie daje innym prawa do użycia kodu poza tym, co przewiduje regulamin GitHub |
+| Weryfikacja commitu z tą sekcją | zapisana w wiadomości adnotowanego tagu `v0.2.0-update-2026-09-17` na tym commicie (raport nie może zawierać hasha commitu, w którym sam się znajduje) |
+
+Adres: **https://github.com/kacperpaczos/agentic-app-template** (publiczne, GitHub template).
 
 ## 7. Ograniczenia i próby niewykonane
 
