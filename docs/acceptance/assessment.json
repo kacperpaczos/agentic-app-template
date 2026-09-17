@@ -1,8 +1,8 @@
 {
   "meta": {
-    "codeState": "commit d142b85 (kod z 7d6bd78 + przeniesione poprawki AgenticApp z 2026-09-17: ui_filter i zawężanie w adresie, alwaysLoad, wyszukiwanie \"*\" z totals; poza tym kod identyczny z AgenticApp, różnice wyłącznie narzędzi szablonu — docs/CONSOLIDATION-UPDATE-2026-09-17.md); regresja w czystej kopii d142b85: pnpm verify 278/278, pnpm test:e2e 72/72 (cztery tury na prawdziwym modelu), sonda ui_filter na prawdziwym modelu, pnpm check:module-swap, start produkcyjny — docs/evidence/template-update-2026-09-17/przebieg-d142b85/. Oceny z 2026-09-16 nieobjęte zmianą kodu pozostają bez zmian (regresja nie oblała żadnego testu, na którym się opierały).",
-    "date": "2026-09-17 (aktualizacja ocen z 2026-09-16)",
-    "scope": "ocena różnic dla bazowej wersji szablonu (faza konsolidacji). Oceny: analiza kodu i testów szablonu wobec treści kryteriów, z historyczną oceną wykonawcy AgenticApp jako punktem wyjścia, skorygowana o wyniki regresji. To nie jest odbiór 200 kryteriów."
+    "codeState": "commit 97a7945 galezi bl01-bl02/integracja (Task 1-10: fundament widokow danych, ekrany modulu jako kompozycje, stan widoku w adresie, Widoki agenta z walidacja OpenUI, semantyczny opis ekranu, wskazanie wartosci pola rekordu, akcje rekordu, proby modelowe T25-T27, fala poprawek po przegladzie koncowym). Weryfikacja koordynatora w czystej kopii: pnpm install --frozen-lockfile, pnpm verify exit 0 (32 pliki / 542 testy, z kontrola typow e2e), pnpm test:e2e exit 0 (114 testow, spece modelowe poza domyslnym przebiegiem), pnpm check:module-swap exit 0, start produkcyjny na porcie testowym. Dowody prob modelowych: docs/evidence/bl01-bl02-2026-09-17/.",
+    "date": "2026-09-18",
+    "scope": "ocena po zamknieciu pakietow BL-01 i BL-02. Zmieniono oceny kryteriow, dla ktorych powstal dowod na tym kodzie; pozostale oceny z 2026-09-17 bez zmian. To nadal nie jest odbior wszystkich 200 kryteriow."
   },
   "criteria": {
     "L1.1": {
@@ -172,10 +172,10 @@
     },
     "L2.1": {
       "status": "czesciowe",
-      "evidence": "test",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "Serwer: cardComponents modułu (packages/module-procurement/src/server/index.ts) i platform-components.ts mają schematy Zod; tests/contracts.test.ts „odrzuca nieprawidlowe wlasciwosci znanego komponentu” i „odrzuca nieznany komponent karty”; tests/platform-boundary.test.ts „przyjmuje dowolny modul testowy: migracja, narzedzie, trasa, komponent”. Przeglądarka: buildRegistry (packages/platform-ui/src/catalog/registry.tsx) dołącza openuiComponents modułu do openuiLibrary z @openuidev/react-ui (kod). Nie obejmuje: rejestracji wszystkich komponentów domenowych w katalogu OpenUI.",
-      "gap": "Tylko 2 z 7 komponentów kart domeny (OfferComparison, OfferCostChart) są zdefiniowane przez defineComponent w katalogu OpenUI; caseSummary, offerList, deliveryTerms, offerItemForm i provenance istnieją wyłącznie we własnym katalogu kart, a renderery React dostają props typu Record<string, unknown>. Komentarz w registry.tsx powołuje się na nieistniejący tests/catalog-parity.test.ts — rozjazd katalogu serwera i rendererów ujawnia się dopiero w runtime („Brak renderera”).",
+      "proof": "Komponenty danych platformy (DataTable, DataChart, DataSummary) i komponenty ekranow modulu (CaseHeader, CaseOfferSources, ItemProvenance, SectionHeading) sa zdefiniowane przez defineComponent z typowanymi schematami propsow w jednym, wspolnym dla przegladarki i serwera miejscu; zgodnosc katalogow sprawdza tests/openui-catalog-parity.test.ts.",
+      "gap": "Karty canvasu modulu (caseSummary, offerList, comparisonTable, costChart, deliveryTerms, offerItemForm, provenance) nadal istnieja tylko we wlasnym katalogu kart, a ich renderery dostaja props typu Record<string, unknown>.",
       "backlog": "BL-10",
       "scenarios": [],
       "historical": {
@@ -242,12 +242,11 @@
       }
     },
     "L2.6": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/access-context.spec.ts „po przelaczeniu zaden wiersz poprzedniej tozsamosci nie jest widoczny” — data-testid access-denied z data-error-code forbidden lub not_found i brak case-detail-page; e2e/app.spec.ts „brakujace dane sa oznaczone jako brakujace” (pf-missing w karcie); e2e/session-restore.spec.ts stan conversation-missing. Kod: QueryErrorState (packages/platform-ui/src/components/ErrorState.tsx) rozróżnia access-denied i query-error; karty mają Loading, Failure i pf-state--empty. Nie obejmuje: stanów ładowania, pustego zbioru i ogólnego błędu w GUI.",
-      "gap": "Brak testu, że ładowanie (np. „Wczytywanie przestrzeni…”), brak danych (pf-state--empty) i błąd pobrania (query-error) są widoczne i odróżnialne od siebie; po przełączeniu tożsamości test sprawdza zero kafelków, a nie komunikat pustego stanu.",
-      "backlog": "BL-10",
+      "proof": "Komponenty danych maja rozlaczne stany prezentacji (packages/platform-ui/src/views/DataFrame.tsx: data-state = loading | ready | empty | error | forbidden), a pusty wynik zawezenia jest stanem pustym z liczbami, nie bledem. Dowod: e2e/composed-views.spec.ts, e2e/view-state.spec.ts (0 z N), tests/data-components-describe.test.ts i tests/canvas-display.test.ts (blad odswiezenia nad danymi z pamieci podrecznej pokazany jako blad).",
+      "gap": "—",
       "scenarios": [
         "T12",
         "T26"
@@ -327,8 +326,8 @@
       "status": "czesciowe",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "e2e/agent-ui.spec.ts „pytanie o dane przenosi na ich widok, a nie tylko je opisuje” (PRAWDZIWY model, czysta kopia d142b85, 25,6 s): start na /files, polecenie „Co jest w dostawcach?”, asercja na pasku adresu — pathname /data i widoczny data-page, niezależnie od treści odpowiedzi; sonda docs/evidence/template-update-2026-09-17/przebieg-d142b85/09-sonda-ui-filter-model.json: model otwiera /data z zawężeniem, potwierdzenia klienta executed=true. e2e/ui-navigation.spec.ts (serwer skryptowany): otwarcie /files i podświetlenie ustawienia settings-auth. Nie obejmuje: podświetlenia ustawienia i przełączenia przestrzeni przez prawdziwy model.",
-      "gap": "Otwarcie widoku przez prawdziwy model ma teraz dowód, ale pokazanie ustawienia lub elementu (podświetlenie) i przełączenie przestrzeni (spaceId) przez model nie mają próby; scenariusz skryptowany nadal woła requestUi z pominięciem handlera ui_navigate.",
+      "proof": "Prawdziwy model otwiera widok i wskazuje element: proba T25 (docs/evidence/bl01-bl02-2026-09-17/t25-wskazanie-wartosci.json) konczy sie podswietlona komorka rekordu, a proba T26 zawezeniem i sortowaniem widocznym w kontrolkach.",
+      "gap": "Pokazanie ustawienia (platform.settings.auth) i przelaczenie przestrzeni pracy przez prawdziwy model nadal bez proby — obie sciezki pokrywa tylko scenariusz skryptowany (e2e/ui-navigation.spec.ts).",
       "backlog": "BL-03",
       "scenarios": [
         "T23"
@@ -338,8 +337,8 @@
       "status": "czesciowe",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/ui-navigation.spec.ts „otwarcie ustawienia podswietla kontrolke i niczego nie zmienia” (data-ui-highlight=true, potem zdjęte; /api/status auth.method i credential.state bez zmian) oraz „niedostepny cel daje czytelna odmowe, a widok sie nie zmienia” (executed=false, unknown_target, pathname /cases); tests/ui-navigation.test.ts „element nieobecny na ekranie to porazka z wlasnym powodem”, „cudza przestrzen pracy jest odrzucona przed dotknieciem interfejsu”, „pokazanie ustawienia nie ma zadnej operacji zmiany wartosci”. Nie obejmuje: odsłonięcia ukrytej sekcji, przewinięcia oraz braku dostępu i nieobecnego elementu w GUI.",
-      "gap": "UiCommandRunner.reveal (packages/platform-ui/src/shell/UiCommandRunner.tsx) wykonuje tylko querySelector, scrollIntoView i atrybut podświetlenia — nie rozwija zwiniętych sekcji, a element ukryty, lecz obecny w DOM, liczy się jako pokazany; przewinięcie nie jest asertowane; odmowy not_present i forbidden sprawdzane tylko w Vitest z symulowanym potwierdzeniem; porównanie /api/status dotyczy pól, których UI i tak nie zmienia.",
+      "proof": "Odslanianie rekordu zdejmuje zawezenie, ktore go ukrywa, przechodzi na jego strone, przewija i podswietla komorke, a kazda zmiana prezentacji jest zgloszona w wyniku i na pasku nad widokiem (packages/platform-ui/src/shell/uiReveal.ts, ViewFilterBanner). Brak celu, brak dostepu, niejednoznacznosc, brak renderera i brak potwierdzenia daja rozlaczne wyniki bez zmiany wartosci. Dowod: e2e/show-value.spec.ts, tests/show-value.test.ts.",
+      "gap": "Rozwijanie zwinietych sekcji (Accordion, Tabs) przed pokazaniem elementu nadal nie jest realizowane; element zaslonięty przez element plywajacy moze zostac zgloszony jako pokazany (sprawdzane jest tylko przyciecie przodkow).",
       "backlog": "BL-10",
       "scenarios": [
         "T23"
@@ -349,31 +348,29 @@
       "status": "czesciowe",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/ui-navigation.spec.ts „Wstecz i Dalej dzialaja po nawigacji wykonanej przez agenta” (/cases → /files, Wstecz do /cases, Dalej do /files) i „zadanie w tle nie przejmuje widoku innej rozmowy”; tests/ui-navigation.test.ts „polecenie niesie rozmowe i stabilny identyfikator”. Idempotencja: UiCommandRunner pamięta obsłużone commandId w useRef (kod). Nie obejmuje: aktualizacji kontekstu po nawigacji i ponowionego zdarzenia. Od d142b85: zawężenie widoku ustawione przez agenta trafia do adresu i wraca przyciskiem Wstecz oraz po odświeżeniu (e2e/view-filter.spec.ts „zawezony widok przezywa odswiezenie i wraca przyciskiem Wstecz”, serwer skryptowany).",
-      "gap": "Kontekst agenta (toAppContext w packages/platform-ui/src/state/appState.ts) nie zawiera aktywnego widoku ani trasy, więc otwarcie widoku przez agenta nie zmienia kontekstu kolejnego polecenia i nie ma testu kontekstu po nawigacji; zbiór obsłużonych commandId jest tylko w pamięci komponentu i po przeładowaniu pusty, a kursor lastSeq startuje od 0 — ponowne wykonanie nawigacji po reload w trakcie wykonania nie jest wykluczone i nie ma testu.",
+      "proof": "Nawigacja zlecona przez agenta jest zwykla nawigacja routera (Wstecz i Dalej dzialaja), zdarzenie jest idempotentne po commandId, a kontekst kolejnego polecenia niesie aktywny widok i wersje opisu ekranu (AppContext.ui). Dowod: e2e/ui-navigation.spec.ts, e2e/ui-state.spec.ts.",
+      "gap": "Brak proby GUI, ktora po nawigacji zleconej przez agenta sprawdza historie Wstecz/Dalej razem z aktualizacja kontekstu w jednym przebiegu.",
       "backlog": "BL-10",
       "scenarios": [
         "T23"
       ]
     },
     "L2.16": {
-      "status": "niespelnione",
-      "evidence": "brak",
-      "origin": "brak",
-      "proof": "Brak implementacji: katalog celów (PLATFORM_UI_TARGETS, uiTargets modułu) zawiera widoki, ustawienia i karty, bez celów rekordu i pola; uiCommandSchema i wynik potwierdzenia (packages/platform-contracts/src/ui.ts) nie niosą identyfikatora rekordu ani pola; brak mechanizmu dostosowania filtra lub paginacji. Brak testów w tests/ i e2e/. README i docs/NEW-APPLICATION.md §5 wymieniają to wprost jako brak.",
-      "gap": "Polecenie „pokaż wartość pola tego rekordu” nie może otworzyć i wskazać konkretnego pola z wartością z backendu ani uzyskać potwierdzenia klienta identyfikującego rekord i pole; agent może najwyżej otworzyć widok lub kartę.",
-      "backlog": "BL-01",
+      "status": "potwierdzone",
+      "evidence": "model",
+      "origin": "szablon",
+      "proof": "Narzedzie ui_show_value (packages/platform-server/src/agent/tools/ui-show-value.ts) czyta wartosc z backendu przed komenda, a klient odslania rekord mimo zawezenia i strony (packages/platform-ui/src/shell/uiReveal.ts) i potwierdza rekord, pole, tekst i wartosc surowa. Prawdziwy model: docs/evidence/bl01-bl02-2026-09-17/t25-wskazanie-wartosci.json (run_1063a97f… seria T25) — rekord ukryty zawezeniem, zdjety filtr zgloszony w wyniku i na pasku, podswietlona komorka [data-record-kind][data-record-id][data-field] z wartoscia rowna POST /api/read. Deterministycznie: e2e/show-value.spec.ts (8 przypadkow) i tests/show-value.test.ts.",
+      "gap": "—",
       "scenarios": [
         "T25"
       ]
     },
     "L2.17": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "Od d142b85 narzędzie ui_filter (typowana akcja: targetId, predicates eq/neq/contains/in, label, clear) zawęża widok deklarujący UiTarget.filter; stan w adresie (?country=PL), pasek z liczbami i „Pokaż pełny widok”; zawężanie odsiewa tylko wiersze już pobrane, dane biznesowe nietknięte. e2e/view-filter.spec.ts (7 testów, serwer skryptowany): 3 z 4 wierszy, pasek, odświeżenie i Wstecz, wklejony link, przycisk przywraca pełny widok, nieznane pole = odmowa bez zmiany widoku, agent sam przywraca, zawężenie nie przechodzi na inny ekran; tests/view-filter.test.ts (21). Sonda na PRAWDZIWYM modelu (jednorazowa, poza regresją, docs/evidence/template-update-2026-09-17/przebieg-d142b85/09-sonda-ui-filter-model.json): „Pokaż tylko dostawców z Polski.” → /data?country=PL, 3 z 4, pasek; „Pokaż z powrotem wszystkich dostawców.” → 4 wiersze, bez parametru.",
-      "gap": "Brak sortowania i paginacji (nie istnieją w widokach ani w adresie). Stan zawężenia nie trafia do kontekstu agenta: AppContext.filters jest zawsze puste (setFilter bez wywołań), więc w kolejnej turze agent nie wie, że widok jest zawężony — zna tylko wynik z potwierdzenia w tej samej turze. Kontrolki to pasek i przycisk przywrócenia, bez edycji filtra przez użytkownika. Zawężanie działa tylko w widokach deklarujących pola i na danych już pobranych. W sondzie model dwa razy użył wartości spoza zadeklarowanych (country=Polska, country=Poland, po 0 z 4 widocznych chwilowo na ekranie), zanim użył kodu PL.",
-      "backlog": "BL-01",
+      "proof": "Zawezenie, sortowanie i strona zyja w adresie (packages/platform-contracts/src/view-state.ts), kontrolki DataTableControls pokazuja stan (aria-sort, wartosci pol, paginacja), a ui_sort odmawia pola nieznanego, niesortowalnego i mieszajacego jednostki zanim cokolwiek trafi do przegladarki. Stan widoku trafia do AppContext.filters w chwili wyslania. Prawdziwy model: docs/evidence/bl01-bl02-2026-09-17/t26-zawezenie-rozmowa.json (trzy tury jednej rozmowy) — wiersze, adres, kontrolki i pasek zgodne z wyliczeniem z backendu, dane biznesowe bajt w bajt niezmienione. Deterministycznie: e2e/view-state.spec.ts (a)-(e), tests/view-state.test.ts.",
+      "gap": "—",
       "scenarios": [
         "T26"
       ]
@@ -408,12 +405,11 @@
       }
     },
     "L3.3": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "tests/contracts.test.ts „odrzuca nieznany komponent karty” i „odrzuca nieprawidlowe wlasciwosci znanego komponentu”; tests/live-artifacts.test.ts „deskryptor wskazujacy nieznana operacje jest odrzucany przy zapisie” i „deskryptor z niepoprawnym wejsciem jest odrzucany przy zapisie”; walidacja przed zapisem we wszystkich ścieżkach HTTP i MCP (kod). Nie obejmuje: kart kind openui i odwołań do cudzych rekordów.",
-      "gap": "ComponentCatalog.validate dla kind openui sprawdza tylko niepusty source — nieznane komponenty i niepoprawne właściwości w OpenUI Lang są zatwierdzane i zapisywane; props z referencją do cudzej sprawy (caseId) są przyjmowane przy zapisie, a odmowa pojawia się dopiero przy odczycie; brak testów obu przypadków.",
-      "backlog": "BL-10",
+      "proof": "Kazda kompozycja openui jest walidowana na serwerze parserem @openuidev/lang-core (packages/platform-server/src/registry/openui-validation.ts) przed zapisem: nieznany komponent, blad skladni, opis czesciowy, instrukcja nieosiagalna lub zdublowana, niezarejestrowana operacja odczytu, niezgodne wejscie, pole spoza deskryptora i seria nieliczbowa sa odrzucane z nazwa. W przestrzeni widokow agenta obowiazuje dodatkowo jawna lista dozwolonych komponentow (bez komponentow przyjmujacych liczby od modelu). Dowod: tests/agent-views.test.ts, tests/openui-catalog-parity.test.ts, e2e/agent-views.spec.ts.",
+      "gap": "—",
       "scenarios": [
         "T07",
         "T27"
@@ -424,12 +420,11 @@
       }
     },
     "L3.4": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "tests/contracts.test.ts „konflikt kompozycji karty nie niszczy ostatniego poprawnego ukladu” (nieaktualna specVersion odrzucona, zostaje v2); walidacja katalogu rzuca przed zapisem (catalog.ts, platform-tools.ts); CardErrorBoundary w packages/platform-ui/src/canvas/CardBody.tsx izoluje błąd renderowania jednej karty (kod). Nie obejmuje: częściowej lub błędnej odpowiedzi modelu.",
-      "gap": "Błędny lub urwany opis OpenUI w karcie openui przechodzi walidację (wystarczy niepusty tekst) i przez canvas_update_card zastępuje ostatnią poprawną treść karty; brak testu przerwanego wykonania w trakcie kompozycji i renderowania uszkodzonej karty; scenariusz tool-error w e2e tylko emituje hooki, bez wywołania narzędzia.",
-      "backlog": "BL-10",
+      "proof": "Odmowa zapisu zostawia ostatnia poprawna kompozycje: walidacja biegnie przed updateSpec, patch jest sprawdzany tez jako tekst napisany przez model (kazda instrukcja patcha musi byc obecna w wyniku), a wynik identyczny z zapisanym nie podbija wersji. Dowod: tests/agent-views.test.ts (warianty: opis czesciowy, smieciowa linia, duplikat, patch gubiacy instrukcje) i e2e/agent-views.spec.ts (po odmowie na ekranie zostaje poprzednia wersja).",
+      "gap": "—",
       "scenarios": [
         "T04"
       ],
@@ -517,20 +512,19 @@
       "status": "czesciowe",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "Proza przy zarejestrowanym katalogu jest widoczna: e2e/session-restore.spec.ts „po przeladowaniu ta sama rozmowa, jej historia i przestrzen pracy” (assistant-message zawiera tekst odpowiedzi), a także e2e/streaming.spec.ts i e2e/agent-ui.spec.ts. Kod: makeAssistantMessage i isOpenUiLang (packages/platform-ui/src/chat/AssistantMessage.tsx) wybierają Renderer OpenUI albo MarkDownRenderer (naprawa N-2 z raportu). Nie obejmuje: poprawnego, częściowego i błędnego OpenUI.",
-      "gap": "Brak testu w tests/ i e2e/, który renderuje poprawny opis OpenUI Lang, częściowy opis w trakcie strumienia albo błędną składnię w wiadomości lub karcie openui; isOpenUiLang nie ma testu jednostkowego — rozróżnienie czterech przypadków nie jest sprawdzane.",
+      "proof": "Opis czesciowy i bledny jest odrzucany przy zapisie (walidator serwera), a w czacie komponent danych nie wysyla odczytu dla nazwy operacji, ktora dopiero sie strumieniuje (readGate) — dowod: tests/agent-views.test.ts, e2e/agent-views.spec.ts.",
+      "gap": "Brak proby GUI, ktora w jednej wiadomosci pokazuje zwykla proze, poprawny OpenUI i odpowiedz po narzedziu obok siebie i sprawdza, ze rejestracja katalogu nie ukrywa prozy.",
       "backlog": "BL-10",
       "scenarios": [
         "T04"
       ]
     },
     "L3.12": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "tests/contracts.test.ts „odrzuca nieznany komponent karty” i „odrzuca nieprawidlowe wlasciwosci znanego komponentu” (kind component); tests/live-artifacts.test.ts „deskryptor wskazujacy nieznana operacje jest odrzucany przy zapisie” (tylko zarejestrowane odczyty). docs/NEW-APPLICATION.md §4 opisuje cardRenderers i openuiComponents osobno. Nie obejmuje: kart openui i odwzorowania własnej reprezentacji na renderer.",
-      "gap": "Własna reprezentacja CardSpec kind component jest renderowana bezpośrednio przez React cardRenderers, bez udokumentowanego odwzorowania na OpenUI Lang i Renderer; karty openui nie są walidowane względem katalogu po stronie serwera, więc opis może użyć niezarejestrowanych komponentów.",
-      "backlog": "BL-10",
+      "proof": "Kompozycje agenta uzywaja wylacznie zarejestrowanych komponentow i zarejestrowanych odczytow — sprawdza to walidator serwera na tym samym katalogu, z ktorego renderuje przegladarka (test zgodnosci nazw i kolejnosci argumentow: tests/openui-catalog-parity.test.ts). Druga reprezentacja (CardSpec kind component) ma udokumentowane odwzorowanie: identyfikator komponentu z katalogu + schemat propsow po stronie serwera i renderer React po stronie przegladarki, walidowane tym samym katalogiem (packages/platform-server/src/registry/catalog.ts).",
+      "gap": "—",
       "scenarios": [
         "T04",
         "T07"
@@ -549,56 +543,51 @@
       ]
     },
     "L3.14": {
-      "status": "niespelnione",
-      "evidence": "brak",
-      "origin": "brak",
-      "proof": "Kompozycja domyślna (defaultComposition w packages/module-procurement/src/server/index.ts) to karty CardSpec kind component renderowane bezpośrednio przez React cardRenderers, nie kompozycje OpenUI Lang; przestrzeni „Widoki agenta” nie ma w nawigacji ani w kodzie. Istnieją klocki: karta kind openui renderowana przez Renderer z ClientRegistry.library i dwa komponenty defineComponent modułu. Brak testów.",
-      "gap": "Widoki domyślne nie są kompozycjami OpenUI, a „Widoki agenta” nie istnieją; próby wielokomponentowej kompozycji OpenUI poza czatem nie da się wykonać.",
-      "backlog": "BL-02",
+      "status": "potwierdzone",
+      "evidence": "gui",
+      "origin": "szablon",
+      "proof": "Ekrany modulu (/data, /cases, /cases/$caseId, /items/$itemId) sa kompozycjami OpenUI Lang renderowanymi przez Renderer na wspolnym katalogu (packages/module-procurement/src/server/views.ts, packages/platform-ui/src/views/ComposedView.tsx), a widoki agenta uzywaja tego samego katalogu i tych samych komponentow danych. Dowod: e2e/composed-views.spec.ts (wartosci komorek rowne POST /api/read, data-view-id), e2e/agent-views.spec.ts, tests/openui-catalog-parity.test.ts (zgodnosc katalogu przegladarki i serwera co do nazw i kolejnosci argumentow).",
+      "gap": "—",
       "scenarios": [
         "T27"
       ]
     },
     "L3.15": {
-      "status": "niespelnione",
-      "evidence": "brak",
-      "origin": "brak",
-      "proof": "Brak osobnej przestrzeni prezentacji agenta: agent dodaje karty do roboczej przestrzeni sprawy współdzielonej z kompozycją domyślną. Klocki: rozmowa ma powiązanie spaceId odświeżane przy starcie wykonania, e2e/session-restore.spec.ts „przestrzen pracy wraca razem z rozmowa”, lista „Zapisane kompozycje” (/spaces) w nawigacji, karta dodana przez model w e2e/agent-ui.spec.ts widoczna po reload.",
-      "gap": "Nie ma przestrzeni „Widoki agenta” ani równoważnego obszaru canvasu przypisanego rozmowie jako miejsce jej prezentacji; brak dowodu zachowania wygenerowanych kompozycji po przełączeniu rozmowy (agent-ui.spec.ts po przełączeniu sprawdza tylko wiadomości).",
-      "backlog": "BL-02",
+      "status": "potwierdzone",
+      "evidence": "model",
+      "origin": "szablon",
+      "proof": "Przestrzen „Widoki agenta” jest w nawigacji (/agent-views), powiazana z rozmowa przez zakres conversation:<id>, nie zmienia roboczej przestrzeni uzytkownika ani jej viewportu, a usuniecie rozmowy usuwa jej przestrzen w tej samej transakcji. Prawdziwy model: docs/evidence/bl01-bl02-2026-09-17/t27-widoki-agenta.json — po przeladowaniu i po przelaczeniu rozmowy te same karty wracaja z wartosciami z backendu (kroki 5 i 6 jednej rozmowy). Deterministycznie: e2e/agent-views.spec.ts.",
+      "gap": "—",
       "scenarios": [
         "T27"
       ]
     },
     "L3.16": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "e2e/agent-ui.spec.ts (prawdziwy model): polecenie „Dodaj na canvasie karte z wykresem kosztow dla tej sprawy” bez identyfikatora komponentu daje nową kartę procurement.costChart widoczną jako card-cost-chart. Nie obejmuje: zestawienia bez wskazania formy ani poprawności serii, jednostek i zakresu wykresu.",
-      "gap": "Brak próby, w której pytanie wymagające zestawienia prowadzi do samodzielnie dobranej prezentacji; test wykresu sprawdza tylko typ komponentu, nie serie (oferty), jednostki (PLN) i zakres; brak przestrzeni „Widoki agenta”.",
-      "backlog": "BL-02",
+      "proof": "Prawdziwy model bez podania nazwy komponentu zlozyl zestawienie (16 wierszy rownych POST /api/read) i dodal wykres — docs/evidence/bl01-bl02-2026-09-17/t27-widoki-agenta.json. Polecenie wykresu nad pozycjami w dwoch walutach dalo uczciwa odmowe rysowania z podanym powodem (komponent odmawia serii mieszajacej jednostki, narzedzie zwraca rendered:false i ostrzezenie unit_from_record, model odczytal ui_state i powiedzial o tym uzytkownikowi), a po zawezeniu zakresu ta sama karta narysowala wykres z seriami, jednostka i zakresem rownym backendowi. Deterministycznie: e2e/agent-views.spec.ts.",
+      "gap": "—",
       "scenarios": [
         "T27"
       ]
     },
     "L3.17": {
-      "status": "niesprawdzone",
-      "evidence": "brak",
-      "origin": "brak",
-      "proof": "Klocki w kodzie: canvas_update_card zmienia spec jednej karty (inny komponent albo props, np. showExcluded) z kontrolą expectedSpecVersion, bez dotykania innych kart i cardState użytkownika (agent/platform-tools.ts, state/appState.ts). W szablonie nie ma testu ani przebiegu modelu, w którym kolejne polecenie zmienia istniejący widok; aktualizacja karty przez model była tylko w audycie AgenticApp.",
-      "gap": "Brak dowodu, że kolejne polecenie zmienia istniejący widok agenta (filtr, grupowanie, typ prezentacji) z zachowaniem pozostałych elementów i stanu użytkownika; grupowania nie ma w schematach komponentów, a „Widoki agenta” nie istnieją.",
-      "backlog": "BL-02",
+      "status": "potwierdzone",
+      "evidence": "model",
+      "origin": "szablon",
+      "proof": "Kolejne polecenie zmienia istniejacy widok: agent_view_update scala instrukcje (mergeStatements) i odrzuca patch, ktory gubi, powiela albo czyni nieosiagalna instrukcje; wersja nie rosnie przy braku zmiany. Prawdziwy model zmienil zakres istniejacej karty (specVersion 1->3, ta sama karta i ta sama instancja tabeli) — docs/evidence/bl01-bl02-2026-09-17/t27-widoki-agenta.json. Zachowanie nieobjetych zmiana elementow i stanu uzytkownika dowodzi deterministycznie e2e/agent-views.spec.ts (przesunieta przez uzytkownika karta i druga karta bez zmian po patchu).",
+      "gap": "—",
       "scenarios": [
         "T27"
       ]
     },
     "L3.18": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "Karty generowane przez agenta (kind component) używają tych samych rendererów i odczytów modułu co widok domyślny (CardBody → cardRenderers → useModuleData, kod). e2e/measurements.spec.ts „zmiana pozycji oferty jest widoczna w zestawieniu bez przeladowania” pokazuje odświeżenie po mutacji dla karty kompozycji domyślnej; tests/live-artifacts.test.ts „snapshot zamraza liczby, live pokazuje biezace — po zmianie zrodla” dla artefaktu live z zarejestrowanym odczytem. Nie obejmuje: tabeli lub wykresu wygenerowanego rozmową.",
-      "gap": "Brak testu, że tabela lub wykres utworzone przez agenta odświeżają się po mutacji i że ich interakcje wywołują te same autoryzowane operacje; ogólne komponenty openuiLibrary w karcie openui mogą przyjąć dane wpisane przez model bez zarejestrowanego odczytu; brak przestrzeni „Widoki agenta”.",
-      "backlog": "BL-02",
+      "proof": "Tabele i wykresy korzystaja wylacznie z zarejestrowanych odczytow (POST /api/read), a akcje rekordu deklarowane w deskryptorze uruchamiaja narzedzie zapisu modulu przez to samo wykonanie co MCP (packages/platform-server/src/registry/tool-execution.ts, POST /api/actions z wlascicielem z sesji, ponownym odczytem rekordu i idempotencja). Dowod: e2e/interactions.spec.ts — zmiana z widoku domyslnego, zmiana narzedziem MCP w trakcie wykonania i akcja w widoku agenta odswiezaja oba widoki bez przeladowania (obserwator DOM), z kontrolami: rekord innego wlasciciela odrzucony bez zmiany danych i nieudane odswiezenie pokazane jako blad. Prawdziwy model: krok 4 proby T27 (akcja w karcie zlozonej przez model).",
+      "gap": "—",
       "scenarios": [
         "T27"
       ]
@@ -1020,12 +1009,11 @@
       ]
     },
     "L6.1": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "packages/platform-contracts/src/agent.ts (appContextSchema: conversationId, spaceId, resource, selection, filters, viewport, drafts) budowany w state/appState.ts toAppContext; e2e/chat.spec.ts „czat pokazuje, do jakiego zasobu odnosi sie rozmowa” i „zaznaczenie karty trafia do kontekstu rozmowy” (pasek kontekstu po stronie klienta).",
-      "gap": "Filtry nigdy nie trafiają do kontekstu: setFilter nie jest wywoływany; zawężenie widoku z 2026-09-17 żyje w adresie URL i w agentFilterKey, a nie w AppContext.filters, więc get_context zwraca filters={} także przy zawężonym ekranie. Identyfikacja kompozycji to tylko spaceId, bez wersji. Brak testu treści kontekstu odebranego przez backend.",
-      "backlog": "BL-11",
+      "proof": "Kontekst polecenia niesie rozmowe, przestrzen, zasob, zaznaczenie, filtry (AppContext.filters[targetId] = predykaty, sortowanie, strona, liczby) oraz identyfikacje kompozycji przez AppContext.ui (wersja opisu, karta, widok, adres). Dowod: e2e/view-state.spec.ts (d) — kolejne polecenie niesie zawezenie i sortowanie w app_context wykonania; tests/ui-snapshot.test.ts.",
+      "gap": "—",
       "scenarios": [
         "T08",
         "T26"
@@ -1036,12 +1024,11 @@
       }
     },
     "L6.2": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "packages/platform-ui/src/chat/chatWiring.ts (send czyta useAppState.getState() przy wysłaniu); e2e/chat.spec.ts „zaznaczenie karty trafia do kontekstu rozmowy” — kliknięcie karty dodaje card: do paska kontekstu, „wyczysc” je usuwa.",
-      "gap": "Test kończy się na stanie klienta; żaden test nie sprawdza, że appContext kolejnego polecenia (ciało POST /api/agui/run, agent_runs, prompt lub get_context) zawiera nowe zaznaczenie. Dowód FEEDBACK #21 był tylko historyczny.",
-      "backlog": "BL-11",
+      "proof": "Zmiana wyboru w UI (filtr, sortowanie, strona, widok) zmienia kontekst kolejnego polecenia: stan widoku jest liczony w chwili wyslania, nie przy montowaniu. Dowod: e2e/view-state.spec.ts (d) czyta cialo POST /api/agui/run oraz wynik get_context z dziennika zdarzen wykonania.",
+      "gap": "—",
       "scenarios": [
         "T08"
       ],
@@ -1051,11 +1038,11 @@
       }
     },
     "L6.3": {
-      "status": "niespelnione",
-      "evidence": "kod",
+      "status": "czesciowe",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "packages/platform-server/src/agent/platform-tools.ts (get_context) zwraca ctx.appContext, który agent/runtime.ts (#execute, toolCtx) ustala raz z ciała POST /api/agui/run; packages/platform-server/src/http/app.ts nie ma kanału aktualizacji kontekstu trwającego wykonania. Testy tylko wymieniają nazwę narzędzia (tests/mcp-schema.test.ts, tests/platform-boundary.test.ts).",
-      "gap": "Narzędzie zwraca wyłącznie snapshot ze startu, co specyfikacja wprost wyklucza; zmiana zaznaczenia, zasobu lub szkicu w trakcie długiego zadania jest dla agenta niewidoczna. Historyczny przebieg dowodził tylko, że model wywołał narzędzie.",
+      "proof": "Narzedzie ui_state zwraca aktualny, wersjonowany opis ekranu w trakcie wykonania (packages/platform-server/src/agent/tools/ui-state.ts) i rozroznia opis nieaktualny; prompt kaze go odczytac po kazdej komendzie UI. Dowod: e2e/ui-state.spec.ts, tests/ui-snapshot.test.ts.",
+      "gap": "get_context nadal zwraca snapshot z chwili startu wykonania: zmiana zaznaczenia, zasobu albo szkicu w trakcie dlugiego zadania jest dla agenta niewidoczna (ui_state opisuje ekran, nie zaznaczenie i szkice).",
       "backlog": "BL-11",
       "scenarios": [
         "T08"
@@ -1206,35 +1193,32 @@
       ]
     },
     "L6.15": {
-      "status": "niespelnione",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "model",
       "origin": "szablon",
-      "proof": "Brak kontraktu opisującego aktywny widok: get_context zwraca identyfikatory kontekstu; canvas_list_cards opisuje karty bieżącej przestrzeni; ui_catalog od d142b85 podaje deklarowane filterableFields widoków (co wolno zawęzić), ale nie aktualny stan ekranu; AppContext nie ma sortowania, a filtry nie są wypełniane.",
-      "gap": "Agent nie może odczytać widoku, wersji kompozycji, instancji komponentów z powiązaniami rekord–pole, AKTUALNYCH filtrów (zawężenie jest w adresie, poza kontekstem), sortowania ani dozwolonych akcji aktywnego UI.",
-      "backlog": "BL-01",
+      "proof": "Przegladarka publikuje wersjonowany opis aktywnego ekranu (packages/platform-ui/src/state/uiSnapshot.ts, PUT /api/ui/snapshot): widok, wersja kompozycji, instancje komponentow z powiazaniem rekord-pole, filtry, sortowanie, strona, grupowanie, dozwolone akcje i stan (loading/ready/empty/error/forbidden). Agent czyta go narzedziem ui_state. Dowod: e2e/ui-state.spec.ts (8 przypadkow, m.in. /settings i karty przestrzeni poza canvasem), tests/ui-snapshot.test.ts; prawdziwy model czytal opis w probach T25-T27.",
+      "gap": "—",
       "scenarios": [
         "T25",
         "T26"
       ]
     },
     "L6.16": {
-      "status": "niespelnione",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "model",
       "origin": "szablon",
-      "proof": "UiTarget (packages/platform-contracts/src/ui.ts) ma tylko identyfikator, trasę i selektor elementu platformy lub modułu; nie ma mapowania rekord–pole na cel prezentacyjny. UI_COMMAND_FAILURES rozróżnia unknown_target, not_present, forbidden, inactive_conversation, no_client — bez niejednoznaczności i braku renderera.",
-      "gap": "Brak mapowania rekord–pole, rozstrzygania niejednoznaczności i rozróżnienia braku renderera; nie da się wskazać wartości pola rekordu na ekranie ani odróżnić znalezienia wartości od jej pokazania (T25).",
-      "backlog": "BL-01",
+      "proof": "Mapowanie rekord-pole na cel prezentacyjny jest wydzielona jednostka (packages/platform-server/src/registry/record-presentation.ts) liczona z deklaracji: widoki z wlasna trasa, karty widokow agenta rozmowy wykonania i ekran rekordowy tylko wtedy, gdy klient go pokazuje. Odmowy sa rozlaczne: ambiguous, no_renderer (trzy warianty), forbidden, record_not_found, unreadable, unknown_target, not_present, not_visible. Znalezienie nie jest pokazaniem: shown wymaga executed + highlighted + zgodnosci rekordu i pola, matchesBackend porownuje potwierdzenie z odczytem serwera. Dowod: tests/show-value.test.ts, e2e/show-value.spec.ts (w tym kontrola: odpowiedz samym tekstem nie zalicza), T25 na prawdziwym modelu.",
+      "gap": "—",
       "scenarios": [
         "T25"
       ]
     },
     "L6.17": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "Od d142b85 wynik ui_filter zawiera potwierdzenie klienta z liczbami zgłoszonymi przez widok (filtered.matched/total), url i executed, z odróżnieniem not_applied (tests/view-filter.test.ts). Sonda na PRAWDZIWYM modelu (docs/evidence/template-update-2026-09-17/przebieg-d142b85/09-sonda-ui-filter-model.json): po potwierdzeniach 0 z 4 dla country=Polska i country=Poland model poprawił wartość na PL (3 z 4) — dalsze działanie oparł na potwierdzonym stanie po akcji, nie na stanie sprzed niej.",
-      "gap": "Potwierdzony stan jest dostępny tylko jako wynik narzędzia w tej samej turze: AppContext nie zawiera zawężenia ani widoku, nie ma wersji lub znacznika świeżości kontekstu, więc w kolejnej turze agent nie odczyta nowego stanu UI ani nie wykryje nieaktualności.",
-      "backlog": "BL-01",
+      "proof": "Kazde potwierdzenie komendy UI niesie uiVersion, uiClientId i uiPublication, a ui_state wiaze minVersion z konkretna karta przegladarki i rozroznia stale/superseded/client_inactive/client_gone/other_conversation. AppContext.ui niesie wersje z chwili wyslania polecenia. Prompt kaze odczytac ui_state po ui_navigate, ui_filter, ui_sort i agent_view_*. Dowod: tests/ui-snapshot.test.ts (m.in. miedzy kartami i po zamknieciu karty), e2e/ui-state.spec.ts; T25 sprawdza na prawdziwym modelu, ze wersja po wskazaniu jest nowsza niz wersja z chwili wyslania.",
+      "gap": "—",
       "scenarios": [
         "T26",
         "T25"
@@ -1854,12 +1838,11 @@
       }
     },
     "L10.5": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "e2e/measurements.spec.ts „zmiana pozycji oferty jest widoczna w zestawieniu bez przeladowania”: kliknięcie Zapisz w formularzu karty zmienia widoczne sumy bez przeładowania (karta dodana przez API jako przygotowanie). e2e/agent-ui.spec.ts (prawdziwy model): narzędzie MCP dodaje kartę wykresu, która pojawia się na canvasie bez przeładowania. tests/agui-stream.test.ts „zmiana danych uniewaznia odczyty modulu, canvas i otwarte artefakty” i „zmiana kompozycji uniewaznia przestrzen, ktorej dotyczy”. Nie obejmuje: mutacji danych domenowych przez MCP z widocznym odświeżeniem w GUI ani odświeżenia otwartego artefaktu po mutacji z UI.",
-      "gap": "Mutacja z formularza modułu (packages/module-procurement/src/ui/cards.tsx) unieważnia tylko klucze module i spaces, a refetchOnWindowFocus jest wyłączony (apps/web/src/main.tsx): otwarty artefakt live i lista plików po edycji w UI zostają nieaktualne do innego odświeżenia. Unieważnianie po mutacjach HTTP zależy od każdego modułu, platforma nie ma wspólnego mechanizmu ani testu.",
-      "backlog": "BL-11",
+      "proof": "Mutacja z UI (akcja rekordu) i mutacja narzedziem MCP unieważniaja te same klucze zapytan (invalidateChangedData) i odswiezaja widok domyslny oraz widok agenta bez pelnego przeladowania — dowod z obserwatorem DOM w e2e/interactions.spec.ts (a), (b), (c); prawdziwy model w kroku 4 proby T27.",
+      "gap": "—",
       "scenarios": [
         "T09"
       ],
@@ -1956,12 +1939,11 @@
       ]
     },
     "L10.12": {
-      "status": "czesciowe",
-      "evidence": "test",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "tests/live-artifacts.test.ts „brak dostepu nie jest przedstawiany jako swieze dane”: odczyt live przy niedostępnym źródle zwraca content null i state forbidden lub failed z komunikatem. Analiza kodu: components/LiveArtifact.tsx (ArtifactContent sprawdza error przed data i pokazuje błąd odświeżenia zamiast wyniku), CanvasHost i karty modułu używają stanów błędu. Nie obejmuje: żadnego testu GUI z nieudanym odświeżeniem (e2e nie symulują błędu sieci ani odpowiedzi 500).",
-      "gap": "Brak próby, w której dane są już na ekranie, a kolejne odświeżenie się nie udaje; nie sprawdzono, że widoki nie pokazują wtedy starych danych jako aktualnych, a ekran Dane modułu przykładowego (DataPage w pages.tsx) w ogóle nie obsługuje błędu zapytania.",
-      "backlog": "BL-11",
+      "proof": "useDataModel sprawdza blad odczytu przed siegnieciem po dane z pamieci podrecznej, wiec nieudane odswiezenie kasuje wiersze i pokazuje blad zamiast starych wartosci; opis ekranu dla agenta niesie wtedy stan error i cards:null. Dowod: tests/canvas-display.test.ts, tests/data-components-describe.test.ts, e2e/interactions.spec.ts (nieudane odswiezenie).",
+      "gap": "—",
       "scenarios": [
         "T13",
         "T26"
@@ -2674,34 +2656,22 @@
       "gap": "Uszkodzony plik i nieobsługiwane formuły nie mają próby; asercja komórki przyjmuje formułę z zapisaną wartością; wynik jest wersją pliku bez podglądu artefaktu i nie jest sprawdzany po restarcie; JPEG, CSV i tekst bez próby z modelem."
     },
     "T25": {
-      "status": "niespelnione",
-      "proof": "—",
-      "gap": "Brak semantycznego opisu aktywnego UI, mapowania rekord–pole na cel prezentacyjny i wskazania wartości mimo filtra lub paginacji (BL-01)."
+      "status": "potwierdzone",
+      "proof": "Prawdziwy model (docs/evidence/bl01-bl02-2026-09-17/t25-wskazanie-wartosci.json): rekord spoza zawezonego widoku, agent zdjal zawezenie, otworzyl wlasciwy widok i podswietlil komorke z wartoscia rowna POST /api/read; potwierdzenie klienta identyfikuje rekord i pole, opis ekranu dostal nowsza wersje niz w chwili wyslania. Detektor proby (e2e/support/show-value-probe.ts) jest jednoczesnie warunkiem zaliczenia i kontrola negatywna: odpowiedz samym tekstem oblewa (e2e/show-value.spec.ts). Kontrole: bledny rekord, niejednoznacznosc, brak dostepu, pole nierenderowane, nieudany odczyt.",
+      "gap": "—"
     },
     "T26": {
-      "status": "czesciowe",
-      "proof": "Od d142b85: e2e/view-filter.spec.ts (serwer skryptowany) — polecenie zawęża widok, wiersze i pasek zgodne (3 z 4), odświeżenie i Wstecz, link, przywrócenie pełnego zakresu przyciskiem i przez agenta, nieznane pole bez zmiany widoku, filtr nie przechodzi na inny ekran; sonda na prawdziwym modelu: zawężenie do PL i przywrócenie (docs/evidence/template-update-2026-09-17/przebieg-d142b85/09-sonda-ui-filter-model.json).",
-      "gap": "Brak sortowania; kolejne pytanie nie uwzględnia filtra, bo zawężenie nie trafia do kontekstu agenta (L6.1, L6.17); kontrola negatywna „zmiana danych zamiast filtra” i „pusty zbiór przedstawiony jako błąd” bez osobnej próby GUI; model użył najpierw wartości spoza deklaracji (0 z 4 widoczne chwilowo)."
+      "status": "potwierdzone",
+      "proof": "Prawdziwy model, trzy tury jednej rozmowy (docs/evidence/bl01-bl02-2026-09-17/t26-zawezenie-rozmowa.json): zawezenie i sortowanie widoczne w kontrolkach, wierszach, adresie i pasku; kolejne pytanie ocenione po ekranie (rekord wskazany jako pierwszy wiersz zawezonego i przesortowanego widoku, rozny od pierwszego wiersza pelnej listy); usuniecie zawezenia przywrocilo pelny zakres. Dane biznesowe bajt w bajt niezmienione po kazdej turze; pusty wynik zawezenia to stan pusty z liczbami, nie blad.",
+      "gap": "—"
     },
     "T27": {
-      "status": "niespelnione",
-      "proof": "Kompozycja canvasu z katalogu i trwałe przestrzenie istnieją (L3.6).",
-      "gap": "Brak przestrzeni „Widoki agenta” związanej z rozmową i generowanych, interaktywnych kompozycji z odświeżaniem po mutacji (BL-02)."
+      "status": "potwierdzone",
+      "proof": "Prawdziwy model, szesc krokow jednej rozmowy (docs/evidence/bl01-bl02-2026-09-17/t27-widoki-agenta.json): przestrzen otwarta z nawigacji, zestawienie bez podania nazwy komponentu, dodany wykres (uczciwa odmowa rysowania nad dwiema walutami, zgloszona przez agenta po odczycie ui_state), zmiana zakresu rozmowa (ta sama karta, wykres gotowy, zakres rowny backendowi), mutacja akcja rekordu w karcie modelu bez przeladowania, przeladowanie i przelaczenie rozmowy odtwarzaja kompozycje. Identyfikatory kart pochodza z badanego wykonania (kontrola „zastana karta”), wartosci rowne POST /api/read, przestrzen rozmowy rozna od roboczej przestrzeni uzytkownika. Nieudane przebiegi sprzed poprawek zachowane jako dowody (docs/evidence/bl01-bl02-2026-09-17/t27-proba-a-kod-sprawy-jako-id.json).",
+      "gap": "—"
     }
   },
   "backlog": [
-    {
-      "id": "BL-01",
-      "title": "Semantyczny odczyt UI, wskazanie wartości, filtry i sortowanie przez rozmowę",
-      "summary": "Zakres „Uzupełnienia: semantyczne UI i własne widoki agenta”. Stan od 2026-09-17 (d142b85): zawężanie widoku filtrem przez rozmowę JEST zaimplementowane dla widoków deklarujących UiTarget.filter (ui_filter, stan w adresie, pasek, potwierdzenie z liczbami), ale pozycja pozostaje otwarta. Pozostaje: (R2 z przekazania) zawężenie nie trafia do kontekstu agenta — AppContext.filters jest puste, agent nie odczyta filtra w kolejnej turze ani nie wykryje nieaktualności; (R3) sortowanie i paginacja nie istnieją, a gdy powstaną, należą do adresu razem z filtrami; (R4) trwałe preferencje i zapisane widoki na koncie nie istnieją; wersjonowany opis aktywnej kompozycji (instancje komponentów, rekord–pole, dozwolone akcje) i wskazanie wartości konkretnego pola mimo filtra lub paginacji; zawężanie tylko po stronie klienta, na wierszach już pobranych; model potrafi najpierw użyć wartości spoza zadeklarowanych (sonda: Polska, Poland przed PL).",
-      "done": "próby T25 i T26 przechodzą przez GUI na prawdziwym modelu z kontrolami negatywnymi (błędny rekord, niejednoznaczność, brak dostępu, odpowiedź tekstowa bez wskazania pola, zmiana danych zamiast filtra); potwierdzenie klienta identyfikuje rekord i pole; kontekst po akcji ma nową wersję."
-    },
-    {
-      "id": "BL-02",
-      "title": "Przestrzeń „Widoki agenta” i interaktywne kompozycje OpenUI",
-      "summary": "Osobna, dostępna z nawigacji przestrzeń powiązana z rozmową, w której agent sam dobiera tabelę, wykres, porównanie lub podsumowanie z katalogu; widok jest trwały, edytowalny rozmową, odświeżany po mutacji backendu i korzysta z tych samych autoryzowanych operacji co widoki domyślne.",
-      "done": "próba T27 przechodzi przez GUI na prawdziwym modelu: nowe zestawienie i wykres (nowe identyfikatory), zmiana zakresu rozmową bez utraty innych kart, mutacja danych odświeża widok, reload i przełączenie rozmowy odtwarzają kompozycje; kontrole negatywne: zastana karta, fikcyjne wartości, nieznany komponent, przejęcie aktywnego UI z tła."
-    },
     {
       "id": "BL-03",
       "title": "Powtarzalne próby na prawdziwym modelu w szablonie",

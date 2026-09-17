@@ -118,6 +118,10 @@ podniesienie sufitu wymaga grantu koordynatora. Nic nie idzie wtedy do modelu i 
 jest ruszany: pominięcie jest uczciwą odpowiedzią na brak budżetu, w przeciwieństwie do przebiegu, który
 wydaje turę i pada na następnej.
 
+Bramka i licznik obejmują **wyłącznie** spec odbiorowy. `e2e/agent-ui.spec.ts` i `e2e/files-agent.spec.ts`
+wydają swoje 4 tury bez liczenia i bez sprawdzenia budżetu, więc `pnpm test:e2e:model` kosztuje 11 tur
+także wtedy, gdy spec odbiorowy sam się pominie. Zanim uruchomisz przebieg modelowy, policz to sam.
+
 Podaj faktyczne polecenia, kody wyjścia i liczby testów. Dowody zapisuj w `docs/evidence/<zadanie>/`
 bez sekretów i danych prywatnych.
 

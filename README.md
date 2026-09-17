@@ -207,6 +207,10 @@ zapisują się pod stemplem przebiegu w `docs/evidence/<zadanie>/runs/`, więc n
 wyników prób odbiorowych. Jeśli budżet tur nie pokrywa całego spec-a odbiorowego, spec pomija próby
 z komunikatem, zanim cokolwiek wyśle do modelu — zamiast wydać turę i paść na następnej.
 
+Licznik i to sprawdzenie obejmują **tylko** spec odbiorowy. `e2e/agent-ui.spec.ts` i
+`e2e/files-agent.spec.ts` wydają swoje 4 tury bez liczenia i bez bramki, więc `pnpm test:e2e:model`
+kosztuje 11 tur nawet wtedy, gdy spec odbiorowy sam się pominie.
+
 `pnpm acceptance` i `scripts/run-agent.mjs` działają inaczej: łączą się z **działającą** instancją
 (domyślnie `http://127.0.0.1:8791`) i zmieniają jej dane. Kieruj je tylko na osobną instancję z
 osobnym katalogiem danych, np. przez `APP_BASE=http://127.0.0.1:8790`.

@@ -76,3 +76,17 @@ Pełna mapa różnic kodu i decyzji: [`CONSOLIDATION-UPDATE-2026-09-17.md`](CONS
 | `AgenticApp/docs/evidence/chat-ux-2026-09-16/05-zawezony-widok.png`, zmienione `docs/evidence/closure-2026-09-15/2*.json` | dowody lokalne | **pozostają lokalnie** | — | jak wszystkie dowody AgenticApp; szablon ma własne: `szablon/docs/evidence/template-update-2026-09-17/` |
 | `materiały/handoff-poprawki-agenticapp-2026-09-17.md` | przekazanie od wykonawcy odczytu: zakres 25 plików, celowe różnice szablonu, ryzyka R1–R8 | **nie przenoszone**, **rozliczone** | `szablon/docs/CONSOLIDATION-UPDATE-2026-09-17.md` §3 | dokument roboczy z lokalnymi ścieżkami; każdy punkt i ryzyko ma decyzję w raporcie aktualizacji |
 | `AgenticApp/docs/ARCHITECTURE.md`, `docs/DOCUMENTATION-MAP.md`, `stack-agentowy-ustalenia-i-materialy.md` | bez zmian od 2026-09-16 | **bez działania** | — | treść zgodna z odpowiednikami szablonu (różnią się tylko nagłówkiem lokalnym) |
+
+## 6. Rozbudowa 2026-09-18 — pakiety BL-01 i BL-02
+
+Ta faza nie przenosiła dokumentów między repozytoriami: powstała w szablonie i tu zostaje.
+
+| Dokument | Rola | Stan |
+|---|---|---|
+| [`plans/2026-09-17-bl01-bl02.md`](plans/2026-09-17-bl01-bl02.md) | plan pracy: decyzje architektoniczne AD-1…AD-9, wiążące ograniczenia, podział na zadania i mapa styków | nowy; opisuje zamiar, nie wynik |
+| [`RAPORT-ARCHITEKTA-BL01-BL02.md`](RAPORT-ARCHITEKTA-BL01-BL02.md) | rozliczenie: co dostarczono, jak weryfikowano, czego nauczył prawdziwy model, znane ograniczenia, rozdzielenie odbioru (L12.17) | nowy; rozstrzyga o stanie tej fazy |
+| [`ACCEPTANCE.md`](ACCEPTANCE.md), [`BACKLOG.md`](BACKLOG.md) | oceny 200 kryteriów i otwarte prace | zaktualizowane z `acceptance/assessment.json`; BL-01 i BL-02 zamknięte i usunięte z backlogu |
+| [`NEW-APPLICATION.md`](NEW-APPLICATION.md) §3.1, §3.2 | kontrakt autora modułu: opis wyniku odczytu z polami i akcjami, widoki modułu, komponenty OpenUI po stronie serwera | rozszerzony |
+| [`../FEEDBACK.md`](../FEEDBACK.md) §T2 | dziennik fazy, w tym własne pomyłki procesu i pułapka z nadpisywaniem dowodów | rozszerzony |
+| `evidence/bl01-bl02-2026-09-17/` | dowody prób T25, T26, T27 z prawdziwego modelu, rejestr tur, przebiegi nieudane | nowy; zapisane werdykty są nienadpisywalne przez kolejne przebiegi |
+| `.superpowers/sdd/2026-09-17-bl01-bl02/` | ledger przebiegu, briefy, raporty zadań i pakiety przeglądów | **poza szablonem** (katalog ignorowany); cytowany w raporcie architekta |

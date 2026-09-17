@@ -209,3 +209,90 @@ paginacji ani trwałych preferencji. Sumy: 59 / 118 / 15 / 8.
 Adres e-mail autora w metadanych commitów występuje w 540 publicznych commitach tego konta na GitHubie,
 więc zmiana widoczności nie ujawnia go po raz pierwszy — historii nie przepisywano. Wynik skanu i
 potwierdzenie widoczności: raport aktualizacji §6.
+
+---
+
+## T2 — 2026-09-18 — Zamknięcie pakietów BL-01 i BL-02
+
+**Zakres zlecenia:** rozbudowa, nie konsolidacja. Semantyczne UI sterowane rozmową (BL-01: L2.16,
+L2.17, L6.15, L6.16, L6.17) i własne widoki agenta (BL-02: L3.14–L3.18), z próbami odbiorowymi
+T25, T26 i T27 na prawdziwym modelu. Praca prowadzona przez koordynatora: dziewięć zadań
+implementacyjnych plus fala poprawek, każde w osobnym worktree, każde z niezależnym przeglądem przed
+scaleniem. Plan i decyzje architektoniczne: `docs/plans/2026-09-17-bl01-bl02.md`. Pełne rozliczenie:
+`docs/RAPORT-ARCHITEKTA-BL01-BL02.md`.
+
+### Co powstało
+
+Jeden mechanizm widoków dla ekranów domyślnych i widoków agenta: ekrany modułu są kompozycjami
+OpenUI Lang nad wspólnym katalogiem, dane płyną wyłącznie z zarejestrowanych odczytów opisanych przez
+moduł (pola, typy, jednostki, akcje). Stan widoku — zawężenie, sortowanie, strona — żyje w adresie,
+widać go w kontrolkach i trafia do kontekstu kolejnego polecenia. Przeglądarka publikuje wersjonowany,
+semantyczny opis ekranu, a agent czyta go narzędziem `ui_state` i wykrywa nieaktualność. Przestrzeń
+„Widoki agenta” jest powiązana z rozmową, a każda kompozycja jest walidowana na serwerze parserem
+OpenUI Lang. Wskazanie wartości pola rekordu (`ui_show_value`) odsłania rekord mimo filtra i strony,
+a akcje rekordu uruchamiają te same narzędzia modułu co MCP.
+
+### Co ujawnił prawdziwy model (a czego testy skryptowane nie mogły pokazać)
+
+1. **Kod sprawy użyty jako identyfikator.** Agent dwa razy złożył widok z `caseId: "PC-2026-01"` bez
+   wcześniejszego odczytu. Platforma zachowała się poprawnie (odczyt odrzucony, karta pokazała odmowę,
+   zero zmyślonych wartości), ale prompt widoków agenta nie mówił tego, co mówi sekcja wskazywania
+   wartości. Po poprawce agent najpierw wyszukuje sprawę i używa prawdziwego identyfikatora.
+2. **Obietnica wykresu, który się nie rysuje.** Model napisał „Dodano wykres słupkowy”, choć komponent
+   odmówił rysowania serii mieszającej PLN i EUR. Narzędzia zwracają teraz `rendered: false` i zdanie,
+   że kompozycja została zapisana, a nie narysowana, a reguła czytania stanu ekranu objęła
+   `agent_view_*`. Po poprawce agent odczytał `ui_state` i powiedział użytkownikowi, dlaczego wykresu
+   nie ma.
+3. **Wartości pól zawężania.** Model nadal sięgał po „Polska” i „Poland”, mimo że katalog podaje kody.
+   Teraz dozwolone wartości są wypisane przy celu w prompcie, z regułą używania ich dosłownie.
+
+### Błędy znalezione przy okazji, nie w zleconym zakresie
+
+- `RunEventStream.read` gubił wybudzenie: zdarzenie wysłane, gdy czytelnik obsługiwał poprzednie,
+  czekało na następne. Komenda UI z prawdziwego handlera wracała po 8 s jako `no_client`. Znaleziona
+  niezależnie przez dwa zadania, naprawiona jedną linią z testem regresji.
+- Pomiar karty na canvasie przestawiał nieprzesunięte karty na (0,0) i podbijał wersję geometrii bez
+  udziału użytkownika.
+- Podczas strumieniowania odpowiedzi czat wysyłał odczyty dla niedokończonych nazw operacji
+  (`procurement.`, `procurement.supp`).
+- Sortowanie tabeli po kwocie ustawiało PLN i EUR na jednej skali, podczas gdy wykres w tej samej
+  sytuacji odmawiał. Reguła jest teraz jedna i wspólna.
+- Po zmianie konta opis ekranu mógł nieść dane poprzedniego użytkownika (instancje komponentów,
+  rozmowa, przestrzeń, parametry `c`/`s` w adresie, identyfikator przestrzeni kart). Wyciek odtworzono
+  na niepoprawionym kodzie i zamknięto filtrem epoki dostępu.
+
+### Własne pomyłki procesu
+
+- Dwóch implementatorów straciło niezacommitowaną pracę, bo próba wykrywalności przywracała plik przez
+  `git checkout`. Obaj odtworzyli zmiany i powtórzyli próby na commitach; procedura („najpierw commit,
+  próba na czystym drzewie, kontrola czystości po przywróceniu”) trafiła do wspólnych zasad.
+- Koordynator podał w jednej notatce zły przykład wywołania z `null`; implementator to wychwycił.
+- W próbach modelowych jedna tura poszła na własny błąd wykonawcy (nie podniesiony limit), a strażnik
+  budżetu zapisywał turę przed odmową, przez co powstał pusty wpis. Kolejność odwrócono, wpis usunięto
+  i opisano w rejestrze.
+- Test odbiorowy T27 był przez pewien czas czerwony, bo kodował złe oczekiwanie (że wykres nad dwiema
+  walutami się narysuje). Poprawiono oczekiwanie do faktycznego, uczciwego zachowania — bez osłabiania
+  asercji.
+
+### Pułapka, którą naprawiono w ostatniej chwili
+
+Próby modelowe należały do domyślnego przebiegu `pnpm test:e2e`, a licznik tur mieszkał w katalogu
+dowodów. Następny pełny przebieg wydałby turę, oblał na kolejnej i **nadpisał zapisane dowody T25, T26
+i T27 werdyktem „niezaliczona”**. Teraz próby modelowe są poza domyślnym przebiegiem (osobne
+polecenie), licznik leży poza repozytorium, dowody przebiegów zapisują się pod stemplem, a spec
+odbiorowy pomija się, gdy budżet nie pokrywa całości. Sprawdzone: domyślny przebieg w czystej kopii
+zostawił dowody bajt w bajt nietknięte.
+
+### Weryfikacja koordynatora (czysta kopia, commit 97a7945)
+
+`pnpm install --frozen-lockfile` 0; `pnpm verify` 0 (32 pliki / 542 testy, z nową kontrolą typów
+katalogu `e2e/`); `pnpm test:e2e` 0 (114 testów, próby modelowe pominięte, zero tur);
+`pnpm check:module-swap` 0; start produkcyjny na porcie testowym z własnym katalogiem danych
+(`/api/health` z etykietą testową, `/api/status` odmawia bez sesji, strona 200). Instancja użytkownika
+na porcie 8791 przez cały czas nietknięta — ten sam proces, identyczna suma kontrolna `dist`.
+
+### Macierz
+
+Zaktualizowane oceny dla kryteriów, dla których powstał dowód na tym kodzie. BL-01 i BL-02 zamknięte i
+usunięte z backlogu (zostaje 10 pakietów). Sumy: **77 / 107 / 9 / 7** (było 59 / 118 / 15 / 8).
+Żadna warstwa nie jest jeszcze zamknięta. Znane ograniczenia i pozycje odłożone: raport architekta §6.
