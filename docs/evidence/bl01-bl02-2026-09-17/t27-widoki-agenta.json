@@ -1,6 +1,6 @@
 {
-  "zapisano": "2026-09-17T20:39:02.494Z",
-  "kodCommit": "e07fe47bd06b8587e0719bbe6a925299012b3028",
+  "zapisano": "2026-09-17T20:43:30.284Z",
+  "kodCommit": "30aaf8f8a09c749cb04d0d90d1e1ddfa6e28d014",
   "zrodlo": "prawdziwy model (subskrypcja Claude), instancja testowa suity przegladarkowej",
   "spec": "e2e/bl01-bl02-model.spec.ts",
   "proba": "T27",
@@ -14,11 +14,11 @@
   "werdykt": "niezaliczona",
   "przebiegi": [
     {
-      "runId": "run_3e583d1184894cb2b1d4",
+      "runId": "run_335ba5ea2b1a47cfb046",
       "polecenie": "Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.",
       "status": "succeeded",
-      "czasMs": 58093,
-      "pierwszyTekstMs": 20521,
+      "czasMs": 34147,
+      "pierwszyTekstMs": 9472,
       "wKolejceMs": 3,
       "narzedzia": [
         "ToolSearch",
@@ -28,11 +28,11 @@
       ]
     },
     {
-      "runId": "run_3213d8f04366476f91d7",
+      "runId": "run_efa90d9f55664e7c9e39",
       "polecenie": "Dodaj do tego wykres cen jednostkowych tych pozycji.",
       "status": "succeeded",
-      "czasMs": 56584,
-      "pierwszyTekstMs": 19173,
+      "czasMs": 42835,
+      "pierwszyTekstMs": 10268,
       "wKolejceMs": 1,
       "narzedzia": [
         "ToolSearch",
@@ -40,10 +40,22 @@
         "agent_view_update",
         "ui_state"
       ]
+    },
+    {
+      "runId": "run_893c41ea783949bdbb7a",
+      "polecenie": "Zawez zestawienie i wykres do pozycji w PLN.",
+      "status": "succeeded",
+      "czasMs": 34581,
+      "pierwszyTekstMs": 19130,
+      "wKolejceMs": 1,
+      "narzedzia": [
+        "agent_view_update",
+        "ui_state"
+      ]
     }
   ],
   "scenariusz": "T27 — uzytkownik nazywa sprawe jej kodem; polecenie wyslane z przestrzeni „Widoki agenta” (scenariusz, ktory przed Task 9 oblal dwukrotnie)",
-  "rozmowa": "cnv_74e8ece66ee04deda51a",
+  "rozmowa": "cnv_e4d046d996cd4077ac78",
   "odpowiedziNarzedzia": {
     "zestawienie": [
       {
@@ -64,26 +76,38 @@
         }
       ],
       "odczytalEkranPoZapisie": true
+    },
+    "zmianaZakresu": {
+      "zapisy": [
+        {
+          "rendered": false,
+          "unchanged": false,
+          "warnings": [
+            "unit_from_record"
+          ]
+        }
+      ],
+      "odczytalEkranPoZapisie": true
     }
   },
   "zestawienie": {
     "kartyZTegoWykonania": [
-      "crd_5c04b594959b4ded9dd6"
+      "crd_fd1c74706dbf4edeb503"
     ],
     "kompozycja": [
       {
-        "id": "crd_5c04b594959b4ded9dd6",
+        "id": "crd_fd1c74706dbf4edeb503",
         "title": "Pozycje ofert PC-2026-01",
         "spec": {
           "kind": "openui",
-          "source": "root = DataTable({operation: \"procurement.case_offer_items\", input: {caseId: \"pcs_0888fe3fd5cb435cbc54\"}}, [\"supplierName\", \"name\", \"unitPriceMinor\", \"currency\"], \"Pozycje ofert\")"
+          "source": "root = DataTable({operation: \"procurement.case_offer_items\", input: {caseId: \"pcs_0a8a9a7d69ca494eb1dd\"}}, [\"supplierName\", \"name\", \"unitPriceMinor\"], \"Pozycje ofert: dostawca, nazwa i cena jednostkowa\")"
         }
       }
     ],
     "zrodloInstancji": {
       "operation": "procurement.case_offer_items",
       "input": {
-        "caseId": "pcs_0888fe3fd5cb435cbc54"
+        "caseId": "pcs_0a8a9a7d69ca494eb1dd"
       }
     },
     "stanInstancji": "ready",
@@ -92,5 +116,32 @@
     "wersjaKompozycji": 1,
     "operacja": "procurement.case_offer_items"
   },
-  "turyModeluWydaneLacznie": 13
+  "wykres": {
+    "kartaWykresu": "crd_fd1c74706dbf4edeb503",
+    "nowaKarta": false,
+    "operacja": "procurement.case_offer_items",
+    "serie": [
+      "unitPriceMinor"
+    ],
+    "stanPoDodaniu": "error",
+    "bladPoDodaniu": {
+      "code": "validation_failed",
+      "message": "Seria Cena jednostkowa laczy rozne jednostki (PLN, EUR); zawez dane do jednej jednostki."
+    },
+    "stanPoZmianieZakresu": "ready"
+  },
+  "zmianaZakresu": {
+    "waluty": [
+      "PLN"
+    ],
+    "wierszy": 12,
+    "wersjaKompozycji": 3
+  },
+  "mutacja": {
+    "gdzie": "akcja rekordu w widoku agenta",
+    "rekord": "pci_4a66a7de841d4a4f9602",
+    "nowaWartosc": "7777,50 PLN",
+    "widokOdswiezonyBezPrzeladowania": true
+  },
+  "turyModeluWydaneLacznie": 16
 }
