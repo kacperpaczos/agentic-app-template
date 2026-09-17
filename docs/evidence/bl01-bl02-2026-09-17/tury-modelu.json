@@ -1,6 +1,6 @@
 {
   "budzet": 12,
-  "wydane": 3,
+  "wydane": 6,
   "tury": [
     {
       "nr": 1,
@@ -23,6 +23,27 @@
       "proba": "T26",
       "polecenie": "Pokaz tylko polskich dostawcow, posortowanych po nazwie od Z do A.",
       "runId": "run_b1b0125692144790afbf"
+    },
+    {
+      "nr": 4,
+      "o": "2026-09-17T19:48:27.296Z",
+      "proba": "T26",
+      "polecenie": "Pokaz tylko polskich dostawcow, posortowanych po nazwie od Z do A.",
+      "runId": "run_b2183264d0f549afb822"
+    },
+    {
+      "nr": 5,
+      "o": "2026-09-17T19:49:21.472Z",
+      "proba": "T26",
+      "polecenie": "Ktory dostawca jest teraz na pierwszym miejscu tej listy i jaki ma NIP?",
+      "runId": "run_ee4f0a7e02bd430e8a3a"
+    },
+    {
+      "nr": 6,
+      "o": "2026-09-17T19:50:03.467Z",
+      "proba": "T26",
+      "polecenie": "Usun zawezenie i pokaz z powrotem wszystkich dostawcow.",
+      "runId": "run_722fe4ef7c434fb1a1b4"
     }
   ]
 }

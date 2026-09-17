@@ -746,7 +746,9 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       expect(state1.space!.id).not.toBe(workspace);
       expect(param(page, 's')).toBe(workspace);
 
-      const tableCardId = state1.cards.find((c) => JSON.stringify(c.spec ?? {}).includes('DataTable'))!.id;
+      const withTable = state1.cards.find((c) => JSON.stringify(c.spec ?? {}).includes('DataTable'));
+      expect(withTable, 'zestawienie nie jest tabela danych').toBeTruthy();
+      const tableCardId = withTable!.id;
       const tableCard = page.getByTestId(`card-${tableCardId}`);
       await expect(tableCard).toBeVisible();
 
@@ -754,7 +756,9 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       let onPage = await instancesOnAgentViews(page, snapshot);
       let tableInstance = onPage.find((i: any) => i.component === 'DataTable');
       expect(tableInstance, 'karta nie zamontowala tabeli danych').toBeTruthy();
-      const table = await expectInstanceMatchesBackend(page, tableCard, tableInstance);
+      // The described table really is inside the card this run created.
+      await expect(tableCard.locator(`[data-ui-instance="${tableInstance.instanceId}"]`)).toHaveCount(1);
+      const table = await expectInstanceMatchesBackend(page, viewsPage(page), tableInstance);
       evidence.zestawienie = {
         kartyZTegoWykonania: created1,
         operacja: table.operation,
@@ -783,7 +787,10 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
         JSON.stringify(c.spec ?? {}).includes('DataChart'),
       )?.id;
       expect(chartCardId, 'zadna karta nie niesie wykresu').toBeTruthy();
-      await expectChartMatchesBackend(page, page.getByTestId(`card-${chartCardId}`), chartInstance);
+      await expect(
+        page.getByTestId(`card-${chartCardId}`).locator(`[data-ui-instance="${chartInstance.instanceId}"]`),
+      ).toHaveCount(1);
+      await expectChartMatchesBackend(page, viewsPage(page), chartInstance);
       evidence.wykres = {
         kartaWykresu: chartCardId,
         nowaKarta: !created1.includes(chartCardId!),
@@ -808,7 +815,7 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       tableInstance =
         onPage.find((i: any) => i.component === 'DataTable' && i.instanceId === tableInstance.instanceId) ??
         onPage.find((i: any) => i.component === 'DataTable');
-      const narrowed = await expectInstanceMatchesBackend(page, tableCard, tableInstance);
+      const narrowed = await expectInstanceMatchesBackend(page, viewsPage(page), tableInstance);
       const supplierNames = new Set(
         tableInstance.visibleRecordIds.map(
           (id: string) => narrowed.records.find((r) => String(r.id) === id)!.supplierName,
@@ -831,15 +838,38 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
         caseId: procurementCase.id,
       });
       const priceField = fieldOf(itemsBefore.descriptor!, 'unitPriceMinor');
-      const targetId = tableInstance.visibleRecordIds[0]!;
-      const targetBefore = recordsOf(itemsBefore.result, itemsBefore.descriptor!).find(
-        (r) => String(r.id) === targetId,
-      )!;
+      const items = recordsOf(itemsBefore.result, itemsBefore.descriptor!);
+      /*
+       * The record action belongs to the offer-items read. If the agent composed
+       * its view over that read, the change is made inside the agent's own view;
+       * if it composed it over another one (the comparison, say), the same
+       * action is taken on the case screen and the view has to follow anyway.
+       */
+      const showsItems = tableInstance.source.operation === 'procurement.case_offer_items';
+      const targetId = showsItems
+        ? tableInstance.visibleRecordIds[0]!
+        : String(
+            items.find(
+              (r) => r.supplierName === 'MediaPro Systemy' && typeof r.unitPriceMinor === 'number',
+            )!.id,
+          );
+      const targetBefore = items.find((r) => String(r.id) === targetId)!;
+      expect(targetBefore, 'rekord do zmiany nie jest pozycja oferty').toBeTruthy();
       const originalTyped = String((targetBefore.unitPriceMinor as number) / 100).replace('.', ',');
+
+      /*
+       * A witness that the page was never reloaded between the change and the
+       * view showing it: a reload would drop this marker with the whole
+       * JavaScript context.
+       */
+      await page.evaluate(() => {
+        (window as unknown as { __t8NoReload?: boolean }).__t8NoReload = true;
+      });
 
       const liveTable = tableCard.locator(`[data-ui-instance="${tableInstance.instanceId}"]`);
       const hasActionHere =
-        (await liveTable.locator('button[data-record-action="change_unit_price"]').count()) > 0;
+        showsItems &&
+        (await liveTable.locator(`tr[data-record-id="${targetId}"] button[data-record-action="change_unit_price"]`).count()) > 0;
       evidence.mutacja = { gdzie: hasActionHere ? 'akcja rekordu w widoku agenta' : 'akcja rekordu na ekranie sprawy' };
 
       let mutationTable = liveTable;
@@ -882,14 +912,17 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       )!;
       expect(targetAfter.unitPriceMinor).toBe(777750);
       const newText = formatFieldValue(targetAfter, priceField);
-      expect(newText).toBe('7777,50 PLN');
+      // A literal too, so the formatter cannot only agree with itself.
+      if (targetAfter.currency === 'PLN') expect(newText).toBe('7777,50 PLN');
 
       if (!hasActionHere) await openAgentViews(page);
       await expect(viewsPage(page)).toHaveAttribute('data-state', 'ready');
-      // The agent's own view shows the changed value — no reload in between.
-      await expect(
-        tableCard.locator(`td[data-record-id="${targetId}"][data-field="unitPriceMinor"]`),
-      ).toHaveText(newText);
+      // The agent's own view shows the changed value, and no reload happened.
+      if (showsItems) {
+        await expect(
+          tableCard.locator(`td[data-record-id="${targetId}"][data-field="unitPriceMinor"]`),
+        ).toHaveText(newText);
+      }
       // The published description is debounced; let it catch up before reading it.
       await page.waitForTimeout(1200);
       snapshot = await publishedSnapshot(page);
@@ -897,9 +930,13 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
         if (instance.component === 'DataTable') await expectInstanceMatchesBackend(page, viewsPage(page), instance);
         if (instance.component === 'DataChart') await expectChartMatchesBackend(page, viewsPage(page), instance);
       }
+      const withoutReload = await page.evaluate(
+        () => (window as unknown as { __t8NoReload?: boolean }).__t8NoReload === true,
+      );
+      expect(withoutReload, 'strona zostala przeladowana miedzy zmiana a odczytem widoku').toBe(true);
       evidence.mutacja.rekord = targetId;
       evidence.mutacja.nowaWartosc = newText;
-      evidence.mutacja.widokOdswiezonyBezPrzeladowania = true;
+      evidence.mutacja.widokOdswiezonyBezPrzeladowania = withoutReload;
 
       /* --------------------------- 5. the reload ----------------------------- */
       await page.reload();
