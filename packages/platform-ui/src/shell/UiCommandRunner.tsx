@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import {
   UI_COMMAND_FAILURES,
+  filterToSearch,
   type UiCommand,
   type UiCommandResult,
   type UiTarget,
@@ -25,7 +26,13 @@ import { setUiCommandHandler } from '../chat/runEvents.ts';
  *  - `inactive_conversation` — the command came from a conversation the user is
  *    not looking at. A task running in the background must not pull the screen
  *    away from what its owner is doing now, so this is reported, not performed;
- *  - `no_client` — added by the server when nothing answered at all.
+ *  - `no_client` — added by the server when nothing answered at all;
+ *  - `not_filterable` / `unknown_field` — the view declares no narrowing, or the
+ *    agent named a property it does not declare;
+ *  - `not_applied` — the narrowing was accepted but no view reported applying
+ *    it. Distinct from narrowing to nothing: "your screen now shows none of the
+ *    rows" is an answer, "your screen is unchanged" is a defect, and the agent
+ *    must not report the second as the first.
  *
  * Idempotent by `commandId`: a re-attached run replays its events from a
  * sequence number, and a navigation that happened once must not happen again
@@ -38,6 +45,7 @@ const HIGHLIGHT_MS = 2600;
 export function UiCommandRunner() {
   const navigate = useNavigate();
   const setSpace = useAppState((s) => s.setSpace);
+  const setAgentFilterKey = useAppState((s) => s.setAgentFilterKey);
   const handled = useRef(new Set<string>());
   const catalog = useRef<UiTarget[] | null>(null);
 
@@ -87,8 +95,76 @@ export function UiCommandRunner() {
       // `SpaceSync`, so Back returns to the previous one.
       if (command.spaceId) setSpace(command.spaceId);
 
+      /*
+       * A narrowing is a change of address, not of client state.
+       *
+       * It becomes one search parameter per field, so the narrowed view can be
+       * linked, reloaded and undone with Back — see `state/viewFilter.ts`.
+       * `undefined` leaves the address alone, `null` clears the view's filter
+       * parameters, and an object sets them.
+       */
+      const narrowing = command.filter;
+      let filterParams: Record<string, string | undefined> | null = null;
+
+      if (narrowing === null) {
+        filterParams = Object.fromEntries(
+          (target.filter?.fields ?? []).map((f) => [f.field, undefined]),
+        );
+        setAgentFilterKey(null);
+      } else if (narrowing) {
+        if (!target.filter || !target.to) {
+          // A narrowing belongs to a screen, and this target declares none — or
+          // has no screen of its own to narrow.
+          return { ...base, executed: false, reason: UI_COMMAND_FAILURES.notFilterable };
+        }
+        const declared = new Set(target.filter.fields.map((f) => f.field));
+        if (narrowing.predicates.some((p) => !declared.has(p.field))) {
+          return { ...base, executed: false, reason: UI_COMMAND_FAILURES.unknownField };
+        }
+        /* Fields not named are cleared, so a second narrowing replaces the first
+           rather than stacking silently on top of it. */
+        filterParams = Object.fromEntries(
+          (target.filter.fields ?? []).map((f) => [f.field, undefined]),
+        );
+        Object.assign(filterParams, filterToSearch(narrowing.predicates));
+        setAgentFilterKey(
+          `${target.id}|${narrowing.predicates.map((p) => `${p.field}=${p.value}`).join('&')}`,
+        );
+      }
+
       if (target.to) {
-        await navigate({ to: target.to, search: (prev: Record<string, unknown>) => prev } as never);
+        await navigate({
+          to: target.to,
+          search: (prev: Record<string, unknown>) => ({ ...prev, ...(filterParams ?? {}) }),
+        } as never);
+      }
+
+      /*
+       * Wait for a view to report what the narrowing did, the same way the
+       * highlight waits for its element. Without this the answer would be "we
+       * set some state", and the difference that matters — narrowed to nothing
+       * versus nothing applied it — would be unanswerable. `not_applied` is
+       * what the user's screen looking untouched actually is.
+       */
+      let filtered: { matched: number; total: number } | undefined;
+      if (narrowing) {
+        for (let attempt = 0; attempt < 25; attempt += 1) {
+          const outcome = useAppState.getState().filterOutcome;
+          if (outcome && outcome.targetId === command.targetId) {
+            filtered = { matched: outcome.matched, total: outcome.total };
+            break;
+          }
+          await new Promise((r) => window.setTimeout(r, 60));
+        }
+        if (!filtered) {
+          setAgentFilterKey(null);
+          return {
+            ...base,
+            executed: false,
+            reason: UI_COMMAND_FAILURES.notApplied,
+            url: window.location.pathname + window.location.search,
+          };
+        }
       }
 
       const highlighted = target.selector ? await reveal(target.selector) : false;
@@ -110,10 +186,11 @@ export function UiCommandRunner() {
         ...base,
         executed: true,
         highlighted,
+        ...(filtered ? { filtered } : {}),
         url: window.location.pathname + window.location.search,
       };
     },
-    [navigate, reveal, setSpace],
+    [navigate, reveal, setSpace, setAgentFilterKey],
   );
 
   useEffect(() => {

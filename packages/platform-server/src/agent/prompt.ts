@@ -146,11 +146,48 @@ export function buildSystemPrompt(input: PromptInput): string {
       '# Sterowanie interfejsem',
       `Gdy uzytkownik prosi o pokazanie, otwarcie albo przelaczenie czegos w aplikacji, uzyj ${mcpToolName('ui_navigate')}.`,
       'NIE opisuj drogi slowami, jesli cel jest na ponizszej liscie — po prostu go otworz.',
+      /*
+       * The rule that was missing, and the transcript that shows why.
+       *
+       * Asked "what is in suppliers?", the agent read the data, retyped it into
+       * the conversation and left the user on the screen they were already on.
+       * The user then asked "why didn't you take me there?" — and only then did
+       * it navigate. The tool was available the whole time; the instruction
+       * fired only on an explicit "show me", and a question is not phrased that
+       * way. Answering about data and putting that data on screen are the same
+       * act here, so the trigger is the subject, not the wording.
+       */
+      'ODPOWIADANIE O DANYCH TO TEZ POKAZYWANIE. Jesli odpowiadasz na pytanie o dane,',
+      'ktore maja swoj widok na ponizszej liscie, otworz ten widok w tej samej turze —',
+      'nawet gdy uzytkownik nie uzyl slowa „pokaz". Najpierw przenies, potem opowiedz,',
+      'i mow o tym, co uzytkownik ma teraz na ekranie.',
       `Pelna liste wraz z przestrzeniami pracy zwraca ${mcpToolName('ui_catalog')}.`,
       'Wynik ui_navigate zawiera executed=true/false. Jesli false, powiedz uzytkownikowi,',
       'czego nie udalo sie zrobic i dlaczego — nie twierdz, ze cos otworzyles.',
       'Pokazanie ustawienia niczego w nim nie zmienia.',
-      ...uiTargets.map((t) => `- ${t.id} [${t.kind}] ${t.label}: ${t.description}`),
+      '',
+      '## Zawezanie widoku',
+      /*
+       * The second half of the same transcript: asked to show only Polish
+       * suppliers, the agent retyped the matching rows into the chat. The screen
+       * still showed all of them, so the user had two versions of the same data,
+       * and the one they were told to read was a copy that cannot be sorted,
+       * cannot update and is only as right as the retyping.
+       */
+      `Gdy uzytkownik chce zobaczyc TYLKO czesc danych ("pokaz tylko X", "same Y"), uzyj ${mcpToolName('ui_filter')}.`,
+      'To jest domyslny sposob. NIE przepisuj pasujacych wierszy do rozmowy zamiast zawezenia widoku —',
+      'uzytkownik zostalby wtedy z pelna lista na ekranie i jej recznie przepisana kopia w czacie.',
+      'Mozesz dodatkowo skomentowac wynik w rozmowie, ale widok jest miejscem, gdzie dane sa zawezane.',
+      'Pola, po ktorych wolno zawezac, podaje ui_catalog jako filterableFields — pole spoza tej listy',
+      'zostanie odrzucone, wiec nie zgaduj nazw. W label napisz krotko po polsku, co zostalo zawezone;',
+      'uzytkownik zobaczy to zdanie nad widokiem razem z przyciskiem powrotu do pelnego widoku.',
+      'Wynik zawiera filtered.matched i filtered.total — podaj te liczby zamiast liczyc samodzielnie.',
+      'Zeby przywrocic pelny widok, wywolaj ui_filter z clear=true.',
+      ...uiTargets.map(
+        (t) =>
+          `- ${t.id} [${t.kind}] ${t.label}: ${t.description}` +
+          (t.filter ? ` | zawezanie po: ${t.filter.fields.map((f) => f.field).join(', ')}` : ''),
+      ),
     );
   }
 

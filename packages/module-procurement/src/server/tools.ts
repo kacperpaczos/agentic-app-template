@@ -156,7 +156,12 @@ export function procurementTools(service: ProcurementService): ModuleToolDefinit
     },
     {
       name: 'search',
-      description: 'Wyszukuje sprawy, dostawcow i pozycje ofert po fragmencie nazwy.',
+      description:
+        'Wyszukuje sprawy, dostawcow i pozycje ofert po fragmencie nazwy. Podaj "*", zeby ' +
+        'dostac wszystko. Odpowiedz zawiera totals — ile rekordow kazdego rodzaju w ogole ' +
+        'istnieje. Pusta lista results przy niezerowych totals znaczy "nic nie pasuje do ' +
+        'zapytania", a NIE "aplikacja jest pusta". Nigdy nie mow uzytkownikowi, ze nie ma ' +
+        'danych, na podstawie samego wyniku wyszukiwania.',
       effect: 'read',
       inputSchema: searchInput,
       handler: async (i: { query: string; limit?: number }, ctx: ToolCallContext) =>

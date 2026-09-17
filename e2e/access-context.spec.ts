@@ -72,6 +72,45 @@ test.describe('kontekst dostepu', () => {
     await expect(page.getByTestId('case-detail-page')).toHaveCount(0);
   });
 
+  test('zawezony link nie pokazuje odbiorcy cudzych danych', async ({ page }) => {
+    /*
+     * A filter in the address is shareable by design, so the obvious worry is
+     * whether the link carries data with it. It cannot: the parameters only
+     * *remove* rows from a response the backend already scoped to its owner —
+     * nothing in the address reaches the database.
+     *
+     * Shown rather than argued. The same narrowed address, opened as the second
+     * identity, is still narrowed and still shows that identity's own data,
+     * which here is none of it.
+     */
+    await openApp(page);
+    await page.goto('/data?country=PL');
+    const rows = page.locator('[data-testid="data-page"] tbody tr');
+    await expect(rows.first()).toBeVisible();
+    const mine = await rows.count();
+    expect(mine).toBeGreaterThan(0);
+    const firstName = (await rows.first().textContent())?.trim() ?? '';
+    // The narrowing is in force, not merely present in the address.
+    await expect(page.getByTestId('view-filter-banner')).toBeVisible();
+
+    await gotoSettings(page);
+    const before = (await owner(page).textContent())?.trim();
+    await page.getByTestId('switch-access-context').click();
+    await expect(owner(page)).not.toHaveText(before ?? '');
+
+    await page.goto('/data?country=PL');
+    await expect(page.getByTestId('data-page')).toBeVisible();
+    // The second identity owns no suppliers, so any row here would be a leak
+    // carried by the link.
+    await expect(rows).toHaveCount(0);
+    if (firstName) await expect(page.locator('body')).not.toContainText(firstName);
+
+    // Put the identity back, so the suite's shared instance is left as found.
+    await gotoSettings(page);
+    await page.getByTestId('switch-access-context').click();
+    await expect(owner(page)).toHaveText(before ?? '');
+  });
+
   test('powrot do pierwszej tozsamosci przywraca jej dane', async ({ page }) => {
     await gotoSettings(page);
     const first = (await owner(page).textContent())?.trim();

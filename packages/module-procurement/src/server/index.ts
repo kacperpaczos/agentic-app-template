@@ -107,15 +107,43 @@ export function createProcurementModule(platform: PlatformServices): ServerModul
         id: 'procurement.cases',
         kind: 'view',
         label: 'Wszystkie sprawy',
-        description: 'Lista spraw zakupowych; stad otwiera sie pojedyncza sprawe.',
+        description:
+          'Lista spraw zakupowych; stad otwiera sie pojedyncza sprawe. Mozna zawezic przez ui_filter.',
         to: '/cases',
+        filter: {
+          collection: 'cases',
+          fields: [
+            { field: 'status', label: 'Status sprawy', values: ['collecting', 'comparing', 'closed'] },
+            { field: 'currency', label: 'Waluta', values: ['PLN', 'EUR'] },
+            { field: 'title', label: 'Tytul sprawy' },
+            { field: 'code', label: 'Kod sprawy' },
+          ],
+        },
       },
       {
         id: 'procurement.data',
         kind: 'view',
         label: 'Dostawcy',
-        description: 'Dane dostawcow i ich ofert.',
+        description:
+          'Dane dostawcow i ich ofert. Mozna zawezic — np. do jednego kraju — przez ui_filter.',
         to: '/data',
+        /*
+         * What may be narrowed here, and by what.
+         *
+         * `collection` is the key of the array in this view's own response, and
+         * the fields are properties of its rows. The platform carries both
+         * without reading them; this module is the only place that knows a
+         * supplier has a country. Listing the values lets the agent use the
+         * codes that are actually in the data instead of writing "Polska".
+         */
+        filter: {
+          collection: 'suppliers',
+          fields: [
+            { field: 'country', label: 'Kraj (kod ISO)', values: ['PL', 'FI', 'DE', 'CZ'] },
+            { field: 'name', label: 'Nazwa dostawcy' },
+            { field: 'taxId', label: 'NIP' },
+          ],
+        },
       },
       {
         id: 'procurement.case.comparison',
