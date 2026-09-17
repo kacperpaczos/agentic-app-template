@@ -104,8 +104,10 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
           label: known.label,
           url: result.url,
           highlighted: result.highlighted ?? false,
-          // The screen's description version after the move; pass it to ui_state as minVersion.
+          // The screen's description after the move, and the tab it belongs to: pass both to ui_state.
           uiVersion: result.uiVersion,
+          uiClientId: result.uiClientId,
+          uiPublication: result.uiPublication,
         };
       },
     },
@@ -218,6 +220,8 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
           cleared: clearing && result.executed,
           filtered: result.filtered,
           uiVersion: result.uiVersion,
+          uiClientId: result.uiClientId,
+          uiPublication: result.uiPublication,
         };
       },
     },

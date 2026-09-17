@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { UI_TARGET_KINDS } from './ui.ts';
+import { UI_TARGET_KINDS, uiClientIdSchema } from './ui.ts';
 import { semanticInstanceSchema } from './views.ts';
 
 /**
@@ -37,12 +37,28 @@ export const UI_SNAPSHOT_CARDS_LIMIT = 50;
  */
 export const UI_SNAPSHOT_MAX_BYTES = 256_000;
 
-/** A tab's identity: random, URL-safe, kept for the life of the tab. */
-export const uiClientIdSchema = z
-  .string()
-  .min(8)
-  .max(80)
-  .regex(/^[A-Za-z0-9_-]+$/);
+/**
+ * Longest address a description (and `AppContext.ui`) carries. A narrowed view
+ * can have a far longer one — eight predicates of forty long values — so the
+ * address is shortened to this and says so ({@link clampUiUrl}), rather than
+ * making the description, or the command sent from that screen, invalid.
+ */
+export const UI_URL_MAX_LENGTH = 2000;
+
+/** The address as a description carries it: at most the limit, and whether it was cut. */
+export function clampUiUrl(url: string): { url: string; urlTruncated: boolean } {
+  return url.length > UI_URL_MAX_LENGTH
+    ? { url: url.slice(0, UI_URL_MAX_LENGTH), urlTruncated: true }
+    : { url, urlTruncated: false };
+}
+
+/**
+ * How often an open tab says it is still there, and after how long without a
+ * word it is no longer taken for one. Generous on purpose: browsers throttle
+ * timers in background tabs to about once a minute.
+ */
+export const UI_CLIENT_HEARTBEAT_MS = 15_000;
+export const UI_CLIENT_INACTIVE_AFTER_MS = 90_000;
 
 export const uiSnapshotCardSchema = z.object({
   cardId: z.string().min(1).max(128),
@@ -66,8 +82,10 @@ export const uiSnapshotSchema = z.object({
   conversationId: z.string().max(128).nullable(),
   /** The canvas space the tab has selected. */
   spaceId: z.string().max(128).nullable(),
-  /** Path and query of the screen, as the address bar shows it. */
-  url: z.string().max(2000),
+  /** Path and query of the screen, as the address bar shows it — cut to the limit. */
+  url: z.string().max(UI_URL_MAX_LENGTH),
+  /** True when `url` was cut: the address on screen is longer. */
+  urlTruncated: z.boolean(),
   /** The catalog target whose route is the screen on display, if one is. */
   target: z
     .object({ id: z.string().max(120), kind: z.enum(UI_TARGET_KINDS), label: z.string().max(120) })
@@ -111,13 +129,23 @@ export type UiSnapshot = z.infer<typeof uiSnapshotSchema>;
  *
  *  - `no_client` — no tab of this owner has published anything (none open, or
  *    the backend restarted since — snapshots live in memory);
- *  - `other_conversation` — tabs are open, but none shows the run's
+ *  - `other_conversation` — no tab (or not the tab asked about) shows the run's
  *    conversation. What they show belongs to another conversation and is not
  *    handed over;
- *  - `older_than_requested` — the conversation's tab has not yet published the
- *    version asked for; the newest one it has is returned, marked stale.
+ *  - `older_than_requested` — the tab has not yet published the version asked
+ *    for; the newest one it has is returned, marked stale;
+ *  - `client_gone` — the tab asked about (or the one a version belongs to) was
+ *    closed, or the backend does not know it;
+ *  - `client_inactive` — the tab's description is returned, but the tab has not
+ *    shown a sign of life for longer than {@link UI_CLIENT_INACTIVE_AFTER_MS}.
  */
-export const UI_STATE_REASONS = ['no_client', 'older_than_requested', 'other_conversation'] as const;
+export const UI_STATE_REASONS = [
+  'no_client',
+  'older_than_requested',
+  'other_conversation',
+  'client_gone',
+  'client_inactive',
+] as const;
 export type UiStateReason = (typeof UI_STATE_REASONS)[number];
 
 /** What `ui_state` and `GET /api/ui/snapshot` answer. */

@@ -92,8 +92,8 @@ async function conversationOnScreen(page: Page): Promise<string> {
   return id!;
 }
 
-/** Results of one tool in a conversation, in call order, parsed. */
-async function toolResults(page: Page, conversationId: string, tool: string): Promise<any[]> {
+/** Stored results of one tool in a conversation, in call order, as text (shortened by the runtime past 4000 characters). */
+async function rawToolResults(page: Page, conversationId: string, tool: string): Promise<string[]> {
   const messages: Array<Record<string, any>> = await getJson(page, `/api/threads/get/${conversationId}`);
   const calls = new Map<string, string>();
   for (const m of messages) {
@@ -101,7 +101,12 @@ async function toolResults(page: Page, conversationId: string, tool: string): Pr
   }
   return messages
     .filter((m) => m.role === 'tool' && calls.get(m.toolCallId) === `mcp__app__${tool}`)
-    .map((m) => JSON.parse(m.content));
+    .map((m) => m.content as string);
+}
+
+/** Results of one tool in a conversation, in call order, parsed. */
+async function toolResults(page: Page, conversationId: string, tool: string): Promise<any[]> {
+  return (await rawToolResults(page, conversationId, tool)).map((text) => JSON.parse(text));
 }
 
 /** Suppliers the backend returns for this owner, and those from one country. */
@@ -214,8 +219,9 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     expect(before.snapshot.instances[0].filter).toEqual([]);
     expect(before.snapshot.instances[0].matched).toBe(all.length);
 
-    // The acknowledgement carries the version published after the narrowing…
+    // The acknowledgement carries the version published after the narrowing, and whose version it is…
     expect(filtered).toMatchObject({ executed: true, filtered: { matched: polish.length, total: all.length } });
+    expect(filtered).toMatchObject({ uiClientId: clientId, uiPublication: 'published' });
     expect(filtered.uiVersion).toBeGreaterThan(before.version);
     // What the user sees of it: the narrowed view says so, with the view's own count.
     await expect(page.getByTestId('view-filter-count')).toContainText(`${polish.length} z ${all.length}`);
@@ -283,6 +289,98 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     // It did wait for the requested version before answering.
     const { runs } = await getJson(page, `/api/conversations/${conversationId}/runs`);
     expect(runs[0].durationMs).toBeGreaterThanOrEqual(1500);
+  });
+
+  test('bardzo dlugi zawezony adres: polecenie nadal sie wysyla, a opis niesie adres skrocony z flaga', async ({ page }) => {
+    await scripted.restart('ui-state-read');
+    // A narrowing the agent itself may apply: one field, forty 200-character values.
+    const values = Array.from({ length: 40 }, (_, i) => `${String(i).padStart(2, '0')}${'Q'.repeat(198)}`);
+    await openApp(page, `/data?country=${values.join(',')}`);
+    expect(page.url().length).toBeGreaterThan(2000);
+    // What the screen shows: nothing matches, and it says so.
+    await expect(page.locator('[data-testid="data-page"] [data-ui-instance]')).toHaveAttribute('data-state', 'empty');
+
+    await send(page, 'Co mam teraz na ekranie?');
+    await settled(page);
+    await expect(answer(page)).toContainText('[call:ui_state] {"stale":false,"version":');
+
+    const conversationId = await conversationOnScreen(page);
+    // The agent's answer is longer than the runtime stores; its verdict is at the start.
+    const [raw] = await rawToolResults(page, conversationId, 'ui_state');
+    const told = /^\{"stale":false,"version":(\d+),/.exec(raw!);
+    expect(told, raw!.slice(0, 120)).not.toBeNull();
+    // The same evaluation, in full, from the backend.
+    const current = await getJson(page, `/api/ui/snapshot?conversationId=${conversationId}`);
+    expect(current.stale).toBe(false);
+    expect(current.version).toBeGreaterThanOrEqual(Number(told![1]));
+    expect(current.snapshot.clientId).toBe(await clientIdOf(page));
+    expect(current.snapshot.urlTruncated).toBe(true);
+    expect(current.snapshot.url).toHaveLength(2000);
+    expect(current.snapshot.url.startsWith('/data?')).toBe(true);
+    // The narrowing itself is not cut: the component describes all forty values.
+    expect(current.snapshot.instances[0]).toMatchObject({ state: 'empty', matched: 0 });
+    expect(current.snapshot.instances[0].filter).toEqual([{ field: 'country', op: 'in', value: values }]);
+  });
+
+  test('karta otwarta wprost na ekranie bez komponentow danych opisuje go; karty przestrzeni znane poza canvasem', async ({ page }) => {
+    await scripted.restart('ui-state-read');
+    await openApp(page, '/settings');
+    await expect(page.getByTestId('settings-page')).toBeVisible();
+    const settings = await published(page, (s) => s.url.startsWith('/settings') && s.target?.id === 'platform.settings');
+    expect(settings).toMatchObject({
+      target: { id: 'platform.settings', kind: 'view', label: 'Ustawienia' },
+      view: null,
+      instances: [],
+      actions: ['navigate'],
+    });
+
+    // The active space's cards, on a screen that is not the canvas and without ever opening it.
+    const { spaces } = await getJson(page, '/api/canvas/spaces');
+    const space = await getJson(page, `/api/canvas/spaces/${spaces[0].id}`);
+    await page.goto(`${BASE}/data?s=${spaces[0].id}`);
+    await expect(rows(page)).toHaveCount(4);
+    const onData = await published(page, (s) => s.url.startsWith('/data') && s.spaceId === spaces[0].id && tableReady(s));
+    expect(onData.cards).toEqual(
+      space.cards.map((c: any) => ({
+        cardId: c.id,
+        title: c.title,
+        kind: c.spec.kind,
+        component: c.spec.kind === 'component' ? c.spec.component : 'openui',
+        specVersion: c.specVersion,
+      })),
+    );
+  });
+
+  test('zamknieta karta nie jest juz ekranem rozmowy: zadanie w tle nie dostaje jej ostatniego opisu', async ({ page, context }) => {
+    await scripted.restart('ui-state-late');
+    await openApp(page, '/data');
+    await send(page, 'Popracuj w tle i na koniec opisz moj ekran.');
+    await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'running', { timeout: 30_000 });
+    const conversationA = await conversationOnScreen(page);
+
+    // The sending tab moves to a new conversation…
+    await page.locator('.pf-chat .openui-icon-button[aria-label="New chat"]').first().click();
+    await published(page, (s) => s.conversationId === null);
+
+    // …while a second tab shows conversation A, and is then closed.
+    const second = await context.newPage();
+    await second.goto(`${BASE}/data?c=${conversationA}`);
+    await expect(second.locator('.openui-agent-thread-composer__input')).toBeVisible();
+    const secondId = await clientIdOf(second);
+    expect(secondId).not.toBe(await clientIdOf(page));
+    await published(second, (s) => s.conversationId === conversationA);
+    await second.close();
+    await expect
+      .poll(async () => (await getJson(page, `/api/ui/snapshot?clientId=${secondId}`)).snapshot, { timeout: 10_000 })
+      .toBeNull();
+
+    await expect
+      .poll(async () => (await getJson(page, `/api/conversations/${conversationA}/runs`)).runs[0]?.status, {
+        timeout: 60_000,
+      })
+      .toBe('succeeded');
+    const [result] = await toolResults(page, conversationA, 'ui_state');
+    expect(result).toEqual({ stale: true, reason: 'other_conversation', version: null, capturedAt: null, ageMs: null, snapshot: null });
   });
 
   test('wykonanie rozmowy A, gdy przegladarka pokazuje B, dostaje other_conversation', async ({ page }) => {

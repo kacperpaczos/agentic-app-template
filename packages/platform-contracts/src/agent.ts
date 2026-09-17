@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { canvasViewportSchema } from './canvas.ts';
+import { UI_URL_MAX_LENGTH } from './ui-snapshot.ts';
 
 /**
  * Application context the frontend attaches to every run.
@@ -51,12 +52,36 @@ export const appContextSchema = z.object({
       version: z.number().int().min(1),
       clientId: z.string().max(80),
       viewId: z.string().max(120).nullable(),
-      url: z.string().max(2000),
+      url: z.string().max(UI_URL_MAX_LENGTH),
+      /** The address on screen is longer than `url`. */
+      urlTruncated: z.boolean().optional(),
     })
     .nullable()
     .default(null),
 });
 export type AppContext = z.infer<typeof appContextSchema>;
+
+/**
+ * Parses the context of a command, tolerating a malformed screen marker.
+ *
+ * The marker (`ui`) only says which description of the screen the command was
+ * sent from. A tab that got it wrong must not stop the user from sending
+ * anything at all from that screen: the marker is dropped (`ui: null`) and the
+ * reasons are returned for the caller to report. Anything else that fails
+ * still fails.
+ */
+export function parseRunAppContext(raw: unknown): { context: AppContext; uiRejected: string[] | null } {
+  const parsed = appContextSchema.safeParse(raw);
+  if (parsed.success) return { context: parsed.data, uiRejected: null };
+  const issues = parsed.error.issues;
+  if (raw && typeof raw === 'object' && issues.every((i) => i.path[0] === 'ui')) {
+    return {
+      context: appContextSchema.parse({ ...(raw as Record<string, unknown>), ui: null }),
+      uiRejected: issues.map((i) => `${i.path.join('.')}: ${i.message}`),
+    };
+  }
+  throw parsed.error;
+}
 
 export const EMPTY_APP_CONTEXT: AppContext = {
   conversationId: null,

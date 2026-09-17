@@ -223,7 +223,8 @@ export function scriptedAgent(steps: Step[], opts: ScriptedAgentOptions = {}): M
                   `[ui:${step.label ?? step.targetId}] executed=${outcome.executed} ` +
                   `reason=${outcome.reason ?? '-'} ` +
                   (counted ? `pokazane=${counted.matched}/${counted.total} ` : '') +
-                  (outcome.uiVersion !== undefined ? `uiVersion=${outcome.uiVersion} ` : ''),
+                  (outcome.uiVersion !== undefined ? `uiVersion=${outcome.uiVersion} ` : '') +
+                  (outcome.uiClientId !== undefined ? `uiClientId=${outcome.uiClientId} ` : ''),
               },
             };
             continue;

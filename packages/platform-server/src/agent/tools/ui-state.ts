@@ -30,21 +30,28 @@ export function uiStateTools(services: PlatformServices): Array<ModuleToolDefini
         'Zwraca aktualny opis ekranu uzytkownika w tej rozmowie: adres, otwarty widok z wersja kompozycji, ' +
         'karty przestrzeni, komponenty danych (stan, pola z etykietami, filtr, sortowanie, strona, ' +
         'identyfikatory widocznych rekordow, liczby matched/total) i dozwolone akcje. Kazdy opis ma ' +
-        'wersje. Po ui_navigate / ui_filter podaj minVersion = uiVersion z ich wyniku: narzedzie ' +
-        `poczeka (domyslnie ${UI_STATE_DEFAULT_WAIT_MS} ms, najwyzej ${UI_STATE_MAX_WAIT_MS} ms) na opis co najmniej ` +
-        'tej wersji. stale=true oznacza, ze opis jest starszy niz wymagany albo go nie ma — wtedy reason ' +
-        'mowi dlaczego: no_client (zadna karta przegladarki nie opisala ekranu), other_conversation ' +
-        '(uzytkownik oglada inna rozmowe), older_than_requested (zwrocony opis jest starszy niz wymagany). ' +
+        'wersje liczona osobno dla kazdej karty przegladarki (clientId). Po ui_navigate / ui_filter podaj ' +
+        'minVersion = uiVersion i clientId = uiClientId z ich wyniku: narzedzie poczeka ' +
+        `(domyslnie ${UI_STATE_DEFAULT_WAIT_MS} ms, najwyzej ${UI_STATE_MAX_WAIT_MS} ms) na opis tej karty co najmniej ` +
+        'tej wersji. stale=true oznacza, ze opis nie jest potwierdzonym aktualnym stanem — reason mowi ' +
+        'dlaczego: no_client (zadna karta nie opisala ekranu), other_conversation (karta pokazuje inna ' +
+        'rozmowe), older_than_requested (zwrocony opis jest starszy niz wymagany), client_gone (karta ' +
+        'zamknieta), client_inactive (karta dawno nie dala znaku zycia). ' +
         'Nie opisuj ekranu na podstawie opisu ze stale=true tak, jakby byl aktualny.',
       effect: 'read',
       alwaysLoad: true,
       inputSchema: z.object({
+        clientId: z
+          .string()
+          .max(80)
+          .optional()
+          .describe('Karta przegladarki, o ktora pytasz, np. uiClientId z wyniku ui_navigate lub ui_filter'),
         minVersion: z
           .number()
           .int()
           .min(1)
           .optional()
-          .describe('Najnizsza wersja opisu, ktora cie interesuje, np. uiVersion z wyniku ui_navigate lub ui_filter'),
+          .describe('Najnizsza wersja opisu tej karty, np. uiVersion z wyniku ui_navigate lub ui_filter'),
         waitMs: z
           .number()
           .int()
@@ -53,7 +60,7 @@ export function uiStateTools(services: PlatformServices): Array<ModuleToolDefini
           .optional()
           .describe('Jak dlugo czekac na opis co najmniej minVersion (ms)'),
       }),
-      handler: async (input: { minVersion?: number; waitMs?: number }, ctx: ToolCallContext) => {
+      handler: async (input: { clientId?: string; minVersion?: number; waitMs?: number }, ctx: ToolCallContext) => {
         const conversationId = ctx.conversationId ?? ctx.appContext.conversationId;
         if (!conversationId) {
           throw new AppError(
@@ -67,8 +74,11 @@ export function uiStateTools(services: PlatformServices): Array<ModuleToolDefini
         );
         const ui = ctx.appContext.ui;
         return services.uiSnapshots.waitFor(ctx.ownerId, conversationId, {
+          ...(input.clientId !== undefined ? { clientId: input.clientId } : {}),
           ...(input.minVersion !== undefined ? { minVersion: input.minVersion } : {}),
           context: ui ? { clientId: ui.clientId, version: ui.version } : null,
+          // A version without a named tab belongs to the tab that acknowledged this run's last UI command.
+          acknowledged: services.uiSnapshots.acknowledgement(ctx.ownerId, ctx.runId),
           waitMs,
         });
       },

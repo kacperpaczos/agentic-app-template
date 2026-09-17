@@ -209,7 +209,12 @@ const SCENARIOS: Record<string, Step[]> = {
       },
       maxChars: 400,
     },
-    { kind: 'call', name: 'ui_state', input: { minVersion: '$last.uiVersion' }, maxChars: 160 },
+    {
+      kind: 'call',
+      name: 'ui_state',
+      input: { minVersion: '$last.uiVersion', clientId: '$last.uiClientId' },
+      maxChars: 160,
+    },
     { kind: 'call', name: 'get_context', maxChars: 160 },
     { kind: 'text', text: 'Opisalem ekran po zawezeniu.' },
   ],
@@ -222,7 +227,7 @@ const SCENARIOS: Record<string, Step[]> = {
   /* Reads the screen late, after the user may have moved to another conversation. */
   'ui-state-late': [
     { kind: 'text', text: 'Zaczynam prace w tle. ', delayMs: 200 },
-    { kind: 'wait', delayMs: 8000 },
+    { kind: 'wait', delayMs: 10_000 },
     { kind: 'call', name: 'ui_state', maxChars: 160 },
     { kind: 'text', text: 'Koniec pracy w tle.' },
   ],

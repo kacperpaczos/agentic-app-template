@@ -336,6 +336,36 @@ export const UI_COMMAND_FAILURES = {
 } as const;
 export type UiCommandFailure = (typeof UI_COMMAND_FAILURES)[keyof typeof UI_COMMAND_FAILURES];
 
+/** A browser tab's identity (see `uiSnapshotSchema`): random, URL-safe, kept for the life of the tab. */
+export const uiClientIdSchema = z
+  .string()
+  .min(8)
+  .max(80)
+  .regex(/^[A-Za-z0-9_-]+$/);
+
+/**
+ * The one time budget of a UI command, shared by both ends.
+ *
+ * The server stops waiting for the acknowledgement after
+ * `UI_COMMAND_ACK_TIMEOUT_MS` and reports `no_client`. Everything the tab does
+ * before acknowledging — performing the command, waiting for the view to
+ * settle, publishing its description — has to fit in that budget minus
+ * `UI_COMMAND_ACK_MARGIN_MS`, left for delivering the command and posting the
+ * acknowledgement. A command the tab performed must never be reported as one
+ * nobody answered because the tab spent the budget describing it.
+ */
+export const UI_COMMAND_ACK_TIMEOUT_MS = 8000;
+export const UI_COMMAND_ACK_MARGIN_MS = 1000;
+
+/**
+ * Whether the acknowledgement names the screen's description version:
+ * `published` — yes (`uiVersion`, `uiClientId`); `timeout` — the budget ran out
+ * first; `rejected` — the backend refused the description; `skipped` — nothing
+ * was described (the command came from a conversation the tab is not showing).
+ */
+export const UI_PUBLICATION_STATUSES = ['published', 'timeout', 'rejected', 'skipped'] as const;
+export type UiPublicationStatus = (typeof UI_PUBLICATION_STATUSES)[number];
+
 export const uiCommandResultSchema = z.object({
   commandId: z.string(),
   /** True only when the client actually moved. Never inferred from sending. */
@@ -361,5 +391,12 @@ export const uiCommandResultSchema = z.object({
    * for something still on its way. Absent when nothing could be published.
    */
   uiVersion: z.number().int().min(1).optional(),
+  /**
+   * The tab that published `uiVersion`. Versions count per tab, so a version
+   * means something only together with the tab it belongs to.
+   */
+  uiClientId: uiClientIdSchema.optional(),
+  /** Why `uiVersion` is absent, or that it is present. */
+  uiPublication: z.enum(UI_PUBLICATION_STATUSES).optional(),
 });
 export type UiCommandResult = z.infer<typeof uiCommandResultSchema>;

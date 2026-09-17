@@ -212,7 +212,9 @@ export function buildSystemPrompt(input: PromptInput): string {
        */
       `Co uzytkownik ma teraz na ekranie, odczytujesz przez ${mcpToolName('ui_state')}: widok z wersja kompozycji, karty,`,
       'komponenty danych (stan, pola z etykietami, filtr, sortowanie, widoczne rekordy, liczby) i dozwolone akcje.',
-      'Po ui_navigate, ui_filter lub ui_sort wywolaj ui_state z minVersion = uiVersion z ich wyniku, ZANIM opiszesz ekran.',
+      'Po ui_navigate, ui_filter lub ui_sort wywolaj ui_state z minVersion = uiVersion i clientId = uiClientId z ich wyniku,',
+      'ZANIM opiszesz ekran. Wersje licza sie osobno dla kazdej karty przegladarki: numer bez karty nic nie znaczy.',
+      'Brak uiVersion (uiPublication inne niz published) oznacza, ze ekranu po akcji nie opisano — powiedz to.',
       'Nie opisuj ekranu na podstawie tego, o co prosiles, ani opisu ze stale=true — wtedy powiedz, czego nie wiesz (reason).',
       'Komponent ze state=loading jeszcze nic nie pokazuje: odczytaj ponownie z minVersion = version + 1.',
       'Porownuj wersje z „ekran przy wyslaniu polecenia” w kontekscie: nizsza wersja tej samej karty jest starsza niz to,',

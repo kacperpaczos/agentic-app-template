@@ -16,7 +16,12 @@ export { ConversationService, deriveTitle } from './conversations.ts';
 export { FileService, sanitizeFilename } from './files.ts';
 export { IdempotencyStore } from './idempotency.ts';
 export { RunRegistry } from './runs.ts';
-export { UiSnapshotStore, UI_SNAPSHOT_CLIENTS_PER_OWNER, type UiStateQuery } from './ui-snapshots.ts';
+export {
+  UiSnapshotStore,
+  UI_SNAPSHOT_CLIENTS_PER_OWNER,
+  type UiStateQuery,
+  type UiVersionRef,
+} from './ui-snapshots.ts';
 
 /**
  * Every platform capability in one place. Modules receive this through their

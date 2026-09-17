@@ -5,7 +5,7 @@ import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import {
   AppError,
-  appContextSchema,
+  parseRunAppContext,
   addCardInputSchema,
   canvasViewportSchema,
   cardGeometrySchema,
@@ -284,9 +284,18 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
     const forwarded = (input.forwardedProps ?? {}) as Record<string, unknown>;
 
     // The frontend's context selects what to look at; it never carries identity.
-    const appContext: AppContext = appContextSchema.parse(
+    const { context: appContext, uiRejected } = parseRunAppContext(
       (input.context as unknown) ?? forwarded.appContext ?? EMPTY_APP_CONTEXT,
     );
+    if (uiRejected) {
+      /*
+       * A malformed screen marker must not refuse the command: the run starts
+       * without it (the agent is told there is no description) and the reason
+       * is reported here, where whoever breaks the client will look.
+       */
+      console.warn(`[agui/run] pominiety znacznik ekranu AppContext.ui: ${uiRejected.join('; ')}`);
+      c.header('X-Ui-Context-Rejected', '1');
+    }
 
     const lastUser = [...input.messages]
       .reverse()
@@ -473,6 +482,36 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
       });
     }
     return json(c, { accepted: true, ...services.uiSnapshots.publishRaw(ownerId, await c.req.text()) });
+  });
+
+  /**
+   * A tab that is closing (`pagehide`) retires its description, so it is no
+   * longer handed out as the screen of a conversation nobody is looking at.
+   * Only a description no newer than `version` is retired: the same tab
+   * reloading may already have published its next one.
+   */
+  app.delete('/api/ui/snapshot', (c) => {
+    const ownerId = c.get('ownerId');
+    const clientId = c.req.query('clientId');
+    const version = Number(c.req.query('version'));
+    if (!clientId || !Number.isInteger(version)) {
+      throw new AppError('validation_failed', 'Podaj clientId i version.');
+    }
+    return json(c, { retired: services.uiSnapshots.retire(ownerId, clientId, version) });
+  });
+
+  /**
+   * An open tab saying it is still there (every `UI_CLIENT_HEARTBEAT_MS`).
+   * `known: false` — the backend has no such description (restarted, or it was
+   * retired): the tab publishes it again.
+   */
+  app.post('/api/ui/snapshot/alive', async (c) => {
+    const ownerId = c.get('ownerId');
+    const body = (await c.req.json().catch(() => ({}))) as { clientId?: unknown; version?: unknown };
+    if (typeof body.clientId !== 'string' || !Number.isInteger(body.version)) {
+      throw new AppError('validation_failed', 'Podaj clientId i version.');
+    }
+    return json(c, { known: services.uiSnapshots.touch(ownerId, body.clientId, body.version as number) });
   });
 
   /**

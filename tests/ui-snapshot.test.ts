@@ -1,12 +1,22 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { QueryClient } from '@tanstack/react-query';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AGUI_EVENTS,
   AppError,
   PLATFORM_CUSTOM_EVENTS,
+  UI_CLIENT_INACTIVE_AFTER_MS,
+  UI_COMMAND_ACK_MARGIN_MS,
+  UI_COMMAND_ACK_TIMEOUT_MS,
   UI_SNAPSHOT_INSTANCES_LIMIT,
+  UI_URL_MAX_LENGTH,
   UI_SNAPSHOT_MAX_BYTES,
   appContextSchema,
+  clampUiUrl,
   compositionVersionOf,
+  parseRunAppContext,
   uiCommandResultSchema,
   uiCommandSchema,
   uiSnapshotSchema,
@@ -15,6 +25,7 @@ import {
   type SemanticInstance,
   type ToolCallContext,
   type UiCommand,
+  type UiCommandResult,
   type UiSnapshot,
 } from '@platform/contracts';
 import {
@@ -24,14 +35,22 @@ import {
   assertMcpCompatibleShape,
   buildSystemPrompt,
   collectToolEntries,
+  createPlatform,
   platformTools,
+  type PlatformInstance,
 } from '@platform/server';
 import {
   UiSnapshotSession,
   buildUiSnapshotContent,
+  createShellSnapshotSource,
+  performAndAcknowledge,
+  qk,
+  resetAccessContext,
+  setAccessContext,
   sessionIdentityStore,
   type UiClientIdentity,
   type UiClientIdentityStore,
+  type UiPublication,
   type UiSnapshotContent,
   type UiSnapshotInput,
 } from '@platform/ui';
@@ -100,6 +119,7 @@ function snapshot(over: Partial<UiSnapshot> = {}): UiSnapshot {
     conversationId: 'cnv_a',
     spaceId: null,
     url: '/data?country=PL',
+    urlTruncated: false,
     target: { id: 'procurement.data', kind: 'view', label: 'Dostawcy' },
     view: { id: 'procurement.data', title: 'Dostawcy', compositionVersion: 'x-00000000' },
     cards: null,
@@ -110,6 +130,12 @@ function snapshot(over: Partial<UiSnapshot> = {}): UiSnapshot {
     ...over,
   };
 }
+
+/** The description a flush got accepted, or null (timeout, refusal). */
+const accepted = async (p: Promise<UiPublication>) => {
+  const r = await p;
+  return r.status === 'published' ? r.snapshot : null;
+};
 
 const uiStateTool = () => platformTools(h.platform.services).find((t) => t.name === 'ui_state')!;
 
@@ -341,7 +367,7 @@ describe('sesja karty: wersje i publikacja', () => {
     expect(s.published()).toBeNull(); // version 1 still on its way
 
     set({ url: '/data?country=FI' });
-    const flushing = s.flush({ timeoutMs: 1000 });
+    const flushing = accepted(s.flush({ timeoutMs: 1000 }));
     await new Promise((r) => setTimeout(r, 30));
     expect(order).toEqual([]); // version 2 waits for version 1
     release!();
@@ -355,20 +381,20 @@ describe('sesja karty: wersje i publikacja', () => {
     await new Promise((r) => setTimeout(r, 60));
     expect(order).toEqual([1, 2]);
     // …while a flush sends the same version again (the backend may have restarted).
-    expect((await s.flush())?.version).toBe(2);
+    expect((await accepted(s.flush()))?.version).toBe(2);
     expect(order).toEqual([1, 2, 2]);
   });
 
   it('po restarcie backendu (pusty magazyn) flush przed poleceniem publikuje ekran ponownie, bez nowej wersji', async () => {
     let store = new UiSnapshotStore();
     const { s } = session({ send: async (snap) => store.publish(h.ownerId, snap) });
-    const first = await s.flush();
+    const first = await accepted(s.flush());
     expect(store.evaluate(h.ownerId, 'cnv_a').version).toBe(first!.version);
 
     store = new UiSnapshotStore(); // the backend restarted: descriptions live in memory
     expect(store.evaluate(h.ownerId, 'cnv_a').reason).toBe('no_client');
 
-    const again = await s.flush();
+    const again = await accepted(s.flush());
     expect(again!.version).toBe(first!.version);
     expect(store.evaluate(h.ownerId, 'cnv_a')).toMatchObject({ stale: false, version: first!.version });
   });
@@ -376,7 +402,7 @@ describe('sesja karty: wersje i publikacja', () => {
   it('flush nie czeka dluzej niz timeout, gdy backend nie odpowiada', async () => {
     const { s } = session({ send: () => new Promise(() => {}) });
     const started = Date.now();
-    expect(await s.flush({ timeoutMs: 80 })).toBeNull();
+    expect(await s.flush({ timeoutMs: 80 })).toEqual({ status: 'timeout' });
     expect(Date.now() - started).toBeLessThan(1000);
   });
 
@@ -390,7 +416,7 @@ describe('sesja karty: wersje i publikacja', () => {
         if (snap.clientId === 'ui_copied_tab_id') throw new AppError('conflict', 'wersja nie nowsza');
       },
     });
-    const published = await s.flush();
+    const published = await accepted(s.flush());
     expect(attempts.map((a) => [a.clientId === 'ui_copied_tab_id', a.version])).toEqual([[true, 6], [false, 1]]);
     expect(published?.clientId).not.toBe('ui_copied_tab_id');
     expect(published?.version).toBe(1);
@@ -640,7 +666,9 @@ describe('AppContext.ui w wykonaniu', () => {
       appContext: context({ ui: { version: 12, clientId: 'ui_tab_sender_01', viewId: 'procurement.data', url: '/data?country=PL' } }),
     });
     expect(withUi).toContain('- ekran przy wyslaniu polecenia: opis w wersji 12 (karta ui_tab_sender_01), widok procurement.data, adres /data?country=PL');
-    expect(withUi).toContain('Po ui_navigate, ui_filter lub ui_sort wywolaj ui_state z minVersion = uiVersion z ich wyniku');
+    expect(withUi).toContain(
+      'Po ui_navigate, ui_filter lub ui_sort wywolaj ui_state z minVersion = uiVersion i clientId = uiClientId z ich wyniku',
+    );
     expect(buildSystemPrompt({ ...base, appContext: context() })).toContain('- ekran przy wyslaniu polecenia: (brak opisu)');
   });
 });
@@ -760,5 +788,389 @@ describe('krok call skryptowanego modelu: wartosc z poprzedniego wyniku', () => 
     expect(resolveLastResult({ x: ['$last.nested.a'] }, last)).toEqual({ x: [[1]] });
     expect(resolveLastResult({ minVersion: '$last.brak' }, last)).toEqual({ minVersion: null });
     expect(resolveLastResult({ minVersion: '$last.uiVersion' }, null)).toEqual({ minVersion: null });
+  });
+});
+
+/* ========================================================================== */
+/*  Fix round 1: long addresses, tab-bound versions, closed tabs, cache       */
+/*  eviction, acknowledgement budget                                          */
+/* ========================================================================== */
+
+const LONG_URL = `/data?country=${Array.from({ length: 40 }, () => 'Q'.repeat(200)).join(',')}`;
+
+describe('I1: bardzo dlugi adres zawezonego widoku', () => {
+  it('opis i marker polecenia skracaja adres do limitu z jawna flaga, a wynik spelnia kontrakty', () => {
+    expect(LONG_URL.length).toBeGreaterThan(UI_URL_MAX_LENGTH);
+    expect(clampUiUrl('/data')).toEqual({ url: '/data', urlTruncated: false });
+
+    const s = new UiSnapshotSession({ identity: sessionIdentityStore(), send: async () => {}, scope: () => 'x' });
+    let url = LONG_URL;
+    s.setSource(() =>
+      buildUiSnapshotContent({
+        url,
+        pathname: '/data',
+        conversationId: 'cnv_a',
+        spaceId: null,
+        instances: [],
+        targets: h.platform.services.modules.uiTargets(),
+        views: h.platform.services.modules.views(),
+        canvas: undefined,
+      }),
+    );
+    const long = s.capture()!;
+    expect(long.url).toHaveLength(UI_URL_MAX_LENGTH);
+    expect(LONG_URL.startsWith(long.url)).toBe(true);
+    expect(long.urlTruncated).toBe(true);
+    expect(uiSnapshotSchema.safeParse(long).success).toBe(true);
+
+    const marker = s.contextMarker()!;
+    expect(marker).toMatchObject({ url: long.url, urlTruncated: true });
+    expect(appContextSchema.safeParse(context({ ui: marker })).success).toBe(true);
+
+    url = '/data?country=PL';
+    expect(s.capture()!.urlTruncated).toBe(false);
+    expect(s.contextMarker()).not.toHaveProperty('urlTruncated');
+  });
+
+  it('zly znacznik ekranu nie odrzuca polecenia: ui = null z powodem; inne bledy kontekstu nadal odrzucaja', () => {
+    const raw = { conversationId: 'cnv_a', spaceId: null, ui: { version: 3, clientId: 'ui_tab_aaaaaaaa', viewId: null, url: 'x'.repeat(5000) } };
+    const { context: parsed, uiRejected } = parseRunAppContext(raw);
+    expect(parsed.ui).toBeNull();
+    expect(parsed.conversationId).toBe('cnv_a');
+    expect(uiRejected?.[0]).toMatch(/^ui\.url:/);
+    expect(parseRunAppContext({ conversationId: 'cnv_a', spaceId: null }).uiRejected).toBeNull();
+    expect(() => parseRunAppContext({ conversationId: 7, spaceId: null, ui: null })).toThrow();
+  });
+
+  it('POST /api/agui/run ze zlym znacznikiem ekranu uruchamia wykonanie bez niego i to zglasza', async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'agentic-uistate-'));
+    let platform: PlatformInstance;
+    platform = createPlatform({
+      modules: [],
+      env: { ...process.env, APP_DATA_DIR: dataDir },
+      modelAgent: scriptedAgent([{ kind: 'call', name: 'get_context', maxChars: 4000 }], {
+        tools: () => collectToolEntries({ registry: platform.registry, platformTools: platformTools(platform.services) }),
+      }),
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const cookie = await login(platform.app, h.ownerId);
+      const res = await platform.app.request('/api/agui/run', {
+        method: 'POST',
+        headers: { cookie, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          threadId: null,
+          messages: [{ id: 'msg_long_url_1', role: 'user', content: 'Co mam na ekranie?' }],
+          context: context({ ui: { version: 2, clientId: 'ui_tab_aaaaaaaa', viewId: 'x', url: LONG_URL } }),
+        }),
+      });
+      expect(res.status).toBe(200);
+      expect(res.headers.get('X-Ui-Context-Rejected')).toBe('1');
+      const body = await res.text();
+      expect(body).toContain('RUN_FINISHED');
+      const result = body
+        .split('\n')
+        .filter((l) => l.startsWith('data: '))
+        .map((l) => JSON.parse(l.slice(6)))
+        .find((e) => e.type === AGUI_EVENTS.TOOL_CALL_RESULT);
+      expect(JSON.parse(result.content).ui).toBeNull();
+      expect(warn.mock.calls.flat().join(' ')).toContain('AppContext.ui');
+    } finally {
+      warn.mockRestore();
+      platform.close();
+      rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('odrzucona publikacja nie ginie po cichu: wynik rejected, zapamietany powod i zgloszenie', async () => {
+    const reports: string[] = [];
+    const s = new UiSnapshotSession({
+      identity: sessionIdentityStore(),
+      send: async () => {
+        throw new AppError('validation_failed', 'Nieprawidlowy opis interfejsu.', { reason: 'invalid_snapshot' });
+      },
+      scope: () => 'x',
+      report: (message) => void reports.push(message),
+    });
+    s.setSource(() => buildUiSnapshotContent({ url: '/', pathname: '/', conversationId: null, spaceId: null, instances: [], targets: [], views: [], canvas: undefined }));
+    expect(await s.flush()).toEqual({ status: 'rejected', code: 'validation_failed' });
+    expect(s.lastRejection()).toMatchObject({ version: 1, code: 'validation_failed', details: { reason: 'invalid_snapshot' } });
+    expect(reports[0]).toContain('wersji 1 nie zostal opublikowany: validation_failed');
+    expect(s.published()).toBeNull();
+  });
+});
+
+describe('I2: wersja nalezy do karty, zamkniete i milczace karty', () => {
+  it('wersja z potwierdzenia jest liczona na karcie, ktora potwierdzila — nie na karcie o wiekszym liczniku', async () => {
+    const store = h.platform.services.uiSnapshots;
+    const conv = h.platform.services.conversations.create({ ownerId: h.ownerId, firstMessage: { content: 'x' } });
+    const X = 'ui_tab_x_sender_';
+    const Y = 'ui_tab_y_reattached';
+    // X sent the command and has counted to 40; Y (the same conversation, re-attached) is at 3.
+    store.publish(h.ownerId, snapshot({ clientId: X, version: 40, conversationId: conv.id, url: '/data' }));
+    store.publish(h.ownerId, snapshot({ clientId: Y, version: 3, conversationId: conv.id, url: '/data' }));
+
+    const steps: Step[] = [
+      { kind: 'call', name: 'ui_filter', input: { targetId: 'procurement.data', predicates: [{ field: 'country', op: 'eq', value: 'PL' }], label: 'PL' } },
+      // No tab named: the version belongs to the tab that acknowledged.
+      { kind: 'call', name: 'ui_state', input: { minVersion: '$last.uiVersion', waitMs: 150 } },
+      { kind: 'wait', delayMs: 300 },
+      { kind: 'call', name: 'ui_state', input: { minVersion: 4, clientId: Y } },
+      { kind: 'call', name: 'ui_state', input: { clientId: 'ui_tab_closed_long_ago' } },
+    ];
+    const runtime = new AgentRuntime(
+      h.platform.services,
+      scriptedAgent(steps, {
+        tools: () => collectToolEntries({ registry: h.platform.registry, platformTools: platformTools(h.platform.services) }),
+      }),
+    );
+    const appContext = context({ conversationId: conv.id, ui: { version: 40, clientId: X, viewId: 'procurement.data', url: '/data' } });
+    const started = await runtime.start({ ownerId: h.ownerId, conversationId: conv.id, prompt: 'x', appContext });
+    const results: any[] = [];
+    for await (const { event } of started.stream.read(0)) {
+      const e = event as Record<string, any>;
+      if (e.type === 'CUSTOM' && e.name === PLATFORM_CUSTOM_EVENTS.uiCommand) {
+        const command = uiCommandSchema.parse(e.value);
+        // Tab Y acknowledges first with its version 4, which reaches the backend only a moment later.
+        runtime.acknowledgeUiCommand({ commandId: command.commandId, targetId: command.targetId, executed: true, filtered: { matched: 3, total: 4 }, uiVersion: 4, uiClientId: Y, uiPublication: 'published' });
+        setTimeout(() => store.publish(h.ownerId, snapshot({ clientId: Y, version: 4, conversationId: conv.id, url: '/data?country=PL' })), 250);
+      }
+      if (e.type === AGUI_EVENTS.TOOL_CALL_RESULT) results.push(JSON.parse(e.content));
+    }
+    await started.done;
+    const [filtered, bound, explicit, gone] = results;
+
+    expect(filtered).toMatchObject({ executed: true, uiVersion: 4, uiClientId: Y, uiPublication: 'published' });
+    // Not X's pre-command description at 40: Y has not published 4 yet, and says so.
+    expect(bound).toMatchObject({ stale: true, reason: 'older_than_requested', version: 3 });
+    expect(bound.snapshot.clientId).toBe(Y);
+    // Once it has, the named tab's version 4 is the confirmed state.
+    expect(explicit).toMatchObject({ stale: false, version: 4 });
+    expect(explicit.snapshot).toMatchObject({ clientId: Y, url: '/data?country=PL' });
+    expect(gone).toMatchObject({ stale: true, reason: 'client_gone', snapshot: null });
+    // The run is over: its acknowledgement is forgotten.
+    expect(store.acknowledgement(h.ownerId, started.runId)).toBeNull();
+  });
+
+  it('karta zamykana wycofuje opis (DELETE); przeladowana karta z nowsza wersja nie zostaje wycofana', async () => {
+    const cookie = await login(h.platform.app, h.ownerId);
+    const put = (body: UiSnapshot) =>
+      h.platform.app.request('/api/ui/snapshot', { method: 'PUT', headers: { cookie, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const del = (q: string) => h.platform.app.request(`/api/ui/snapshot?${q}`, { method: 'DELETE', headers: { cookie } });
+
+    expect((await put(snapshot({ version: 5 }))).status).toBe(200);
+    // A reload: the old page's retirement names version 4, the new page already published 5.
+    expect(await (await del('clientId=ui_tab_aaaaaaaa&version=4')).json()).toEqual({ retired: false });
+    expect((await callUiState({})).stale).toBe(false);
+    // Closing for good.
+    expect(await (await del('clientId=ui_tab_aaaaaaaa&version=5')).json()).toEqual({ retired: true });
+    expect(await callUiState({})).toMatchObject({ stale: true, reason: 'no_client', snapshot: null });
+    expect(await callUiState({ clientId: 'ui_tab_aaaaaaaa' })).toMatchObject({ reason: 'client_gone' });
+    expect((await del('clientId=ui_tab_aaaaaaaa')).status).toBe(400);
+
+    // Another owner cannot retire it.
+    expect((await put(snapshot({ version: 6 }))).status).toBe(200);
+    const theirs = await login(h.platform.app, h.otherOwnerId);
+    await h.platform.app.request('/api/ui/snapshot?clientId=ui_tab_aaaaaaaa&version=99', { method: 'DELETE', headers: { cookie: theirs } });
+    expect((await callUiState({})).version).toBe(6);
+  });
+
+  it('karta milczaca dluzej niz limit jest client_inactive; heartbeat ja podtrzymuje; zyjaca karta ma pierwszenstwo', async () => {
+    const store = h.platform.services.uiSnapshots;
+    const t0 = Date.now();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(t0);
+      store.publish(h.ownerId, snapshot({ clientId: 'ui_tab_quiet_one', version: 2 }));
+      vi.setSystemTime(t0 + UI_CLIENT_INACTIVE_AFTER_MS - 1000);
+      expect(store.evaluate(h.ownerId, 'cnv_a').stale).toBe(false);
+      expect(store.touch(h.ownerId, 'ui_tab_quiet_one', 2)).toBe(true);
+      expect(store.touch(h.ownerId, 'ui_tab_quiet_one', 1)).toBe(false); // not the version held
+      vi.setSystemTime(t0 + 2 * UI_CLIENT_INACTIVE_AFTER_MS - 2000);
+      expect(store.evaluate(h.ownerId, 'cnv_a').stale).toBe(false); // kept alive by the beat
+      vi.setSystemTime(t0 + 2 * UI_CLIENT_INACTIVE_AFTER_MS);
+      const silent = store.evaluate(h.ownerId, 'cnv_a');
+      expect(silent).toMatchObject({ stale: true, reason: 'client_inactive', version: 2 });
+      expect(silent.snapshot?.clientId).toBe('ui_tab_quiet_one');
+
+      // A live tab on the same conversation is chosen over the silent one — even over the sender's.
+      store.publish(h.ownerId, snapshot({ clientId: 'ui_tab_live_two', version: 1 }));
+      const chosen = store.evaluate(h.ownerId, 'cnv_a', { context: { clientId: 'ui_tab_quiet_one', version: 2 } });
+      expect(chosen).toMatchObject({ stale: false });
+      expect(chosen.snapshot?.clientId).toBe('ui_tab_live_two');
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const cookie = await login(h.platform.app, h.ownerId);
+    const alive = (body: unknown) =>
+      h.platform.app.request('/api/ui/snapshot/alive', { method: 'POST', headers: { cookie, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    expect(await (await alive({ clientId: 'ui_tab_live_two', version: 1 })).json()).toEqual({ known: true });
+    expect(await (await alive({ clientId: 'ui_tab_never_seen', version: 1 })).json()).toEqual({ known: false });
+    expect((await alive({ clientId: 'ui_tab_live_two' })).status).toBe(400);
+  });
+
+  it('sesja: heartbeat nieznanej wersji publikuje ponownie; zamykanie wycofuje biezaca wersje', async () => {
+    const sent: number[] = [];
+    const retired: Array<{ clientId: string; version: number }> = [];
+    let known = true;
+    const s = new UiSnapshotSession({
+      identity: sessionIdentityStore(),
+      send: async (snap) => void sent.push(snap.version),
+      alive: async () => known,
+      retire: (ref) => void retired.push(ref),
+      scope: () => 'x',
+    });
+    s.setSource(() => buildUiSnapshotContent({ url: '/', pathname: '/', conversationId: null, spaceId: null, instances: [], targets: [], views: [], canvas: undefined }));
+    await s.flush();
+    await s.heartbeat();
+    expect(sent).toEqual([1]);
+    known = false; // the backend restarted
+    await s.heartbeat();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(sent).toEqual([1, 1]);
+    s.closing();
+    expect(retired).toEqual([{ clientId: s.clientId, version: 1 }]);
+  });
+});
+
+describe('I3: opis nie zalezy od przypadkowej zawartosci pamieci podrecznej', () => {
+  it('wyrzucenie katalogu i widokow z pamieci nie zmienia opisu ani wersji; zmiana wlasciciela porzuca zapamietane', () => {
+    const qc = new QueryClient();
+    setAccessContext(qc, 'local-user');
+    try {
+      qc.setQueryData(qk.uiTargets(), { targets: h.platform.services.modules.uiTargets() });
+      qc.setQueryData(qk.uiViews(), { views: h.platform.services.modules.views() });
+      const s = new UiSnapshotSession({ identity: sessionIdentityStore(), send: async () => {} });
+      s.setSource(
+        createShellSnapshotSource({
+          qc,
+          location: () => ({ pathname: '/settings', search: '' }),
+          shell: () => ({ conversationId: 'cnv_a', spaceId: null }),
+          instances: () => [],
+        }),
+      );
+      const first = s.capture()!;
+      expect(first.target).toEqual({ id: 'platform.settings', kind: 'view', label: 'Ustawienia' });
+
+      // Garbage collection of the cache is not a change of the screen.
+      qc.removeQueries({ queryKey: ['ui-targets'] });
+      qc.removeQueries({ queryKey: ['ui-views'] });
+      expect(qc.getQueryData(qk.uiTargets())).toBeUndefined();
+      expect(s.capture()).toBe(first);
+
+      // Another owner: nothing of the previous one's is described.
+      setAccessContext(qc, 'other-user');
+      const other = s.capture()!;
+      expect(other.version).toBe(first.version + 1);
+      expect(other.target).toBeNull();
+    } finally {
+      resetAccessContext();
+    }
+  });
+});
+
+describe('R1: wspolny budzet potwierdzenia komendy UI', () => {
+  function gate() {
+    const conv = h.platform.services.conversations.create({ ownerId: h.ownerId, firstMessage: { content: 'x' } });
+    const run = h.platform.services.runs.start({
+      conversationId: conv.id,
+      ownerId: h.ownerId,
+      prompt: 'x',
+      appContext: context({ conversationId: conv.id }),
+      workspaceDir: null,
+      abort: new AbortController(),
+    });
+    return { conv, run, stream: new RunEventStream(run.id, h.platform.services.runs), runtime: h.platform.runtime };
+  }
+  const command = (conv: { id: string }, run: { id: string }): UiCommand => ({
+    commandId: `uic_${Math.random().toString(36).slice(2, 12)}`,
+    runId: run.id,
+    conversationId: conv.id,
+    targetId: 'procurement.data',
+    spaceId: null,
+  });
+
+  it('wolna publikacja nie zamienia wykonanej komendy w no_client: potwierdzenie w budzecie, bez wersji, uiPublication=timeout', async () => {
+    const BUDGET = 900;
+    const { conv, run, stream, runtime } = gate();
+    const hanging = new UiSnapshotSession({ identity: sessionIdentityStore(), send: () => new Promise(() => {}), scope: () => 'x' });
+    hanging.setSource(() => buildUiSnapshotContent({ url: '/data', pathname: '/data', conversationId: conv.id, spaceId: null, instances: [], targets: [], views: [], canvas: undefined }));
+
+    const watcher = (async () => {
+      for await (const { event } of stream.read(0)) {
+        const e = event as Record<string, unknown>;
+        if (e.type === 'CUSTOM' && e.name === PLATFORM_CUSTOM_EVENTS.uiCommand) {
+          const cmd = uiCommandSchema.parse(e.value);
+          void performAndAcknowledge(cmd, {
+            perform: async () => {
+              await new Promise((r) => setTimeout(r, 250)); // navigating, filtering
+              return { commandId: cmd.commandId, targetId: cmd.targetId, executed: true, url: '/data' };
+            },
+            session: hanging,
+            post: async (_runId, result) => runtime.acknowledgeUiCommand(result),
+            budgetMs: BUDGET,
+            marginMs: 200,
+          });
+        }
+      }
+    })();
+    const started = Date.now();
+    const outcome = await runtime.requestUiCommand(command(conv, run), stream, BUDGET);
+    const took = Date.now() - started;
+    stream.close();
+    await watcher;
+
+    expect(outcome.reason).toBeUndefined();
+    expect(outcome).toMatchObject({ executed: true, uiPublication: 'timeout' });
+    expect(outcome.uiVersion).toBeUndefined();
+    expect(outcome.uiClientId).toBeUndefined();
+    expect(took).toBeLessThan(BUDGET);
+  });
+
+  it('potwierdzenie mowi, czy opis opublikowano: published z karta, rejected, skipped dla innej rozmowy', async () => {
+    const base = { commandId: 'uic_abcdefgh', runId: 'run_x', conversationId: 'cnv_a', targetId: 'procurement.data', spaceId: null };
+    const posted: UiCommandResult[] = [];
+    const flushing = (publication: UiPublication) => ({ flush: async () => publication });
+    const ok = snapshot({ clientId: 'ui_tab_acking_01', version: 9 });
+    await performAndAcknowledge(base, {
+      perform: async () => ({ commandId: base.commandId, executed: true }),
+      session: flushing({ status: 'published', snapshot: ok }),
+      post: async (_r, result) => void posted.push(result),
+    });
+    await performAndAcknowledge(base, {
+      perform: async () => ({ commandId: base.commandId, executed: true }),
+      session: flushing({ status: 'rejected', code: 'validation_failed' }),
+      post: async (_r, result) => void posted.push(result),
+    });
+    let flushed = false;
+    await performAndAcknowledge(base, {
+      perform: async () => ({ commandId: base.commandId, executed: false, reason: 'inactive_conversation' }),
+      session: { flush: async () => ((flushed = true), { status: 'timeout' }) },
+      post: async (_r, result) => void posted.push(result),
+    });
+    expect(posted[0]).toMatchObject({ uiVersion: 9, uiClientId: 'ui_tab_acking_01', uiPublication: 'published' });
+    expect(posted[1]).toMatchObject({ uiPublication: 'rejected' });
+    expect(posted[1]!.uiVersion).toBeUndefined();
+    expect(posted[2]).toMatchObject({ uiPublication: 'skipped' });
+    expect(flushed).toBe(false);
+    expect(uiCommandResultSchema.safeParse(posted[0]).success).toBe(true);
+  });
+
+  it('serwer czeka na potwierdzenie dokladnie wspolny budzet', async () => {
+    const { conv, run, stream, runtime } = gate();
+    vi.useFakeTimers();
+    try {
+      let result: UiCommandResult | null = null;
+      void runtime.requestUiCommand(command(conv, run), stream).then((r) => (result = r));
+      await vi.advanceTimersByTimeAsync(UI_COMMAND_ACK_TIMEOUT_MS - 1);
+      expect(result).toBeNull();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(result).toMatchObject({ executed: false, reason: 'no_client' });
+      expect(UI_COMMAND_ACK_MARGIN_MS).toBeLessThan(UI_COMMAND_ACK_TIMEOUT_MS);
+    } finally {
+      vi.useRealTimers();
+      stream.close();
+    }
   });
 });

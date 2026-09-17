@@ -1,8 +1,10 @@
 import {
   AppError,
+  UI_CLIENT_HEARTBEAT_MS,
   UI_SNAPSHOT_CARDS_LIMIT,
   UI_SNAPSHOT_INSTANCES_LIMIT,
   UI_SNAPSHOT_MAX_BYTES,
+  clampUiUrl,
   compositionVersionOf,
   type AppContext,
   type CanvasState,
@@ -12,7 +14,7 @@ import {
   type ViewDefinition,
 } from '@platform/contracts';
 import { accessScope } from '../api/accessContext.ts';
-import { apiPut } from '../api/client.ts';
+import { apiPost, apiPut } from '../api/client.ts';
 
 /**
  * This tab's versioned description of its screen, and its publication.
@@ -87,7 +89,8 @@ export function buildUiSnapshotContent(input: UiSnapshotInput): UiSnapshotConten
   const content = (): UiSnapshotContent => ({
     conversationId: input.conversationId,
     spaceId: input.spaceId,
-    url: input.url,
+    // A narrowed address can be far longer than a description carries: cut, and said so.
+    ...clampUiUrl(input.url),
     target: target ? { id: target.id, kind: target.kind, label: target.label } : null,
     view: view ? { id: view.id, title: view.title, compositionVersion: compositionVersionOf(view.composition) } : null,
     cards: spaceCards
@@ -190,9 +193,15 @@ export interface UiSnapshotSessionOptions {
   identity?: UiClientIdentityStore;
   /** Sends one description; rejects with `AppError('conflict')` when the backend refuses its version. */
   send: (snapshot: UiSnapshot) => Promise<unknown>;
+  /** Tells the backend the tab is still open at this version; resolves whether it knows that version. */
+  alive?: (ref: { clientId: string; version: number }) => Promise<boolean>;
+  /** Tells the backend the tab is closing. Must work while the page is being torn down. */
+  retire?: (ref: { clientId: string; version: number }) => void;
   debounceMs?: number;
   /** Who is signed in: a description published under another identity is a new one. */
   scope?: () => string;
+  /** Where a refused publication is reported. */
+  report?: (message: string, detail: unknown) => void;
 }
 
 export interface UiSnapshotFlushOptions {
@@ -206,20 +215,36 @@ export interface UiSnapshotFlushOptions {
   maxSettleMs?: number;
   /** Upper bound on waiting for the backend to accept. */
   timeoutMs?: number;
+  /** Absolute time (ms) by which settling and publishing must be over, whatever the bounds above. */
+  deadlineAt?: number;
 }
+
+/**
+ * What became of a publication: accepted (with the description the backend
+ * now has), refused by the backend (`code`), or still unanswered when the
+ * caller stopped waiting.
+ */
+export type UiPublication =
+  | { status: 'published'; snapshot: UiSnapshot }
+  | { status: 'rejected'; code: string }
+  | { status: 'timeout' };
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export class UiSnapshotSession {
   readonly #store: UiClientIdentityStore;
   readonly #send: (snapshot: UiSnapshot) => Promise<unknown>;
+  readonly #alive: ((ref: { clientId: string; version: number }) => Promise<boolean>) | null;
+  readonly #retire: ((ref: { clientId: string; version: number }) => void) | null;
   readonly #debounceMs: number;
   readonly #scope: () => string;
+  readonly #report: (message: string, detail: unknown) => void;
   #identity: UiClientIdentity;
   #source: (() => UiSnapshotContent) | null = null;
   #current: UiSnapshot | null = null;
   #currentKey: string | null = null;
   #published: UiSnapshot | null = null;
+  #lastRejection: { version: number; code: string; message: string; details: unknown } | null = null;
   #timer: ReturnType<typeof setTimeout> | null = null;
   #chain: Promise<unknown> = Promise.resolve();
   #lastChangeAt = 0;
@@ -227,8 +252,11 @@ export class UiSnapshotSession {
   constructor(opts: UiSnapshotSessionOptions) {
     this.#store = opts.identity ?? sessionIdentityStore();
     this.#send = opts.send;
+    this.#alive = opts.alive ?? null;
+    this.#retire = opts.retire ?? null;
     this.#debounceMs = opts.debounceMs ?? 250;
     this.#scope = opts.scope ?? accessScope;
+    this.#report = opts.report ?? ((message, detail) => console.error(message, detail));
     this.#identity = this.#store.load() ?? { clientId: newUiClientId(), version: 0 };
     this.#store.save(this.#identity);
   }
@@ -256,10 +284,24 @@ export class UiSnapshotSession {
     return this.#published;
   }
 
+  /** The last description the backend refused, and why. Cleared by the next accepted one. */
+  lastRejection(): { version: number; code: string; message: string; details: unknown } | null {
+    return this.#lastRejection;
+  }
+
   /** What a command carries about the screen it was sent from (`AppContext.ui`). */
   contextMarker(): AppContext['ui'] {
     const s = this.#current;
-    return s ? { version: s.version, clientId: s.clientId, viewId: s.view?.id ?? null, url: s.url } : null;
+    if (!s) return null;
+    // Cut again here: the marker must never be what makes a command invalid.
+    const { url, urlTruncated } = clampUiUrl(s.url);
+    return {
+      version: s.version,
+      clientId: s.clientId,
+      viewId: s.view?.id ?? null,
+      url,
+      ...(urlTruncated || s.urlTruncated ? { urlTruncated: true } : {}),
+    };
   }
 
   /**
@@ -297,8 +339,7 @@ export class UiSnapshotSession {
   }
 
   /**
-   * Captures and publishes now, and resolves with the description the backend
-   * accepted — or null when it did not within `timeoutMs`.
+   * Captures and publishes now, and says what became of it within `timeoutMs`.
    *
    * Sent even when this version was accepted before: the backend keeps
    * descriptions in memory, so after its restart it has none, and a tab whose
@@ -306,17 +347,18 @@ export class UiSnapshotSession {
    * as long as the user keeps looking at it. Re-sending the same version is
    * accepted without change.
    */
-  async flush(opts: UiSnapshotFlushOptions = {}): Promise<UiSnapshot | null> {
+  async flush(opts: UiSnapshotFlushOptions = {}): Promise<UiPublication> {
+    const deadlineAt = opts.deadlineAt ?? Number.POSITIVE_INFINITY;
     const settleMs = opts.settleMs ?? 0;
-    if (settleMs > 0) {
+    const maxSettleMs = Math.max(0, Math.min(opts.maxSettleMs ?? 1500, deadlineAt - Date.now()));
+    if (settleMs > 0 && maxSettleMs > 0) {
       const started = Date.now();
-      const maxSettleMs = opts.maxSettleMs ?? 1500;
       for (;;) {
         const now = Date.now();
         const quiet = now - Math.max(this.#lastChangeAt, started) >= settleMs;
         const loading = this.#source?.().instances.some((i) => i.state === 'loading') ?? false;
         if ((quiet && !loading) || now - started >= maxSettleMs) break;
-        await sleep(Math.min(settleMs, 50));
+        await sleep(Math.min(settleMs, 50, Math.max(1, maxSettleMs - (now - started))));
       }
     }
     if (this.#timer) {
@@ -325,28 +367,61 @@ export class UiSnapshotSession {
     }
     this.capture();
     const publication = this.#publishCurrent(true);
-    const timeoutMs = opts.timeoutMs ?? 2000;
-    return Promise.race([publication, sleep(timeoutMs).then(() => null)]);
+    const timeoutMs = Math.max(0, Math.min(opts.timeoutMs ?? 2000, deadlineAt - Date.now()));
+    return Promise.race([publication, sleep(timeoutMs).then((): UiPublication => ({ status: 'timeout' }))]);
+  }
+
+  /**
+   * Says the tab is still open, at the version the backend should hold; when
+   * the backend does not hold it (it restarted, or retired the tab), publishes
+   * it again.
+   */
+  async heartbeat(): Promise<void> {
+    const snapshot = this.#published ?? this.#current;
+    if (!snapshot || !this.#alive) return;
+    let known = false;
+    try {
+      known = await this.#alive({ clientId: snapshot.clientId, version: snapshot.version });
+    } catch {
+      return; // unreachable backend: the next beat tries again
+    }
+    if (!known) void this.#publishCurrent(true);
+  }
+
+  /** Beats every `intervalMs` until the returned function is called. */
+  startHeartbeat(intervalMs = UI_CLIENT_HEARTBEAT_MS): () => void {
+    const timer = setInterval(() => void this.heartbeat(), intervalMs);
+    return () => clearInterval(timer);
+  }
+
+  /** The tab is closing: its description should stop being handed out. */
+  closing(): void {
+    const snapshot = this.#current ?? this.#published;
+    if (!snapshot || !this.#retire) return;
+    try {
+      this.#retire({ clientId: snapshot.clientId, version: snapshot.version });
+    } catch {
+      /* the page is going away; the backend's inactivity rule covers a lost request */
+    }
   }
 
   /**
    * Publishes the current description, one publication at a time, so the
    * backend receives this tab's versions in order.
    */
-  #publishCurrent(resend = false): Promise<UiSnapshot | null> {
-    const run = this.#chain.then(async () => {
+  #publishCurrent(resend = false): Promise<UiPublication> {
+    const run = this.#chain.then(async (): Promise<UiPublication> => {
       const snapshot = this.#current;
-      if (!snapshot) return null;
+      if (!snapshot) return { status: 'rejected', code: 'nothing_described' };
       const done = this.#published;
       if (!resend && done && done.clientId === snapshot.clientId && done.version === snapshot.version) {
-        return snapshot;
+        return { status: 'published', snapshot };
       }
       try {
         await this.#send(snapshot);
-        this.#published = snapshot;
-        return snapshot;
+        return this.#accepted(snapshot);
       } catch (err) {
-        if (!(err instanceof AppError && err.code === 'conflict')) return null;
+        if (!(err instanceof AppError && err.code === 'conflict')) return this.#rejected(snapshot, err);
         /*
          * The backend already has a newer version under this identity: another
          * tab carries it (a duplicated tab copies `sessionStorage`). This tab
@@ -365,19 +440,49 @@ export class UiSnapshotSession {
         }
         try {
           await this.#send(renewed);
-          this.#published = renewed;
-          return renewed;
-        } catch {
-          return null;
+          return this.#accepted(renewed);
+        } catch (again) {
+          return this.#rejected(renewed, again);
         }
       }
     });
     this.#chain = run.catch(() => null);
     return run;
   }
+
+  #accepted(snapshot: UiSnapshot): UiPublication {
+    this.#published = snapshot;
+    this.#lastRejection = null;
+    return { status: 'published', snapshot };
+  }
+
+  /**
+   * A refused description is reported, never dropped in silence: the agent is
+   * then told the screen is not described (`no_client`, `older_than_requested`)
+   * and whoever looks at the console can see why.
+   */
+  #rejected(snapshot: UiSnapshot, err: unknown): UiPublication {
+    const code = err instanceof AppError ? err.code : 'unreachable';
+    const message = err instanceof Error ? err.message : String(err);
+    const details = err instanceof AppError ? err.details : undefined;
+    this.#lastRejection = { version: snapshot.version, code, message, details };
+    this.#report(`[uiSnapshot] opis ekranu w wersji ${snapshot.version} nie zostal opublikowany: ${code} — ${message}`, details);
+    return { status: 'rejected', code };
+  }
 }
 
 /** This tab's session. */
 export const uiSnapshotSession = new UiSnapshotSession({
   send: (snapshot) => apiPut('/api/ui/snapshot', snapshot),
+  alive: async (ref) => (await apiPost<{ known: boolean }>('/api/ui/snapshot/alive', ref)).known,
+  /*
+   * `keepalive`, so the request outlives the page that sends it. Deliberately
+   * not through `api()`: the page is being torn down and nothing awaits it.
+   */
+  retire: (ref) =>
+    void fetch(`/api/ui/snapshot?clientId=${encodeURIComponent(ref.clientId)}&version=${ref.version}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      keepalive: true,
+    }).catch(() => undefined),
 });

@@ -11,6 +11,7 @@ import { apiGet, apiPost } from '../api/client.ts';
 import { useAppState } from '../state/appState.ts';
 import { setUiCommandHandler } from '../chat/runEvents.ts';
 import { uiSnapshotSession } from '../state/uiSnapshot.ts';
+import { performAndAcknowledge } from './uiCommandAck.ts';
 
 /**
  * Performs the agent's interface commands — and reports back what really
@@ -201,33 +202,11 @@ export function UiCommandRunner() {
       if (handled.current.has(command.commandId)) return;
       handled.current.add(command.commandId);
 
-      let result: UiCommandResult;
-      try {
-        result = await perform(command);
-      } catch (e) {
-        result = {
-          commandId: command.commandId,
-          targetId: command.targetId,
-          executed: false,
-          reason: e instanceof Error ? e.message.slice(0, 120) : 'error',
-        };
-      }
-      /*
-       * Publish the screen as it is after the command, and say which version
-       * that is — once the view has settled, so the version names the screen
-       * the command produced rather than the frame in between. A command from
-       * another conversation changed nothing here and is not described.
-       */
-      if (result.reason !== UI_COMMAND_FAILURES.inactiveConversation) {
-        const published = await uiSnapshotSession.flush({ settleMs: 150, maxSettleMs: 1500, timeoutMs: 2000 });
-        if (published) result = { ...result, uiVersion: published.version };
-      }
-      try {
-        await apiPost(`/api/runs/${command.runId}/ui-ack`, result);
-      } catch {
-        // The server times the command out on its own; a failed acknowledgement
-        // becomes `no_client`, which is the truthful outcome.
-      }
+      await performAndAcknowledge(command, {
+        perform,
+        session: uiSnapshotSession,
+        post: (runId, result) => apiPost(`/api/runs/${runId}/ui-ack`, result),
+      });
     });
     return () => setUiCommandHandler(null);
   }, [perform]);
