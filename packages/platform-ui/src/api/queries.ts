@@ -76,6 +76,19 @@ export function invalidateBusinessData(qc: QueryClient): void {
   void qc.invalidateQueries({ queryKey: ['read'] });
 }
 
+/**
+ * Business data changed — announced by a tool during a run (`data_changed`)
+ * or reported by a record action the user performed: refresh module reads and
+ * registered reads (every data component), any canvas card that derives from
+ * them, and every open artifact — a live artifact re-runs its query on read,
+ * so invalidating it is what makes an open report reflect the change.
+ */
+export function invalidateAfterDataChange(qc: QueryClient): void {
+  invalidateBusinessData(qc);
+  void qc.invalidateQueries({ queryKey: ['canvas'] });
+  void qc.invalidateQueries({ queryKey: ['artifact'] });
+}
+
 export interface PlatformStatus {
   auth: AuthStatus;
   versions: Record<string, string>;

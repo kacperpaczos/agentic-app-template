@@ -13,7 +13,7 @@ import {
   type RecordActionResponse,
 } from '@platform/contracts';
 import { apiPost } from '../api/client.ts';
-import { invalidateBusinessData } from '../api/queries.ts';
+import { invalidateAfterDataChange, invalidateBusinessData } from '../api/queries.ts';
 
 /**
  * Record actions in a data table: a button per action on each row, a small
@@ -26,14 +26,16 @@ import { invalidateBusinessData } from '../api/queries.ts';
  * re-reads the record as the session's owner and runs the module's write tool
  * through the execution the MCP server uses; the browser only asks.
  *
- * **What the screen may claim afterwards.** A saved change marks every read
- * stale (`invalidateBusinessData`), so this table, a chart over the same data
- * and the same read in any other view refetch; while they do, the frame says
- * it is refreshing rather than presenting the previous numbers as current. A
- * refusal says why, in words and with its code. A refusal that can mean the
- * data on screen is no longer what the backend has — no access, no such
- * record, a conflicting change — refreshes the reads too, so the table shows
- * the backend's answer instead of the rows the action was refused on.
+ * **What the screen may claim afterwards.** A saved change refreshes what a
+ * tool's `data_changed` refreshes (`invalidateAfterDataChange`), so this
+ * table, a chart over the same data and the same read in any other view
+ * refetch; while they do, the frame says it is refreshing rather than
+ * presenting the previous numbers as current. A refusal says why, in words and
+ * with its code. A refusal that can mean the rows on screen are no longer what
+ * the backend has — no access, no such record, a conflicting change —
+ * refreshes the reads (`invalidateBusinessData`: nothing else changed), so the
+ * table shows the backend's answer instead of the rows the action was refused
+ * on.
  */
 
 /** Refusals after which the rows on screen are known to be unchanged. */
@@ -114,7 +116,8 @@ export function useRecordActions(
             actionId: target.actionId,
             message: `${action.label}: zapisano. Dane sa ponownie wczytywane z backendu.`,
           });
-          invalidateBusinessData(qc);
+          // A saved change is a data change like a tool's `data_changed`.
+          invalidateAfterDataChange(qc);
         },
         onError: (error) => {
           failed(error);
