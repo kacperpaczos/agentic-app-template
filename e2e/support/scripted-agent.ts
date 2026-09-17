@@ -44,12 +44,7 @@ export type Step =
   | {
       kind: 'call';
       name: string;
-      /**
-       * The arguments, or a function of the calls this run has already made —
-       * for a call that needs what an earlier one returned (a record id, a card
-       * id), the way a model would read it from the previous result.
-       */
-      input?: unknown | ((earlier: CallRecord[]) => unknown);
+      input?: CallInput;
       maxChars?: number;
     }
   /** Time passing with nothing emitted — lets the browser settle and repaint. */
@@ -69,6 +64,21 @@ export type Step =
       sort?: { field: string; direction: 'asc' | 'desc' } | null;
     }
   | { kind: 'fail'; message: string };
+
+/**
+ * The arguments of a `call` step: an object, or a function of the calls this
+ * run has already made — for a call that needs what an earlier one returned (a
+ * record id, a card id), the way a model would read it from the previous
+ * result.
+ *
+ * Deliberately *not* `unknown | ((earlier: CallRecord[]) => unknown)`:
+ * `unknown` absorbs every other member of a union, so the whole type collapsed
+ * to `unknown`, the callback form lost its contextual type, and every
+ * `input: (calls) => …` in the scenarios was written with an implicitly `any`
+ * parameter — fourteen errors the shared typecheck could not see because it did
+ * not cover `e2e/` at all.
+ */
+export type CallInput = Record<string, unknown> | ((earlier: CallRecord[]) => Record<string, unknown>);
 
 /** A `call` step already performed in this run: the tool and its parsed answer. */
 export interface CallRecord {

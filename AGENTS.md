@@ -91,11 +91,26 @@ Rodzaj dowodu nie jest statusem. W raporcie i w `assessment.json` rozróżniaj: 
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm verify          # granica, macierz 200, macierze historyczne, typy, build, testy
+pnpm verify          # granica, macierz 200, macierze historyczne, typy (pakiety + e2e), build, testy
 pnpm test:e2e        # przeglądarka na istniejącym buildzie produkcyjnym (po verify/build — inaczej testuje stary bundle);
-                     # cztery testy zużywają tury subskrypcji
+                     # BEZ testów z prawdziwym modelem — nie zużywa ani jednej tury subskrypcji
+pnpm test:e2e:model  # tylko testy z prawdziwym modelem; koszt: 11 tur subskrypcji na przebieg
 pnpm check:module-swap   # przy zmianach kontraktu modułu lub warstwy składania
 ```
+
+`pnpm typecheck` sprawdza dwie konfiguracje: `tsconfig.json` (pakiety, aplikacje, `tests/`, `scripts/`)
+i `tsconfig.e2e.json` (`e2e/` i `playwright.config.ts`). Playwright uruchamia TypeScript bez sprawdzania
+typów, więc bez tej drugiej bramki błąd typu w specu wychodzi dopiero w trakcie przebiegu — przy testach
+modelowych kosztuje turę.
+
+**Testy z prawdziwym modelem są świadomym wyborem, nie domyślnym.** `e2e/bl01-bl02-model.spec.ts`
+(7 tur), `e2e/agent-ui.spec.ts` (2) i `e2e/files-agent.spec.ts` (2) nie należą do żadnego projektu
+domyślnego przebiegu — żaden argument ani filtr do nich nie sięgnie. Uruchamia je wyłącznie
+`pnpm test:e2e:model` (czyli `APP_E2E_MODEL=1`). Domyślny przebieg wypisuje, co pominął i ile by to
+kosztowało. Licznik wydanych tur trzymany jest w kopii roboczej (`.e2e-model-turns/`, ignorowanej przez
+git), zasiewany raz z zamkniętego rejestru `docs/evidence/bl01-bl02-2026-09-17/tury-modelu.json`, którego
+spec **tylko czyta**; dowody przebiegu lądują pod stemplem przebiegu w `docs/evidence/<zadanie>/runs/`,
+więc zapisany werdykt próby odbiorowej nie jest do nadpisania przez późniejszy przebieg.
 
 Podaj faktyczne polecenia, kody wyjścia i liczby testów. Dowody zapisuj w `docs/evidence/<zadanie>/`
 bez sekretów i danych prywatnych.
