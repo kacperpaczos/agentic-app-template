@@ -1,0 +1,95 @@
+{
+  "zapisano": "2026-09-17T19:59:17.450Z",
+  "kodCommit": "d097d67c64805d61177a2d1ee122e6d8f927aea3",
+  "zrodlo": "prawdziwy model (subskrypcja Claude), instancja testowa suity przegladarkowej",
+  "spec": "e2e/bl01-bl02-model.spec.ts",
+  "proba": "T27",
+  "kryteria": [
+    "L3.14",
+    "L3.15",
+    "L3.16",
+    "L3.17",
+    "L3.18"
+  ],
+  "werdykt": "niezaliczona — krok 1 potwierdzony, krok 2 to ustalenie o produkcie, kroki 3-5 niesprawdzone (budzet tur wyczerpany)",
+  "przebiegi": [
+    {
+      "runId": "run_0de7b080d1764c2fbcca",
+      "polecenie": "Zestaw mi w widokach agenta pozycje ofert tej sprawy: dostawca, nazwa pozycji i cena jednostkowa.",
+      "status": "succeeded",
+      "czasMs": 26115,
+      "pierwszyTekstMs": 16756,
+      "wKolejceMs": 3,
+      "narzedzia": [
+        "agent_view_create"
+      ]
+    },
+    {
+      "runId": "run_96c52b19607e4a21a589",
+      "polecenie": "Dodaj do tego wykres cen jednostkowych tych pozycji.",
+      "status": "succeeded",
+      "czasMs": 25684,
+      "pierwszyTekstMs": 11307,
+      "wKolejceMs": 1,
+      "narzedzia": [
+        "agent_views_list",
+        "agent_view_update"
+      ]
+    }
+  ],
+  "scenariusz": "T27 wariant B — uzytkownik ma sprawe otwarta na ekranie; polecenie wyslane z ekranu sprawy",
+  "rozmowa": "cnv_736526b2e0b243249ba0",
+  "zestawienie": {
+    "kartyZTegoWykonania": [
+      "crd_8d0f90ea401c472dabb0"
+    ],
+    "kompozycja": [
+      {
+        "id": "crd_8d0f90ea401c472dabb0",
+        "title": "Pozycje ofert: dostawca, nazwa, cena",
+        "spec": {
+          "kind": "openui",
+          "source": "root = tabela\ntabela = DataTable({operation: \"procurement.case_offer_items\", input: {caseId: \"pcs_88524ec47ef94db1aaf3\"}}, [\"supplierName\", \"name\", \"unitPriceMinor\"], \"Pozycje ofert w sprawie PC-2026-01\")"
+        }
+      }
+    ],
+    "zrodloInstancji": {
+      "operation": "procurement.case_offer_items",
+      "input": {
+        "caseId": "pcs_88524ec47ef94db1aaf3"
+      }
+    },
+    "stanInstancji": "ready",
+    "bladInstancji": null,
+    "wierszy": 16,
+    "wersjaKompozycji": 1,
+    "operacja": "procurement.case_offer_items"
+  },
+  "turyModeluWydaneLacznie": 11,
+  "coPotwierdzono": [
+    "otwarcie przestrzeni „Widoki agenta” z nawigacji: stan no-conversation przed wykonaniem",
+    "zestawienie powstalo z rozmowy bez nazwy komponentu; karta ma NOWY identyfikator z tego wykonania (crd_8d0f90ea401c472dabb0 z wyniku agent_view_create), a przestrzen rozmowy nie jest przestrzenia robocza uzytkownika",
+    "kompozycja zlozona przez model czyta zarejestrowana operacje z prawdziwym identyfikatorem sprawy wzietym z ekranu uzytkownika",
+    "wszystkie 16 wierszy i kazda komorka tabeli rowne POST /api/read dla zrodla instancji; opis instancji (ui_state) wymienia te same rekordy w kolejnosci z ekranu",
+    "adres i przestrzen robocza uzytkownika bez zmian po wykonaniu"
+  ],
+  "ustalenieKrok2": {
+    "runId": "run_96c52b19607e4a21a589",
+    "narzedzia": [
+      "agent_views_list",
+      "agent_view_update"
+    ],
+    "patch": "wykres = DataChart({operation: \"procurement.case_offer_items\", input: {caseId: \"pcs_88524ec47ef94db1aaf3\"}}, \"bar\", \"name\", [\"unitPriceMinor\"], \"Ceny jednostkowe pozycji ofert\")",
+    "wynikNarzedzia": "sukces — kompozycja przeszla walidacje serwera (pole liczbowe, zadeklarowane)",
+    "naEkranie": "instancja DataChart w stanie error: „Seria Cena jednostkowa laczy rozne jednostki (PLN, EUR); zawez dane do jednej jednostki.”",
+    "odpowiedzModelu": "„Dodano wykres słupkowy cen jednostkowych do widoku.” — model oznajmil sukces, nie ogladajac wyniku",
+    "wniosek": "Dwa braki produktu, oba widoczne tylko z prawdziwym modelem: (1) walidator kompozycji przepuszcza serie pieniezna, ktorej jednostka nie jest jednolita w danych, wiec odmowa przychodzi dopiero przy rysowaniu; (2) sekcja promptu „## Stan ekranu” nakazuje ui_state po ui_navigate/ui_filter/ui_sort, ale nie po agent_view_create/agent_view_update, a wynik tych narzedzi nie mowi nic o tym, co karta narysowala — model nie ma z czego sie dowiedziec, ze obiecal wykres, ktorego nie ma."
+  },
+  "czegoNieSprawdzono": [
+    "zmiana zakresu zestawienia rozmowa (krok 3)",
+    "mutacja danych akcja rekordu w widoku agenta i odswiezenie bez przeladowania (krok 4)",
+    "przeladowanie i odtworzenie kart z wartosciami z backendu (krok 5)"
+  ],
+  "powodZatrzymania": "budzet 12 tur modelu: wydane 11, pelne powtorzenie proby T27 wymaga 3",
+  "uwagaArchiwalna": "Stan SPRZED Task 9 (kod 118c871/7132b95). Zachowane, bo na tym przebiegu powstalo ustalenie F2: agent_view_update zwrocilo sukces dla wykresu, ktorego komponent odmowil narysowania, a model oznajmil uzytkownikowi, ze wykres dodal. Dokonczenie proby po scaleniu Task 9 jest w t27-widoki-agenta.json."
+}

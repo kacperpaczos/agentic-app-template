@@ -1,0 +1,127 @@
+{
+  "zapisano": "2026-09-17T19:50:18.861Z",
+  "kodCommit": "962e24a9c5986497813984ed01a17cf46356c79f",
+  "zrodlo": "prawdziwy model (subskrypcja Claude), instancja testowa suity przegladarkowej",
+  "spec": "e2e/bl01-bl02-model.spec.ts",
+  "proba": "T26",
+  "kryteria": [
+    "L2.17",
+    "L6.17"
+  ],
+  "werdykt": "zaliczona",
+  "przebiegi": [
+    {
+      "runId": "run_b2183264d0f549afb822",
+      "polecenie": "Pokaz tylko polskich dostawcow, posortowanych po nazwie od Z do A.",
+      "status": "succeeded",
+      "czasMs": 52677,
+      "pierwszyTekstMs": 22191,
+      "wKolejceMs": 2,
+      "narzedzia": [
+        "ui_filter",
+        "ui_filter",
+        "ui_sort",
+        "ui_state"
+      ]
+    },
+    {
+      "runId": "run_ee4f0a7e02bd430e8a3a",
+      "polecenie": "Ktory dostawca jest teraz na pierwszym miejscu tej listy i jaki ma NIP?",
+      "status": "succeeded",
+      "czasMs": 41026,
+      "pierwszyTekstMs": 31294,
+      "wKolejceMs": 1,
+      "narzedzia": [
+        "ui_show_value",
+        "ui_show_value"
+      ]
+    },
+    {
+      "runId": "run_722fe4ef7c434fb1a1b4",
+      "polecenie": "Usun zawezenie i pokaz z powrotem wszystkich dostawcow.",
+      "status": "succeeded",
+      "czasMs": 14022,
+      "pierwszyTekstMs": 6033,
+      "wKolejceMs": 1,
+      "narzedzia": [
+        "ui_filter"
+      ]
+    }
+  ],
+  "zawezenieISortowanie": {
+    "adres": [
+      [
+        "country",
+        "PL"
+      ],
+      [
+        "sort",
+        "-name"
+      ]
+    ],
+    "wiersze": [
+      "MediaPro Systemy",
+      "Konferencje24",
+      "AV Technika Sp. z o.o."
+    ],
+    "daneBackendu": "identyczne przed i po",
+    "proByZawezenia": [
+      {
+        "url": "/data?c=cnv_8311071ec95b4c45b407&country=Poland",
+        "cleared": false,
+        "filtered": {
+          "matched": 0,
+          "total": 4
+        }
+      },
+      {
+        "url": "/data?c=cnv_8311071ec95b4c45b407&country=PL",
+        "cleared": false,
+        "filtered": {
+          "matched": 3,
+          "total": 4
+        }
+      }
+    ],
+    "proByPorzadku": [
+      {
+        "sorted": {
+          "field": "name",
+          "direction": "desc"
+        },
+        "cleared": false
+      }
+    ]
+  },
+  "kontekstDrugiegoPolecenia": {
+    "predicates": [
+      {
+        "field": "country",
+        "op": "eq",
+        "value": "PL"
+      }
+    ],
+    "sort": {
+      "field": "name",
+      "direction": "desc"
+    },
+    "page": {
+      "index": 1,
+      "size": 10,
+      "count": 1
+    },
+    "matched": 3,
+    "total": 4
+  },
+  "detektorT25wDrugiejTurze": [],
+  "pelnyZakres": {
+    "adres": [
+      [
+        "sort",
+        "-name"
+      ]
+    ],
+    "wiersze": 4
+  },
+  "turyModeluWydaneLacznie": 6
+}

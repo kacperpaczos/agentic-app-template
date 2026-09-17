@@ -1,0 +1,81 @@
+{
+  "zapisano": "2026-09-17T19:54:06.851Z",
+  "kodCommit": "7132b95b39839af4bb853f5e7c2fdc8b7bbb99bc",
+  "zrodlo": "prawdziwy model (subskrypcja Claude), instancja testowa suity przegladarkowej",
+  "spec": "e2e/bl01-bl02-model.spec.ts",
+  "proba": "T27",
+  "kryteria": [
+    "L3.14",
+    "L3.15",
+    "L3.16",
+    "L3.17",
+    "L3.18"
+  ],
+  "werdykt": "niezaliczona (dwie proby, ten sam blad modelu)",
+  "przebiegi": [
+    {
+      "runId": "run_24132e16b1cf49a9a624",
+      "polecenie": "Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.",
+      "status": "succeeded",
+      "czasMs": 32479,
+      "pierwszyTekstMs": 18860,
+      "wKolejceMs": 2,
+      "narzedzia": [
+        "ToolSearch",
+        "agent_view_create"
+      ]
+    }
+  ],
+  "rozmowa": "cnv_a992bedab7d44ba494ac",
+  "zestawienie": {
+    "kartyZTegoWykonania": [
+      "crd_a25c7cc3d41f450ab281"
+    ],
+    "kompozycja": [
+      {
+        "id": "crd_a25c7cc3d41f450ab281",
+        "title": "Pozycje ofert PC-2026-01",
+        "spec": {
+          "kind": "openui",
+          "source": "root = DataTable({operation: \"procurement.case_offer_items\", input: {caseId: \"PC-2026-01\"}}, [\"supplierName\", \"name\", \"unitPriceMinor\"], \"Pozycje ofert w sprawie PC-2026-01\")"
+        }
+      }
+    ],
+    "zrodloInstancji": {
+      "operation": "procurement.case_offer_items",
+      "input": {
+        "caseId": "PC-2026-01"
+      }
+    },
+    "stanInstancji": "forbidden",
+    "bladInstancji": {
+      "code": "not_found",
+      "message": "Sprawa PC-2026-01 nie istnieje."
+    },
+    "wierszy": 0,
+    "wersjaKompozycji": 1
+  },
+  "turyModeluWydaneLacznie": 8,
+  "scenariusz": "T27 wariant A — uzytkownik nazywa sprawe jej kodem; polecenie wyslane z ekranu startowego",
+  "polecenie": "Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.",
+  "ustalenie": "W obu probach model zlozyl kompozycje z input {caseId: \"PC-2026-01\"} — kodem sprawy zamiast jej identyfikatora — i nie wykonal wczesniej zadnego odczytu ani wyszukania modulu. Platforma zachowala sie poprawnie: odczyt odmowil (not_found, \"Sprawa PC-2026-01 nie istnieje.\"), karta pokazuje odmowe zamiast zmyslonych wartosci, a opis instancji niesie stan i blad. Sekcja promptu o widokach agenta — inaczej niz sekcja o ui_show_value — nie mowi, zeby identyfikator rekordu najpierw ustalic narzedziem modulu.",
+  "proba1": {
+    "runId": "run_39bc79cc133d4bce8fcc",
+    "narzedzia": [
+      "agent_view_create"
+    ],
+    "czasMs": 22375,
+    "zrodlo": "root = DataTable(source, [\"supplierName\", \"name\", \"unitPriceMinor\"], \"Pozycje ofert\")\nsource = {operation: \"procurement.case_offer_items\", input: {caseId: \"PC-2026-01\"}}",
+    "skutek": "POST /api/read -> 404 not_found"
+  },
+  "proba2": {
+    "runId": "run_24132e16b1cf49a9a624",
+    "narzedzia": [
+      "ToolSearch",
+      "agent_view_create"
+    ],
+    "czasMs": 32479,
+    "zrodlo": "root = DataTable({operation: \"procurement.case_offer_items\", input: {caseId: \"PC-2026-01\"}}, [\"supplierName\", \"name\", \"unitPriceMinor\"], \"Pozycje ofert w sprawie PC-2026-01\")",
+    "skutek": "instancja w stanie forbidden, error.code=not_found, 0 wierszy"
+  }
+}

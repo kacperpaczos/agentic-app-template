@@ -1,0 +1,66 @@
+{
+  "zapisano": "2026-09-17T19:44:04.768Z",
+  "kodCommit": "492bfbca7368bdf1f20ad94e2d1a8bc9a0b15597",
+  "zrodlo": "prawdziwy model (subskrypcja Claude), instancja testowa suity przegladarkowej",
+  "spec": "e2e/bl01-bl02-model.spec.ts",
+  "proba": "T25",
+  "kryteria": [
+    "L2.16",
+    "L6.16"
+  ],
+  "werdykt": "zaliczona",
+  "przebiegi": [
+    {
+      "runId": "run_37fe29692e9f4a6e908e",
+      "polecenie": "Jaki NIP ma dostawca NordAV OY?",
+      "status": "succeeded",
+      "czasMs": 47039,
+      "pierwszyTekstMs": 20442,
+      "wKolejceMs": 2,
+      "narzedzia": [
+        "ToolSearch",
+        "procurement_search",
+        "ToolSearch",
+        "ui_show_value"
+      ],
+      "wersjaEkranuPrzyWyslaniu": 1
+    }
+  ],
+  "warunekWstepny": {
+    "zawezenie": "country=PL (ustawione kontrolka przez uzytkownika)",
+    "rekordPoszukiwany": "NordAV OY",
+    "widocznyPrzedPoleceniem": false
+  },
+  "detektorT25": [],
+  "adresPo": [],
+  "zmianyPrezentacji": [
+    "filter_cleared"
+  ],
+  "wynikNarzedzia": {
+    "target": {
+      "targetId": "procurement.data",
+      "place": "view",
+      "label": "Dostawcy",
+      "viewId": "procurement.data",
+      "operation": "procurement.suppliers",
+      "fields": [
+        "name",
+        "taxId",
+        "country",
+        "contactEmail"
+      ]
+    },
+    "found": true,
+    "shown": true,
+    "matchesBackend": true,
+    "uiVersion": 3,
+    "url": "/data?c=cnv_1eac4bc25b71442cb7fb"
+  },
+  "opisEkranuPo": {
+    "wersja": 3,
+    "filtr": [],
+    "widoczneRekordy": 4
+  },
+  "daneBackendu": "identyczne przed i po",
+  "turyModeluWydaneLacznie": 2
+}

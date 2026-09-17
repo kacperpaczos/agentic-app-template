@@ -1,0 +1,203 @@
+{
+  "budzet": 22,
+  "wydane": 21,
+  "tury": [
+    {
+      "nr": 1,
+      "o": "2026-09-17T19:41:04.000Z",
+      "proba": "T25",
+      "polecenie": "Jaki NIP ma dostawca NordAV OY?",
+      "runId": "run_e3f0eb8de955422387a8",
+      "uwaga": "proba 1 — aplikacja wykonala zadanie poprawnie (found/shown/matchesBackend = true), test oblal przez wlasny blad czytania wyniku narzedzia przez MCP",
+      "etap": "task-8"
+    },
+    {
+      "nr": 2,
+      "o": "2026-09-17T19:43:16.519Z",
+      "proba": "T25",
+      "polecenie": "Jaki NIP ma dostawca NordAV OY?",
+      "runId": "run_37fe29692e9f4a6e908e",
+      "etap": "task-8"
+    },
+    {
+      "nr": 3,
+      "o": "2026-09-17T19:44:18.940Z",
+      "proba": "T26",
+      "polecenie": "Pokaz tylko polskich dostawcow, posortowanych po nazwie od Z do A.",
+      "runId": "run_b1b0125692144790afbf",
+      "etap": "task-8"
+    },
+    {
+      "nr": 4,
+      "o": "2026-09-17T19:48:27.296Z",
+      "proba": "T26",
+      "polecenie": "Pokaz tylko polskich dostawcow, posortowanych po nazwie od Z do A.",
+      "runId": "run_b2183264d0f549afb822",
+      "etap": "task-8"
+    },
+    {
+      "nr": 5,
+      "o": "2026-09-17T19:49:21.472Z",
+      "proba": "T26",
+      "polecenie": "Ktory dostawca jest teraz na pierwszym miejscu tej listy i jaki ma NIP?",
+      "runId": "run_ee4f0a7e02bd430e8a3a",
+      "etap": "task-8"
+    },
+    {
+      "nr": 6,
+      "o": "2026-09-17T19:50:03.467Z",
+      "proba": "T26",
+      "polecenie": "Usun zawezenie i pokaz z powrotem wszystkich dostawcow.",
+      "runId": "run_722fe4ef7c434fb1a1b4",
+      "etap": "task-8"
+    },
+    {
+      "nr": 7,
+      "o": "2026-09-17T19:51:56.070Z",
+      "proba": "T27",
+      "polecenie": "Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.",
+      "runId": "run_39bc79cc133d4bce8fcc",
+      "etap": "task-8"
+    },
+    {
+      "nr": 8,
+      "o": "2026-09-17T19:53:33.357Z",
+      "proba": "T27",
+      "polecenie": "Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.",
+      "runId": "run_24132e16b1cf49a9a624",
+      "etap": "task-8"
+    },
+    {
+      "nr": 9,
+      "o": "2026-09-17T19:56:01.141Z",
+      "proba": "T27",
+      "polecenie": "Zestaw mi w widokach agenta pozycje ofert tej sprawy: dostawca, nazwa pozycji i cena jednostkowa.",
+      "runId": "run_443631b2fddf406eaf31",
+      "etap": "task-8"
+    },
+    {
+      "nr": 10,
+      "o": "2026-09-17T19:58:22.287Z",
+      "proba": "T27",
+      "polecenie": "Zestaw mi w widokach agenta pozycje ofert tej sprawy: dostawca, nazwa pozycji i cena jednostkowa.",
+      "runId": "run_0de7b080d1764c2fbcca",
+      "etap": "task-8"
+    },
+    {
+      "nr": 11,
+      "o": "2026-09-17T19:58:50.504Z",
+      "proba": "T27",
+      "polecenie": "Dodaj do tego wykres cen jednostkowych tych pozycji.",
+      "runId": "run_96c52b19607e4a21a589",
+      "etap": "task-8"
+    },
+    {
+      "nr": 12,
+      "o": "2026-09-17T20:37:05.490Z",
+      "proba": "T27",
+      "polecenie": "Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.",
+      "etap": "dokonczenie-T27-po-Task-9",
+      "runId": "run_3e583d1184894cb2b1d4"
+    },
+    {
+      "nr": 13,
+      "o": "2026-09-17T20:38:04.889Z",
+      "proba": "T27",
+      "polecenie": "Dodaj do tego wykres cen jednostkowych tych pozycji.",
+      "etap": "dokonczenie-T27-po-Task-9",
+      "runId": "run_3213d8f04366476f91d7"
+    },
+    {
+      "nr": 14,
+      "o": "2026-09-17T20:41:33.667Z",
+      "proba": "T27",
+      "polecenie": "Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.",
+      "etap": "dokonczenie-T27-po-Task-9",
+      "runId": "run_335ba5ea2b1a47cfb046"
+    },
+    {
+      "nr": 15,
+      "o": "2026-09-17T20:42:09.371Z",
+      "proba": "T27",
+      "polecenie": "Dodaj do tego wykres cen jednostkowych tych pozycji.",
+      "etap": "dokonczenie-T27-po-Task-9",
+      "runId": "run_efa90d9f55664e7c9e39"
+    },
+    {
+      "nr": 16,
+      "o": "2026-09-17T20:42:53.362Z",
+      "proba": "T27",
+      "polecenie": "Zawez zestawienie i wykres do pozycji w PLN.",
+      "etap": "dokonczenie-T27-po-Task-9",
+      "runId": "run_893c41ea783949bdbb7a"
+    },
+    {
+      "nr": 17,
+      "o": "2026-09-17T20:46:26.442Z",
+      "proba": "T27 — kroki 5 i 6",
+      "polecenie": "Zestaw mi w widokach agenta pozycje ofert w PLN ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa, a pod spodem wykres tych cen.",
+      "etap": "dokonczenie-T27-po-Task-9",
+      "runId": "run_9411a0c692a04d8f822c"
+    },
+    {
+      "nr": 18,
+      "o": "2026-09-17T21:05:09.792Z",
+      "proba": "T27",
+      "polecenie": "Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.",
+      "etap": "domkniecie-T27-krok-2-i-krok-6",
+      "runId": "run_94540037b0394f86878f"
+    },
+    {
+      "nr": 19,
+      "o": "2026-09-17T21:07:13.344Z",
+      "proba": "T27",
+      "polecenie": "Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.",
+      "etap": "domkniecie-T27-krok-2-i-krok-6",
+      "runId": "run_1063a97fce11422d86c8"
+    },
+    {
+      "nr": 20,
+      "o": "2026-09-17T21:07:54.081Z",
+      "proba": "T27",
+      "polecenie": "Dodaj do tego wykres cen jednostkowych tych pozycji.",
+      "etap": "domkniecie-T27-krok-2-i-krok-6",
+      "runId": "run_f0520015edfc48708557"
+    },
+    {
+      "nr": 21,
+      "o": "2026-09-17T21:08:33.665Z",
+      "proba": "T27",
+      "polecenie": "Zawez zestawienie i wykres do pozycji w PLN.",
+      "etap": "domkniecie-T27-krok-2-i-krok-6",
+      "runId": "run_adca8dc48ad946248e1f"
+    }
+  ],
+  "odrzuconeBezWyslania": [
+    {
+      "proba": "T27",
+      "polecenie": "Dodaj do tego wykres cen jednostkowych tych pozycji.",
+      "powod": "Strażnik budżetu odmówił wysłania: stała MODEL_TURN_BUDGET nadal wynosiła 18, a przyznany przez koordynatora trzeci grant (4 tury) podnosi sufit do 22. Polecenie nie opuściło przeglądarki, więc nie jest turą. Kolejność w sendForRun poprawiona: najpierw odmowa, potem zapis.",
+      "etap": "domkniecie-T27-krok-2-i-krok-6"
+    }
+  ],
+  "granty": [
+    {
+      "etap": "task-8",
+      "tury": "1-11",
+      "przyznane": 12
+    },
+    {
+      "etap": "dokonczenie-T27-po-Task-9",
+      "tury": "12-17",
+      "przyznane": 6
+    },
+    {
+      "etap": "domkniecie-T27-krok-2-i-krok-6",
+      "tury": "18-21",
+      "przyznane": 4,
+      "uwaga": "tura 18 stracona na wlasny blad: stala MODEL_TURN_BUDGET nie byla podniesiona przed uruchomieniem"
+    }
+  ],
+  "sufitStraznika": 22,
+  "uwagaORozliczeniu": "sufit 22 = 12 + 6 + 4 (suma przyznanych), wydane 21: 11 z pierwszego grantu, 6 z drugiego, 4 z trzeciego. Jedna tura nierozliczona to niewykorzystana reszta grantu Taska 8, nie zapas na kolejny przebieg. Grant jest zamkniety."
+}
