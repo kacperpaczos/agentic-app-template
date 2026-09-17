@@ -306,6 +306,11 @@ test.describe('widoki agenta', () => {
       currencies.flatMap((c) => records.filter((r) => r.currency === c)),
     );
 
+    // The statement the patch did not name is still there, on screen.
+    await expect(page.getByTestId(`card-${tableCardId}`)).toContainText(
+      'Zestawienie ofert w sprawie: dostawca, waluta, podstawa cen, suma i termin dostawy.',
+    );
+
     const afterGrouping = await agentViewsOf(page, conversationA);
     expect(afterGrouping.cards.map((c) => c.id)).toEqual([tableCardId, chartCardId]);
     const tableAfter = afterGrouping.cards.find((c) => c.id === tableCardId)!;

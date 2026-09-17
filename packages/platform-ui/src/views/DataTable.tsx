@@ -36,6 +36,10 @@ import { useComposedView, useInstanceId } from './viewContext.ts';
  * module screen reading its own route (`applyViewFilter`). Any other table,
  * including one in a card or the chat, applies only its composition's `filter`.
  *
+ * **Grouping.** `groupBy` shows the rows in groups by one declared field, each
+ * under a heading with its value and count (`grouping.ts`); the rows themselves
+ * are rendered exactly as without it.
+ *
  * `pageSize` is accepted and not yet applied: every matching row is shown.
  * Paging belongs with the address-bar state that makes it undoable.
  */
