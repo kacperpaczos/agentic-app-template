@@ -13,6 +13,8 @@ import { buildUiTargetCatalog } from './ui-targets.ts';
 import { OpenUiServerCatalog, validateComposition } from './openui-validation.ts';
 import type { ReadOperationLookup } from './read-operations.ts';
 import { checkReadDescriptor, checkViewAgainstTarget, checkViewShape } from './views.ts';
+import { checkRecordActions } from './record-actions.ts';
+import { executeTool } from './tool-execution.ts';
 
 export interface RegisteredRoute {
   method: 'get' | 'post' | 'patch' | 'delete';
@@ -70,7 +72,8 @@ export class ServerModuleRegistry {
       if (this.#readOperations.has(qualifiedName) || readOperations.has(qualifiedName)) {
         throw new AppError('conflict', `Operacja odczytu ${qualifiedName} juz istnieje.`);
       }
-      checkReadDescriptor(qualifiedName, op);
+      const descriptor = checkReadDescriptor(qualifiedName, op);
+      if (descriptor) checkRecordActions({ moduleId: mod.meta.id, operation: qualifiedName, descriptor, tools: mod.tools });
       readOperations.set(qualifiedName, { qualifiedName, moduleId: mod.meta.id, definition: op });
     }
 
@@ -238,15 +241,14 @@ export class ServerModuleRegistry {
     return [];
   }
 
+  /**
+   * Runs a module tool by its qualified name, through the same execution as
+   * the MCP server and a record action ({@link executeTool}) — validation and
+   * handler are not repeated here.
+   */
   async callTool(qualifiedName: string, input: unknown, ctx: ToolCallContext): Promise<unknown> {
     const entry = this.#tools.get(qualifiedName);
     if (!entry) throw new AppError('not_found', `Nieznane narzedzie ${qualifiedName}.`);
-    const parsed = entry.definition.inputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new AppError('validation_failed', `Nieprawidlowe wejscie narzedzia ${qualifiedName}.`, {
-        issues: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
-      });
-    }
-    return entry.definition.handler(parsed.data as never, ctx);
+    return executeTool({ localName: qualifiedName, def: entry.definition }, input, ctx);
   }
 }

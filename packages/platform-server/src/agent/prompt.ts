@@ -330,8 +330,17 @@ function describeReadOperationLine(op: ReadOperationSummary): string {
     .map((f) => `${f.field}: ${f.label}, ${f.type}${f.unit ? ` [${f.unit}]` : ''}`)
     .join('; ');
   const where = d.collection ? `rekordy kolekcji ${d.collection}` : 'rekordy wyniku';
+  /*
+   * A table over this read offers these to the user by itself; naming the
+   * tool says that a change made there is the same operation as the agent's.
+   */
+  const moduleId = op.name.slice(0, op.name.indexOf('.'));
+  const actions = (d.actions ?? [])
+    .map((a) => `${a.label} (${mcpToolName(`${moduleId}_${a.tool}`)})`)
+    .join('; ');
   return (
     `${line}\n  ${where} (rodzaj ${d.record.kind}, id: ${d.record.idField}) maja pola: ${fields}` +
-    '; tylko te pola wskazujesz w komponentach danych'
+    '; tylko te pola wskazujesz w komponentach danych' +
+    (actions ? `\n  kazda DataTable tej operacji daje uzytkownikowi akcje rekordu: ${actions}` : '')
   );
 }

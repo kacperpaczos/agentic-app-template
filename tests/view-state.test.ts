@@ -24,6 +24,7 @@ import {
 } from '@platform/contracts';
 import {
   AgentRuntime,
+  executeTool,
   RunEventStream,
   buildSystemPrompt,
   buildUiTargetCatalog,
@@ -384,9 +385,10 @@ const EMPTY_CONTEXT = (conversationId: string): AppContext => ({
 });
 
 /**
- * Calls a platform tool the way a run does — over the runtime's real
- * acknowledgement gate and a real event stream — and records the commands the
- * browser would have received.
+ * Calls a platform tool the way a run does — through the same execution as the
+ * MCP server (`executeTool`: input validated against the tool's schema, then
+ * its handler), over the runtime's real acknowledgement gate and a real event
+ * stream — and records the commands the browser would have received.
  */
 async function callTool(
   name: string,
@@ -441,7 +443,7 @@ async function callTool(
   const tool = platformTools(h.platform.services).find((t) => t.name === name)!;
   const out: { result?: any; error?: unknown; emitted: UiCommand[] } = { emitted };
   try {
-    out.result = await tool.handler(input as never, ctx);
+    out.result = await executeTool({ localName: name, def: tool }, input, ctx);
   } catch (e) {
     out.error = e;
   }

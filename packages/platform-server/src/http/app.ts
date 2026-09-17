@@ -27,6 +27,7 @@ import { SESSION_COOKIE, SessionAuth, ensureUser, requireUser } from '../auth/se
 import type { PlatformServices } from '../services/index.ts';
 import { deriveTitle } from '../services/conversations.ts';
 import { describeReadOperations, runRead } from '../registry/read-operations.ts';
+import { performRecordAction } from '../services/record-actions.ts';
 
 export const DEFAULT_USER_ID = 'local-user';
 export const SECOND_USER_ID = 'other-user';
@@ -572,6 +573,22 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
     const ownerId = c.get('ownerId');
     const body = await c.req.json().catch(() => undefined);
     return json(c, await runRead(services.modules, body, ownerId));
+  });
+
+  /**
+   * Performs a record action declared by a read's descriptor, for the
+   * signed-in owner: the record is re-read through the named read, and the
+   * module's write tool runs through the same execution as over MCP
+   * (`performRecordAction`). The answer names what changed; the browser
+   * refreshes its reads.
+   */
+  app.post('/api/actions', async (c) => {
+    const ownerId = c.get('ownerId');
+    const body = await c.req.json().catch(() => undefined);
+    return json(
+      c,
+      await performRecordAction({ registry: services.modules, idempotency: services.idempotency }, body, ownerId),
+    );
   });
 
   /** Every registered read with its input keys and result descriptor. */

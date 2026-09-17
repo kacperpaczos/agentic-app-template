@@ -4,6 +4,7 @@ import {
   NUMERIC_FIELD_TYPES,
   ROUTE_PLACEHOLDER,
   type ReadResultDescriptor,
+  type RecordActionFormFieldType,
   type RecordField,
 } from './views.ts';
 
@@ -187,6 +188,56 @@ export function formatFieldValue(record: DataRecord, field: RecordField): string
 export function recordValue(record: DataRecord, field: string): string | number | boolean | null {
   const raw = record[field];
   return typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean' ? raw : null;
+}
+
+/**
+ * A decimal number as `formatFieldValue` writes one, and as people type one:
+ * optional sign, digits optionally grouped by spaces (the Polish grouping is a
+ * no-break space), and a decimal comma — or a dot, which is what a numeric
+ * keypad often gives.
+ */
+const TYPED_DECIMAL = /^([+-]?)(\d{1,3}(?:[   ]\d{3})+|\d+)(?:[,.](\d+))?$/;
+
+/**
+ * The value a record action's tool receives for what the user typed into one
+ * form field — the reverse of how `formatFieldValue` shows a value of the same
+ * kind, so a number reads back the way the table printed it.
+ *
+ * Amounts and quantities are converted with integer arithmetic on the digits
+ * (never `× 100` on a float, which turns `19,99` into `1998.9999…`) and refuse
+ * more decimals than their unit has, rather than rounding the user's input
+ * behind their back. Every refusal is `validation_failed` naming the field.
+ */
+export function parseFieldInput(text: string, field: { label: string; type: RecordActionFormFieldType }): string | number {
+  const trimmed = text.trim();
+  const refuse = (why: string): never => {
+    throw new AppError('validation_failed', `Pole ${field.label}: ${why}`, { field: field.label, reason: 'invalid_value' });
+  };
+  if (trimmed === '') refuse('wartosc jest wymagana.');
+  if (field.type === 'text') return trimmed;
+
+  const match = TYPED_DECIMAL.exec(trimmed);
+  if (!match) refuse(`"${trimmed}" nie jest liczba (np. 1 234,56).`);
+  const [, sign, grouped, fraction = ''] = match!;
+  const whole = grouped!.replace(/[   ]/g, '');
+  const negative = sign === '-';
+
+  if (field.type === 'number') {
+    const value = Number(`${negative ? '-' : ''}${whole}${fraction ? `.${fraction}` : ''}`);
+    return Number.isFinite(value) ? value : refuse('liczba jest poza zakresem.');
+  }
+
+  const scale = field.type === 'money_minor' ? 2 : 3;
+  if (fraction.length > scale) {
+    refuse(
+      field.type === 'money_minor'
+        ? 'kwota moze miec najwyzej 2 miejsca po przecinku.'
+        : 'ilosc moze miec najwyzej 3 miejsca po przecinku.',
+    );
+  }
+  const units = Number(whole) * 10 ** scale + Number(fraction.padEnd(scale, '0'));
+  if (!Number.isSafeInteger(units)) refuse('liczba jest poza zakresem.');
+  return negative && units !== 0 ? -units : units;
 }
 
 /* -------------------------------------------------------------------------- */

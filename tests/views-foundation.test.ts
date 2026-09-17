@@ -221,7 +221,7 @@ describe('procurement.case_offer_items', () => {
     const res = await read({ operation: 'procurement.case_offer_items', input: { caseId } });
     expect(res.status).toBe(200);
     expect(res.body.descriptor.collection).toBe('items');
-    expect(res.body.descriptor.record).toEqual({ kind: 'offer_item', idField: 'id' });
+    expect(res.body.descriptor.record).toEqual({ kind: 'offer_item', idField: 'id', titleField: 'name' });
     const rows = recordsOf(res.body.result, res.body.descriptor);
     expect(rows.length).toBeGreaterThan(0);
 

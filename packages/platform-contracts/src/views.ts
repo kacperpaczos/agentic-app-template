@@ -100,6 +100,73 @@ export type RecordField = z.infer<typeof recordFieldSchema>;
 /** `{field}` placeholders in a record route. */
 export const ROUTE_PLACEHOLDER = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 
+/* -------------------------------------------------------------------------- */
+/*  Record actions                                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What a user types into one field of a record action's form, and what the
+ * tool receives for it:
+ *
+ *  - `text`           the text as typed (trimmed);
+ *  - `number`         a decimal number (`1 234,5` or `1234.5`);
+ *  - `money_minor`    an amount typed in whole units with at most two decimals
+ *                     (`1 234,56`), handed over as integer minor units (123456);
+ *  - `quantity_milli` a quantity typed in units with at most three decimals,
+ *                     handed over as integer thousandths.
+ *
+ * The type describes the tool's input, not the record field the form edits:
+ * a tool taking an amount in whole currency units takes a `number`.
+ */
+export const RECORD_ACTION_FORM_FIELD_TYPES = ['text', 'number', 'money_minor', 'quantity_milli'] as const;
+export type RecordActionFormFieldType = (typeof RECORD_ACTION_FORM_FIELD_TYPES)[number];
+
+const identifier = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/).max(80);
+
+/** `$record.<field>` — a value of the record as the backend re-reads it; `$form.<key>` — a form field. */
+export const RECORD_ACTION_SOURCE = /^\$(record|form)\.([A-Za-z_][A-Za-z0-9_]*)$/;
+
+export const recordActionFormFieldSchema = z.object({
+  key: identifier,
+  label: z.string().min(1).max(120),
+  type: z.enum(RECORD_ACTION_FORM_FIELD_TYPES),
+});
+export type RecordActionFormField = z.infer<typeof recordActionFormFieldSchema>;
+
+/*
+ * The input mapping is a list of pairs rather than an object keyed by input
+ * name: it has to stay expressible without `z.record()`, which no schema that
+ * may reach the model over MCP can use.
+ */
+export const recordActionInputSchema = z.object({
+  /** Key of the tool's input. */
+  key: identifier,
+  /** Where its value comes from: `$record.<field>` or `$form.<key>`. */
+  from: z.string().regex(RECORD_ACTION_SOURCE, 'Oczekiwano $record.<pole> albo $form.<klucz>.'),
+});
+
+/**
+ * An interaction a read's records offer: a write tool of the module that owns
+ * the read, with its input taken from the record and from a small form.
+ *
+ * Performed by the platform (`POST /api/actions`) with the owner from the
+ * session, after re-reading the record through the same read, through the very
+ * handler the MCP server runs — so a table in a module's screen and the same
+ * table in an agent's view change data by one authorized operation, and the
+ * agent changing it by the tool is the same change again.
+ */
+export const recordActionSchema = z.object({
+  id: z.string().regex(/^[a-z][a-z0-9_]*$/).max(60),
+  /** What the button says, e.g. "Zmien cene". */
+  label: z.string().min(1).max(80),
+  /** Unqualified name of a `write` tool of the same module. */
+  tool: identifier,
+  input: z.array(recordActionInputSchema).min(1).max(20),
+  /** Fields the user fills in; absent: the action only asks for confirmation. */
+  form: z.array(recordActionFormFieldSchema).max(10).optional(),
+});
+export type RecordAction = z.infer<typeof recordActionSchema>;
+
 export const readResultDescriptorSchema = z
   .object({
     /**
@@ -123,6 +190,11 @@ export const readResultDescriptorSchema = z
     }),
     /** Every field a view may show, filter, sort or chart. Anything else is refused. */
     fields: z.array(recordFieldSchema).min(1).max(60),
+    /**
+     * Interactions every table over this read offers on each record. Checked
+     * against the module's tools when the module registers.
+     */
+    actions: z.array(recordActionSchema).max(10).optional(),
   })
   .superRefine((d, ctx) => {
     const names = d.fields.map((f) => f.field);
@@ -164,7 +236,58 @@ export const readResultDescriptorSchema = z
         });
       }
     }
+    checkRecordActionShapes(d.actions ?? [], seen, d.record.idField, ctx);
   });
+
+/**
+ * What can be said about record actions from the descriptor alone: unique ids,
+ * inputs and form keys; every `$record.<field>` a declared field or the id;
+ * every `$form.<key>` a field of the action's form; and no form field that no
+ * input uses — a field the user fills in and the tool never receives would be
+ * a lie about what the action does. Whether the tool exists, writes and takes
+ * those inputs is checked against the module's tools at registration.
+ */
+function checkRecordActionShapes(
+  actions: readonly RecordAction[],
+  declared: ReadonlySet<string>,
+  idField: string,
+  ctx: z.RefinementCtx,
+): void {
+  const ids = new Set<string>();
+  actions.forEach((action, i) => {
+    const where = `Akcja ${action.id}`;
+    const issue = (path: PropertyKey[], message: string) =>
+      ctx.addIssue({ code: 'custom', path: ['actions', i, ...path], message: `${where}: ${message}` });
+    if (ids.has(action.id)) issue(['id'], 'identyfikator akcji powtarza sie.');
+    ids.add(action.id);
+
+    const formKeys = new Set<string>();
+    (action.form ?? []).forEach((f, j) => {
+      if (formKeys.has(f.key)) issue(['form', j, 'key'], `pole formularza ${f.key} powtarza sie.`);
+      formKeys.add(f.key);
+    });
+
+    const inputKeys = new Set<string>();
+    const usedForm = new Set<string>();
+    action.input.forEach((entry, j) => {
+      if (inputKeys.has(entry.key)) issue(['input', j, 'key'], `wejscie ${entry.key} jest mapowane dwa razy.`);
+      inputKeys.add(entry.key);
+      const [, kind, name] = RECORD_ACTION_SOURCE.exec(entry.from) ?? [];
+      if (kind === 'record' && name && !declared.has(name) && name !== idField) {
+        issue(['input', j, 'from'], `${entry.from} nie jest zadeklarowanym polem rekordu ani idField.`);
+      }
+      if (kind === 'form' && name) {
+        if (!formKeys.has(name)) issue(['input', j, 'from'], `${entry.from} nie jest polem formularza akcji.`);
+        usedForm.add(name);
+      }
+    });
+    (action.form ?? []).forEach((f, j) => {
+      if (!usedForm.has(f.key)) {
+        issue(['form', j, 'key'], `pole formularza ${f.key} nie trafia do zadnego wejscia narzedzia.`);
+      }
+    });
+  });
+}
 export type ReadResultDescriptor = z.infer<typeof readResultDescriptorSchema>;
 
 /* -------------------------------------------------------------------------- */
@@ -456,4 +579,56 @@ export interface ReadOperationSummary {
   description: string;
   inputKeys: string[];
   descriptor: ReadResultDescriptor | null;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Performing a record action                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What `POST /api/actions` takes.
+ *
+ * The read and its input are those of the table the user acts in: the record
+ * is re-read through them, with the session's owner, so the action works on
+ * the record as the backend has it now — never on values the browser sends.
+ * Form values are sent as typed and parsed on the server by each field's
+ * declared type. `operationId` is required: a repeated request (a retry, a
+ * double click) returns the first outcome instead of changing data twice.
+ *
+ * Only the HTTP API takes this, so `values` may be a plain object.
+ */
+export const recordActionRequestSchema = z.object({
+  operation: dataSourceSchema.shape.operation,
+  input: dataSourceSchema.shape.input,
+  action: z.string().min(1).max(60),
+  recordId: z.string().min(1).max(128),
+  values: z.record(z.string(), z.string().max(500)).optional(),
+  operationId: z.string().min(8).max(200),
+});
+export type RecordActionRequest = z.infer<typeof recordActionRequestSchema>;
+
+/** What `POST /api/actions` answers. */
+export interface RecordActionResponse {
+  operation: string;
+  action: string;
+  recordId: string;
+  /** The tool's own answer. */
+  result: unknown;
+  /** Resources the tool reported changed (`data_changed`), e.g. `thing:42`. */
+  changed: string[];
+  /** True when this `operationId` was already performed and its outcome is returned again. */
+  replayed: boolean;
+}
+
+/**
+ * JSON with object keys in sorted order: one text for values that differ only
+ * in key order. The browser keys its read cache with it; the server compares
+ * a repeated record action with the first one by it.
+ */
+export function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) =>
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : v,
+  );
 }

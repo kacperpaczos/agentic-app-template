@@ -25,7 +25,7 @@ export function DataSummaryView(props: DataSummaryProps) {
   const instanceId = useInstanceId('DataSummary');
   const view = useComposedView();
 
-  const { state, model, error, response } = useDataModel(
+  const { state, model, error, response, refreshing } = useDataModel(
     props.source,
     (response) => buildDataModel({ response, fieldNames: props.fields }),
     [JSON.stringify(props.fields)],
@@ -50,7 +50,7 @@ export function DataSummaryView(props: DataSummaryProps) {
     }),
   );
 
-  const frame = { instanceId, component: 'DataSummary', operation: props.source.operation, title: props.title };
+  const frame = { instanceId, component: 'DataSummary', operation: props.source.operation, title: props.title, refreshing };
   if (state === 'loading') return <DataFrame {...frame} state="loading"><LoadingBody /></DataFrame>;
   if (!model) {
     return (
