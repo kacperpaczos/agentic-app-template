@@ -936,17 +936,36 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       await expect(
         page.getByTestId(`card-${chartCardId}`).locator(`[data-ui-instance="${chartInstance.instanceId}"]`),
       ).toHaveCount(1);
-      await expectChartMatchesBackend(page, viewsPage(page), chartInstance);
+      /*
+       * The chart's *values* are judged after the next turn, not here.
+       *
+       * The case's sixteen items are priced in PLN and in EUR, so there is no
+       * correct single chart of all of them: a money series carries the
+       * record's own currency and `buildChartModel` refuses to put two on one
+       * axis. Task 9 made the tool warn about exactly this shape of series
+       * (`unit_from_record`) and made the agent read the screen back, and the
+       * run that first showed it does now say so in the conversation and asks
+       * which narrowing the user wants (`run_3213d8f04366476f91d7`).
+       *
+       * So this step asserts what this step is about — the agent added a chart
+       * to its own view, as a card that is mounted on screen, without losing the
+       * table — and records the state the component ended up in. What the chart
+       * *shows* is asserted after the scope is settled by the conversation,
+       * which is the next step of the proba and the answer to the agent's own
+       * question.
+       */
       evidence.wykres = {
         kartaWykresu: chartCardId,
         nowaKarta: !created1.includes(chartCardId!),
         operacja: chartInstance.source.operation,
         serie: chartInstance.fields.slice(1).map((f: any) => f.field),
+        stanPoDodaniu: chartInstance.state,
+        bladPoDodaniu: chartInstance.error,
       };
       await shot(page, 't27-wykres.png');
 
       /* ----------------------- 3. the scope, by talking ---------------------- */
-      const third = 'Ogranicz zestawienie do pozycji dostawcy MediaPro Systemy.';
+      const third = 'Zawez zestawienie i wykres do pozycji w PLN.';
       const run3 = await sendForRun(page, third, evidence.proba as string);
       const phase3 = await settled(page, run3.runId);
       evidence.przebiegi.push(await runFacts(page, conversationId, run3.runId, third));
@@ -968,27 +987,38 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       onPage = await describedOnAgentViews(
         page,
         'opis ekranu Widokow agenta po zmianie zakresu',
-        has('DataTable'),
+        (all) => has('DataTable')(all) && has('DataChart')(all),
       );
       tableInstance =
         onPage.find((i: any) => i.component === 'DataTable' && i.instanceId === tableInstance.instanceId) ??
         onPage.find((i: any) => i.component === 'DataTable');
       const narrowed = await expectInstanceMatchesBackend(page, viewsPage(page), tableInstance);
       const idField = narrowed.descriptor.record.idField;
-      const supplierNames = new Set(
+      const currencies = new Set(
         tableInstance.visibleRecordIds.map(
-          (id: string) => narrowed.records.find((r) => String(r[idField]) === id)?.supplierName ?? '?',
+          (id: string) => narrowed.records.find((r) => String(r[idField]) === id)?.currency ?? '?',
         ),
       );
-      expect([...supplierNames], 'zakres zestawienia nie zostal ograniczony do jednego dostawcy').toEqual([
-        'MediaPro Systemy',
-      ]);
+      expect([...currencies], 'zakres zestawienia nie zostal ograniczony do jednej waluty').toEqual(['PLN']);
       expect(tableInstance.visibleRecordIds.length).toBeLessThan(
         Number(evidence.zestawienie.wierszy),
       );
+
+      /*
+       * Now the chart has a single unit, so it has to draw — and what it draws
+       * has to be the backend's range for its own narrowed source. This is the
+       * assertion that step 2 could not make honestly.
+       */
+      const chartAfter =
+        onPage.find((i: any) => i.component === 'DataChart' && i.instanceId === chartInstance.instanceId) ??
+        onPage.find((i: any) => i.component === 'DataChart');
+      expect(chartAfter, 'wykres zniknal przy zmianie zakresu').toBeTruthy();
+      await expectChartMatchesBackend(page, viewsPage(page), chartAfter);
+      evidence.wykres.stanPoZmianieZakresu = chartAfter.state;
+
       evidence.zmianaZakresu = {
+        waluty: [...currencies],
         wierszy: tableInstance.visibleRecordIds.length,
-        dostawcy: [...supplierNames],
         wersjaKompozycji: state3.cards.find((c) => c.id === tableCardId)!.specVersion,
       };
 

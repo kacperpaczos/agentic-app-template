@@ -1,6 +1,6 @@
 {
-  "budzet": 12,
-  "wydane": 11,
+  "budzet": 18,
+  "wydane": 13,
   "tury": [
     {
       "nr": 1,
@@ -79,6 +79,22 @@
       "proba": "T27",
       "polecenie": "Dodaj do tego wykres cen jednostkowych tych pozycji.",
       "runId": "run_96c52b19607e4a21a589"
+    },
+    {
+      "nr": 12,
+      "o": "2026-09-17T20:37:05.490Z",
+      "proba": "T27",
+      "polecenie": "Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.",
+      "etap": "dokonczenie-T27-po-Task-9",
+      "runId": "run_3e583d1184894cb2b1d4"
+    },
+    {
+      "nr": 13,
+      "o": "2026-09-17T20:38:04.889Z",
+      "proba": "T27",
+      "polecenie": "Dodaj do tego wykres cen jednostkowych tych pozycji.",
+      "etap": "dokonczenie-T27-po-Task-9",
+      "runId": "run_3213d8f04366476f91d7"
     }
   ]
 }
