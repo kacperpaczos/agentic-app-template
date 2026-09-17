@@ -83,6 +83,15 @@ export class RunEventStream {
         yield item;
       }
       /*
+       * Events emitted while this reader was suspended at `yield` (its
+       * consumer still writing to the socket) found no waiter to wake. They are
+       * in the buffer already, so they are read now — waiting here would hold
+       * them back until some later, unrelated emit. A tool that asks the
+       * browser for something emits its call and the command in one burst, and
+       * the command then reached the browser only once it had timed out.
+       */
+      if (this.#buffer.some((e) => e.seq > cursor)) continue;
+      /*
        * Once the stream is closed there will be no further wake-up, so a reader
        * must drain what is left instead of waiting for one.
        *
