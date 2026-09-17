@@ -360,6 +360,38 @@ describe('instrukcja agenta', () => {
     expect(prompt).toContain('ui_filter');
     expect(prompt).toMatch(/zawezanie po: .*country/);
   });
+
+  /*
+   * From a real turn: asked for Polish suppliers, the agent tried "Polska"
+   * (0 rows), went to another screen to look at the countries, came back with
+   * "Poland" (0 rows) and only then reached "PL". The values were declared the
+   * whole time and `ui_catalog` already returned them — nothing said to use
+   * them, and nothing put them where the field names are read.
+   */
+  it('podaje zadeklarowane wartosci pola zawezania i kaze uzyc ich doslownie', async () => {
+    const { buildSystemPrompt } = await import('@platform/server');
+    const prompt = buildSystemPrompt({
+      registry: h.platform.services.modules,
+      catalog: h.platform.services.catalog,
+      appContext: EMPTY_CONTEXT('c'),
+      resourceSummary: null,
+      workspaceDir: null,
+      stagedFiles: [],
+      toolkit: [],
+    } as never);
+
+    expect(prompt).toMatch(/zawezanie po: .*country \(PL\|FI\|DE\|CZ\)/);
+    expect(prompt).toContain('uzyj JEDNEJ Z NICH DOSLOWNIE');
+    expect(prompt).toContain('nie „Polska" ani „Poland"');
+    expect(prompt).toContain('Pole bez values przyjmuje dowolna wartosc');
+
+    // The same values the tool answers with, so prompt and catalog cannot drift.
+    const country = h.platform.services.modules
+      .uiTargets()
+      .flatMap((t) => t.filter?.fields ?? [])
+      .find((f) => f.field === 'country');
+    expect(country?.values).toEqual(['PL', 'FI', 'DE', 'CZ']);
+  });
 });
 
 describe('pusty wynik wyszukiwania to nie pusta aplikacja', () => {

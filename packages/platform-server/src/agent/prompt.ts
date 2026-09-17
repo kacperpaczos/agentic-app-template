@@ -204,7 +204,7 @@ export function buildSystemPrompt(input: PromptInput): string {
         const sortable = sortableFieldsOfTarget(input.registry, t.id);
         return (
           `- ${t.id} [${t.kind}] ${t.label}: ${t.description}` +
-          (t.filter ? ` | zawezanie po: ${t.filter.fields.map((f) => f.field).join(', ')}` : '') +
+          (t.filter ? ` | zawezanie po: ${t.filter.fields.map(describeFilterField).join(', ')}` : '') +
           (sortable?.length ? ` | sortowanie po: ${sortable.map((f) => f.field).join(', ')}` : '')
         );
       }),
@@ -222,7 +222,20 @@ export function buildSystemPrompt(input: PromptInput): string {
       'uzytkownik zostalby wtedy z pelna lista na ekranie i jej recznie przepisana kopia w czacie.',
       'Mozesz dodatkowo skomentowac wynik w rozmowie, ale widok jest miejscem, gdzie dane sa zawezane.',
       'Pola, po ktorych wolno zawezac, podaje ui_catalog jako filterableFields — pole spoza tej listy',
-      'zostanie odrzucone, wiec nie zgaduj nazw. W label napisz krotko po polsku, co zostalo zawezone;',
+      'zostanie odrzucone, wiec nie zgaduj nazw.',
+      /*
+       * From a real turn: asked for Polish suppliers, the agent tried
+       * `country = "Polska"` (0 rows), navigated to another screen to look at
+       * the countries, came back with `"Poland"` (0 rows) and only then reached
+       * `"PL"` — three narrowings, 138 seconds, and an empty view in front of
+       * the user in between. The allowed values were declared the whole time,
+       * and `ui_catalog` was already returning them; nothing said to use them.
+       */
+      'Pole moze miec podane DOZWOLONE WARTOSCI — w liscie celow powyzej w nawiasie, a w ui_catalog jako',
+      'filterableFields[].values. Wtedy uzyj JEDNEJ Z NICH DOSLOWNIE, tak jak jest zapisana (np. kod kraju PL,',
+      'nie „Polska" ani „Poland"). Nie tlumacz ich na slowa i nie dochodz do nich probami — wartosc spoza listy',
+      'zwyczajnie nie ma dopasowan i uzytkownik zobaczy pusty widok. Pole bez values przyjmuje dowolna wartosc.',
+      'W label napisz krotko po polsku, co zostalo zawezone;',
       'uzytkownik zobaczy to zdanie nad widokiem razem z przyciskiem powrotu do pelnego widoku.',
       'Wynik zawiera filtered.matched i filtered.total — podaj te liczby zamiast liczyc samodzielnie.',
       'Zeby przywrocic pelny widok, wywolaj ui_filter z clear=true.',
@@ -251,6 +264,20 @@ export function buildSystemPrompt(input: PromptInput): string {
       'grupowanie, widoczne rekordy w kolejnosci z ekranu, liczby) i dozwolone akcje.',
       'Po ui_navigate, ui_filter lub ui_sort wywolaj ui_state z minVersion = uiVersion i clientId = uiClientId z ich wyniku,',
       'ZANIM opiszesz ekran. Wersje licza sie osobno dla kazdej karty przegladarki: numer bez karty nic nie znaczy.',
+      /*
+       * The same rule for the agent's own views, from the turn that showed why
+       * it was missing: `agent_view_update` answered success for a chart the
+       * component then refused to draw, and the user was told the chart was
+       * there. These tools store a composition; they do not render it, and
+       * unlike the interface commands they have no version to wait for.
+       */
+      'Po agent_view_create i agent_view_update tez odczytaj ui_state, ZANIM powiesz, co widok pokazuje: te narzedzia',
+      'ZAPISUJA kompozycje, nie rysuja jej, i nie zwracaja uiVersion — podaj minVersion i clientId, jesli masz je',
+      'z wczesniejszego ui_navigate / ui_filter / ui_sort, a w przeciwnym razie odczytaj bez nich.',
+      'NIE mow, ze wykres, tabela albo podsumowanie cos pokazuje, jesli nie odczytales tego z opisu ekranu: komponent',
+      'moze odmowic rysowania (state = error, error.message mowi dlaczego), a odczyt moze byc odrzucony (state = forbidden).',
+      'Gdy opis ekranu nie wymienia twojej karty ani jej instancji, bo uzytkownik patrzy na co innego — powiedz, ze widok',
+      'powstal albo sie zmienil, i nie opisuj, co przedstawia.',
       'Brak uiVersion (uiPublication inne niz published) oznacza, ze ekranu po akcji nie opisano — powiedz to.',
       'Nie opisuj ekranu na podstawie tego, o co prosiles, ani opisu ze stale=true — wtedy powiedz, czego nie wiesz (reason).',
       'Komponent ze state=loading jeszcze nic nie pokazuje: odczytaj ponownie z minVersion = version + 1.',
@@ -318,6 +345,25 @@ function describeFilters(filters: AppContext['filters']): string[] {
       `sortowanie ${order}; ${paging}; pokazane ${matched} z ${total}`
     );
   });
+}
+
+/** Longest list of declared values written into a target's line; the rest are in `ui_catalog`. */
+const PROMPT_FILTER_VALUES = 12;
+
+/**
+ * One narrowable property of a view, with the values it declares.
+ *
+ * The declaration existed and `ui_catalog` returned it, but nothing put it
+ * where the model reads the field names — so it reached `country = PL` by
+ * trying "Polska" and "Poland" first, leaving the user with an empty view twice
+ * on the way. A long list is cut rather than allowed to swell the prompt: the
+ * tool still answers with all of them.
+ */
+function describeFilterField(field: { field: string; values?: string[] }): string {
+  const values = field.values ?? [];
+  if (values.length === 0) return field.field;
+  const shown = values.slice(0, PROMPT_FILTER_VALUES).join('|');
+  return `${field.field} (${shown}${values.length > PROMPT_FILTER_VALUES ? '|... pelna lista w ui_catalog' : ''})`;
 }
 
 /** One read operation, with its record and fields when it declares them. */

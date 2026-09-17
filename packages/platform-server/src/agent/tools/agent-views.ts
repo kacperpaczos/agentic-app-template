@@ -12,6 +12,7 @@ import {
   AGENT_VIEW_LAYOUT_COMPONENTS,
   applyCompositionPatch,
   compositionRefusal,
+  findDataInstances,
   normalizeCompositionSource,
   sameComposition,
   statementsOf,
@@ -19,6 +20,75 @@ import {
 } from '../../registry/openui-validation.ts';
 import type { PlatformServices } from '../../services/index.ts';
 import { mcpToolName } from '../mcp.ts';
+
+/**
+ * What every answer of `agent_view_create` / `agent_view_update` says about
+ * itself.
+ *
+ * Storing a composition and drawing it are two different events, and only the
+ * first one happened here. A real turn made the difference visible: the agent
+ * added a money series to a view, the tool answered success, the component
+ * refused on screen ("laczy rozne jednostki (PLN, EUR)") — and the user was
+ * told "Dodano wykres slupkowy cen jednostkowych do widoku." Nothing in the
+ * answer could have told the model otherwise, so the answer says it itself.
+ */
+const NOT_RENDERED_NOTE =
+  'Kompozycja zostala ZAPISANA, ale nie narysowana: ten wynik nie mowi nic o tym, co karta pokazuje. ' +
+  `Zanim powiesz uzytkownikowi, co widok przedstawia, odczytaj ekran przez ${mcpToolName('ui_state')} ` +
+  '(stan instancji, liczba rekordow, ewentualna odmowa komponentu). Jesli opis ekranu nie wymienia tej karty ' +
+  '(uzytkownik patrzy gdzie indziej), powiedz tylko, ze widok powstal — nie opisuj, co przedstawia.';
+
+/** A warning about a stored composition: never a refusal, and never about the data. */
+export interface CompositionWarning {
+  code: 'unit_from_record';
+  statementId?: string;
+  message: string;
+}
+
+/**
+ * Warnings a composition earns from its descriptors alone.
+ *
+ * **Why a warning and not a check.** The one failure a real turn produced was a
+ * chart series in PLN and EUR at once, which `buildChartModel` refuses to draw
+ * rather than state a comparison the data does not support. Whether a series
+ * mixes units is a fact about the rows *at the moment of drawing*, so running
+ * the read here would prove nothing durable: the composition would be accepted
+ * today and still fail tomorrow, or refused today for rows that are fine an
+ * hour later. What *is* knowable without data is weaker and stable — a field
+ * that carries its unit in another property of the record (`unitField`) can
+ * never be shown to be uniform ahead of time. That is what is said, once, as a
+ * warning next to the note that the view was not rendered.
+ */
+function compositionWarnings(source: string, services: PlatformServices): CompositionWarning[] {
+  const warnings: CompositionWarning[] = [];
+  let instances;
+  try {
+    instances = findDataInstances(source, services.catalog.openui);
+  } catch {
+    // A warning must never be the reason a stored composition is reported as failed.
+    return warnings;
+  }
+  for (const instance of instances) {
+    if (instance.component !== 'DataChart') continue;
+    const descriptor = services.modules.readOperation(instance.props.source.operation)?.definition.result;
+    if (!descriptor) continue;
+    const carried = instance.props.series
+      .map((name) => descriptor.fields.find((f) => f.field === name))
+      .filter((f) => f?.unitField);
+    if (carried.length === 0) continue;
+    warnings.push({
+      code: 'unit_from_record',
+      ...(instance.statementId ? { statementId: instance.statementId } : {}),
+      message:
+        `Instrukcja ${instance.statementId ?? '(wewnetrzna)'} (DataChart): ` +
+        `serie ${carried.map((f) => `${f!.label} (jednostka z pola ${f!.unitField})`).join(', ')} ` +
+        'niosa jednostke z rekordu, wiec dopiero dane pokaza, czy jest jednolita. Jesli nie jest ' +
+        '(np. PLN i EUR naraz), wykres odmowi narysowania. Nie obiecuj tego wykresu uzytkownikowi, ' +
+        `zanim nie odczytasz ekranu przez ${mcpToolName('ui_state')}.`,
+    });
+  }
+  return warnings;
+}
 
 const operationId = z.string().min(8).max(200).optional();
 const sourceText = z
@@ -118,7 +188,10 @@ export function agentViewTools(services: PlatformServices): Array<ModuleToolDefi
         'Tworzy nowy widok w przestrzeni "Widoki agenta" tej rozmowy. source to kompozycja OpenUI Lang z komponentow ' +
         'danych DataTable, DataChart, DataSummary (zrodlo: zarejestrowana operacja odczytu i pola jej deskryptora), ' +
         'opcjonalnie ulozonych w Stack, Card, Tabs z tekstem. Nigdy nie wpisuj wartosci biznesowych — komponenty ' +
-        'pobieraja je z backendu. Kompozycja jest sprawdzana przed zapisem; odmowa podaje przyczyne.',
+        'pobieraja je z backendu. Identyfikatory w source.input biora sie z odczytu narzedziem modulu albo z ' +
+        'biezacego kontekstu — nigdy z kodu biznesowego, ktory uzytkownik wpisal w rozmowie. Kompozycja jest ' +
+        'sprawdzana przed zapisem (schemat, nie istnienie rekordu); odmowa podaje przyczyne. Wynik mowi tylko, ' +
+        'ze kompozycja zostala ZAPISANA, nie ze karta ja narysowala — co widac na ekranie odczytaj przez ui_state.',
       effect: 'write',
       alwaysLoad: true,
       inputSchema: z.object({
@@ -134,7 +207,15 @@ export function agentViewTools(services: PlatformServices): Array<ModuleToolDefi
           ctx.ownerId,
         );
         ctx.emit({ type: 'canvas_changed', spaceId: space.id });
-        return { cardId: card.id, spaceId: space.id, title: card.title, specVersion: card.specVersion };
+        return {
+          cardId: card.id,
+          spaceId: space.id,
+          title: card.title,
+          specVersion: card.specVersion,
+          rendered: false,
+          readBack: NOT_RENDERED_NOTE,
+          warnings: compositionWarnings(spec.source, services),
+        };
       },
     },
     {
@@ -144,7 +225,9 @@ export function agentViewTools(services: PlatformServices): Array<ModuleToolDefi
         'instrukcje o tych samych nazwach, np. tabela = DataTable(...); pozostale instrukcje zostaja bez zmian, ' +
         'nazwa = null usuwa instrukcje. Nowa instrukcja musi byc osiagalna z root (zmien tez root), a istniejaca ' +
         'nie moze zniknac bez jawnego nazwa = null. source: cala nowa kompozycja. Polozenie karty i inne widoki sie ' +
-        'nie zmieniaja. Niepoprawny wynik jest odrzucany, a widok zostaje w poprzedniej wersji; brak zmiany zwraca unchanged=true.',
+        'nie zmieniaja. Niepoprawny wynik jest odrzucany, a widok zostaje w poprzedniej wersji; brak zmiany zwraca ' +
+        'unchanged=true. Wynik mowi tylko, ze kompozycja zostala ZAPISANA, nie ze karta ja narysowala — co widac ' +
+        'na ekranie (i czy komponent nie odmowil rysowania) odczytaj przez ui_state.',
       effect: 'write',
       alwaysLoad: true,
       inputSchema: z.object({
@@ -212,7 +295,16 @@ export function agentViewTools(services: PlatformServices): Array<ModuleToolDefi
          * answer says so, instead of reporting an edit that did not happen.
          */
         if (next === current && (input.title === undefined || input.title === card.title)) {
-          return { cardId: card.id, title: card.title, specVersion: card.specVersion, source: current, unchanged: true };
+          return {
+            cardId: card.id,
+            title: card.title,
+            specVersion: card.specVersion,
+            source: current,
+            unchanged: true,
+            rendered: false,
+            readBack: NOT_RENDERED_NOTE,
+            warnings: compositionWarnings(current, services),
+          };
         }
         const spec = validated(next);
         const updated = await services.canvas.updateSpec(
@@ -232,6 +324,9 @@ export function agentViewTools(services: PlatformServices): Array<ModuleToolDefi
           specVersion: updated.specVersion,
           source: spec.source,
           unchanged: false,
+          rendered: false,
+          readBack: NOT_RENDERED_NOTE,
+          warnings: compositionWarnings(spec.source, services),
         };
       },
     },
@@ -285,6 +380,27 @@ export function agentViewsPromptSection(catalog: OpenUiServerCatalog): string[] 
     '  Nie tworz nowego widoku zamiast zmiany i nie przepisuj calej kompozycji — reszta widoku i uklad uzytkownika maja zostac.',
     '## Co wolno wpisac do kompozycji',
     '- Dane pokazuja wylacznie komponenty danych. source = {operation: "<operacja z listy operacji odczytu>", input: {...}}.',
+    /*
+     * From two real turns in a row (`run_39bc79cc133d4bce8fcc`,
+     * `run_24132e16b1cf49a9a624`): asked for the offer items "of case
+     * PC-2026-01", the agent went straight to `agent_view_create` with
+     * `input: {caseId: "PC-2026-01"}` — the code the user had typed put where
+     * the record's id belongs — without a single read first. The platform held:
+     * the read was refused and the card showed the refusal instead of invented
+     * rows. What was missing was this paragraph. The neighbouring rule for
+     * `ui_show_value` has said "find the record and its id with a module tool"
+     * from the start, and that path never produced the same mistake.
+     */
+    '- Identyfikatory w source.input musza pochodzic z ODCZYTU: z wyniku narzedzia modulu (wyszukiwanie, lista,',
+    '  operacja odczytu) albo z biezacego kontekstu (zasob, zaznaczenie, opis ekranu z ui_state). NIGDY nie wstawiaj',
+    '  kodu biznesowego, ktory uzytkownik wpisal w rozmowie (np. "PC-2026-01"), jako identyfikatora rekordu —',
+    '  kod i identyfikator to rozne rzeczy. Gdy uzytkownik nazywa rekord slowem albo kodem, najpierw go znajdz',
+    '  narzedziem modulu i wez identyfikator z wyniku.',
+    '- Walidator sprawdza schemat kompozycji, a NIE istnienie rekordu: zmyslony identyfikator przechodzi walidacje,',
+    '  a odmowa przychodzi dopiero przy odczycie. Tak wyglada odmowa w opisie ekranu: instancja ma state = forbidden',
+    '  (albo error), error.code not_found lub forbidden, error.message podaje powod, zero rekordow, a karta pokazuje',
+    '  komunikat o odmowie zamiast danych. Wtedy widok NIE pokazuje danych — powiedz to uzytkownikowi i popraw',
+    '  identyfikator; nie wymyslaj wartosci.',
     '- Kolumny, x, series, fields, filter[].field, sort.field i groupBy to wylacznie pola rekordow tej operacji z listy operacji odczytu.',
     '- NIGDY nie wpisuj do kompozycji liczb, kwot, dat ani wierszy danych. Tekst sluzy tylko tytulom i objasnieniom.',
     '- Argumenty sa pozycyjne, w podanej kolejnosci; pominiety argument przed kolejnym zapisz jako null.',
@@ -304,6 +420,24 @@ export function agentViewsPromptSection(catalog: OpenUiServerCatalog): string[] 
     '- Odmowa narzedzia podaje przyczyne (nieznany komponent, operacja, wejscie, pole). Popraw kompozycje; poprzednia wersja widoku zostaje.',
     '- Jesli katalog nie pozwala pokazac tego, o co prosi uzytkownik (brak operacji albo pola), powiedz to wprost.',
     '  Nie obchodz ograniczenia wpisujac liczby do tekstu.',
+    /*
+     * From `run_96c52b19607e4a21a589`: the agent added a chart of unit prices,
+     * the tool answered success, `DataChart` refused to draw a series in PLN
+     * and EUR at once — and the user was told "Dodano wykres slupkowy cen
+     * jednostkowych do widoku." The composition was stored; the picture was
+     * never there. Storing and drawing are separate events, so what may be said
+     * about the second one has to be read back from the screen.
+     */
+    '## Po utworzeniu albo zmianie widoku',
+    '- Wynik agent_view_create / agent_view_update mowi tylko, ze kompozycja zostala ZAPISANA. Nie mowi, ze karta',
+    '  ja narysowala: komponent moze odmowic rysowania (np. seria pieniezna laczaca PLN i EUR), a odczyt moze',
+    '  zostac odrzucony.',
+    `- Zanim powiesz uzytkownikowi, co widok pokazuje, odczytaj ekran przez ${mcpToolName('ui_state')} — patrz "## Stan ekranu".`,
+    '- NIGDY nie twierdz, ze wykres, tabela albo podsumowanie cos pokazuje, jesli tego nie odczytales. Instancja ze',
+    '  state = error albo forbidden niczego nie narysowala: powiedz, czego nie widac i dlaczego (error.message).',
+    '- Gdy opis ekranu nie wymienia tej karty ani jej instancji (uzytkownik patrzy na inny ekran), powiedz tylko,',
+    '  ze widok powstal albo sie zmienil, i NIE opisuj, co przedstawia.',
+    '- warnings w wyniku to ostrzezenia, nie odmowa — mowia, czego nie dalo sie sprawdzic przed narysowaniem.',
     '## Nawigacja',
     '- Nie przelaczaj ekranu uzytkownika do Widokow agenta z wlasnej inicjatywy. Napisz, ze widok jest w "Widoki agenta";',
     `  ${mcpToolName('ui_navigate')} do platform.agentViews tylko na wyrazna prosbe uzytkownika.`,
