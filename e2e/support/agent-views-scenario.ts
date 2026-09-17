@@ -67,9 +67,15 @@ export function agentViewsScript(prompt: string): Step[] {
     ];
   }
   if (prompt.includes('[pierwszy]')) {
-    // The first view of a conversation, then a long pause before the run ends:
-    // the view must be on screen while the run is still going.
+    /*
+     * The first view of a conversation, created after a pause (so the page has
+     * already read "no views yet" for the new conversation) and followed by a
+     * long one before the run ends: the view must reach the screen while the
+     * run is still going, i.e. through the event, not the end of the run.
+     */
     return [
+      { kind: 'text', text: 'Przygotowuje pierwszy widok. ', delayMs: 100 },
+      { kind: 'wait', delayMs: 3000 },
       listCases,
       {
         kind: 'call',

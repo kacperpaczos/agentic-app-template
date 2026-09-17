@@ -467,6 +467,9 @@ test.describe('widoki agenta', () => {
     await expect(strip).toHaveAttribute('data-phase', 'running', { timeout: 30_000 });
     await expect.poll(() => urlParam(page, 'c'), { timeout: 15_000 }).toBeTruthy();
     const conversation = urlParam(page, 'c')!;
+    // Before the view exists the page has read this conversation and found nothing.
+    await expect(viewsPage).toHaveAttribute('data-conversation-id', conversation);
+    await expect(viewsPage).toHaveAttribute('data-state', 'empty');
 
     // The view arrives through `canvas_changed` while the run is still working (it waits 8 s after creating it).
     await expect(viewsPage).toHaveAttribute('data-state', 'ready', { timeout: 6_000 });
