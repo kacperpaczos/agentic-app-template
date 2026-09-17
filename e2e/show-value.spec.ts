@@ -4,6 +4,14 @@ import { expect, test } from './support/fixtures.ts';
 import { ScriptedInstance } from './support/scripted.ts';
 import { type Page } from '@playwright/test';
 import { formatFieldValue, recordsOf, type ReadResponse } from '@platform/contracts';
+import {
+  highlights,
+  notShown as notShownAt,
+  resultOf,
+  toolResults as toolResultsAt,
+  watchHighlights,
+  type ExpectedValue,
+} from './support/show-value-probe.ts';
 
 /**
  * Showing the value of one record's field on screen (L2.16, L6.16; proba T25).
@@ -100,25 +108,6 @@ async function sendForRun(page: Page, text: string): Promise<{ runId: string }> 
 const settled = (page: Page) =>
   expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', /succeeded|failed/, { timeout: 90_000 });
 
-/** What each tool call of a run returned, from the run's own persisted event log. */
-async function toolResults(page: Page, runId: string): Promise<Array<{ name: string; result: any }>> {
-  const res = await page.request.get(`${BASE}/api/runs/${runId}/events`);
-  expect(res.status()).toBe(200);
-  const { events } = (await res.json()) as { events: Array<{ name: string; payload: Record<string, any> }> };
-  const names = new Map<string, string>();
-  const out: Array<{ name: string; result: any }> = [];
-  for (const e of events) {
-    if (e.name === 'TOOL_CALL_START') names.set(e.payload.toolCallId, e.payload.toolCallName);
-    if (e.name === 'TOOL_CALL_RESULT') {
-      out.push({ name: names.get(e.payload.toolCallId) ?? '?', result: JSON.parse(e.payload.content) });
-    }
-  }
-  return out;
-}
-
-const resultOf = (results: Array<{ name: string; result: any }>, tool: string) =>
-  results.find((r) => r.name === `mcp__app__${tool}`)?.result;
-
 type Supplier = { id: string; name: string; country: string; taxId: string };
 
 /** The suppliers as the backend returns them, in its order, through the endpoint the view uses. */
@@ -129,100 +118,16 @@ async function backendSuppliers(page: Page): Promise<{ raw: ReadResponse; record
   return { raw, records: recordsOf(raw.result, raw.descriptor!) as unknown as Supplier[] };
 }
 
-/* -------------------------------------------------------------------------- */
-/*  What counts as "the value was shown" — the probe's detector               */
-/* -------------------------------------------------------------------------- */
-
-interface Highlight {
-  recordKind: string | null;
-  recordId: string | null;
-  field: string | null;
-  text: string;
-  inViewport: boolean;
-  instanceId: string | null;
-  cardId: string | null;
-}
-
-/**
- * Records every cell the application highlights, as it happens.
+/*
+ * The probe's detector, bound to this suite's own instance.
  *
- * The highlight is deliberately short-lived, so it is observed rather than
- * polled for: an assertion that looked afterwards could miss a real one, and a
- * test that waited for it to still be there would be testing the timer.
+ * The verdict itself lives in `support/show-value-probe.ts`, shared with the
+ * real-model probe (`e2e/bl01-bl02-model.spec.ts`): one definition of what
+ * counts as "the value was shown", used here both as the pass condition of (a)
+ * and as the thing the text-only run of (b) has to fail.
  */
-async function watchHighlights(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const w = window as unknown as { __highlights?: unknown[]; __highlightObserver?: MutationObserver };
-    if (w.__highlightObserver) return;
-    w.__highlights = [];
-    const observer = new MutationObserver((records) => {
-      for (const m of records) {
-        const el = m.target as HTMLElement;
-        if (m.attributeName !== 'data-ui-highlight' || el.getAttribute('data-ui-highlight') !== 'true') continue;
-        const rect = el.getBoundingClientRect();
-        w.__highlights!.push({
-          recordKind: el.getAttribute('data-record-kind'),
-          recordId: el.getAttribute('data-record-id'),
-          field: el.getAttribute('data-field'),
-          text: (el.textContent ?? '').trim(),
-          inViewport:
-            rect.width > 0 &&
-            rect.height > 0 &&
-            rect.top >= 0 &&
-            rect.left >= 0 &&
-            rect.bottom <= window.innerHeight &&
-            rect.right <= window.innerWidth,
-          instanceId: el.closest('[data-ui-instance]')?.getAttribute('data-ui-instance') ?? null,
-          cardId:
-            el.closest('[data-testid^="card-"]')?.getAttribute('data-testid')?.replace(/^card-/, '') ?? null,
-        });
-      }
-    });
-    observer.observe(document.body, { attributes: true, subtree: true, attributeFilter: ['data-ui-highlight'] });
-    w.__highlightObserver = observer;
-  });
-}
-
-const highlights = (page: Page): Promise<Highlight[]> =>
-  page.evaluate(() => ((window as unknown as { __highlights?: Highlight[] }).__highlights ?? []) as Highlight[]);
-
-/**
- * The probe's verdict, as a list of what is missing — so a run that only talks
- * about the value fails it, and the test can show *that* it fails and why.
- *
- * Deliberately not a set of assertions: the negative control has to run the
- * same detector and get a non-empty list.
- */
-async function notShown(
-  page: Page,
-  runId: string,
-  expected: { recordKind: string; recordId: string; field: string; rawValue: unknown; displayedText: string },
-): Promise<string[]> {
-  const problems: string[] = [];
-  const result = resultOf(await toolResults(page, runId), 'ui_show_value');
-  if (!result) problems.push('wykonanie nie wywolalo ui_show_value');
-  else {
-    if (result.found !== true) problems.push('narzedzie nie znalazlo wartosci w backendzie');
-    if (result.shown !== true) problems.push(`klient nie potwierdzil pokazania (reason=${result.reason ?? '-'})`);
-    if (result.matchesBackend !== true) problems.push('wartosc na ekranie nie zgadza sie z backendem');
-    if (result.revealed?.recordId !== expected.recordId || result.revealed?.field !== expected.field) {
-      problems.push('potwierdzenie nie wskazuje tego rekordu i pola');
-    }
-    if (result.revealed?.rawValue !== expected.rawValue) problems.push('potwierdzona wartosc to nie wartosc backendu');
-  }
-  const marked = (await highlights(page)).filter(
-    (hl) =>
-      hl.recordKind === expected.recordKind && hl.recordId === expected.recordId && hl.field === expected.field,
-  );
-  if (marked.length === 0) problems.push('zadna komorka tego rekordu i pola nie zostala podswietlona');
-  else {
-    if (!marked.some((hl) => hl.inViewport)) problems.push('podswietlona komorka nie byla w widocznym obszarze');
-    if (!marked.some((hl) => hl.text === expected.displayedText)) {
-      problems.push(`podswietlona komorka nie pokazuje "${expected.displayedText}"`);
-    }
-  }
-  return problems;
-}
+const toolResults = (page: Page, runId: string) => toolResultsAt(page, runId, BASE);
+const notShown = (page: Page, runId: string, expected: ExpectedValue) => notShownAt(page, runId, expected, BASE);
 
 const rows = (page: Page) => page.locator('[data-testid="data-page"] tbody tr');
 const notice = (page: Page) => page.getByTestId('view-reveal-notice');
