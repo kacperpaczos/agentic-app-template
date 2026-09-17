@@ -254,6 +254,8 @@ export function buildSystemPrompt(input: PromptInput): string {
       'Brak uiVersion (uiPublication inne niz published) oznacza, ze ekranu po akcji nie opisano — powiedz to.',
       'Nie opisuj ekranu na podstawie tego, o co prosiles, ani opisu ze stale=true — wtedy powiedz, czego nie wiesz (reason).',
       'Komponent ze state=loading jeszcze nic nie pokazuje: odczytaj ponownie z minVersion = version + 1.',
+      'cards: null znaczy „nie wiadomo” (cardsState loading albo error), nie „brak kart” — jesli karty sa wazne,',
+      'odczytaj ponownie z minVersion = version + 1; puste cards z cardsState none to brak przestrzeni do pokazania.',
       'Porownuj wersje z „ekran przy wyslaniu polecenia” w kontekscie: nizsza wersja tej samej karty jest starsza niz to,',
       'co uzytkownik widzial, wysylajac polecenie.',
     );

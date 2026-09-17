@@ -23,6 +23,7 @@ import {
   uiSnapshotSchema,
   type AppContext,
   type CanvasCard,
+  type CanvasSpace,
   type CanvasState,
   type ReadResponse,
   type ReadResultDescriptor,
@@ -46,6 +47,8 @@ import {
 import {
   AccessContextChanged,
   UiSnapshotSession,
+  agentViewsDisplay,
+  type DisplayedCanvas,
   accessEpoch,
   accessScope,
   createInstanceDescriber,
@@ -144,6 +147,7 @@ function snapshot(over: Partial<UiSnapshot> = {}): UiSnapshot {
     cards: null,
     cardsOmitted: 0,
     cardsSpaceId: null,
+    cardsState: 'loading',
     instances: [instance('DataTable-a')],
     instancesOmitted: 0,
     actions: ['navigate', 'filter', 'sort'],
@@ -1668,7 +1672,7 @@ describe('Merge round', () => {
       displayed,
     });
 
-    const shown = buildUiSnapshotContent(input({ spaceId: 'spc_conv_a', scopeKind: 'conversation', cards: agentCards }));
+    const shown = buildUiSnapshotContent(input({ spaceId: 'spc_conv_a', scopeKind: 'conversation', cards: agentCards, state: 'loaded' }));
     expect(shown.target?.id).toBe('platform.agentViews');
     expect(shown.spaceId).toBe('spc_working');
     expect(shown.cardsSpaceId).toBe('spc_conv_a');
@@ -1680,17 +1684,21 @@ describe('Merge round', () => {
     });
     // An agent view edited (spec version) is a new composition version.
     const edited = buildUiSnapshotContent(
-      input({ spaceId: 'spc_conv_a', scopeKind: 'conversation', cards: [{ ...agentCards[0]!, specVersion: 3 }, agentCards[1]!] }),
+      input({ spaceId: 'spc_conv_a', scopeKind: 'conversation', cards: [{ ...agentCards[0]!, specVersion: 3 }, agentCards[1]!], state: 'loaded' }),
     );
     expect(edited.view?.compositionVersion).not.toBe(shown.view?.compositionVersion);
 
     // No views yet: an empty set of cards of no space — not the working space's cards.
-    const none = buildUiSnapshotContent(input({ spaceId: null, scopeKind: 'conversation', cards: [] }));
-    expect(none).toMatchObject({ cards: [], cardsSpaceId: null });
+    const none = buildUiSnapshotContent(input({ spaceId: null, scopeKind: 'conversation', cards: [], state: 'none' }));
+    expect(none).toMatchObject({ cards: [], cardsSpaceId: null, cardsState: 'none' });
     // Still loading: unknown.
-    expect(buildUiSnapshotContent(input({ spaceId: null, scopeKind: 'conversation', cards: null }))).toMatchObject({ cards: null, view: null });
+    expect(buildUiSnapshotContent(input({ spaceId: null, scopeKind: 'conversation', cards: null, state: 'loading' }))).toMatchObject({
+      cards: null,
+      cardsState: 'loading',
+      view: null,
+    });
     // The working canvas on screen: its cards, and no composition version of its own.
-    const canvas = buildUiSnapshotContent({ ...input({ spaceId: 'spc_working', scopeKind: null, cards: working.cards }), url: '/', pathname: '/' });
+    const canvas = buildUiSnapshotContent({ ...input({ spaceId: 'spc_working', scopeKind: null, cards: working.cards, state: 'loaded' }), url: '/', pathname: '/' });
     expect(canvas).toMatchObject({ cardsSpaceId: 'spc_working', view: null });
     expect(canvas.cards?.map((c) => c.cardId)).toEqual(['crd_working']);
     // Nothing displayed (a data screen): the working space, as before.
@@ -1702,15 +1710,15 @@ describe('Merge round', () => {
     setAccessContext(qc, 'local-user');
     try {
       const before = accessEpoch();
-      setDisplayedCanvas('k1', { spaceId: 'spc_1', scopeKind: null, cards: [] });
-      setDisplayedCanvas('k2', { spaceId: 'spc_2', scopeKind: 'conversation', cards: null });
+      setDisplayedCanvas('k1', { spaceId: 'spc_1', scopeKind: null, cards: [], state: 'loaded' });
+      setDisplayedCanvas('k2', { spaceId: 'spc_2', scopeKind: 'conversation', cards: null, state: 'loading' });
       expect(displayedCanvas()?.spaceId).toBe('spc_2');
       setDisplayedCanvas('k2', null);
       expect(displayedCanvas()?.spaceId).toBe('spc_1');
       setAccessContext(qc, 'other-user');
       expect(displayedCanvas()).toBeNull();
       // Rendered before the switch, recorded after it: still not this identity's.
-      setDisplayedCanvas('k3', { spaceId: 'spc_3', scopeKind: null, cards: [] }, before);
+      setDisplayedCanvas('k3', { spaceId: 'spc_3', scopeKind: null, cards: [], state: 'loaded' }, before);
       expect(displayedCanvas()).toBeNull();
       setDisplayedCanvas('k1', null);
       setDisplayedCanvas('k3', null);
@@ -1770,5 +1778,104 @@ describe('Merge round', () => {
     } finally {
       resetAccessContext();
     }
+  });
+});
+
+/* ========================================================================== */
+/*  Merge round — fix L1                                                      */
+/* ========================================================================== */
+
+describe('Merge round — fix L1', () => {
+  it('L1: po przelaczeniu canvas pokazujacy przestrzen sprzed przelaczenia nie podaje ani jej id, ani kart', async () => {
+    const qc = new QueryClient();
+    setAccessContext(qc, 'local-user');
+    const shell = { conversationId: null as string | null, spaceId: 'spc_of_local_user' as string | null };
+    let screen: DisplayedCanvas | null = { spaceId: 'spc_of_local_user', scopeKind: null, cards: [], state: 'loaded' };
+    const source = createShellSnapshotSource({
+      qc,
+      location: () => ({ pathname: '/', search: shell.spaceId ? `?s=${shell.spaceId}` : '' }),
+      shell: () => shell,
+      instances: listInstances,
+      displayed: () => screen,
+    });
+    const s = new UiSnapshotSession({ identity: sessionIdentityStore(), send: async () => {} });
+    s.setSource(source);
+    try {
+      qc.setQueryData(qk.uiTargets(), { targets: h.platform.services.modules.uiTargets() });
+      const mine = s.capture()!;
+      expect(mine).toMatchObject({ spaceId: 'spc_of_local_user', cardsSpaceId: 'spc_of_local_user', cardsState: 'loaded' });
+
+      // Switch on Settings, then open the canvas: it renders the held space under the new identity (and fails to load it).
+      setAccessContext(qc, 'other-user');
+      qc.setQueryData(qk.uiTargets(), { targets: h.platform.services.modules.uiTargets() });
+      screen = { spaceId: 'spc_of_local_user', scopeKind: null, cards: null, state: 'error' };
+      const theirs = s.capture()!;
+      expect(theirs).toMatchObject({ spaceId: null, cardsSpaceId: null, cards: [], cardsState: 'none', url: '/' });
+      expect(JSON.stringify(theirs)).not.toContain('spc_of_local_user');
+
+      // The shell moves to the new identity's space: reported.
+      shell.spaceId = 'spc_of_other_user';
+      screen = { spaceId: 'spc_of_other_user', scopeKind: null, cards: [], state: 'loaded' };
+      expect(s.capture()).toMatchObject({ spaceId: 'spc_of_other_user', cardsSpaceId: 'spc_of_other_user', cardsState: 'loaded' });
+    } finally {
+      source.dispose();
+      resetAccessContext();
+    }
+  });
+
+  it('Widoki agenta: strona bez rozmowy, z bledem, w trakcie ladowania albo bez widokow nie podaje kart przestrzeni roboczej', () => {
+    const space = { id: 'spc_conv_a', scopeKind: 'conversation' } as unknown as CanvasSpace;
+    const card = { id: 'crd_view_1', title: 'Widok', spec: { kind: 'openui', source: 'x' }, specVersion: 1 } as unknown as CanvasCard;
+    expect(agentViewsDisplay({ conversationId: null, data: undefined, failed: false })).toMatchObject({ spaceId: null, cards: [], state: 'none' });
+    // A failed refetch with older data still cached shows the error screen: nothing of that data is on screen.
+    expect(agentViewsDisplay({ conversationId: 'cnv_a', data: { space, cards: [card] }, failed: true })).toMatchObject({ spaceId: null, cards: null, state: 'error' });
+    expect(agentViewsDisplay({ conversationId: 'cnv_a', data: undefined, failed: false })).toMatchObject({ cards: null, state: 'loading' });
+    expect(agentViewsDisplay({ conversationId: 'cnv_a', data: { space: null, cards: [] }, failed: false })).toMatchObject({ spaceId: null, cards: [], state: 'none' });
+    expect(agentViewsDisplay({ conversationId: 'cnv_a', data: { space, cards: [] }, failed: false })).toMatchObject({ spaceId: 'spc_conv_a', cards: [], state: 'loaded' });
+    // With views, the canvas on screen describes itself.
+    expect(agentViewsDisplay({ conversationId: 'cnv_a', data: { space, cards: [card] }, failed: false })).toBeNull();
+
+    const working = { space: { id: 'spc_working' }, cards: [card] } as unknown as CanvasState;
+    const on = (displayed: DisplayedCanvas | null) =>
+      buildUiSnapshotContent({
+        url: '/agent-views',
+        pathname: '/agent-views',
+        conversationId: null,
+        spaceId: 'spc_working',
+        instances: [],
+        targets: h.platform.services.modules.uiTargets(),
+        views: [],
+        canvas: working,
+        displayed,
+      });
+    expect(on(agentViewsDisplay({ conversationId: null, data: undefined, failed: false }))).toMatchObject({ cards: [], cardsSpaceId: null, cardsState: 'none' });
+    expect(on(agentViewsDisplay({ conversationId: 'cnv_a', data: { space, cards: [card] }, failed: true }))).toMatchObject({ cards: null, cardsSpaceId: null, cardsState: 'error' });
+  });
+
+  it('karty przestrzeni utworzone w tej samej milisekundzie maja staly porzadek (created_at, id)', () => {
+    const space = h.platform.services.canvas.createSpace({ ownerId: h.ownerId, title: 'porzadek kart' });
+    const insert = h.platform.db.$client.prepare(
+      `INSERT INTO canvas_cards (id, space_id, title, spec, geometry, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    );
+    const ts = '2026-09-17T12:00:00.000Z';
+    const spec = JSON.stringify({ kind: 'openui', source: 'root = Stack([])' });
+    const geometry = JSON.stringify({ x: 0, y: 0, width: 300, height: 200, z: 0 });
+    // Inserted b before a, in the same millisecond.
+    insert.run('crd_zzz_b', space.id, 'B', spec, geometry, ts, ts);
+    insert.run('crd_aaa_a', space.id, 'A', spec, geometry, ts, ts);
+    expect(h.platform.services.canvas.getState(space.id, h.ownerId).cards.map((c) => c.id)).toEqual(['crd_aaa_a', 'crd_zzz_b']);
+  });
+
+  it('prompt: cards null to „nie wiadomo”, nie brak kart', () => {
+    const prompt = buildSystemPrompt({
+      registry: h.platform.registry,
+      catalog: h.platform.services.catalog,
+      appContext: context(),
+      resourceSummary: null,
+      workspaceDir: null,
+      stagedFiles: [],
+      toolkit: [],
+    });
+    expect(prompt).toContain('cards: null znaczy „nie wiadomo” (cardsState loading albo error), nie „brak kart”');
   });
 });

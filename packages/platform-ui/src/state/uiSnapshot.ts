@@ -11,6 +11,7 @@ import {
   type CanvasCard,
   type CanvasState,
   type SemanticInstance,
+  type UiCardsState,
   type UiSnapshot,
   type UiTarget,
   type ViewDefinition,
@@ -56,11 +57,13 @@ export interface UiSnapshotInput {
   views: readonly ViewDefinition[] | undefined;
   /** The working space's cards, when loaded. */
   canvas: CanvasState | undefined;
+  /** Loading the working space failed. */
+  canvasFailed?: boolean;
   /**
    * The space actually on screen and its cards, when a canvas (or the agent
    * views page) is displayed — preferred to the working space.
    */
-  displayed?: { spaceId: string | null; scopeKind: string | null; cards: CanvasCard[] | null } | null;
+  displayed?: { spaceId: string | null; scopeKind: string | null; cards: CanvasCard[] | null; state: UiCardsState } | null;
 }
 
 /** Room left for version, identity and capture time under the size limit. */
@@ -90,24 +93,36 @@ export function buildUiSnapshotContent(input: UiSnapshotInput): UiSnapshotConten
     null;
 
   const displayed = input.displayed ?? null;
-  const cardsSpaceId = displayed ? displayed.spaceId : input.spaceId;
-  const spaceCards: CanvasCard[] | null = displayed
-    ? displayed.cards
-    : input.spaceId && input.canvas && input.canvas.space.id === input.spaceId
-      ? input.canvas.cards
-      : null;
+  const working = input.spaceId && input.canvas && input.canvas.space.id === input.spaceId ? input.canvas : null;
+  const cardsState: UiCardsState = displayed
+    ? displayed.state
+    : !input.spaceId
+      ? 'none'
+      : working
+        ? 'loaded'
+        : input.canvasFailed
+          ? 'error'
+          : 'loading';
+  const cardsSpaceId = cardsState === 'none' ? null : displayed ? displayed.spaceId : input.spaceId;
+  // Listed only when loaded; unknown (null) while loading or failed; none is an empty list.
+  const spaceCards: CanvasCard[] | null =
+    cardsState === 'loaded'
+      ? ((displayed ? displayed.cards : working?.cards) ?? [])
+      : cardsState === 'none'
+        ? []
+        : null;
   /*
    * A conversation's agent views are a composition too: named by the space and
    * every card's spec version, so a view added, removed or edited by the agent
    * is a new composition version.
    */
   const agentViews =
-    displayed && displayed.scopeKind === AGENT_VIEWS_SCOPE_KIND && displayed.cards
+    displayed && displayed.scopeKind === AGENT_VIEWS_SCOPE_KIND && spaceCards
       ? {
-          id: target?.id ?? `space:${displayed.spaceId ?? 'none'}`,
+          id: target?.id ?? `space:${cardsSpaceId ?? 'none'}`,
           title: target?.label ?? 'Widoki agenta',
           compositionVersion: compositionVersionOf(
-            `${displayed.spaceId ?? ''}|${displayed.cards.map((c) => `${c.id}@${c.specVersion}`).join(',')}`,
+            `${cardsSpaceId ?? ''}|${spaceCards.map((c) => `${c.id}@${c.specVersion}`).join(',')}`,
           ),
         }
       : null;
@@ -135,6 +150,7 @@ export function buildUiSnapshotContent(input: UiSnapshotInput): UiSnapshotConten
       : null,
     cardsOmitted: spaceCards ? Math.max(0, spaceCards.length - UI_SNAPSHOT_CARDS_LIMIT) : 0,
     cardsSpaceId: cardsSpaceId ?? null,
+    cardsState,
     instances,
     instancesOmitted,
     /*

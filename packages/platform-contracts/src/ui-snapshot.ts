@@ -60,6 +60,19 @@ export function clampUiUrl(url: string): { url: string; urlTruncated: boolean } 
 export const UI_CLIENT_HEARTBEAT_MS = 15_000;
 export const UI_CLIENT_INACTIVE_AFTER_MS = 90_000;
 
+/**
+ * What is known about the cards a description lists:
+ *  - `loaded` — `cards` lists the cards of `cardsSpaceId` (possibly none);
+ *  - `loading` — not loaded yet: `cards` is null, i.e. **unknown**, not empty;
+ *  - `error` — loading them failed: `cards` is null (unknown);
+ *  - `none` — there is no space whose cards the screen could show (no working
+ *    space, no conversation on the agent views page, a conversation without
+ *    agent views, or a space still held from before an identity switch):
+ *    `cards` is empty and `cardsSpaceId` null.
+ */
+export const UI_CARDS_STATES = ['loaded', 'loading', 'error', 'none'] as const;
+export type UiCardsState = (typeof UI_CARDS_STATES)[number];
+
 export const uiSnapshotCardSchema = z.object({
   cardId: z.string().min(1).max(128),
   title: z.string().max(200),
@@ -119,14 +132,23 @@ export const uiSnapshotSchema = z.object({
     .nullable(),
   /**
    * Cards of the space in `cardsSpaceId`: the canvas space actually on screen
-   * (the working canvas, or a conversation's agent views), otherwise the
-   * working space selected in the shell (`target` says which screen is shown).
-   * Null while not loaded — unknown, which is not the same as none; empty for a
-   * conversation that has no agent views yet.
+   * (the working canvas, or a conversation's agent views — on that page never
+   * the working space's), otherwise the working space selected in the shell
+   * (`target` says which screen is shown). **Null means unknown** — not loaded
+   * yet, or loading failed (`cardsState` says which) — and is not the same as
+   * none. A description is published once the view settles, but settling does
+   * not wait for cards: a reader for whom they matter reads again with
+   * `minVersion` = `version` + 1.
    */
   cards: z.array(uiSnapshotCardSchema).max(UI_SNAPSHOT_CARDS_LIMIT).nullable(),
-  /** Which space `cards` belong to; null when none (e.g. a conversation without agent views). */
+  /**
+   * Which space `cards` belong to; null when there is none (`cardsState: none`).
+   * Also null right after an identity switch while the space on screen is still
+   * the one the shell held before it — as `spaceId`; neither its id nor its
+   * cards are reported until the shell moves to another space.
+   */
   cardsSpaceId: z.string().max(128).nullable(),
+  cardsState: z.enum(UI_CARDS_STATES),
   /** Cards of the space left out of `cards` by its limit. */
   cardsOmitted: z.number().int().nonnegative(),
   /**

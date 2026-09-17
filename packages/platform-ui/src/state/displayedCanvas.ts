@@ -1,6 +1,6 @@
 import { useEffect, useId } from 'react';
 import { create } from 'zustand';
-import type { CanvasCard } from '@platform/contracts';
+import type { CanvasCard, UiCardsState } from '@platform/contracts';
 import { accessEpoch } from '../api/accessContext.ts';
 
 /**
@@ -22,8 +22,10 @@ export interface DisplayedCanvas {
   spaceId: string | null;
   /** The space's scope kind (e.g. a conversation's agent views), when known. */
   scopeKind: string | null;
-  /** The cards on screen; null while they are loading. */
+  /** The cards on screen; null while they are loading or failed to load. */
   cards: CanvasCard[] | null;
+  /** What the screen shows of them (`UiCardsState`). */
+  state: UiCardsState;
 }
 
 interface Entry extends DisplayedCanvas {
@@ -41,6 +43,7 @@ const sameEntry = (a: Entry, b: Entry) =>
   a.epoch === b.epoch &&
   a.spaceId === b.spaceId &&
   a.scopeKind === b.scopeKind &&
+  a.state === b.state &&
   JSON.stringify(a.cards) === JSON.stringify(b.cards);
 
 export function setDisplayedCanvas(key: string, displayed: DisplayedCanvas | null, epoch = accessEpoch()): void {
@@ -61,7 +64,7 @@ export function displayedCanvas(): DisplayedCanvas | null {
   const epoch = accessEpoch();
   const current = useDisplayedCanvases.getState().entries.filter(([, e]) => e.epoch === epoch);
   const last = current.at(-1)?.[1];
-  return last ? { spaceId: last.spaceId, scopeKind: last.scopeKind, cards: last.cards } : null;
+  return last ? { spaceId: last.spaceId, scopeKind: last.scopeKind, cards: last.cards, state: last.state } : null;
 }
 
 /** Declares, while mounted, the space this component shows. `null` declares nothing. */

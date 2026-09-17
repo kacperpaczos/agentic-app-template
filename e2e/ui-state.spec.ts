@@ -385,7 +385,12 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
 
   test('przelaczenie tozsamosci na Ustawieniach: nowy wlasciciel nie dostaje tabeli z czatu ani rozmowy poprzedniego', async ({ page }) => {
     await scripted.restart('chat-data-table');
-    await openApp(page, '/settings');
+    // The canvas first, so the shell holds the first owner's working space; then Settings, inside the app.
+    await openApp(page, '/');
+    await expect.poll(() => new URL(page.url()).searchParams.get('s'), { timeout: 20_000 }).toBeTruthy();
+    const heldSpace = new URL(page.url()).searchParams.get('s')!;
+    await page.locator('.pf-nav__link', { hasText: 'Ustawienia' }).click();
+    await expect(page.getByTestId('settings-page')).toBeVisible();
     await send(page, 'Pokaz dostawcow tutaj w rozmowie.');
     await settled(page);
     const table = page.locator('.pf-chat [data-ui-instance][data-component="DataTable"]');
@@ -418,6 +423,15 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     // Not even in the address, which still carries the conversation until the chat catches up.
     expect(text).not.toContain(conversationId);
     expect(after.instances.some((i: any) => i.state === 'ready' && i.matched === mine.length)).toBe(false);
+    expect(text).not.toContain(heldSpace);
+
+    // Then the canvas, inside the app: it renders the space the shell still holds from before the switch.
+    await page.locator('.pf-nav__link', { hasText: 'Canvas' }).click();
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/');
+    expect(new URL(page.url()).searchParams.get('s')).toBe(heldSpace); // the precondition: still held
+    const onCanvas = await published(page, (s) => s.target?.id === 'platform.canvas');
+    expect(onCanvas).toMatchObject({ spaceId: null, cardsSpaceId: null, cardsState: 'none', cards: [] });
+    expect(JSON.stringify(onCanvas)).not.toContain(heldSpace);
   });
 
   test('ui_sort, a potem ui_state z minVersion i clientId z jego wyniku: opis ma nowy porzadek w kolejnosci z ekranu', async ({ page }) => {

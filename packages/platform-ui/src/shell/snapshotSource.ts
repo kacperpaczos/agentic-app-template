@@ -97,10 +97,21 @@ export function createShellSnapshotSource(deps: ShellSnapshotDeps): ShellSnapsho
     if (views) known.views = views;
 
     const shell = deps.shell();
+    const heldSpace = heldAtSwitch.spaceId;
     const conversationId = unlessHeld('conversationId', shell.conversationId);
     const spaceId = unlessHeld('spaceId', shell.spaceId);
     const canvas = spaceId ? deps.qc.getQueryData<CanvasState>(qk.space(spaceId)) : undefined;
     if (canvas) known.canvas = canvas;
+    const canvasFailed = spaceId ? deps.qc.getQueryState(qk.space(spaceId))?.status === 'error' : false;
+    /*
+     * The canvas on screen may still be showing the space the shell held at the
+     * switch (the working canvas renders the shell's space): not reported —
+     * neither its id nor its cards — until the shell moves to another space.
+     */
+    let displayed = deps.displayed?.() ?? null;
+    if (displayed && displayed.spaceId !== null && heldSpace !== undefined && displayed.spaceId === heldSpace) {
+      displayed = { spaceId: null, scopeKind: null, cards: [], state: 'none' };
+    }
 
     const { pathname, search } = deps.location();
     return buildUiSnapshotContent({
@@ -113,7 +124,8 @@ export function createShellSnapshotSource(deps: ShellSnapshotDeps): ShellSnapsho
       views: known.views,
       // Only the active space's: the builder ignores a remembered other space.
       canvas: known.canvas,
-      displayed: deps.displayed?.() ?? null,
+      canvasFailed,
+      displayed,
     });
   };
   return Object.assign(source, { dispose: stop });

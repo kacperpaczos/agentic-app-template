@@ -102,7 +102,12 @@ function CanvasInner({
 }: CanvasSurfaceProps) {
   const { data, isLoading, error } = useCanvasState(spaceId);
   // The space on screen and its cards, for the screen's description (`state/displayedCanvas.ts`).
-  useDisplayCanvas({ spaceId, scopeKind: data?.space.scopeKind ?? null, cards: data?.cards ?? null });
+  useDisplayCanvas({
+    spaceId,
+    scopeKind: data?.space.scopeKind ?? null,
+    cards: data?.cards ?? null,
+    state: data ? 'loaded' : error ? 'error' : 'loading',
+  });
   const updateGeometry = useUpdateGeometry(spaceId);
   const saveViewport = useSaveViewport(spaceId);
   const setViewport = useAppState((s) => s.setViewport);
