@@ -77,15 +77,18 @@ export function invalidateBusinessData(qc: QueryClient): void {
 }
 
 /**
- * Business data changed — announced by a tool during a run (`data_changed`)
- * or reported by a record action the user performed: refresh module reads and
- * registered reads (every data component), any canvas card that derives from
- * them, and every open artifact — a live artifact re-runs its query on read,
- * so invalidating it is what makes an open report reflect the change.
+ * Business data changed — announced by a tool during a run (`data_changed`) or
+ * saved by a record action the user performed: every module read and
+ * registered read is stale, and so is every open artifact, because a live
+ * artifact re-runs its read when it is shown.
+ *
+ * Deliberately not `['canvas']`: a change of business data changes no card. A
+ * run's event refreshes the canvas as well, for cards a tool may have changed
+ * without saying so — but doing that after a record action would re-render the
+ * card the user is acting in and take their open form with it.
  */
-export function invalidateAfterDataChange(qc: QueryClient): void {
+export function invalidateChangedData(qc: QueryClient): void {
   invalidateBusinessData(qc);
-  void qc.invalidateQueries({ queryKey: ['canvas'] });
   void qc.invalidateQueries({ queryKey: ['artifact'] });
 }
 

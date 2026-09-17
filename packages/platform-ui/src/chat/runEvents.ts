@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { PLATFORM_CUSTOM_EVENTS, uiCommandSchema, type UiCommand } from '@platform/contracts';
-import { invalidateAfterDataChange, invalidateBusinessData, qk } from '../api/queries.ts';
+import { invalidateBusinessData, invalidateChangedData, qk } from '../api/queries.ts';
 import { useAppState } from '../state/appState.ts';
 
 /**
@@ -139,9 +139,11 @@ export function applyRunEvent(
       break;
     }
     case PLATFORM_CUSTOM_EVENTS.dataChanged:
-      // Business data changed through a tool — the same refresh as after a
-      // record action a user performed.
-      invalidateAfterDataChange(ctx.qc);
+      // Business data changed through a tool: the same refresh as after a
+      // record action the user saved, plus the canvas — a tool that changed
+      // data may have changed cards without announcing it.
+      invalidateChangedData(ctx.qc);
+      void ctx.qc.invalidateQueries({ queryKey: ['canvas'] });
       break;
     case PLATFORM_CUSTOM_EVENTS.artifactCreated:
       void ctx.qc.invalidateQueries({ queryKey: ['artifacts'] });
