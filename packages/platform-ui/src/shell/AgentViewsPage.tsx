@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import { useAgentViews } from '../api/queries.ts';
 import { CanvasSurface } from '../canvas/CanvasHost.tsx';
 import { QueryErrorState } from '../components/ErrorState.tsx';
+import { AGENT_VIEWS_SCOPE_KIND, type CanvasCard, type CanvasSpace } from '@platform/contracts';
+import { useDisplayCanvas, type DisplayedCanvas } from '../state/displayedCanvas.ts';
 import { useSessionLocation } from '../state/sessionLocation.ts';
 
 /**
@@ -19,9 +21,38 @@ import { useSessionLocation } from '../state/sessionLocation.ts';
  * viewport. The cards are the same canvas cards as anywhere else, so the user
  * can move them, and a move survives the agent changing their content.
  */
+/**
+ * What the agent views page shows, for the screen's description — decided the
+ * same way the page decides what to render, so the two cannot disagree. Null
+ * only when the page renders the canvas, which describes itself (with the cards
+ * it actually draws). Never the working space: without a conversation, on an
+ * error, or with no views, the page shows none of its cards.
+ */
+export function agentViewsDisplay(input: {
+  conversationId: string | null;
+  data: { space: CanvasSpace | null; cards: CanvasCard[] } | undefined;
+  failed: boolean;
+}): DisplayedCanvas | null {
+  const scopeKind = AGENT_VIEWS_SCOPE_KIND;
+  if (!input.conversationId) return { spaceId: null, scopeKind, cards: [], state: 'none' };
+  // An error is shown even when older data is still cached: that data is not on screen.
+  if (input.failed) return { spaceId: null, scopeKind, cards: null, state: 'error' };
+  if (!input.data) return { spaceId: null, scopeKind, cards: null, state: 'loading' };
+  const { space, cards } = input.data;
+  if (!space) return { spaceId: null, scopeKind, cards: [], state: 'none' };
+  if (cards.length === 0) return { spaceId: space.id, scopeKind, cards: [], state: 'loaded' };
+  return null;
+}
+
 export function AgentViewsPage() {
   const { conversationId } = useSessionLocation();
   const views = useAgentViews(conversationId);
+  /*
+   * What this page shows, for the screen's description, while it has no canvas
+   * of its own on screen: no views yet is an empty set of cards, not the working
+   * space's. Once the canvas is there, the canvas says it (with fresher cards).
+   */
+  useDisplayCanvas(agentViewsDisplay({ conversationId, data: views.data, failed: Boolean(views.error) }));
 
   const frame = (state: string, body: ReactNode, spaceId?: string) => (
     <div

@@ -6,7 +6,7 @@ import { z } from 'zod';
 import {
   AGENT_VIEWS_SCOPE_KIND,
   AppError,
-  appContextSchema,
+  parseRunAppContext,
   addCardInputSchema,
   canvasViewportSchema,
   cardGeometrySchema,
@@ -19,6 +19,7 @@ import {
   type AppContext,
   type StoredMessage,
   uiCommandResultSchema,
+  UI_SNAPSHOT_MAX_BYTES,
 } from '@platform/contracts';
 import { probeAuth } from '../agent/auth.ts';
 import { AgentRuntime } from '../agent/runtime.ts';
@@ -94,7 +95,7 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
       c.header('Access-Control-Allow-Credentials', 'true');
       c.header('Vary', 'Origin');
       c.header('Access-Control-Allow-Headers', 'content-type, x-app-user');
-      c.header('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+      c.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
     }
     if (c.req.method === 'OPTIONS') return c.body(null, 204);
     return next();
@@ -304,9 +305,18 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
     const forwarded = (input.forwardedProps ?? {}) as Record<string, unknown>;
 
     // The frontend's context selects what to look at; it never carries identity.
-    const appContext: AppContext = appContextSchema.parse(
+    const { context: appContext, uiRejected } = parseRunAppContext(
       (input.context as unknown) ?? forwarded.appContext ?? EMPTY_APP_CONTEXT,
     );
+    if (uiRejected) {
+      /*
+       * A malformed screen marker must not refuse the command: the run starts
+       * without it (the agent is told there is no description) and the reason
+       * is reported here, where whoever breaks the client will look.
+       */
+      console.warn(`[agui/run] pominiety znacznik ekranu AppContext.ui: ${uiRejected.join('; ')}`);
+      c.header('X-Ui-Context-Rejected', '1');
+    }
 
     const lastUser = [...input.messages]
       .reverse()
@@ -472,6 +482,79 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
   app.get('/api/ui/views', (c) => {
     c.get('ownerId');
     return json(c, { views: services.modules.views() });
+  });
+
+  /**
+   * A tab publishing what it shows (`uiSnapshotSchema`).
+   *
+   * The owner is the session's; the description names only what is on screen.
+   * The body is read as text so its size is checked before it is parsed.
+   * Refused with `validation_failed` (too large, malformed) or `conflict` (a
+   * version that does not advance the tab's counter — the tab takes a new
+   * identity and publishes again).
+   */
+  app.put('/api/ui/snapshot', async (c) => {
+    const ownerId = c.get('ownerId');
+    const declared = Number(c.req.header('content-length') ?? '0');
+    if (declared > UI_SNAPSHOT_MAX_BYTES) {
+      throw new AppError('validation_failed', `Opis interfejsu przekracza ${UI_SNAPSHOT_MAX_BYTES} bajtow.`, {
+        reason: 'too_large',
+        limit: UI_SNAPSHOT_MAX_BYTES,
+      });
+    }
+    return json(c, { accepted: true, ...services.uiSnapshots.publishRaw(ownerId, await c.req.text()) });
+  });
+
+  /**
+   * A tab that is closing (`pagehide`) retires its description, so it is no
+   * longer handed out as the screen of a conversation nobody is looking at.
+   * Only a description no newer than `version` is retired: the same tab
+   * reloading may already have published its next one.
+   */
+  app.delete('/api/ui/snapshot', (c) => {
+    const ownerId = c.get('ownerId');
+    const clientId = c.req.query('clientId');
+    const version = Number(c.req.query('version'));
+    if (!clientId || !Number.isInteger(version)) {
+      throw new AppError('validation_failed', 'Podaj clientId i version.');
+    }
+    return json(c, { retired: services.uiSnapshots.retire(ownerId, clientId, version) });
+  });
+
+  /**
+   * An open tab saying it is still there (every `UI_CLIENT_HEARTBEAT_MS`).
+   * `known: false` — the backend has no such description (restarted, or it was
+   * retired): the tab publishes it again.
+   */
+  app.post('/api/ui/snapshot/alive', async (c) => {
+    const ownerId = c.get('ownerId');
+    const body = (await c.req.json().catch(() => ({}))) as { clientId?: unknown; version?: unknown };
+    if (typeof body.clientId !== 'string' || !Number.isInteger(body.version)) {
+      throw new AppError('validation_failed', 'Podaj clientId i version.');
+    }
+    return json(c, { known: services.uiSnapshots.touch(ownerId, body.clientId, body.version as number) });
+  });
+
+  /**
+   * The description the agent would be given for a conversation — the same
+   * evaluation as `ui_state`, without waiting — or one tab's latest. Only the
+   * signed-in owner's own tabs are ever visible. For diagnostics and tests.
+   */
+  app.get('/api/ui/snapshot', (c) => {
+    const ownerId = c.get('ownerId');
+    const clientId = c.req.query('clientId');
+    if (clientId) return json(c, { snapshot: services.uiSnapshots.forClient(ownerId, clientId) });
+    const conversationId = c.req.query('conversationId');
+    if (!conversationId) {
+      throw new AppError('validation_failed', 'Podaj conversationId albo clientId.');
+    }
+    const minVersion = Number(c.req.query('minVersion'));
+    return json(
+      c,
+      services.uiSnapshots.evaluate(ownerId, conversationId, {
+        ...(Number.isInteger(minVersion) && minVersion > 0 ? { minVersion } : {}),
+      }),
+    );
   });
 
   /* -------------------------------- reads ------------------------------- */

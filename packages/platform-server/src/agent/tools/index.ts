@@ -7,6 +7,7 @@ import { contextTools } from './context.ts';
 import { fileTools } from './files.ts';
 import { uiSortTools } from './ui-sort.ts';
 import { uiTools } from './ui.ts';
+import { uiStateTools } from './ui-state.ts';
 
 export { stageFileIntoWorkspace } from './files.ts';
 
@@ -29,6 +30,7 @@ export function platformTools(services: PlatformServices): ModuleToolDefinition<
     ...canvasTools(services),
     ...uiTools(services),
     ...uiSortTools(services),
+    ...uiStateTools(services),
     ...fileTools(services),
     ...artifactTools(services),
     ...agentViewTools(services),

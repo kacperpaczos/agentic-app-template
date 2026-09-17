@@ -65,7 +65,7 @@ const startRun = (runtime: AgentRuntime, conversationId: string, prompt = 'polec
     prompt,
     appContext: {
       conversationId, spaceId: null, resource: null,
-      selection: [], filters: {}, viewport: null, drafts: [],
+      selection: [], filters: {}, viewport: null, drafts: [], ui: null,
     },
   });
 

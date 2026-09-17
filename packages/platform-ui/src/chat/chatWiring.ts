@@ -2,6 +2,7 @@ import { restStorage, type ChatLLM, type ChatStorage } from '@openuidev/react-he
 import type { QueryClient } from '@tanstack/react-query';
 import { apiGet, apiPatch, apiPost } from '../api/client.ts';
 import { useAppState } from '../state/appState.ts';
+import { uiSnapshotSession } from '../state/uiSnapshot.ts';
 import { platformAguiAdapter } from './platformAdapter.ts';
 
 /**
@@ -83,6 +84,22 @@ export function createChatLlm(qc: QueryClient): ChatLLM {
   return {
     streamProtocol: platformAguiAdapter(qc),
     async send({ threadId, messages, signal }) {
+      /*
+       * The thread being sent to is the conversation on screen, even when the
+       * chat selected it a moment ago and the shell has not caught up yet (it
+       * would on the response). Recorded first, so the screen's description —
+       * and a UI command arriving from this run — name the same conversation
+       * as the command.
+       */
+      if (threadId && useAppState.getState().conversationId !== threadId) {
+        useAppState.getState().setConversation(threadId);
+      }
+      /*
+       * The command carries the version of the screen it was sent from; publish
+       * that version first, so the backend has what the command refers to.
+       * Bounded: a slow publication must not hold the command back.
+       */
+      await uiSnapshotSession.flush({ timeoutMs: 1500 });
       const state = useAppState.getState();
       const appContext = { ...state.toAppContext(), conversationId: threadId || state.conversationId };
       // Accepted but not yet executing. The backend may have to wait for this

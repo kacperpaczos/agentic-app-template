@@ -56,6 +56,18 @@ export function buildSystemPrompt(input: PromptInput): string {
     input.resourceSummary ? `- opis zasobu: ${input.resourceSummary}` : '',
     `- zaznaczenie: ${ctx.selection.length ? ctx.selection.map((s) => `${s.kind}:${s.id}`).join(', ') : '(brak)'}`,
     ...describeFilters(ctx.filters),
+    /*
+     * The marker of the screen at send time. The description itself is not in
+     * the prompt: by the time the agent acts on it, it may be gone — `ui_state`
+     * reads the current one and says whether it is newer than this.
+     */
+    `- ekran przy wyslaniu polecenia: ${
+      ctx.ui
+        ? `opis w wersji ${ctx.ui.version} (karta ${ctx.ui.clientId}), widok ${ctx.ui.viewId ?? '(brak)'}, adres ${ctx.ui.url}` +
+          // A cut address may end in the middle of a value; say so rather than let it read as the whole.
+          (ctx.ui.urlTruncated ? ` [adres skrocony do ${ctx.ui.url.length} znakow — pelny jest dluzszy]` : '')
+        : '(brak opisu)'
+    }`,
     ctx.drafts.length
       ? `- niezapisane szkice: ${ctx.drafts.map((d) => `${d.entity}/${d.entityId ?? 'nowy'} (${d.dirtyFields.join(',')})`).join('; ')}`
       : '',
@@ -226,6 +238,26 @@ export function buildSystemPrompt(input: PromptInput): string {
       'Nie zmieniaja danych w bazie: nie mow, ze cos usunales, ukryles na stale albo przestawiles w danych.',
       'Aktualny stan widoku uzytkownika (zawezenie, sortowanie, strona, pokazane X z Y) jest w kontekscie',
       'aplikacji powyzej i w filters zwracanym przez get_context — z chwili wyslania polecenia.',
+      '',
+      '## Stan ekranu',
+      /*
+       * The confirmation of a command says the client carried it out, not what
+       * the screen shows afterwards — the rows left, whether the table is still
+       * loading, which view composition. Describing the screen from what was
+       * asked for is exactly the stale answer this section exists to prevent.
+       */
+      `Co uzytkownik ma teraz na ekranie, odczytujesz przez ${mcpToolName('ui_state')}: widok z wersja kompozycji, karty`,
+      '(na Widokach agenta — karty tej rozmowy), komponenty danych (stan, pola z etykietami, filtr, sortowanie, strona,',
+      'grupowanie, widoczne rekordy w kolejnosci z ekranu, liczby) i dozwolone akcje.',
+      'Po ui_navigate, ui_filter lub ui_sort wywolaj ui_state z minVersion = uiVersion i clientId = uiClientId z ich wyniku,',
+      'ZANIM opiszesz ekran. Wersje licza sie osobno dla kazdej karty przegladarki: numer bez karty nic nie znaczy.',
+      'Brak uiVersion (uiPublication inne niz published) oznacza, ze ekranu po akcji nie opisano — powiedz to.',
+      'Nie opisuj ekranu na podstawie tego, o co prosiles, ani opisu ze stale=true — wtedy powiedz, czego nie wiesz (reason).',
+      'Komponent ze state=loading jeszcze nic nie pokazuje: odczytaj ponownie z minVersion = version + 1.',
+      'cards: null znaczy „nie wiadomo” (cardsState loading albo error), nie „brak kart” — jesli karty sa wazne,',
+      'odczytaj ponownie z minVersion = version + 1; puste cards z cardsState none to brak przestrzeni do pokazania.',
+      'Porownuj wersje z „ekran przy wyslaniu polecenia” w kontekscie: nizsza wersja tej samej karty jest starsza niz to,',
+      'co uzytkownik widzial, wysylajac polecenie.',
     );
   }
 

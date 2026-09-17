@@ -299,8 +299,12 @@ export function describeDataInstance(input: {
   viewId: string | null;
   source: DataSource;
   state: DataInstanceState;
-  /** Present exactly when the component renders records or an empty result. */
-  model?: DataModel | null;
+  /**
+   * Present exactly when the component renders records or an empty result.
+   * A grouped model (`withGrouping`) describes its records in the grouped,
+   * on-screen order and names the field it is grouped by.
+   */
+  model?: (DataModel & { grouping?: { field: RecordField; groups: Array<{ records: DataRecord[] }> } | null }) | null;
   /** Descriptor known without a model, e.g. from a response whose composition was refused. */
   descriptor?: ReadResultDescriptor | null;
   /** Fields the component asked for, described when there is no model. */
@@ -327,12 +331,14 @@ export function describeDataInstance(input: {
 
   if (model && (input.state === 'ready' || input.state === 'empty')) {
     // Only the page on screen is drawn; `matched` still counts every page.
+    // Grouped, the page's rows are on screen group by group, not in page order.
+    const onScreen = model.grouping ? model.grouping.groups.flatMap((g) => g.records) : model.shown;
     const drawn =
       input.state !== 'ready'
         ? []
         : input.visibleLimit !== undefined
-          ? model.shown.slice(0, input.visibleLimit)
-          : model.shown;
+          ? onScreen.slice(0, input.visibleLimit)
+          : onScreen;
     return {
       ...base,
       // What the model applied, not what was asked for: an order the address
@@ -353,6 +359,7 @@ export function describeDataInstance(input: {
       matched: model.records.length,
       total: model.total,
       actions: input.actions,
+      groupBy: model.grouping?.field.field ?? null,
     };
   }
 
@@ -377,5 +384,6 @@ export function describeDataInstance(input: {
     matched: null,
     total: null,
     actions: [],
+    groupBy: null,
   };
 }

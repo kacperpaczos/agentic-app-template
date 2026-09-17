@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
+  EMPTY_APP_CONTEXT,
   formatFieldValue,
   parseFieldInput,
   readResultDescriptorSchema,
@@ -384,7 +385,7 @@ describe('kontrola startowa akcji rekordu', () => {
     const prompt = buildSystemPrompt({
       registry: h.platform.registry,
       catalog: h.platform.services.catalog,
-      appContext: { conversationId: null, spaceId: null, resource: null, selection: [], filters: {}, viewport: null, drafts: [] },
+      appContext: EMPTY_APP_CONTEXT,
       resourceSummary: null,
       workspaceDir: null,
       stagedFiles: [],

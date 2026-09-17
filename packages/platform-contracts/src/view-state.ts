@@ -274,7 +274,15 @@ export const viewStateContextSchema = z.object({
   page: viewPageSchema.nullable(),
   /** Records left after the narrowing. */
   matched: z.number().int().nonnegative(),
-  /** Records the view would show without the narrowing. */
+  /**
+   * Records the view would show without the address bar's narrowing: what the
+   * read returned, after the composition's own `filter`.
+   *
+   * Compare `SemanticInstance.total` (the read's records before any predicate).
+   * Only a view's primary instance feeds this context, and a primary instance's
+   * composition declares no filter, so for it the two counts are equal; they
+   * are defined separately so that neither silently becomes the other.
+   */
   total: z.number().int().nonnegative(),
 });
 export type ViewStateContext = z.infer<typeof viewStateContextSchema>;

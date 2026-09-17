@@ -87,7 +87,7 @@ const runWith = async (script: Step[]) => {
     prompt: 'polecenie testowe',
     appContext: {
       conversationId: conv.id, spaceId: null, resource: null,
-      selection: [], filters: {}, viewport: null, drafts: [],
+      selection: [], filters: {}, viewport: null, drafts: [], ui: null,
     },
   });
   const events: Array<Record<string, any>> = [];

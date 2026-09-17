@@ -133,7 +133,9 @@ export class CanvasService {
     const space = toSpace(this.#spaceRow(spaceId, ownerId));
     const cards = (
       this.db.$client
-        .prepare('SELECT * FROM canvas_cards WHERE space_id = ? ORDER BY created_at')
+        // `id` breaks ties: cards created in the same millisecond keep one order, so a
+        // description naming the space's cards in order cannot change without a change.
+        .prepare('SELECT * FROM canvas_cards WHERE space_id = ? ORDER BY created_at, id')
         .all(spaceId) as CardRow[]
     ).map(toCard);
     return { space, cards };

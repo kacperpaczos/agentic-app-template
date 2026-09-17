@@ -517,17 +517,38 @@ export const semanticInstanceSchema = z
     sort: dataSortSchema.nullable(),
     /** `index` counts from 1. Null when the instance does not paginate. */
     page: viewPageSchema.nullable(),
-    /** Records on screen, at most the limit. Empty unless `ready`. */
+    /**
+     * Records on screen, at most the limit, **in the order they are on screen**:
+     * the page's order, or — when the table is grouped (`groupBy`) — group by
+     * group in the order the groups appear, each group's records in the page's
+     * order. Empty unless `ready`.
+     */
     visibleRecordIds: z.array(z.string().max(128)).max(SEMANTIC_VISIBLE_RECORDS_LIMIT),
     /**
      * Records left after every predicate — all of them, not only those listed
      * or drawn. Null unless `ready` or `empty`: nothing was counted.
      */
     matched: z.number().int().nonnegative().nullable(),
-    /** Records the read returned, before any predicate. Null unless `ready` or `empty`. */
+    /**
+     * Records the read returned, before **any** predicate — the composition's
+     * own `filter` included. Null unless `ready` or `empty`.
+     *
+     * Not the same count as `ViewStateContext.total` (`AppContext.filters`),
+     * which is taken after the composition's own filter and before the address
+     * bar's narrowing. The two coincide for a view's primary instance, whose
+     * composition declares no filter — and only primary instances feed
+     * `AppContext.filters`. A table in a card or the chat with a composition
+     * filter has `total` larger than what that filter leaves.
+     */
     total: z.number().int().nonnegative().nullable(),
     /** Interactions the instance offers right now, e.g. `filter`, `open_record`. */
     actions: z.array(z.string().max(80)).max(20),
+    /**
+     * The declared field the records on screen are grouped by, or null when
+     * they are not grouped (or not yet shown). Appended: older descriptions
+     * without it read as not grouped.
+     */
+    groupBy: z.string().max(80).nullable().optional(),
   })
   .superRefine((d, ctx) => {
     const counted = d.state === 'ready' || d.state === 'empty';

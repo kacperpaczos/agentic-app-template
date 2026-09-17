@@ -2,6 +2,7 @@ import { Mastra } from '@mastra/core';
 import { ClaudeSDKAgent } from '@mastra/claude';
 import {
   PLATFORM_CUSTOM_EVENTS,
+  UI_COMMAND_ACK_TIMEOUT_MS,
   UI_COMMAND_FAILURES,
   type AppContext,
   type AppErrorCode,
@@ -183,7 +184,8 @@ export class AgentRuntime {
   requestUiCommand(
     command: UiCommand,
     stream: RunEventStream,
-    timeoutMs = 8000,
+    // The budget the tab plans its acknowledgement against, too.
+    timeoutMs = UI_COMMAND_ACK_TIMEOUT_MS,
   ): Promise<UiCommandResult> {
     stream.custom(PLATFORM_CUSTOM_EVENTS.uiCommand, command);
     return new Promise<UiCommandResult>((resolve) => {
@@ -443,7 +445,20 @@ export class AgentRuntime {
             reason: command.reason,
           },
           stream,
-        ),
+        ).then((result) => {
+          /*
+           * Which tab answered, with which version of its screen. `ui_state`
+           * binds a version asked for without a tab to this one: versions count
+           * per tab, and the tab that acknowledged is the one the number means.
+           */
+          if (result.uiClientId && result.uiVersion !== undefined) {
+            this.services.uiSnapshots.recordAcknowledgement(args.ownerId, runId, {
+              clientId: result.uiClientId,
+              version: result.uiVersion,
+            });
+          }
+          return result;
+        }),
     };
 
     // Per-run MCP server: the handler closes over this run's context only.
@@ -621,6 +636,7 @@ export class AgentRuntime {
       stream.runError(message, code);
     } finally {
       clearTimeout(timeout);
+      this.services.uiSnapshots.forgetRun(runId);
       stream.close();
     }
   }

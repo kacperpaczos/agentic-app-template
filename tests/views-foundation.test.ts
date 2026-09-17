@@ -868,6 +868,7 @@ describe('szew narzedzi i prompt', () => {
       'ui_navigate',
       'ui_filter',
       'ui_sort',
+      'ui_state',
       'files_list',
       'files_stage',
       'files_publish_version',
@@ -902,6 +903,7 @@ describe('szew narzedzi i prompt', () => {
         filters: {},
         viewport: null,
         drafts: [],
+        ui: null,
       },
       resourceSummary: null,
       workspaceDir: null,
@@ -975,6 +977,7 @@ describe('krok skryptowany call wywoluje prawdziwy handler', () => {
         filters: {},
         viewport: null,
         drafts: [],
+        ui: null,
       },
     });
     const events: Array<Record<string, any>> = [];

@@ -380,6 +380,7 @@ const EMPTY_CONTEXT = (conversationId: string): AppContext => ({
   filters: {},
   viewport: null,
   drafts: [],
+  ui: null,
 });
 
 /**

@@ -6,6 +6,7 @@ import type {
   ViewPage,
   ViewStateContext,
 } from '@platform/contracts';
+import { uiSnapshotSession } from './uiSnapshot.ts';
 
 export type RunPhase =
   | 'idle'
@@ -323,6 +324,8 @@ export const useAppState = create<AppState>((set, get) => ({
         entityId: d.entityId,
         dirtyFields: d.dirtyFields,
       })),
+      // The screen's description version at this moment; the description itself is read with `ui_state`.
+      ui: uiSnapshotSession.contextMarker(),
     };
   },
 }));
