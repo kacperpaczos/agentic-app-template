@@ -195,11 +195,6 @@ export function DataTableView(props: DataTableProps) {
     );
   };
 
-  /*
-   * One frame for the ready and the empty state, with the controls at the same
-   * place in both: narrowing to nothing must leave the user the fields to
-   * change it with, and pressing "Apply" must not move the focus away.
-   */
   // A refusal is shown in its form while the form is on screen, above the table otherwise.
   const formShown = Boolean(
     shownState !== 'empty' &&
@@ -208,6 +203,11 @@ export function DataTableView(props: DataTableProps) {
   );
   const columnCount = model.fields.length + (recordActions.actions.length > 0 ? 1 : 0);
 
+  /*
+   * One frame for the ready and the empty state, with the controls at the same
+   * place in both: narrowing to nothing must leave the user the fields to
+   * change it with, and pressing "Apply" must not move the focus away.
+   */
   return (
     <DataFrame {...frame} state={shownState === 'empty' ? 'empty' : 'ready'}>
       {address && filterable && (
