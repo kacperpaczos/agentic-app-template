@@ -127,6 +127,40 @@ export function numericFieldValue(record: DataRecord, field: RecordField): numbe
   }
 }
 
+/**
+ * The units this field's values are actually in across these records — but only
+ * when they disagree; null when they are all in one unit.
+ *
+ * **One rule, one implementation.** Wherever the platform puts several records'
+ * values of the same field on a single scale — a chart's axis, an order by that
+ * field — it asks this. A column holding 100 EUR and 200 PLN has no scale:
+ * 100 < 200 is arithmetic about stored integers, not about money, so a bar
+ * chart drawn from it states a comparison the data does not support and a
+ * "most expensive first" list states the same one. Both refuse, with the units
+ * named, instead of drawing or ordering it.
+ *
+ * Only values that take part are counted: an empty cell is in no unit, and a
+ * value the field's type cannot read is not on the scale either.
+ */
+export function mixedUnits(records: readonly DataRecord[], field: RecordField): string[] | null {
+  const units = new Set<string>();
+  for (const record of records) {
+    const counts = isNumericField(field)
+      ? numericFieldValue(record, field) !== null
+      : !isEmpty(record[field.field]);
+    if (!counts) continue;
+    units.add(fieldUnitOf(record, field) ?? '');
+  }
+  return units.size > 1 ? [...units] : null;
+}
+
+/**
+ * How every refusal by that rule reads, so a user meeting it on a chart and on
+ * an order meets the same sentence and the same instruction.
+ */
+export const mixedUnitsMessage = (subject: string, units: readonly string[]): string =>
+  `${subject} laczy rozne jednostki (${units.join(', ')}); zawez dane do jednej jednostki.`;
+
 const withUnit = (text: string, unit: string | undefined) => (unit ? `${text} ${unit}` : text);
 
 /** Integer arithmetic, so an amount never picks up a float's last-digit error. */
@@ -263,6 +297,13 @@ function comparable(record: DataRecord, field: RecordField): number | string | n
  * amounts numerically, dates chronologically, text in Polish collation, enums
  * by their labels. Empty values go last in either direction; equal values keep
  * their order.
+ *
+ * Refused — `validation_failed`, with the units named — when the records
+ * disagree on the unit of the field being ordered. The comparison below is on
+ * stored integers, so ordering 100 EUR against 200 PLN would produce a list the
+ * screen then presents as a ranking ("most expensive first") that the data does
+ * not support. Exactly the rule a chart applies to a series ({@link mixedUnits}),
+ * because it is the same rule.
  */
 export function sortRecords(
   records: readonly DataRecord[],
@@ -270,6 +311,14 @@ export function sortRecords(
   descriptor: ReadResultDescriptor,
 ): DataRecord[] {
   const [field] = pickFields(descriptor, [sort.field]);
+  const mixed = mixedUnits(records, field!);
+  if (mixed) {
+    throw new AppError(
+      'validation_failed',
+      mixedUnitsMessage(`Kolejnosc wedlug pola ${field!.label}`, mixed),
+      { reason: 'mixed_units', field: field!.field, units: mixed },
+    );
+  }
   const factor = sort.direction === 'desc' ? -1 : 1;
   return [...records].sort((a, b) => {
     const va = comparable(a, field!);

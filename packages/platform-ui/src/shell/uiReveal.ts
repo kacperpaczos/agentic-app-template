@@ -365,8 +365,10 @@ export async function performReveal(
     });
   const table = await settledTable();
   // Still being read when the budget ran out: the screen never reached a state
-  // this command could confirm, which is not the same as the record missing.
-  if (!table) return refuse(findTable(reveal)?.refreshing ? UI_COMMAND_FAILURES.notApplied : UI_COMMAND_FAILURES.notPresent);
+  // this command could confirm, which is not the same as the record missing —
+  // and not the same as a command nothing applied, which asking again cannot
+  // fix. `refreshing` says "ask me again once the read settles".
+  if (!table) return refuse(findTable(reveal)?.refreshing ? UI_COMMAND_FAILURES.refreshing : UI_COMMAND_FAILURES.notPresent);
 
   const labels = new Map(table.address?.filterFields.map((f) => [f.field, f.label]) ?? []);
   const plan = planReveal({
@@ -420,7 +422,7 @@ export async function performReveal(
     );
     return cell ? { at, cell } : null;
   });
-  if (!shown) return refuse(findTable(reveal)?.refreshing ? UI_COMMAND_FAILURES.notApplied : UI_COMMAND_FAILURES.notPresent);
+  if (!shown) return refuse(findTable(reveal)?.refreshing ? UI_COMMAND_FAILURES.refreshing : UI_COMMAND_FAILURES.notPresent);
   const { at, cell } = shown;
 
   const visible = await bringIntoView(cell, reveal, adjustments, deps.until);

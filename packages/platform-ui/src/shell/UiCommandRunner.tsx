@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import {
+  REJECTED_SORT_FAILURES,
   UI_COMMAND_FAILURES,
   viewAddressKey,
   type UiCommand,
@@ -36,12 +37,17 @@ import { markHighlighted, performReveal } from './uiReveal.ts';
  *    agent named a property it does not declare;
  *  - `not_sortable` — an order (or clearing one) for a target with no view that
  *    can be ordered;
+ *  - `mixed_units` — the view can be ordered by the field, but the records on
+ *    screen hold it in several units, so no order over them is a ranking; the
+ *    units are reported with it (`rejectedSort`);
  *  - `views_unavailable` — the view definitions could not be loaded, so a
  *    change of a view's state could not be judged; nothing was done;
  *  - `not_applied` — the narrowing or order was accepted but no view reported
  *    applying it. Distinct from narrowing to nothing: "your screen now shows
  *    none of the rows" is an answer, "your screen is unchanged" is a defect,
- *    and the agent must not report the second as the first.
+ *    and the agent must not report the second as the first. It is a defect
+ *    signal only: a view that was merely still being read answers `refreshing`
+ *    (`uiReveal.ts`), which is worth asking again.
  *
  * Idempotent by `commandId`: a re-attached run replays its events from a
  * sequence number, and a navigation that happened once must not happen again
@@ -221,10 +227,19 @@ export function UiCommandRunner() {
           (viewReport?.sort?.field === ordering.field && viewReport.sort.direction === ordering.direction);
         if ((!viewReport && !filtered) || !orderApplied) {
           setAgentFilterKey(null);
+          /*
+           * An order the view *judged* and set aside is a different answer from
+           * one nothing applied: the view says which field and why, so that is
+           * passed on by name — with the units, when the records turned out to
+           * be in several of them — instead of the blanket `not_applied`.
+           */
+          const setAside =
+            ordering && viewReport?.rejectedSort?.field === ordering.field ? viewReport.rejectedSort : null;
           return {
             ...base,
             executed: false,
-            reason: UI_COMMAND_FAILURES.notApplied,
+            reason: setAside ? REJECTED_SORT_FAILURES[setAside.reason] : UI_COMMAND_FAILURES.notApplied,
+            ...(setAside ? { rejectedSort: setAside, sorted: viewReport?.sort ?? null } : {}),
             url: window.location.pathname + window.location.search,
           };
         }

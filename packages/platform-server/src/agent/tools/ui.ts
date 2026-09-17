@@ -141,7 +141,8 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
         '(tylko widok z filterableFields; inny cel odpowiada not_filterable i nic nie zmienia) ' +
         'pelny widok. Zwraca to, co KLIENT faktycznie pokazal, razem z liczba wierszy ' +
         '(filtered.matched z filtered.total) i strona (page) — podaj te liczby uzytkownikowi zamiast ' +
-        'zgadywac. Zawezenie zmienia tylko prezentacje, nie dane.',
+        'zgadywac. Zawezenie zmienia tylko prezentacje, nie dane. Odmowa not_applied znaczy, ze zaden widok nie ' +
+        'zastosowal zawezenia (wada) — to co innego niz zawezenie, ktore nie dopasowalo zadnego wiersza; ponawianie nic nie da.',
       effect: 'read',
       alwaysLoad: true,
       inputSchema: z.object({
