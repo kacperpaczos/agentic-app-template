@@ -541,6 +541,29 @@ body {
 .pf-attach__error button { border: 0; background: none; cursor: pointer; font-size: 13px; line-height: 1; color: inherit; }
 
 /*
+  „Ten widok nie pokazuje wszystkiego" — i jak to cofnac.
+
+  Nad powierzchnia roboczą, wiec dotyczy kazdego ekranu. Wyglada jak komunikat,
+  nie jak ozdoba: ciepla ramka, ktora widac katem oka, i przycisk powrotu w tym
+  samym wierszu, zeby wyjscie bylo tak samo latwe jak wejscie.
+*/
+.pf-viewfilter {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--pf-warn);
+  background: #fffaf0;
+  font-size: 13px;
+}
+.pf-viewfilter__mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; flex: none;
+  border-radius: 50%; background: #fff2d6; color: #8a6400;
+}
+.pf-viewfilter__text { flex: 1; min-width: 0; }
+.pf-viewfilter__count { color: var(--pf-muted); white-space: nowrap; }
+.pf-viewfilter .pf-btn { flex: none; }
+
+/*
   Temporary highlight of an element the agent was asked to point at.
 
   Time-limited and purely visual: it marks where to look, and changes nothing

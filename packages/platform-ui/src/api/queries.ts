@@ -1,4 +1,6 @@
+import { useEffect, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { rowMatchesFilter } from '@platform/contracts';
 import type {
   ArtifactMeta,
   AuthStatus,
@@ -6,9 +8,12 @@ import type {
   CardGeometry,
   CardSpec,
   StoredFile,
+  UiTarget,
 } from '@platform/contracts';
 import { accessScope, setAccessContext } from './accessContext.ts';
 import { apiDelete, apiGet, apiPatch, apiPost, ensureSession } from './client.ts';
+import { useAppState } from '../state/appState.ts';
+import { useActiveViewFilter } from '../state/viewFilter.ts';
 
 /**
  * Query keys.
@@ -34,6 +39,7 @@ export const qk = {
   artifact: (id: string) => ['artifact', accessScope(), id] as const,
   files: (scope?: string) => ['files', accessScope(), scope ?? 'all'] as const,
   module: (path: string) => ['module', accessScope(), path] as const,
+  uiTargets: () => ['ui-targets', accessScope()] as const,
 };
 
 export interface PlatformStatus {
@@ -90,12 +96,83 @@ export const useFiles = (scope?: { kind: string; id: string }) =>
   });
 
 /** Generic reader for a business module's own HTTP routes. */
-export const useModuleData = <T>(moduleId: string, path: string, enabled = true) =>
+/**
+ * The interface targets the agent may be asked to open, as the browser sees
+ * them.
+ *
+ * Shared because two things need the same list and must not disagree about it:
+ * the command runner, which resolves a target the agent named, and the view
+ * narrowing, which decides whether a search parameter is a filter for this
+ * screen. It changes only when modules change, hence effectively static.
+ */
+export const useUiTargets = () =>
   useQuery({
+    queryKey: qk.uiTargets(),
+    queryFn: () => apiGet<{ targets: UiTarget[] }>('/api/ui/targets'),
+    staleTime: 5 * 60_000,
+    select: (d) => d.targets,
+  });
+
+/**
+ * A module view's data — narrowed, when the agent narrowed this view.
+ *
+ * **Why the narrowing lives here.** The requirement is that *every* view can be
+ * narrowed and that every narrowed view says so. Doing it per screen would mean
+ * every screen, present and future, remembering to implement it — and the one
+ * that forgot would show a full list under a banner claiming it was filtered.
+ * Every module view already reads its data through this hook, so this is the
+ * one place where "narrowed" can be made true rather than promised.
+ *
+ * The platform stays domain-free doing it. The narrowing names a `collection` —
+ * a key of the response — and property names on its rows, all declared by the
+ * module that owns the view and carried here as opaque strings. Nothing in this
+ * file knows what any of them mean; it matches text against text.
+ *
+ * Which narrowing is active comes from the address bar — see
+ * `state/viewFilter.ts`, which resolves it against the view's own declaration,
+ * so it applies to the screen it was made for and nowhere else.
+ */
+export const useModuleData = <T>(moduleId: string, path: string, enabled = true) => {
+  const active = useActiveViewFilter();
+  const reportFilterOutcome = useAppState((s) => s.reportFilterOutcome);
+
+  const query = useQuery({
     queryKey: qk.module(`${moduleId}${path}`),
     queryFn: () => apiGet<T>(`/api/m/${moduleId}${path}`),
     enabled,
   });
+
+  const { data, outcome } = useMemo(() => {
+    if (!active || !query.data || typeof query.data !== 'object') {
+      return { data: query.data, outcome: null };
+    }
+    const source = query.data as Record<string, unknown>;
+    const rows = source[active.collection];
+    if (!Array.isArray(rows)) {
+      /*
+       * The view declared a collection this response does not carry. Reported
+       * as "nothing applied it" rather than quietly showing everything: the
+       * banner would otherwise claim a narrowing that never happened.
+       */
+      return { data: query.data, outcome: null };
+    }
+    const kept = rows.filter((row) => rowMatchesFilter(row, active.predicates));
+    return {
+      data: { ...source, [active.collection]: kept } as T,
+      outcome: { targetId: active.targetId, matched: kept.length, total: rows.length },
+    };
+  }, [active, query.data]);
+
+  /*
+   * The count goes back into the store so the banner can show it and the
+   * acknowledgement to the agent can be a fact rather than a prediction.
+   */
+  useEffect(() => {
+    if (outcome) reportFilterOutcome(outcome);
+  }, [outcome, reportFilterOutcome]);
+
+  return { ...query, data } as typeof query;
+};
 
 /* ------------------------------- mutations -------------------------------- */
 

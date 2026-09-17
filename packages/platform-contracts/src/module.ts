@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import type { UiCommandResult, UiTarget } from './ui.ts';
+import type { UiCommandResult, UiTarget, ViewFilter } from './ui.ts';
 import type { AppContext } from './agent.ts';
 import type { CardSpec } from './canvas.ts';
 
@@ -101,6 +101,22 @@ export interface ModuleToolDefinition<TInput = unknown> {
   inputSchema: z.ZodObject<ToolInputShape>;
   /** `read` tools are always allowed; `write` tools go through idempotency. */
   effect: 'read' | 'write';
+  /**
+   * Keep this tool in the model's context instead of behind tool search.
+   *
+   * The SDK defers tools once there are many of them: they are not in the
+   * prompt, and the model has to go looking with `ToolSearch` before it can
+   * call one. Observed consequence, on a real turn: asked what was in a view's
+   * data, the model searched for the two tools it thought it needed, answered
+   * from them, and never moved the screen — because the tool that moves the
+   * screen was not in front of it. The system prompt told it to navigate and
+   * named a tool it did not have.
+   *
+   * So this is for the few tools a model has to *know exist* to behave
+   * correctly, rather than the ones it goes looking for once it knows what it
+   * wants. Use it sparingly: every always-loaded tool is in every prompt.
+   */
+  alwaysLoad?: boolean;
   handler: (input: TInput, ctx: ToolCallContext) => Promise<unknown>;
 }
 
@@ -160,6 +176,8 @@ export interface ToolCallContext {
   requestUi?: (command: {
     targetId: string;
     spaceId?: string | null;
+    /** Narrowing to apply; `null` clears one. Omitted leaves the view alone. */
+    filter?: ViewFilter | null;
     reason?: string;
   }) => Promise<UiCommandResult>;
 }

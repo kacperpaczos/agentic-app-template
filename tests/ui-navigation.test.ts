@@ -278,11 +278,21 @@ describe('ui_navigate zwraca to, co potwierdzil klient', () => {
   });
 
   it('pokazanie ustawienia nie ma zadnej operacji zmiany wartosci', () => {
-    // The tool surface is the guarantee: there is no "set" verb at all, so an
-    // agent cannot change a setting by accident while showing it.
-    const names = platformTools(h.platform.services).map((t) => t.name);
-    expect(names).toContain('ui_navigate');
-    expect(names.filter((n) => /^ui_/.test(n)).sort()).toEqual(['ui_catalog', 'ui_navigate']);
+    /*
+     * The tool surface is the guarantee: there is no "set" verb at all, so an
+     * agent cannot change a setting by accident while showing it.
+     *
+     * `ui_filter` joined this set when views became narrowable, and it does not
+     * weaken the property. It changes which rows are *displayed* and says so on
+     * screen; it writes nothing, and the user undoes it with one button. The
+     * assertion below is therefore two things: the exact list, so a new verb
+     * cannot appear unnoticed, and — the part that actually matters — that none
+     * of them writes.
+     */
+    const tools = platformTools(h.platform.services);
+    const ui = tools.filter((t) => /^ui_/.test(t.name));
+    expect(ui.map((t) => t.name).sort()).toEqual(['ui_catalog', 'ui_filter', 'ui_navigate']);
+    expect(ui.every((t) => t.effect === 'read')).toBe(true);
   });
 });
 

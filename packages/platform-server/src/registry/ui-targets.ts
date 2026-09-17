@@ -1,4 +1,4 @@
-import type { UiTarget } from '@platform/contracts';
+import { RESERVED_SEARCH_KEYS, type UiTarget } from '@platform/contracts';
 
 /**
  * Places in the interface the agent can be asked to open, contributed by the
@@ -118,6 +118,23 @@ export const PLATFORM_UI_TARGETS: UiTarget[] = [
 export function buildUiTargetCatalog(moduleTargets: UiTarget[][]): UiTarget[] {
   const byId = new Map<string, UiTarget>();
   for (const target of [...PLATFORM_UI_TARGETS, ...moduleTargets.flat()]) {
+    /*
+     * A narrowing becomes one search parameter per field, so a field named `c`
+     * or `s` would collide with the session's own keys — which are retained
+     * across every navigation and would drag the filter onto screens it means
+     * nothing on. Refused when the catalog is built, i.e. at startup, because
+     * the alternative is a filter that silently does the wrong thing to the
+     * address bar in production.
+     */
+    for (const field of target.filter?.fields ?? []) {
+      if ((RESERVED_SEARCH_KEYS as readonly string[]).includes(field.field)) {
+        throw new Error(
+          `Cel interfejsu "${target.id}" deklaruje pole filtra "${field.field}", ` +
+            `ktore jest zarezerwowane dla sesji (${RESERVED_SEARCH_KEYS.join(', ')}). ` +
+            'Zmien nazwe pola.',
+        );
+      }
+    }
     if (!byId.has(target.id)) byId.set(target.id, target);
   }
   return [...byId.values()];

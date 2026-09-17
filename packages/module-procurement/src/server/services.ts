@@ -226,9 +226,24 @@ export class ProcurementService {
     };
   }
 
+  /**
+   * Search, with enough context that an empty result cannot be read as an empty
+   * application.
+   *
+   * Both halves come from one observed turn. The agent asked for everything
+   * with `query: "*"`, got `{results: []}` back, and told the user "the
+   * database is empty — no suppliers, no offers, no cases" while all of them
+   * existed. So `*` now means everything, and every answer carries how much
+   * data there actually is: "0 matched out of 4 suppliers" is a different
+   * statement from "there are no suppliers", and only one of them was ever
+   * true.
+   */
   search(ownerId: string, query: string, limit = 20) {
-    if (!query.trim()) return { results: [] };
-    return { results: this.repo.search(ownerId, query.trim(), Math.min(limit, 50)) };
+    const counts = this.repo.counts(ownerId);
+    const wanted = query.trim();
+    if (!wanted) return { results: [], matched: 0, query: wanted, totals: counts };
+    const results = this.repo.search(ownerId, wanted, Math.min(limit, 50));
+    return { results, matched: results.length, query: wanted, totals: counts };
   }
 
   setCriterionWeights(

@@ -436,6 +436,9 @@ export class AgentRuntime {
             conversationId: args.conversationId,
             targetId: command.targetId,
             spaceId: command.spaceId ?? null,
+            // `undefined` and `null` differ here: the first leaves any narrowing
+            // in place, the second is an explicit "show everything again".
+            ...(command.filter !== undefined ? { filter: command.filter } : {}),
             reason: command.reason,
           },
           stream,

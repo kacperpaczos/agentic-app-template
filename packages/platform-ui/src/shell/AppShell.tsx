@@ -9,6 +9,7 @@ import { useAppState } from '../state/appState.ts';
 import { SpaceSync } from './SpaceSync.tsx';
 import { BackgroundTasks } from './BackgroundTasks.tsx';
 import { UiCommandRunner } from './UiCommandRunner.tsx';
+import { ViewFilterBanner } from './ViewFilterBanner.tsx';
 
 const SECTION_LABELS: Record<MenuSection, string> = {
   workspace: 'Przestrzen pracy',
@@ -136,6 +137,11 @@ export function AppShell({ children }: { children?: ReactNode }) {
       <Nav />
       <main className="pf-main">
         <StatusBar />
+        {/*
+          Above the work surface, so it is true of every screen — including the
+          ones written after this one. See `ViewFilterBanner.tsx`.
+        */}
+        <ViewFilterBanner />
         <div className="pf-surface">{children ?? <CanvasHost />}</div>
       </main>
       <ChatPanel />

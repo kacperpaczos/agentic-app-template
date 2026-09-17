@@ -91,6 +91,25 @@ interface AppState {
    */
   attachments: string[];
   /**
+   * The narrowing this session's agent applied, as a comparison key.
+   *
+   * Not the filter itself — that lives in the address bar, because it decides
+   * which records are on screen (`state/viewFilter.ts`). This is only the
+   * answer to "did the agent do it?", which a URL cannot carry and should not:
+   * the same address reached by a pasted link or by Back is the same view,
+   * narrowed by nobody. Transient interface state, held in memory, which is
+   * where provenance of this kind belongs.
+   */
+  agentFilterKey: string | null;
+  /**
+   * What the narrowing did, counted by the view that applied it.
+   *
+   * Set by the view, read by the banner and by the acknowledgement. This is the
+   * only thing that distinguishes "narrowed to nothing" from "nothing applied
+   * the narrowing", and the agent is told which of the two happened.
+   */
+  filterOutcome: { targetId: string; matched: number; total: number } | null;
+  /**
    * Lifecycle of every run the client knows about, **keyed by conversation**.
    *
    * Keyed, and not a single record, because a run belongs to its conversation
@@ -119,6 +138,8 @@ interface AppState {
   setNavOpen: (open: boolean) => void;
   setLastRunId: (id: string | null) => void;
   setAttachments: (ids: string[]) => void;
+  setAgentFilterKey: (key: string | null) => void;
+  reportFilterOutcome: (outcome: { targetId: string; matched: number; total: number }) => void;
   /** Merges a patch into one conversation's run record, creating it if absent. */
   patchRun: (conversationId: string, patch: Partial<ConversationRun>) => void;
   /** Reads one conversation's run record, or an empty one. */
@@ -151,6 +172,8 @@ export const useAppState = create<AppState>((set, get) => ({
   navOpen: true,
   lastRunId: null,
   attachments: [],
+  agentFilterKey: null,
+  filterOutcome: null,
   runs: {},
 
   setSpace: (id) => set({ spaceId: id }),
@@ -180,6 +203,18 @@ export const useAppState = create<AppState>((set, get) => ({
   setNavOpen: (navOpen) => set({ navOpen }),
   setLastRunId: (lastRunId) => set({ lastRunId }),
   setAttachments: (attachments) => set({ attachments }),
+  // The count goes with it: a stale "3 of 4" under a full view would be a lie
+  // of exactly the kind this feature exists to stop.
+  setAgentFilterKey: (agentFilterKey) => set({ agentFilterKey, filterOutcome: null }),
+  reportFilterOutcome: (filterOutcome) =>
+    set((s) =>
+      s.filterOutcome &&
+      s.filterOutcome.targetId === filterOutcome.targetId &&
+      s.filterOutcome.matched === filterOutcome.matched &&
+      s.filterOutcome.total === filterOutcome.total
+        ? s
+        : { filterOutcome },
+    ),
   patchRun: (conversationId, patch) =>
     set((s) => ({
       runs: { ...s.runs, [conversationId]: { ...(s.runs[conversationId] ?? emptyRun()), ...patch } },
