@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export * from './openui-components.ts';
+
 export const MODULE_ID = 'procurement';
 
 /* -------------------------------------------------------------------------- */

@@ -168,17 +168,105 @@ describe('GET /api/ui/views', () => {
     const res = await api('/api/ui/views');
     expect(res.status).toBe(200);
     const ids = res.body.views.map((v: any) => v.id);
-    expect(ids).toEqual(['procurement.data', 'procurement.cases']);
+    expect(ids).toEqual([
+      'procurement.data',
+      'procurement.cases',
+      'procurement.case.detail',
+      'procurement.item.provenance',
+    ]);
     const data = res.body.views[0];
     expect(data.primaryOperation).toBe('procurement.suppliers');
     expect(data.composition).toMatch(/DataTable\(\{operation: "procurement.suppliers"\}/);
-    // Each view has the id of a UI target the agent can open.
+    // The two list screens are named UI targets the agent can navigate to
+    // directly. The two per-record screens below are reached through a
+    // record's own `route` instead (the case's title link, the item's
+    // "pochodzenie" link) — nothing to navigate to without already knowing
+    // which record — so they name no UI target of their own.
     const targets = (await api('/api/ui/targets')).body.targets.map((t: any) => t.id);
-    for (const id of ids) expect(targets).toContain(id);
+    for (const id of ['procurement.data', 'procurement.cases']) expect(targets).toContain(id);
+  });
+
+  it('widok szczegolow sprawy i pochodzenia pozycji nie zawezaja niczego — brak wlasnego celu UI', async () => {
+    const res = await api('/api/ui/views');
+    const byId = Object.fromEntries(res.body.views.map((v: any) => [v.id, v]));
+    expect(byId['procurement.case.detail'].params).toEqual(['caseId']);
+    expect(byId['procurement.case.detail'].primaryOperation).toBeUndefined();
+    expect(byId['procurement.case.detail'].composition).toContain(
+      'DataTable({operation: "procurement.case_offer_items", input: {caseId: $caseId}}',
+    );
+    expect(byId['procurement.item.provenance'].params).toEqual(['itemId']);
+    expect(byId['procurement.item.provenance'].composition).toBe('root = ItemProvenance($itemId)');
   });
 
   it('bez sesji nie ma listy widokow', async () => {
     expect((await api('/api/ui/views', { as: null })).status).toBe(401);
+  });
+});
+
+describe('procurement.case_offer_items', () => {
+  it('splaszcza pozycje wszystkich ofert sprawy, z dostawca i waluta oferty na wierszu', async () => {
+    const res = await read({ operation: 'procurement.case_offer_items', input: { caseId } });
+    expect(res.status).toBe(200);
+    expect(res.body.descriptor.collection).toBe('items');
+    expect(res.body.descriptor.record).toEqual({ kind: 'offer_item', idField: 'id' });
+    const rows = recordsOf(res.body.result, res.body.descriptor);
+    expect(rows.length).toBeGreaterThan(0);
+
+    // Same rows a direct walk of the case's offers would find, service-side.
+    const expected = h.service
+      .getCaseDetail(caseId, h.ownerId)
+      .offers.flatMap(({ offer, supplierName, items }) =>
+        items.map((item) => ({
+          id: item.id,
+          supplierName,
+          name: item.name,
+          unit: item.unit,
+          quantityMilli: item.quantityMilli,
+          unitPriceMinor: item.unitPriceMinor,
+          currency: offer.currency,
+        })),
+      );
+    expect(rows.map((r) => r.id)).toEqual(expected.map((r) => r.id));
+    for (const row of rows) {
+      const want = expected.find((r) => r.id === row.id)!;
+      expect(row.supplierName).toBe(want.supplierName);
+      expect(row.currency).toBe(want.currency);
+      expect(row.unitPriceMinor).toBe(want.unitPriceMinor);
+    }
+
+    // Formatted through the one shared rule, not re-implemented by the screen.
+    const priced = rows.find((r) => r.unitPriceMinor !== null)!;
+    const priceField = res.body.descriptor.fields.find((f: RecordField) => f.field === 'unitPriceMinor')!;
+    expect(formatFieldValue(priced, priceField)).toMatch(new RegExp(`${priced.currency}$`));
+  });
+
+  it('sprawa innego wlasciciela jest odrzucona, nie pusta lista pozycji', async () => {
+    const res = await read({ operation: 'procurement.case_offer_items', input: { caseId } }, otherCookie);
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('forbidden');
+    expect(res.body.result).toBeUndefined();
+  });
+
+  it('nieistniejaca sprawa daje not_found, nie pusta lista', async () => {
+    const res = await read({ operation: 'procurement.case_offer_items', input: { caseId: 'brak-takiej-sprawy' } });
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('not_found');
+  });
+
+  it('deskryptor jest zarejestrowanym, poprawnym opisem wyniku', async () => {
+    const res = await api('/api/read/operations');
+    const op = res.body.operations.find((o: any) => o.name === 'procurement.case_offer_items');
+    expect(op).toBeTruthy();
+    expect(op.inputKeys).toEqual(['caseId']);
+    expect(readResultDescriptorSchema.safeParse(op.descriptor).success).toBe(true);
+    expect(op.descriptor.fields.map((f: RecordField) => f.field)).toEqual([
+      'supplierName',
+      'name',
+      'unit',
+      'quantityMilli',
+      'unitPriceMinor',
+      'currency',
+    ]);
   });
 });
 
@@ -199,7 +287,12 @@ describe('zgodnosc zawezania UiTarget z deskryptorem widoku przy starcie', () =>
   it('modul przykladowy przechodzi kontrole', () => {
     const registry = new ServerModuleRegistry();
     expect(() => registry.register(createProcurementModule(h.platform.services))).not.toThrow();
-    expect(registry.views().map((v) => v.id)).toEqual(['procurement.data', 'procurement.cases']);
+    expect(registry.views().map((v) => v.id)).toEqual([
+      'procurement.data',
+      'procurement.cases',
+      'procurement.case.detail',
+      'procurement.item.provenance',
+    ]);
   });
 
   it('pole zawezania spoza deskryptora zatrzymuje start z nazwa pola', () => {

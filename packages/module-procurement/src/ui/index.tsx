@@ -8,10 +8,12 @@ import {
   CostChartCard,
   procurementCardRenderers,
 } from './cards.tsx';
+import { procurementDetailOpenuiComponents } from './detailComponents.tsx';
 import { CaseDetailPage, CasesPage, DataPage, ItemProvenancePage } from './pages.tsx';
 
 export { CaseDetailPage, CasesPage, DataPage, ItemProvenancePage } from './pages.tsx';
 export * from './cards.tsx';
+export * from './detailComponents.tsx';
 
 const menu: MenuItemContribution[] = [
   { id: 'procurement.cases', section: 'records', label: 'Wszystkie sprawy', to: '/cases', order: 10 },
@@ -40,6 +42,7 @@ const starters: ConversationStarterContribution[] = [
  * layout are the same table reading the same backend data.
  */
 const openuiComponents = [
+  ...procurementDetailOpenuiComponents,
   defineComponent({
     name: 'OfferComparison',
     description:

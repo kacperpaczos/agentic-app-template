@@ -78,6 +78,31 @@ export class ProcurementService {
     return this.repo.listSuppliers(ownerId);
   }
 
+  /**
+   * Every offer item of a case, one row per item, with its offer's supplier
+   * and currency copied onto the row.
+   *
+   * Built from {@link getCaseDetail} rather than its own queries: the case
+   * detail screen's item table and its "Oferty" card both walk case -> offer ->
+   * item, and a second query here could disagree with the first about which
+   * items exist.
+   */
+  listCaseOfferItems(caseId: string, ownerId: string) {
+    const detail = this.getCaseDetail(caseId, ownerId);
+    return detail.offers.flatMap(({ offer, supplierName, items }) =>
+      items.map((item) => ({
+        id: item.id,
+        offerId: offer.id,
+        supplierName,
+        name: item.name,
+        unit: item.unit,
+        quantityMilli: item.quantityMilli,
+        unitPriceMinor: item.unitPriceMinor,
+        currency: offer.currency,
+      })),
+    );
+  }
+
   getOfferDetail(offerId: string, ownerId: string) {
     const offer = this.repo.getOffer(offerId, ownerId);
     return {
@@ -207,7 +232,7 @@ export class ProcurementService {
         unitPriceFormatted:
           item.unitPriceMinor === null ? null : formatMinor(item.unitPriceMinor, offer.currency),
       },
-      offer: { id: offer.id, reference: offer.reference, receivedAt: offer.receivedAt },
+      offer: { id: offer.id, reference: offer.reference, receivedAt: offer.receivedAt, currency: offer.currency },
       supplier: { id: supplier.id, name: supplier.name },
       provenance: entries.map((e) => ({
         field: e.field,
