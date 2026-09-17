@@ -23,6 +23,7 @@ export * from './registry/modules.ts';
 export * from './registry/catalog.ts';
 export * from './registry/ui-targets.ts';
 export * from './registry/read-operations.ts';
+export * from './registry/openui-validation.ts';
 export * from './registry/views.ts';
 export * from './services/index.ts';
 export * from './services/base-data.ts';

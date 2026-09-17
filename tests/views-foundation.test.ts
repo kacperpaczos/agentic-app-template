@@ -768,6 +768,11 @@ describe('szew narzedzi i prompt', () => {
       'workspace_outputs',
       'artifact_create',
       'artifact_publish_file',
+      // Appended by agent views; the order before them is unchanged.
+      'agent_views_list',
+      'agent_view_create',
+      'agent_view_update',
+      'agent_view_remove',
     ]);
   });
 

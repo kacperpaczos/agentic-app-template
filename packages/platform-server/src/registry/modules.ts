@@ -10,6 +10,8 @@ import type {
 } from '@platform/contracts';
 import { AppError , type UiTarget } from '@platform/contracts';
 import { buildUiTargetCatalog } from './ui-targets.ts';
+import { OpenUiServerCatalog, validateComposition } from './openui-validation.ts';
+import type { ReadOperationLookup } from './read-operations.ts';
 import { checkReadDescriptor, checkViewAgainstTarget, checkViewShape } from './views.ts';
 
 export interface RegisteredRoute {
@@ -72,6 +74,19 @@ export class ServerModuleRegistry {
       readOperations.set(qualifiedName, { qualifiedName, moduleId: mod.meta.id, definition: op });
     }
 
+    /*
+     * The module's OpenUI components join the catalog its views are checked
+     * against — refused here, too, when a name is already taken.
+     */
+    const openui =
+      mod.views?.length || mod.openuiComponents?.length
+        ? new OpenUiServerCatalog([...this.#modules.flatMap((m) => m.openuiComponents ?? []), ...(mod.openuiComponents ?? [])])
+        : null;
+    const reads: ReadOperationLookup = {
+      readOperation: (name) => readOperations.get(name) ?? this.#readOperations.get(name),
+      readOperations: [...this.#readOperations.values(), ...readOperations.values()],
+    };
+
     const views = new Map<string, RegisteredView>();
     for (const raw of mod.views ?? []) {
       const view = checkViewShape(mod.meta.id, raw);
@@ -85,6 +100,27 @@ export class ServerModuleRegistry {
         readOperation: (name) =>
           (readOperations.get(name) ?? this.#readOperations.get(name))?.definition,
       });
+      /*
+       * The composition itself, parsed as the browser will parse it: known
+       * components with valid props, registered reads with valid input, only
+       * declared fields, and a `DataTable` on the primary read the narrowing
+       * applies to. A view that fails any of it would render as a quietly
+       * broken screen, so the module does not start.
+       */
+      try {
+        validateComposition({
+          source: view.composition,
+          mode: 'catalog',
+          catalog: openui!,
+          reads,
+          params: view.params,
+          primaryOperation: view.primaryOperation,
+        });
+      } catch (err) {
+        throw new Error(
+          `Modul ${mod.meta.id}, widok ${view.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
       views.set(view.id, { moduleId: mod.meta.id, definition: view });
     }
 

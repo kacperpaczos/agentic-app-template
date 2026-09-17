@@ -62,7 +62,9 @@ export function canvasTools(services: PlatformServices): Array<ModuleToolDefinit
       }),
       handler: async (input: any, ctx: ToolCallContext) => {
         const spaceId = requireSpace(ctx, input.spaceId);
-        const spec = services.catalog.validate(input.spec);
+        const spec = services.catalog.validate(input.spec, {
+          mode: services.canvas.compositionModeOfSpace(spaceId, ctx.ownerId),
+        });
         const card = await services.canvas.addCard(
           { spaceId, title: input.title, spec, geometry: input.geometry, operationId: input.operationId },
           ctx.ownerId,
@@ -84,7 +86,9 @@ export function canvasTools(services: PlatformServices): Array<ModuleToolDefinit
         operationId: z.string().min(8).max(200).optional(),
       }),
       handler: async (input: any, ctx: ToolCallContext) => {
-        const spec = services.catalog.validate(input.spec);
+        const spec = services.catalog.validate(input.spec, {
+          mode: services.canvas.compositionModeOfCard(input.cardId, ctx.ownerId),
+        });
         const card = await services.canvas.updateSpec({ ...input, spec }, ctx.ownerId);
         ctx.emit({ type: 'canvas_changed', spaceId: card.spaceId });
         return { cardId: card.id, specVersion: card.specVersion };

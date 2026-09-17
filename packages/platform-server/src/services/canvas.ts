@@ -1,4 +1,5 @@
 import {
+  AGENT_VIEWS_SCOPE_KIND,
   AppError,
   canvasViewportSchema,
   type AddCardInput,
@@ -12,6 +13,7 @@ import {
   type UpdateCardSpecInput,
 } from '@platform/contracts';
 import type { Db } from '../db/client.ts';
+import type { CompositionMode } from '../registry/openui-validation.ts';
 import { newId, nowIso } from '../util/id.ts';
 import type { IdempotencyStore } from './idempotency.ts';
 
@@ -153,6 +155,36 @@ export class CanvasService {
       .get(input.ownerId, input.scopeKind, input.scopeId) as SpaceRow | undefined;
     if (existing) return { space: toSpace(existing), created: false };
     return { space: this.createSpace(input), created: true };
+  }
+
+  /** The space bound to a scope, or null — never creates one. */
+  findScopedSpace(ownerId: string, scopeKind: string, scopeId: string): CanvasSpace | null {
+    const row = this.db.$client
+      .prepare('SELECT * FROM canvas_spaces WHERE owner_id = ? AND scope_kind = ? AND scope_id = ?')
+      .get(ownerId, scopeKind, scopeId) as SpaceRow | undefined;
+    return row ? toSpace(row) : null;
+  }
+
+  /** One card, for its owner. */
+  getCard(cardId: string, ownerId: string): CanvasCard {
+    return toCard(this.#cardRow(cardId, ownerId).card);
+  }
+
+  /**
+   * How a composition written into this space is validated.
+   *
+   * A conversation's agent views space takes only what `agent-views` mode
+   * allows, whichever door the write comes through — the agent view tools, the
+   * generic canvas tools or the HTTP API — so the rule cannot be sidestepped by
+   * choosing a different tool.
+   */
+  compositionModeOfSpace(spaceId: string, ownerId: string): CompositionMode {
+    return this.#spaceRow(spaceId, ownerId).scope_kind === AGENT_VIEWS_SCOPE_KIND ? 'agent-views' : 'catalog';
+  }
+
+  /** {@link compositionModeOfSpace} of the space holding a card. */
+  compositionModeOfCard(cardId: string, ownerId: string): CompositionMode {
+    return this.#cardRow(cardId, ownerId).space.scope_kind === AGENT_VIEWS_SCOPE_KIND ? 'agent-views' : 'catalog';
   }
 
   setViewport(spaceId: string, ownerId: string, viewport: CanvasViewport): CanvasSpace {

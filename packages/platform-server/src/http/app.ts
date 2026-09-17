@@ -4,6 +4,7 @@ import { getCookie, setCookie } from 'hono/cookie';
 import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import {
+  AGENT_VIEWS_SCOPE_KIND,
   AppError,
   appContextSchema,
   addCardInputSchema,
@@ -262,6 +263,25 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
   app.get('/api/conversations/:id', (c) =>
     json(c, services.conversations.get(c.req.param('id'), c.get('ownerId'))),
   );
+
+  /**
+   * The conversation's agent views: its space and cards, or no space yet.
+   *
+   * Read-only on purpose — opening the page must not create a space; the agent
+   * creates it with its first view. Under the conversation, so the owner check
+   * is the conversation's and a view is never looked up by a space id the
+   * client could have picked.
+   */
+  app.get('/api/conversations/:id/agent-views', (c) => {
+    const ownerId = c.get('ownerId');
+    const conversation = services.conversations.get(c.req.param('id'), ownerId);
+    const space = services.canvas.findScopedSpace(ownerId, AGENT_VIEWS_SCOPE_KIND, conversation.id);
+    return json(c, {
+      conversationId: conversation.id,
+      space,
+      cards: space ? services.canvas.getState(space.id, ownerId).cards : [],
+    });
+  });
 
   app.get('/api/conversations/:id/runs', (c) =>
     json(c, { runs: services.runs.listForConversation(c.req.param('id'), c.get('ownerId')) }),
@@ -563,7 +583,9 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
   app.post('/api/canvas/cards', async (c) => {
     const ownerId = c.get('ownerId');
     const body = addCardInputSchema.parse(await c.req.json());
-    const spec = services.catalog.validate(body.spec);
+    const spec = services.catalog.validate(body.spec, {
+      mode: services.canvas.compositionModeOfSpace(body.spaceId, ownerId),
+    });
     return json(c, await services.canvas.addCard({ ...body, spec }, ownerId), 201);
   });
 
@@ -574,7 +596,9 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
       ...(await c.req.json()),
       cardId: c.req.param('id'),
     });
-    const spec = services.catalog.validate(body.spec);
+    const spec = services.catalog.validate(body.spec, {
+      mode: services.canvas.compositionModeOfCard(body.cardId, ownerId),
+    });
     return json(c, await services.canvas.updateSpec({ ...body, spec }, ownerId));
   });
 
