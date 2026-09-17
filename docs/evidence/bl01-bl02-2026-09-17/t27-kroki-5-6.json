@@ -1,0 +1,73 @@
+{
+  "zapisano": "2026-09-17T20:57:26.821Z",
+  "kodCommit": "d986b891d3b4f91efed73f67a487b932d88f0478",
+  "zrodlo": "prawdziwy model (subskrypcja Claude), instancja testowa suity przegladarkowej",
+  "spec": "e2e/bl01-bl02-model.spec.ts",
+  "proba": "T27 — kroki 5 i 6",
+  "kryteria": [
+    "L3.14",
+    "L3.16",
+    "L3.17",
+    "L3.18"
+  ],
+  "werdykt": "krok 5 potwierdzony, krok 6 niesprawdzony (blad testu: zly przycisk „New chat”)",
+  "przebiegi": [
+    {
+      "runId": "run_9411a0c692a04d8f822c",
+      "polecenie": "Zestaw mi w widokach agenta pozycje ofert w PLN ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa, a pod spodem wykres tych cen.",
+      "status": "succeeded",
+      "czasMs": 52492,
+      "pierwszyTekstMs": 16659,
+      "wKolejceMs": 3,
+      "narzedzia": [
+        "ToolSearch",
+        "procurement_search",
+        "agent_view_create",
+        "ui_state"
+      ]
+    }
+  ],
+  "rozmowa": "cnv_3d08b94c4940410aa0dd",
+  "kartyZTegoWykonania": [
+    "crd_ca29fa01661945d88352"
+  ],
+  "odczytalEkranPoZapisie": true,
+  "komponenty": [
+    {
+      "component": "DataTable",
+      "state": "ready",
+      "operation": "procurement.case_offer_items",
+      "rekordow": 12
+    },
+    {
+      "component": "DataChart",
+      "state": "ready",
+      "operation": "procurement.case_offer_items",
+      "rekordow": 12
+    }
+  ],
+  "mutacja": {
+    "rekord": "pci_7287ff5347f94146a52e",
+    "nowaWartosc": "7777,50 PLN",
+    "gdzie": "akcja rekordu w widoku agenta"
+  },
+  "poPrzeladowaniu": {
+    "karty": [
+      "crd_ca29fa01661945d88352"
+    ],
+    "wartosciZgodneZBackendem": true
+  },
+  "turyModeluWydaneLacznie": 17,
+  "coPotwierdzono": [
+    "jedna tura zlozyla widok z tabela I wykresem, obie instancje z filtrem currency=PLN wpisanym przez model, z prawdziwym identyfikatorem sprawy z procurement_search",
+    "karta ma nowy identyfikator z tego wykonania (crd_ca29fa01661945d88352); model odczytal ekran przez ui_state po zapisie",
+    "tabela 12 rekordow i wykres 12 rekordow, oba state=ready, kazda komorka i zakres serii rowne POST /api/read",
+    "mutacja akcja rekordu WEWNATRZ widoku agenta (pci_7287ff5347f94146a52e -> 7777,50 PLN), wartosc na ekranie rowna swiezemu odczytowi",
+    "KROK 5: po przeladowaniu ta sama karta wraca, jest widoczna, a wszystkie wartosci (ze zmieniona cena) sa rowne backendowi"
+  ],
+  "czegoNieSprawdzono": [
+    "KROK 6: wyjscie do nowej rozmowy i powrot z szuflady — test nie kliknal przycisku „New chat”"
+  ],
+  "bladTestu": "Selektor .pf-chat [aria-label=\"New chat\"] trafil w DUZY przycisk w szufladzie rozmow, ktora jest poza kadrem przy zamknietej szufladzie; na /agent-views klikniecie przechwytuje react-flow__pane. Klikanie ponawialo sie do limitu czasu testu (11 min). e2e/session-restore.spec.ts opisuje dokladnie te pulapke i uzywa .pf-chat .openui-icon-button[aria-label=\"New chat\"]. Poprawione w kodzie; nie da sie tego przebiegu powtorzyc bez kolejnej tury, a budzet 6 tur jest wyczerpany.",
+  "uwagaODanych": "Przywrocenie ceny z zasiewu nie wykonalo sie, bo Playwright przerwal test na limicie czasu przed blokiem finally. Bez skutkow dla innych speców: e2e/support/boot-server.ts kasuje i odtwarza katalog .e2e-data przed kazdym uruchomieniem suity."
+}

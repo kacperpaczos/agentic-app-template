@@ -1,6 +1,6 @@
 {
   "budzet": 18,
-  "wydane": 16,
+  "wydane": 17,
   "tury": [
     {
       "nr": 1,
@@ -119,6 +119,14 @@
       "polecenie": "Zawez zestawienie i wykres do pozycji w PLN.",
       "etap": "dokonczenie-T27-po-Task-9",
       "runId": "run_893c41ea783949bdbb7a"
+    },
+    {
+      "nr": 17,
+      "o": "2026-09-17T20:46:26.442Z",
+      "proba": "T27 — kroki 5 i 6",
+      "polecenie": "Zestaw mi w widokach agenta pozycje ofert w PLN ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa, a pod spodem wykres tych cen.",
+      "etap": "dokonczenie-T27-po-Task-9",
+      "runId": "run_9411a0c692a04d8f822c"
     }
   ]
 }

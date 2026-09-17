@@ -1167,7 +1167,17 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       );
       const title = threads.find((t) => t.id === conversationId)!.title;
 
-      await page.locator('.pf-chat [aria-label="New chat"]').first().click();
+      /*
+       * The header icon, not the large button in the drawer.
+       *
+       * Both carry `aria-label="New chat"`. The large one lives inside the
+       * conversation drawer, off-canvas while it is closed, so a click on it
+       * lands on whatever is underneath — on "Widoki agenta" that is the React
+       * Flow pane, which is what happened on `run_9411a0c692a04d8f822c`: the
+       * click retried until the test timed out and step 6 was never reached.
+       * `e2e/session-restore.spec.ts` documents the same trap.
+       */
+      await page.locator('.pf-chat .openui-icon-button[aria-label="New chat"]').first().click();
       await expect(viewsPage(page)).toHaveAttribute('data-state', 'no-conversation');
       await expect(page.getByTestId(`card-${tableCardId}`)).toHaveCount(0);
 
@@ -1381,7 +1391,17 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       );
       const title = threads.find((t) => t.id === conversationId)!.title;
 
-      await page.locator('.pf-chat [aria-label="New chat"]').first().click();
+      /*
+       * The header icon, not the large button in the drawer.
+       *
+       * Both carry `aria-label="New chat"`. The large one lives inside the
+       * conversation drawer, off-canvas while it is closed, so a click on it
+       * lands on whatever is underneath — on "Widoki agenta" that is the React
+       * Flow pane, which is what happened on `run_9411a0c692a04d8f822c`: the
+       * click retried until the test timed out and step 6 was never reached.
+       * `e2e/session-restore.spec.ts` documents the same trap.
+       */
+      await page.locator('.pf-chat .openui-icon-button[aria-label="New chat"]').first().click();
       await expect(viewsPage(page)).toHaveAttribute('data-state', 'no-conversation');
       for (const card of afterReload.cards) {
         await expect(page.getByTestId(`card-${card.id}`)).toHaveCount(0);
