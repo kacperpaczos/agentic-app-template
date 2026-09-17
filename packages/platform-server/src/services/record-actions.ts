@@ -8,7 +8,7 @@ import {
   type RecordActionResponse,
   type ToolCallContext,
 } from '@platform/contracts';
-import { executeTool } from '../agent/mcp.ts';
+import { executeTool } from '../registry/tool-execution.ts';
 import type { ServerModuleRegistry } from '../registry/modules.ts';
 import { prepareRead, runPreparedRead } from '../registry/read-operations.ts';
 import {
@@ -125,9 +125,15 @@ export async function performRecordAction(
   );
 
   if (replayed && outcome.request !== fingerprint) {
+    /*
+     * The identifier belongs to an attempt that was performed — saying "nothing
+     * changed" without saying that would read as "your earlier change did not
+     * happen".
+     */
     throw new AppError(
       'conflict',
-      `operationId ${request.operationId} zostal juz uzyty dla innej akcji lub innych wartosci; nic nie zmieniono.`,
+      `operationId ${request.operationId} zostal juz uzyty dla innej akcji lub innych wartosci — tamta zmiana ` +
+        'zostala wykonana. Tym zadaniem nie zmieniono nic; odczytaj rekord ponownie i powtorz zmiane z nowym operationId.',
       { reason: 'operation_id_reused' },
     );
   }

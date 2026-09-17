@@ -154,7 +154,7 @@ export function DataTableView(props: DataTableProps) {
   if (!model) {
     return (
       <DataFrame {...frame} state={state === 'forbidden' ? 'forbidden' : 'error'}>
-        <RecordActionStatus controller={recordActions} formShown={false} />
+        <RecordActionStatus controller={recordActions} formShown={false} refreshing={refreshing} />
         <FailureBody error={error} />
       </DataFrame>
     );
@@ -217,7 +217,7 @@ export function DataTableView(props: DataTableProps) {
           onApply={(predicates) => address.change({ predicates })}
         />
       )}
-      <RecordActionStatus controller={recordActions} formShown={formShown} />
+      <RecordActionStatus controller={recordActions} formShown={formShown} refreshing={refreshing} />
       {shownState === 'empty' ? (
         <EmptyBody total={outcome?.total ?? model.total} matched={0} />
       ) : (

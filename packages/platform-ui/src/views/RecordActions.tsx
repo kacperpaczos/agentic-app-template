@@ -5,6 +5,7 @@ import {
   formatFieldValue,
   parseFieldInput,
   recordIdOf,
+  stableJson,
   type DataRecord,
   type DataSource,
   type ReadResultDescriptor,
@@ -40,7 +41,13 @@ import { invalidateBusinessData, invalidateChangedData } from '../api/queries.ts
 /** Refusals after which the rows on screen are known to be unchanged. */
 const DATA_UNCHANGED = new Set(['validation_failed', 'domain_rule_violated']);
 
-type Target = { recordId: string; actionId: string; operationId: string };
+type Target = {
+  recordId: string;
+  actionId: string;
+  operationId: string;
+  /** The values already sent under `operationId`, or undefined before the first send. */
+  sentValues?: string;
+};
 type Outcome =
   | { kind: 'done'; recordId: string; actionId: string; message: string }
   | { kind: 'failed'; recordId: string; actionId: string; error: AppError };
@@ -95,6 +102,17 @@ export function useRecordActions(
     }
 
     setOutcome(null);
+    /*
+     * The replay guard covers *this* attempt: resubmitting the same values
+     * after a lost answer returns the first outcome instead of changing the
+     * data again. Editing the value first makes it a different change, so it
+     * gets its own identifier — otherwise the user would be told their new
+     * value collides with their own earlier attempt.
+     */
+    const sent = stableJson(values);
+    const operationId =
+      target.sentValues !== undefined && target.sentValues !== sent ? newOperationId() : target.operationId;
+    setOpen({ ...target, operationId, sentValues: sent });
     mutation.mutate(
       {
         operation: source.operation,
@@ -102,9 +120,7 @@ export function useRecordActions(
         action: action.id,
         recordId: target.recordId,
         values,
-        // Kept for the life of the form: resubmitting after a lost answer
-        // returns the first outcome instead of changing the data again.
-        operationId: target.operationId,
+        operationId,
       },
       {
         onSuccess: () => {
@@ -113,7 +129,7 @@ export function useRecordActions(
             kind: 'done',
             recordId: target.recordId,
             actionId: target.actionId,
-            message: `${action.label}: zapisano. Dane sa ponownie wczytywane z backendu.`,
+            message: `${action.label}: zapisano.`,
           });
           // A saved change is a data change like a tool's `data_changed`.
           invalidateChangedData(qc);
@@ -315,14 +331,24 @@ function RecordActionError({ error, id }: { error: AppError; id?: string }) {
  * The last outcome, above the table: a saved change, or a refusal whose form
  * is no longer on screen (the table itself failed, or the record is gone from
  * it) — a refusal must stay readable after the rows it was about disappear.
+ *
+ * The note about re-reading is there only while the read is actually running
+ * (`refreshing`): once the rows are back the sentence would be a claim about
+ * something that is over, and the frame no longer says it either.
  */
-export function RecordActionStatus(props: { controller: RecordActionsController; formShown: boolean }) {
+export function RecordActionStatus(props: {
+  controller: RecordActionsController;
+  formShown: boolean;
+  /** The table is fetching the read again right now. */
+  refreshing?: boolean;
+}) {
   const { outcome } = props.controller;
   if (!outcome) return null;
   if (outcome.kind === 'done') {
     return (
       <p className="pf-record-action__status" role="status" data-testid="record-action-status" data-record-id={outcome.recordId}>
         {outcome.message}
+        {props.refreshing ? ' Dane sa ponownie wczytywane z backendu.' : ''}
       </p>
     );
   }

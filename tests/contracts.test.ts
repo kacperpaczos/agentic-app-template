@@ -244,6 +244,12 @@ describe('kontrakty: walidacja, uprawnienia, konflikty, powtorzenia', () => {
   });
 
   /* ------------------ same rules through HTTP and through MCP ------------- */
+  /*
+   * `registry.callTool` is the execution the MCP server performs for the model
+   * (`executeTool`: the tool's own input validation, then its handler with the
+   * caller's context); the MCP server only turns the outcome into a tool
+   * result. So a call here fails, and succeeds, exactly as the model's does.
+   */
 
   it('narzedzie MCP i endpoint HTTP prowadza do tej samej reguly', async () => {
     const { item } = firstItem();

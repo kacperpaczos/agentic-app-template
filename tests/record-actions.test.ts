@@ -167,6 +167,10 @@ describe('POST /api/actions', () => {
     const reused = await act({ ...body, values: { unitPrice: '1' } });
     expect(reused.status).toBe(409);
     expect(reused.body.error.details.reason).toBe('operation_id_reused');
+    // The refusal says the earlier attempt was performed — "nothing changed"
+    // alone would read as "your earlier change did not happen".
+    expect(reused.body.error.message).toMatch(/tamta zmiana zostala wykonana/);
+    expect(reused.body.error.message).toMatch(/nowym operationId/);
     expect(spy.calls).toHaveLength(1);
     expect((await items()).find((r) => r.id === item.id)!.unitPriceMinor).toBe(1425000);
     expect(versionOf(item.id)).toBe(before + 1);

@@ -1,6 +1,7 @@
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { AppError, type ModuleToolDefinition, type ToolCallContext } from '@platform/contracts';
 import type { ServerModuleRegistry } from '../registry/modules.ts';
+import { executeTool } from '../registry/tool-execution.ts';
 
 export interface McpHostTool {
   /** Name inside the MCP server. */
@@ -54,39 +55,12 @@ export type ToolInvocationResult = {
 };
 
 /**
- * Validates a tool call's arguments against the tool's schema and runs its
- * handler with the given context. Throws what the handler throws.
+ * Runs one tool call for the MCP server: the shared {@link executeTool}, with
+ * the outcome turned into an MCP result.
  *
- * The one execution of a tool: the MCP server wraps it into a tool result
- * ({@link invokeTool}), and a record action performed from a table
- * (`POST /api/actions`) calls it directly — so a user's click and the model's
- * call pass the same validation into the same handler.
- */
-export async function executeTool(
-  entry: Pick<ToolEntry, 'localName' | 'def'>,
-  args: unknown,
-  ctx: ToolCallContext,
-): Promise<unknown> {
-  const { localName, def } = entry;
-  const parsed = def.inputSchema.safeParse(args ?? {});
-  if (!parsed.success) {
-    throw new AppError('validation_failed', `Nieprawidlowe wejscie narzedzia ${localName}.`, {
-      issues: parsed.error.issues.map((i) => ({
-        path: i.path.join('.'),
-        message: i.message,
-      })),
-    });
-  }
-  return def.handler(parsed.data as never, ctx);
-}
-
-/**
- * Runs one tool call: validate the arguments against the tool's schema, call
- * its handler with the run's context, and turn the outcome into an MCP result.
- *
- * The only way a tool is executed, whoever asks — the MCP server the model
- * talks to, or a scripted stand-in in a test — so a test that calls a tool
- * exercises the validation and error mapping the model gets, not a copy.
+ * The error mapping the model sees is here; the validation and the handler are
+ * the ones every other caller uses, so a test that calls a tool exercises what
+ * the model gets, not a copy.
  */
 export async function invokeTool(
   entry: Pick<ToolEntry, 'localName' | 'def'>,

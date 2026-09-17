@@ -14,6 +14,7 @@ import {
   OFFER_ITEMS,
   PROJECTORS_IN_PLN,
   VIEW_COLUMNS,
+  byPriceDesc,
 } from './support/interactions-scenario.ts';
 
 /**
@@ -154,6 +155,25 @@ async function openCaseScreen(page: Page, caseId: string): Promise<Locator> {
   return table;
 }
 
+/** This tab's identity, as it keeps it (Task 3's snapshot session). */
+const clientIdOf = (page: Page) =>
+  page.evaluate(() => JSON.parse(sessionStorage.getItem('platform.ui-snapshot.client') ?? '{}').clientId as string);
+
+/** This tab's latest published description of its screen. */
+async function publishedSnapshot(page: Page): Promise<any> {
+  const clientId = await clientIdOf(page);
+  expect(clientId).toMatch(/^ui_/);
+  return (await backendJson<any>(page, `/api/ui/snapshot?clientId=${clientId}`)).snapshot;
+}
+
+/** What the published description says about the view's table, if anything. */
+const tableInstance = (snapshot: any) =>
+  snapshot?.instances?.find((i: any) => i.component === 'DataTable' && i.source.operation === OFFER_ITEMS) ?? null;
+
+/** Records the view shows, in the order its `sort` puts them. */
+const shownRecords = (backend: ReadResponse) =>
+  recordsOf(backend.result, backend.descriptor!).filter(PROJECTORS_IN_PLN).sort(byPriceDesc);
+
 const priceCell = (scope: Locator, id: string) => scope.locator(`td[data-record-id="${id}"][data-field="unitPriceMinor"]`);
 const actionButton = (table: Locator, id: string) =>
   table.locator(`tr[data-record-id="${id}"] [data-record-action="${ACTION}"]`);
@@ -177,9 +197,13 @@ async function changePriceByKeyboard(page: Page, table: Locator, record: DataRec
   await page.keyboard.press('Enter');
   const sent = (await request).postDataJSON();
   expect((await response).status()).toBe(200);
-  await expect(table.getByTestId('record-action-status')).toContainText('Zmien cene: zapisano');
+  const status = table.getByTestId('record-action-status');
+  await expect(status).toContainText('Zmien cene: zapisano.');
   await expect(form).toHaveCount(0);
   await expect(button).toBeFocused();
+  // Once the rows are back, nothing claims they are still being read again.
+  await expect(table).not.toHaveAttribute('data-refreshing', 'true');
+  await expect(status).toHaveText('Zmien cene: zapisano.');
   return { sent, answer: await (await response).json() };
 }
 
@@ -189,7 +213,8 @@ async function changePriceByKeyboard(page: Page, table: Locator, record: DataRec
  */
 async function expectViewMatchesBackend(card: Locator, backend: ReadResponse) {
   const descriptor = backend.descriptor!;
-  const records = recordsOf(backend.result, descriptor).filter(PROJECTORS_IN_PLN);
+  // The composition orders by price, so this is the order on screen too.
+  const records = shownRecords(backend);
   expect(records.length).toBe(3);
 
   const table = card.locator('[data-component="DataTable"]');
@@ -332,7 +357,15 @@ test.describe('interakcje widokow agenta', () => {
     const editedRow = projectorOf(backend, 'AV Technika');
     await actionButton(table, String(editedRow.id)).click();
     const openForm = table.getByTestId('record-action-form');
+    await expect
+      .poll(async () => tableInstance(await publishedSnapshot(page))?.state, { timeout: 20_000 })
+      .toBe('ready');
+    const described = tableInstance(await publishedSnapshot(page));
     await openForm.getByLabel('Nowa cena jednostkowa').fill('111');
+    // The description Task 3 publishes is about the records, not about the
+    // form: opening one changes neither the state, the page nor the rows.
+    await page.waitForTimeout(1500);
+    expect(tableInstance(await publishedSnapshot(page))).toEqual(described);
 
     await send(page, '[mcp] Zmien cene projektora MediaPro na 14 250 PLN');
     const strip = page.getByTestId('run-state');
@@ -371,6 +404,11 @@ test.describe('interakcje widokow agenta', () => {
     const version = await itemVersion(page, caseId, String(target.id));
 
     const table = card.locator('[data-component="DataTable"]');
+    await expect
+      .poll(async () => tableInstance(await publishedSnapshot(page))?.state, { timeout: 20_000 })
+      .toBe('ready');
+    const describedBefore = await publishedSnapshot(page);
+
     const { sent, answer } = await changePriceByKeyboard(page, table, target, '8 750,25');
     // The request the case screen sends for the same change: same read, same action.
     expect(sent).toMatchObject({ operation: OFFER_ITEMS, input: { caseId }, action: ACTION, recordId: target.id, values: { unitPrice: '8 750,25' } });
@@ -385,6 +423,28 @@ test.describe('interakcje widokow agenta', () => {
     await expect(priceCell(card, String(target.id))).toHaveText(afterText);
     await expect(card.locator('figcaption [data-series="unitPriceMinor"]')).toHaveAttribute('data-min', '8750.25');
     await expectViewMatchesBackend(card, backend);
+
+    /*
+     * What `ui_state` would hand the agent now. The description carries no
+     * values (the agent reads those through `POST /api/read`), but the price
+     * orders the rows — so the change shows up as a new version describing the
+     * new order, and the screen from before the action is not the current one.
+     */
+    const order = shownRecords(backend).map((r) => String(r.id));
+    await expect
+      .poll(async () => tableInstance(await publishedSnapshot(page))?.visibleRecordIds.join(','), { timeout: 20_000 })
+      .toBe(order.join(','));
+    const describedAfter = await publishedSnapshot(page);
+    expect(describedAfter.version).toBeGreaterThan(describedBefore.version);
+    const instance = tableInstance(describedAfter);
+    expect(instance.state).toBe('ready');
+    expect(instance.matched).toBe(order.length);
+    expect(instance.actions).toContain(`action:${ACTION}`);
+    expect(tableInstance(describedBefore).visibleRecordIds).not.toEqual(order);
+    // The rows on screen are in that order too.
+    expect(
+      await table.locator('tbody tr[data-record-id]').evaluateAll((trs) => trs.map((tr) => tr.getAttribute('data-record-id'))),
+    ).toEqual(order);
 
     const itemsTable = await openCaseScreen(page, caseId);
     await expect(priceCell(itemsTable, String(target.id))).toHaveText(afterText);
@@ -470,10 +530,12 @@ test.describe('interakcje widokow agenta', () => {
     const form = table.getByTestId('record-action-form');
     await form.getByLabel('Nowa cena jednostkowa').fill('7 000');
     await form.getByRole('button', { name: 'Zapisz' }).click();
-    await expect(table.getByTestId('record-action-status')).toContainText('zapisano');
+    const status = table.getByTestId('record-action-status');
+    await expect(status).toContainText('Zmien cene: zapisano.');
 
     // While the rows are read again they say so; the previous values are not presented as current.
     await expect(table).toHaveAttribute('data-refreshing', 'true');
+    await expect(status).toContainText('Dane sa ponownie wczytywane z backendu.');
     await expect(figure).toHaveAttribute('data-refreshing', 'true');
     await expect(table.getByTestId('data-refreshing')).toHaveText('Odswiezanie danych…');
 
@@ -481,6 +543,8 @@ test.describe('interakcje widokow agenta', () => {
     await expect(table).toHaveAttribute('data-state', 'error', { timeout: 30_000 });
     await expect(figure).toHaveAttribute('data-state', 'error', { timeout: 30_000 });
     await expect(table.getByTestId('query-error')).toContainText('Awaria odczytu (test)');
+    // The read is over (it failed): the note about re-reading is gone, the save stands.
+    await expect(status).toHaveText('Zmien cene: zapisano.');
     await expect(figure.getByTestId('query-error')).toBeVisible();
     await expect(card.locator('td[data-field="unitPriceMinor"]')).toHaveCount(0);
     await expect(card.locator('figcaption')).toHaveCount(0);
@@ -497,6 +561,67 @@ test.describe('interakcje widokow agenta', () => {
     await expect(priceCell(card, String(target.id))).toHaveText(
       formatFieldValue(recordOf(backend, String(target.id)), priceField(backend)),
     );
+    await expectViewMatchesBackend(card, backend);
+    await expectNoReload(page);
+  });
+
+  test('zgubiona odpowiedz, a potem poprawiona wartosc: druga proba ma wlasny operationId, nie konflikt', async ({ page }) => {
+    await openApp(page, `/?c=${conversationId}`);
+    await openAgentViews(page);
+    const card = page.getByTestId(`card-${cardId}`);
+    let backend = await readItems(page, caseId);
+    await expectViewMatchesBackend(card, backend);
+    const target = projectorOf(backend, 'Konferencje24');
+    const table = card.locator('[data-component="DataTable"]');
+    const field = priceField(backend);
+
+    const sent: any[] = [];
+    page.on('request', (r) => {
+      if (r.method() === 'POST' && r.url().endsWith('/api/actions')) sent.push(r.postDataJSON());
+    });
+    /*
+     * The first save reaches the backend and its answer never comes back — the
+     * case the replay guard exists for, and the one in which a user naturally
+     * tries again with a different number.
+     */
+    let dropAnswer = true;
+    await page.route('**/api/actions', async (route) => {
+      if (!dropAnswer) return route.continue();
+      dropAnswer = false;
+      await route.fetch();
+      await route.abort('failed');
+    });
+
+    await actionButton(table, String(target.id)).click();
+    const form = table.getByTestId('record-action-form');
+    await form.getByLabel('Nowa cena jednostkowa').fill('5 000');
+    await form.getByRole('button', { name: 'Zapisz' }).click();
+    await expect(form.getByTestId('record-action-error')).toBeVisible();
+
+    // The change did happen, and the re-read after the failure shows it.
+    backend = await readItems(page, caseId);
+    expect(recordOf(backend, String(target.id)).unitPriceMinor).toBe(500000);
+    await expect(priceCell(card, String(target.id))).toHaveText(
+      formatFieldValue(recordOf(backend, String(target.id)), field),
+    );
+
+    // The user corrects the value and saves again: a different change, so a
+    // different operationId — not a refusal about their own earlier attempt.
+    await form.getByLabel('Nowa cena jednostkowa').fill('5 100');
+    await form.getByRole('button', { name: 'Zapisz' }).click();
+    await expect(table.getByTestId('record-action-status')).toContainText('Zmien cene: zapisano.');
+    await expect(form).toHaveCount(0);
+    await expect(table.getByTestId('record-action-error')).toHaveCount(0);
+
+    backend = await readItems(page, caseId);
+    expect(recordOf(backend, String(target.id)).unitPriceMinor).toBe(510000);
+    await expect(priceCell(card, String(target.id))).toHaveText(
+      formatFieldValue(recordOf(backend, String(target.id)), field),
+    );
+    expect(sent).toHaveLength(2);
+    expect(sent[0].values).toEqual({ unitPrice: '5 000' });
+    expect(sent[1].values).toEqual({ unitPrice: '5 100' });
+    expect(sent[0].operationId).not.toBe(sent[1].operationId);
     await expectViewMatchesBackend(card, backend);
     await expectNoReload(page);
   });

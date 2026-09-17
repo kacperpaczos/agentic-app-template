@@ -27,6 +27,10 @@ export const MCP_PRICE = 14250;
 export const MCP_TAIL_MS = 9000;
 
 const FILTER = '[{field: "currency", op: "eq", value: "PLN"}, {field: "name", op: "contains", value: "Projektor"}]';
+const VIEW_SORT = '{field: "unitPriceMinor", direction: "desc"}';
+/** How the view's table orders its rows (and therefore its `visibleRecordIds`). */
+export const byPriceDesc = (a: Record<string, unknown>, b: Record<string, unknown>) =>
+  (b.unitPriceMinor as number) - (a.unitPriceMinor as number);
 
 const caseIdFrom = (calls: CallRecord[]): string => {
   const listed = calls.find((c) => c.name === 'procurement_list_cases');
@@ -40,7 +44,13 @@ export const viewComposition = (caseId: string) => {
   return [
     'root = Stack([opis, tabela, wykres])',
     'opis = TextContent("Ceny jednostkowe projektorow w ofertach w PLN.")',
-    `tabela = DataTable(${source}, ${JSON.stringify(VIEW_COLUMNS).replace(/,/g, ', ')}, "Ceny projektorow", null, ${FILTER})`,
+    /*
+     * Ordered by price, so that changing one price changes what the screen
+     * *shows* — the order of the rows — and not only the numbers in them. The
+     * semantic description carries no values, so this is what makes a change
+     * visible to `ui_state` as a new version.
+     */
+    `tabela = DataTable(${source}, ${JSON.stringify(VIEW_COLUMNS).replace(/,/g, ', ')}, "Ceny projektorow", null, ${FILTER}, ${VIEW_SORT})`,
     `wykres = DataChart(${source}, "bar", "supplierName", ["unitPriceMinor"], "Cena projektora", ${FILTER})`,
   ].join('\n');
 };
