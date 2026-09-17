@@ -128,8 +128,7 @@ export function numericFieldValue(record: DataRecord, field: RecordField): numbe
 }
 
 /**
- * The units this field's values are actually in across these records — but only
- * when they disagree; null when they are all in one unit.
+ * The units this field's values are actually in across these records.
  *
  * **One rule, one implementation.** Wherever the platform puts several records'
  * values of the same field on a single scale — a chart's axis, an order by that
@@ -142,7 +141,7 @@ export function numericFieldValue(record: DataRecord, field: RecordField): numbe
  * Only values that take part are counted: an empty cell is in no unit, and a
  * value the field's type cannot read is not on the scale either.
  */
-export function mixedUnits(records: readonly DataRecord[], field: RecordField): string[] | null {
+export function unitsInPlay(records: readonly DataRecord[], field: RecordField): string[] {
   const units = new Set<string>();
   for (const record of records) {
     const counts = isNumericField(field)
@@ -151,7 +150,13 @@ export function mixedUnits(records: readonly DataRecord[], field: RecordField): 
     if (!counts) continue;
     units.add(fieldUnitOf(record, field) ?? '');
   }
-  return units.size > 1 ? [...units] : null;
+  return [...units];
+}
+
+/** The judgement itself: the units when they disagree, null when they are one. */
+export function mixedUnits(records: readonly DataRecord[], field: RecordField): string[] | null {
+  const units = unitsInPlay(records, field);
+  return units.length > 1 ? units : null;
 }
 
 /**

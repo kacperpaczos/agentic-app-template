@@ -10,6 +10,7 @@ import {
   mixedUnits,
   mixedUnitsMessage,
   numericFieldValue,
+  unitsInPlay,
   pageSlice,
   pickFields,
   recordIdOf,
@@ -222,11 +223,8 @@ export function buildChartModel(model: DataModel, x: string, seriesNames: readon
     if (mixed) {
       throw new AppError('validation_failed', mixedUnitsMessage(`Seria ${field.label}`, mixed));
     }
-    const units = new Set(
-      model.records
-        .filter((r) => numericFieldValue(r, field) !== null)
-        .map((r) => fieldUnitOf(r, field) ?? ''),
-    );
+    // One unit by now, or none at all — from the same traversal the rule uses.
+    const [unit] = unitsInPlay(model.records, field);
     const values = model.records.map((r) => numericFieldValue(r, field));
     let lowest: { value: number; record: DataRecord } | null = null;
     let highest: { value: number; record: DataRecord } | null = null;
@@ -236,7 +234,6 @@ export function buildChartModel(model: DataModel, x: string, seriesNames: readon
       if (!lowest || value < lowest.value) lowest = { value, record };
       if (!highest || value > highest.value) highest = { value, record };
     }
-    const [unit] = [...units];
     return {
       field: field.field,
       label: field.label,
