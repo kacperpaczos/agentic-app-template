@@ -102,19 +102,19 @@ describe('stan widoku w adresie', () => {
 
   it('zmiana zawezenia albo sortowania wraca na pierwsza strone; sama strona nie rusza reszty', () => {
     const fields = ['country', 'name'];
-    expect(viewStatePatch(fields, { predicates: [{ field: 'country', op: 'eq', value: 'PL' }] })).toEqual({
+    expect(viewStatePatch(fields, { predicates: [{ field: 'country', op: 'eq', value: 'PL' }] })).toStrictEqual({
       country: 'PL',
       name: undefined,
       page: undefined,
     });
-    expect(viewStatePatch(fields, { sort: { field: 'name', direction: 'desc' } })).toEqual({
+    expect(viewStatePatch(fields, { sort: { field: 'name', direction: 'desc' } })).toStrictEqual({
       sort: '-name',
       page: undefined,
     });
-    expect(viewStatePatch(fields, { page: 3 })).toEqual({ page: '3' });
-    expect(viewStatePatch(fields, { page: 1 })).toEqual({ page: undefined });
+    expect(viewStatePatch(fields, { page: 3 })).toStrictEqual({ page: '3' });
+    expect(viewStatePatch(fields, { page: 1 })).toStrictEqual({ page: undefined });
     // Clearing everything: every declared field, the order and the page.
-    expect(viewStatePatch(fields, { predicates: null, sort: null, page: null })).toEqual({
+    expect(viewStatePatch(fields, { predicates: null, sort: null, page: null })).toStrictEqual({
       country: undefined,
       name: undefined,
       sort: undefined,
