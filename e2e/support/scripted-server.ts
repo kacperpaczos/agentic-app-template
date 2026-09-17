@@ -266,7 +266,8 @@ const SCENARIOS: Record<string, Step[]> = {
           title: 'Oferty wedlug waluty',
           source: [
             'root = Stack([tabela])',
-            `tabela = DataTable({operation: "procurement.comparison", input: {caseId: "${found.id}"}}, ["supplierName", "currency", "totalMinor"], "Oferty", null, null, null, "currency")`,
+            // Ordered by delivery time the currencies interleave, so grouping reorders the page on screen.
+            `tabela = DataTable({operation: "procurement.comparison", input: {caseId: "${found.id}"}}, ["supplierName", "currency", "totalMinor", "deliveryDays"], "Oferty", null, null, {field: "deliveryDays", direction: "asc"}, "currency")`,
           ].join('\n'),
         };
       },

@@ -505,6 +505,12 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     const sequence = onScreen.map((id) => currencyOf.get(id));
     const blocks = sequence.filter((c, i) => i === 0 || c !== sequence[i - 1]);
     expect(new Set(blocks).size).toBe(blocks.length);
+    // And that order is not the page's own: by delivery time the currencies interleave (precondition of the check).
+    const pageOrder = [...read.result.rows]
+      .sort((a: any, b: any) => a.deliveryDays - b.deliveryDays)
+      .map((r: any) => r.offerId);
+    expect(pageOrder).not.toEqual(onScreen);
+    expect([...pageOrder].sort()).toEqual([...onScreen].sort());
   });
 
   test('wykonanie rozmowy A, gdy przegladarka pokazuje B, dostaje other_conversation', async ({ page }) => {
