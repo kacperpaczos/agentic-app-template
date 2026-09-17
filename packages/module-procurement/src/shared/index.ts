@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export * from './openui-components.ts';
+
 export const MODULE_ID = 'procurement';
 
 /* -------------------------------------------------------------------------- */
@@ -21,6 +23,21 @@ export type Currency = z.infer<typeof currencySchema>;
 /** Net vs gross is a comparison dimension, never an implicit conversion. */
 export const priceBasisSchema = z.enum(['net', 'gross']);
 export type PriceBasis = z.infer<typeof priceBasisSchema>;
+
+/**
+ * The one place `net`/`gross` are spelled out in Polish.
+ *
+ * `caseRecords.fields` (`server/views.ts`) uses this for its `priceBasis`
+ * enum, and any screen that shows a price basis outside a `DataTable` —
+ * `CaseHeader` (`ui/detailComponents.tsx`) today — builds its `RecordField`
+ * from the same array instead of re-typing the two labels. One rename here
+ * changes both; a mismatched hand-written ternary cannot happen because there
+ * is nothing left to hand-write.
+ */
+export const PRICE_BASIS_LABELS: Array<{ value: PriceBasis; label: string }> = [
+  { value: 'net', label: 'netto' },
+  { value: 'gross', label: 'brutto' },
+];
 
 export const unitSchema = z.enum(['szt', 'kpl', 'm', 'm2', 'kg', 'h', 'usluga']);
 export type Unit = z.infer<typeof unitSchema>;

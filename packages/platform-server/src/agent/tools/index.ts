@@ -1,9 +1,11 @@
 import type { ModuleToolDefinition } from '@platform/contracts';
 import type { PlatformServices } from '../../services/index.ts';
+import { agentViewTools } from './agent-views.ts';
 import { artifactTools } from './artifacts.ts';
 import { canvasTools } from './canvas.ts';
 import { contextTools } from './context.ts';
 import { fileTools } from './files.ts';
+import { uiSortTools } from './ui-sort.ts';
 import { uiTools } from './ui.ts';
 import { uiStateTools } from './ui-state.ts';
 
@@ -11,7 +13,8 @@ export { stageFileIntoWorkspace } from './files.ts';
 
 /**
  * Domain-agnostic tools every agent run gets: application context, canvas
- * composition, interface control, managed files and artifacts.
+ * composition, interface control, managed files, artifacts and the
+ * conversation's agent views.
  *
  * These are registered under the `app` module id, so they surface as
  * `mcp__app__app_*` / `mcp__app__canvas_*` to Claude. They never touch business
@@ -26,9 +29,11 @@ export function platformTools(services: PlatformServices): ModuleToolDefinition<
     ...contextTools(services),
     ...canvasTools(services),
     ...uiTools(services),
+    ...uiSortTools(services),
     ...uiStateTools(services),
     ...fileTools(services),
     ...artifactTools(services),
+    ...agentViewTools(services),
   ];
   return defs as ModuleToolDefinition<never>[];
 }

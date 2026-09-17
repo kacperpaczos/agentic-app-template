@@ -31,6 +31,15 @@ export const PLATFORM_UI_TARGETS: UiTarget[] = [
     to: '/spaces',
   },
   {
+    id: 'platform.agentViews',
+    kind: 'view',
+    label: 'Widoki agenta',
+    description:
+      'Przestrzen biezacej rozmowy z widokami utworzonymi przez agenta (tabele, wykresy, podsumowania ' +
+      'z zarejestrowanych odczytow). Kazda rozmowa ma wlasne widoki.',
+    to: '/agent-views',
+  },
+  {
     id: 'platform.files',
     kind: 'view',
     label: 'Pliki i raporty',

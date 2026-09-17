@@ -41,7 +41,17 @@ export type Step =
    * the tool's own validation refuses the call visibly instead of the property
    * silently disappearing.
    */
-  | { kind: 'call'; name: string; input?: unknown; maxChars?: number }
+  | {
+      kind: 'call';
+      name: string;
+      /**
+       * The arguments, or a function of the calls this run has already made —
+       * for a call that needs what an earlier one returned (a record id, a card
+       * id), the way a model would read it from the previous result.
+       */
+      input?: unknown | ((earlier: CallRecord[]) => unknown);
+      maxChars?: number;
+    }
   /** Time passing with nothing emitted — lets the browser settle and repaint. */
   | { kind: 'wait'; delayMs: number }
   /**
@@ -55,8 +65,17 @@ export type Step =
       label?: string;
       /** Narrowing to apply; `null` restores the full view. */
       filter?: { predicates: Array<{ field: string; op: string; value: unknown }>; label: string } | null;
+      /** Order to apply; `null` restores the view's own order. */
+      sort?: { field: string; direction: 'asc' | 'desc' } | null;
     }
   | { kind: 'fail'; message: string };
+
+/** A `call` step already performed in this run: the tool and its parsed answer. */
+export interface CallRecord {
+  name: string;
+  ok: boolean;
+  result: any;
+}
 
 export interface ScriptedAgentOptions {
   /**
@@ -93,8 +112,32 @@ const CALL_ECHO_CHARS = 1200;
 
 const shorten = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text);
 
-export function scriptedAgent(steps: Step[], opts: ScriptedAgentOptions = {}): ModelAgentLike {
-  const play = async (options: any) => {
+/** The user's message as the adapter receives it: a string, or `{ message }` when resuming. */
+const promptOf = (input: unknown): string =>
+  typeof input === 'string'
+    ? input
+    : typeof (input as { message?: unknown })?.message === 'string'
+      ? (input as { message: string }).message
+      : '';
+
+/**
+ * `script` is a fixed list of steps, or a function choosing them from the
+ * user's message — so one scenario can answer several commands of a
+ * conversation differently, as a browser test sends them.
+ */
+export function scriptedAgent(
+  script: Step[] | ((prompt: string) => Step[]),
+  opts: ScriptedAgentOptions = {},
+): ModelAgentLike {
+  /*
+   * Tool call ids of `call` steps are unique for the life of the agent, as a
+   * provider's are. Restarting them in every run made the chat pair a call of
+   * an earlier turn with the result of a later one carrying the same id, so a
+   * successful call was shown as failed once a later turn's call failed.
+   */
+  let callSeq = 0;
+  const play = async (prompt: string, options: any) => {
+    const steps = typeof script === 'function' ? script(prompt) : script;
     const hooks = options?.sdkOptions?.hooks ?? {};
     const fire = async (event: string, payload: Record<string, unknown>) => {
       for (const group of hooks[event] ?? []) {
@@ -131,9 +174,9 @@ export function scriptedAgent(steps: Step[], opts: ScriptedAgentOptions = {}): M
     }
     await fire('Stop', { session_id: 'sess_scripted' });
 
-    let callSeq = 0;
     /** What the previous `ui` or `call` step answered, for `$last.` placeholders. */
     let lastResult: unknown = null;
+    const calls: CallRecord[] = [];
     /*
      * Honours the abort signal, as the real SDK does. Without this a scripted
      * run would ignore a cancellation and finish anyway — which would make a
@@ -152,7 +195,10 @@ export function scriptedAgent(steps: Step[], opts: ScriptedAgentOptions = {}): M
           if (e.type === 'call') {
             const step = e.step as Extract<Step, { kind: 'call' }>;
             const localName = step.name.replace(/^mcp__app__/, '');
-            const input = resolveLastResult(step.input ?? {}, lastResult);
+            const input = resolveLastResult(
+              (typeof step.input === 'function' ? step.input(calls) : step.input) ?? {},
+              lastResult,
+            );
             callSeq += 1;
             const id = `tu_call_${callSeq}`;
             await fire('PreToolUse', { tool_use_id: id, tool_name: mcpToolName(localName), tool_input: input });
@@ -169,11 +215,16 @@ export function scriptedAgent(steps: Step[], opts: ScriptedAgentOptions = {}): M
                 ? refusal('unsupported_operation', 'Brak kontekstu wykonania dla wywolania narzedzia.')
                 : await invokeTool(entry, input, ctx);
             const text = outcome.content.map((c) => c.text).join('');
+            let parsed: unknown = text;
+            let isJson = false;
             try {
-              lastResult = JSON.parse(text);
+              parsed = JSON.parse(text);
+              isJson = true;
             } catch {
-              lastResult = null;
+              /* kept as text */
             }
+            calls.push({ name: localName, ok: !outcome.isError, result: parsed });
+            lastResult = isJson ? parsed : null;
 
             if (outcome.isError) await fire('PostToolUseFailure', { tool_use_id: id, error: text });
             else await fire('PostToolUse', { tool_use_id: id, tool_response: text });
@@ -196,6 +247,7 @@ export function scriptedAgent(steps: Step[], opts: ScriptedAgentOptions = {}): M
               spaceId?: string;
               label?: string;
               filter?: { predicates: unknown[]; label: string } | null;
+              sort?: { field: string; direction: 'asc' | 'desc' } | null;
             };
             const ctx = options?.toolContext;
             let outcome: Record<string, unknown> = { executed: false, reason: 'no_tool_context' };
@@ -212,10 +264,13 @@ export function scriptedAgent(steps: Step[], opts: ScriptedAgentOptions = {}): M
                           : { targetId: step.targetId, ...step.filter },
                     }
                   : {}),
+                ...(step.sort !== undefined ? { sort: step.sort } : {}),
               })) as Record<string, unknown>;
             }
             const counted = outcome.filtered as { matched: number; total: number } | undefined;
             lastResult = outcome;
+            const sorted = outcome.sorted as { field: string; direction: string } | null | undefined;
+            const paged = outcome.page as { index: number; count: number } | undefined;
             yield {
               type: 'text-delta',
               payload: {
@@ -223,6 +278,8 @@ export function scriptedAgent(steps: Step[], opts: ScriptedAgentOptions = {}): M
                   `[ui:${step.label ?? step.targetId}] executed=${outcome.executed} ` +
                   `reason=${outcome.reason ?? '-'} ` +
                   (counted ? `pokazane=${counted.matched}/${counted.total} ` : '') +
+                  (sorted !== undefined ? `sortowanie=${sorted ? `${sorted.field}:${sorted.direction}` : '-'} ` : '') +
+                  (paged ? `strona=${paged.index}/${paged.count} ` : '') +
                   (outcome.uiVersion !== undefined ? `uiVersion=${outcome.uiVersion} ` : '') +
                   (outcome.uiClientId !== undefined ? `uiClientId=${outcome.uiClientId} ` : ''),
               },
@@ -234,5 +291,5 @@ export function scriptedAgent(steps: Step[], opts: ScriptedAgentOptions = {}): M
       })(),
     };
   };
-  return { stream: (_p, o) => play(o), resumeStream: (_i, o) => play(o) };
+  return { stream: (p, o) => play(promptOf(p), o), resumeStream: (i, o) => play(promptOf(i), o) };
 }

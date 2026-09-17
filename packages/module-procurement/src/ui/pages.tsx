@@ -1,7 +1,14 @@
 import { Link, useParams } from '@tanstack/react-router';
 import { useEffect } from 'react';
-import { apiPost, ComposedView, useAppState, useModuleData, QueryErrorState } from '@platform/ui';
-import { formatMinor, formatQuantity, MODULE_ID } from '../shared/index.ts';
+import {
+  apiPost,
+  ComposedView,
+  useAppState,
+  useModuleData,
+  useReadOperation,
+  QueryErrorState,
+} from '@platform/ui';
+import { MODULE_ID } from '../shared/index.ts';
 
 /**
  * Cases list — the module's "records" screen.
@@ -21,28 +28,34 @@ export function CasesPage() {
 }
 
 /**
- * Case detail.
+ * Case detail — the `procurement.case.detail` view: a composition of a case
+ * header, its required lines and its offer items, all reading registered
+ * reads for `$caseId`.
  *
- * Opening a case does two things: it sets the agent's context to this record,
- * and it resolves (creating on first use) the canvas space bound to it. The
- * default composition comes from the module's `defaultComposition`, validated
+ * Opening a case does two things outside that composition, kept in this
+ * deterministic wrapper: it sets the agent's context to this record, and it
+ * resolves (creating on first use) the canvas space bound to it. The default
+ * composition comes from the module's `defaultComposition`, validated
  * server-side against the shared catalog.
+ *
+ * **Why this fetches too.** The composition itself is happy to show a "does
+ * not exist" state for any one of its data components — that is how a broken
+ * table already behaves. But a screen that does not exist at all must not
+ * claim the frame `data-testid="case-detail-page"`: a test switching identity
+ * asserts exactly that (`e2e/access-context.spec.ts`). So the wrapper reads
+ * `case_overview` itself, purely to decide whether to render the frame; the
+ * composition's own components read the same registered operation and land on
+ * the same cached response, so this is one request, not two.
  */
 export function CaseDetailPage() {
   const { caseId } = useParams({ from: '/cases/$caseId' });
   const setResource = useAppState((s) => s.setResource);
   const setSpace = useAppState((s) => s.setSpace);
 
-  const { data, isLoading, error } = useModuleData<{
-    procurementCase: { id: string; code: string; title: string; description: string; currency: string; priceBasis: string };
-    requirements: Array<{ id: string; position: number; name: string; unit: string; quantityMilli: number; spec: string }>;
-    offers: Array<{
-      offer: { id: string; reference: string; currency: string; deliveryDays: number | null; validUntil: string | null };
-      supplierName: string;
-      items: Array<{ id: string; name: string; unit: string; quantityMilli: number; unitPriceMinor: number | null }>;
-      attachmentFileIds: string[];
-    }>;
-  }>(MODULE_ID, `/cases/${caseId}`);
+  const { isLoading, error, data } = useReadOperation({
+    operation: `${MODULE_ID}.case_overview`,
+    input: { caseId },
+  });
 
   useEffect(() => {
     setResource({ kind: 'case', id: caseId });
@@ -66,91 +79,14 @@ export function CaseDetailPage() {
   }
   if (!data) return null;
 
-  const c = data.procurementCase;
   return (
     <div className="pf-page" data-testid="case-detail-page">
-      <h1>
-        {c.code} — {c.title}
-      </h1>
-      <p className="pf-page__lead">
-        {c.description} Podstawa porownania: {c.currency}, ceny {c.priceBasis === 'net' ? 'netto' : 'brutto'}.
-      </p>
       <p>
         <Link to="/" className="pf-btn">
           Otworz przestrzen pracy na canvasie
         </Link>
       </p>
-
-      <h2>Pozycje wymagane</h2>
-      <table className="pf-table">
-        <thead>
-          <tr>
-            <th scope="col">#</th>
-            <th scope="col">Nazwa</th>
-            <th scope="col">Ilosc</th>
-            <th scope="col">Specyfikacja</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.requirements.map((r) => (
-            <tr key={r.id}>
-              <td className="pf-num">{r.position}</td>
-              <td>{r.name}</td>
-              <td className="pf-num">
-                {formatQuantity(r.quantityMilli)} {r.unit}
-              </td>
-              <td className="pf-muted">{r.spec}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <h2>Oferty</h2>
-      {data.offers.map(({ offer, supplierName, items, attachmentFileIds }) => (
-        <div key={offer.id} style={{ marginBottom: 18 }}>
-          <h3 style={{ fontSize: 14, marginBottom: 4 }}>
-            {supplierName} <span className="pf-muted">({offer.reference})</span>{' '}
-            {offer.currency !== c.currency && <span className="pf-badge pf-badge--warn">{offer.currency}</span>}
-          </h3>
-          <table className="pf-table">
-            <thead>
-              <tr>
-                <th scope="col">Pozycja</th>
-                <th scope="col">Ilosc</th>
-                <th scope="col">Cena jedn.</th>
-                <th scope="col">Zrodlo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((i) => (
-                <tr key={i.id}>
-                  <td>{i.name}</td>
-                  <td className="pf-num">
-                    {formatQuantity(i.quantityMilli)} {i.unit}
-                  </td>
-                  <td className="pf-num">
-                    {i.unitPriceMinor === null ? (
-                      <span className="pf-missing">brak</span>
-                    ) : (
-                      formatMinor(i.unitPriceMinor, offer.currency as never)
-                    )}
-                  </td>
-                  <td>
-                    <Link to="/items/$itemId" params={{ itemId: i.id }} className="pf-link">
-                      pochodzenie
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {attachmentFileIds.map((fid) => (
-            <a key={fid} className="pf-link" href={`/api/files/${fid}/content`} download style={{ fontSize: 12 }}>
-              zalacznik zrodlowy
-            </a>
-          ))}
-        </div>
-      ))}
+      <ComposedView viewId="procurement.case.detail" params={{ caseId }} />
     </div>
   );
 }
@@ -168,40 +104,31 @@ export function DataPage() {
   );
 }
 
-/** Standalone provenance view, reachable from a price in the case detail. */
+/**
+ * Standalone provenance view, reachable from a price in the case detail — the
+ * `procurement.item.provenance` view, one custom `ItemProvenance` component
+ * reading `/items/:itemId/provenance` for `$itemId`.
+ *
+ * Same reasoning as `CaseDetailPage` for why this wrapper fetches too: the
+ * frame `data-testid="provenance-page"` must not appear for an item that does
+ * not exist or is not the caller's, and this is the same module route the
+ * composition's own `ItemProvenance` component reads, so the two share one
+ * cached response.
+ */
 export function ItemProvenancePage() {
   const { itemId } = useParams({ from: '/items/$itemId' });
-  const { data, isLoading, error } = useModuleData<any>(MODULE_ID, `/items/${itemId}/provenance`);
+  const { data, isLoading, error } = useModuleData<unknown>(MODULE_ID, `/items/${itemId}/provenance`);
 
   if (isLoading) return <div className="pf-state">Wczytywanie…</div>;
   if (error) {
     return <QueryErrorState error={error} />;
   }
+  if (!data) return null;
 
   return (
     <div className="pf-page" data-testid="provenance-page">
       <h1>Pochodzenie wartosci</h1>
-      <dl className="pf-kv">
-        <dt>Pozycja</dt>
-        <dd>{data.item.name}</dd>
-        <dt>Cena jednostkowa</dt>
-        <dd>{data.item.unitPriceFormatted ?? 'brak'}</dd>
-        <dt>Dostawca</dt>
-        <dd>{data.supplier.name}</dd>
-        <dt>Oferta</dt>
-        <dd>{data.offer.reference}</dd>
-      </dl>
-      <h2>Zrodlo</h2>
-      <ul>
-        {data.provenance.map((p: any) => (
-          <li key={p.locator}>
-            {p.field} — {p.locator} w{' '}
-            <a className="pf-link" href={p.downloadUrl} download>
-              {p.file.filename}
-            </a>
-          </li>
-        ))}
-      </ul>
+      <ComposedView viewId="procurement.item.provenance" params={{ itemId }} />
     </div>
   );
 }

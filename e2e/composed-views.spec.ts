@@ -13,7 +13,8 @@ import { formatFieldValue, recordsOf, type ReadResponse } from '@platform/contra
  * formatter agreeing with itself cannot pass on its own.
  *
  * The last two tests put data components in `openui` canvas cards: a table
- * naming an operation nobody registered must say so, not render an empty box.
+ * naming an operation nobody registered is not stored at all, and a read that
+ * fails must say so, not render an empty box.
  */
 
 async function signIn(request: APIRequestContext) {
@@ -138,16 +139,38 @@ test.describe('widoki modulu jako kompozycje OpenUI', () => {
     expect(new URL(page.url()).pathname).toBe(`/cases/${first.id}`);
   });
 
-  test('karta openui z niezarejestrowana operacja pokazuje blad, nie puste pole', async ({ page, request }) => {
+  test('karta openui z niezarejestrowana operacja nie jest zapisana; odczyt, ktory zawodzi, pokazuje blad, nie puste pole', async ({
+    page,
+    request,
+  }) => {
     await signIn(request);
     const space = await (
       await request.post('/api/canvas/spaces', { data: { title: `Kompozycje ${Date.now()}` } })
     ).json();
-    const broken = await addOpenUiCard(
+    /*
+     * A composition naming an operation nobody registered is refused before it
+     * is stored (server-side validation of OpenUI compositions), so it can no
+     * longer reach the screen as a card. The browser's own handling of such a
+     * source — a composition in a chat answer — is covered by
+     * `agent-views.spec.ts`.
+     */
+    const refused = await request.post('/api/canvas/cards', {
+      data: {
+        spaceId: space.id,
+        title: 'Nieznana operacja',
+        spec: { kind: 'openui', source: 'root = DataTable({operation: "nie.istnieje"})' },
+        geometry: { x: 40, y: 40, width: 520, height: 260 },
+      },
+    });
+    expect(refused.status()).toBe(400);
+    expect((await refused.json()).error.details.reason).toBe('unknown_operation');
+
+    // A registered read for a record that does not exist is valid to store and fails when read.
+    const missing = await addOpenUiCard(
       request,
       space.id,
-      'Nieznana operacja',
-      'root = DataTable({operation: "nie.istnieje"})',
+      'Brak rekordu',
+      'root = DataTable({operation: "procurement.comparison", input: {caseId: "cas_nie_istnieje"}}, ["supplierName"])',
       { x: 40, y: 40, width: 520, height: 260 },
     );
     // Same component, a registered read: the failure above is about the source.
@@ -160,12 +183,15 @@ test.describe('widoki modulu jako kompozycje OpenUI', () => {
     );
 
     await openSpace(page, space.id);
+    expect(
+      ((await (await request.get(`/api/canvas/spaces/${space.id}`)).json()).cards as Array<{ id: string }>).map((c) => c.id),
+    ).toEqual([missing.id, working.id]);
 
-    const brokenTable = page.getByTestId(`card-${broken.id}`).locator('[data-component="DataTable"]');
-    await expect(brokenTable).toHaveAttribute('data-state', 'error');
-    await expect(brokenTable.getByRole('alert')).toContainText('Nieznana operacja odczytu "nie.istnieje"');
-    await expect(brokenTable.locator('table')).toHaveCount(0);
-    await expect(page.getByTestId(`card-${broken.id}`).locator('[data-state="empty"]')).toHaveCount(0);
+    const failedTable = page.getByTestId(`card-${missing.id}`).locator('[data-component="DataTable"]');
+    await expect(failedTable).toHaveAttribute('data-state', 'forbidden');
+    await expect(failedTable.getByRole('alert')).toContainText('Zasob nie istnieje');
+    await expect(failedTable.locator('table')).toHaveCount(0);
+    await expect(page.getByTestId(`card-${missing.id}`).locator('[data-state="empty"]')).toHaveCount(0);
 
     const workingTable = page.getByTestId(`card-${working.id}`).locator('[data-component="DataTable"]');
     await expect(workingTable).toHaveAttribute('data-state', 'ready');
@@ -236,5 +262,133 @@ test.describe('widoki modulu jako kompozycje OpenUI', () => {
     // A literal from the fixture: the projector line is two pieces.
     const projector = requirements.find((r) => r.name === 'Projektor laserowy 4K')!;
     await expect(box.locator(`dd[data-record-id="${projector.id}"][data-field="quantityMilli"]`)).toHaveText('2 szt');
+  });
+});
+
+test.describe('ekrany szczegolow modulu: sprawa i pochodzenie pozycji', () => {
+  test('szczegoly sprawy: naglowek i obie tabele rowne backendowi', async ({ page, request }) => {
+    await signIn(request);
+    const { cases } = await (await request.get('/api/m/procurement/cases')).json();
+    const caseId = cases[0].id as string;
+    const overview = await readBackend(request, 'procurement.case_overview', { caseId });
+    const c = (
+      overview.result as { procurementCase: { code: string; title: string; description: string; priceBasis: string } }
+    ).procurementCase;
+    // The label "netto"/"brutto" comes from the same registered descriptor
+    // `DataTable` would use for this field (procurement.cases), never a
+    // hand-typed ternary in the screen.
+    const casesRead = await readBackend(request, 'procurement.cases');
+    const priceBasisField = casesRead.descriptor!.fields.find((f) => f.field === 'priceBasis')!;
+    const priceBasisLabel = formatFieldValue({ priceBasis: c.priceBasis }, priceBasisField);
+
+    await page.goto(`/cases/${caseId}`);
+    const detailPage = page.getByTestId('case-detail-page');
+    await expect(detailPage).toBeVisible();
+    const view = detailPage.getByTestId('composed-view');
+    await expect(view).toHaveAttribute('data-view-id', 'procurement.case.detail');
+    await expect(view).toHaveAttribute('data-state', 'ready');
+
+    // The header is its own OpenUI component (CaseHeader), not a table, but
+    // still the backend's own record — not a copy typed into the composition.
+    const heading = detailPage.getByRole('heading', { level: 1 });
+    await expect(heading).toContainText(c.code);
+    await expect(heading).toContainText(c.title);
+    await expect(detailPage.locator('.pf-page__lead')).toContainText(c.description);
+    await expect(detailPage.locator('.pf-page__lead')).toContainText(`ceny ${priceBasisLabel}`);
+
+    // Real headings for the document outline (SectionHeading -> <h2>), not
+    // `TextContent`'s plain <div>: an assistive-technology user can jump to
+    // either section the same way they could on the pre-composition markup.
+    await expect(detailPage.getByRole('heading', { level: 2, name: 'Pozycje wymagane' })).toBeVisible();
+    await expect(detailPage.getByRole('heading', { level: 2, name: 'Oferty' })).toBeVisible();
+
+    // Pozycje wymagane: DataTable on the existing procurement.case_overview read.
+    const requirementsTable = view.locator(
+      '[data-operation="procurement.case_overview"][data-component="DataTable"]',
+    );
+    await expect(requirementsTable).toHaveAttribute('data-state', 'ready');
+    await expectTableMatchesBackend(requirementsTable, overview, ['position', 'name', 'quantityMilli', 'spec']);
+
+    // Oferty: DataTable on the new procurement.case_offer_items read, one row
+    // per item across every offer, with the offer's own supplier and currency.
+    const items = await readBackend(request, 'procurement.case_offer_items', { caseId });
+    const itemsTable = view.locator('[data-operation="procurement.case_offer_items"][data-component="DataTable"]');
+    await expect(itemsTable).toHaveAttribute('data-state', 'ready');
+    await expectTableMatchesBackend(itemsTable, items, [
+      'supplierName',
+      'name',
+      'unit',
+      'quantityMilli',
+      'unitPriceMinor',
+      'currency',
+    ]);
+
+    // The non-tabular part (CaseOfferSources) still carries the exact link text
+    // and download links the rest of the suite (e2e/app.spec.ts) depends on.
+    await expect(detailPage.getByRole('link', { name: 'pochodzenie' }).first()).toBeVisible();
+    await expect(detailPage.getByRole('link', { name: 'zalacznik zrodlowy' }).first()).toBeVisible();
+  });
+
+  test('pochodzenie pozycji: wartosci rowne trasie modulu, data-view-id widoku', async ({ page, request }) => {
+    await signIn(request);
+    const { cases } = await (await request.get('/api/m/procurement/cases')).json();
+    const caseId = cases[0].id as string;
+    const overview = await readBackend(request, 'procurement.case_overview', { caseId });
+    const firstItemId = (
+      overview.result as { offers: Array<{ items: Array<{ id: string }> }> }
+    ).offers[0]!.items[0]!.id;
+
+    const backendRes = await request.get(`/api/m/procurement/items/${firstItemId}/provenance`);
+    expect(backendRes.status()).toBe(200);
+    const backend = (await backendRes.json()) as {
+      item: { name: string; unitPriceMinor: number | null };
+      offer: { reference: string; currency: string };
+      supplier: { name: string };
+      provenance: Array<{ file: { filename: string } }>;
+    };
+
+    const items = await readBackend(request, 'procurement.case_offer_items', { caseId });
+    const priceField = items.descriptor!.fields.find((f) => f.field === 'unitPriceMinor')!;
+    const expectedPrice = formatFieldValue(
+      { unitPriceMinor: backend.item.unitPriceMinor, currency: backend.offer.currency },
+      priceField,
+    );
+
+    await page.goto(`/items/${firstItemId}`);
+    const provenancePage = page.getByTestId('provenance-page');
+    await expect(provenancePage).toBeVisible();
+    const view = provenancePage.getByTestId('composed-view');
+    await expect(view).toHaveAttribute('data-view-id', 'procurement.item.provenance');
+    await expect(view).toHaveAttribute('data-state', 'ready');
+
+    const dd = view.locator('dl.pf-kv dd');
+    await expect(dd.nth(0)).toHaveText(backend.item.name);
+    await expect(dd.nth(1)).toHaveText(expectedPrice);
+    await expect(dd.nth(2)).toHaveText(backend.supplier.name);
+    await expect(dd.nth(3)).toHaveText(backend.offer.reference);
+
+    expect(backend.provenance.length).toBeGreaterThan(0);
+    for (const p of backend.provenance) {
+      await expect(view.getByRole('link', { name: p.file.filename })).toBeVisible();
+    }
+  });
+
+  test('sprawa i pozycja, ktore nie istnieja: stan "nie istnieje", nie pusta ramka ekranu', async ({
+    page,
+    request,
+  }) => {
+    await signIn(request);
+
+    await page.goto('/cases/nie-ma-takiej-sprawy');
+    const caseDenied = page.getByTestId('access-denied');
+    await expect(caseDenied).toBeVisible();
+    await expect(caseDenied).toHaveAttribute('data-error-code', 'not_found');
+    await expect(page.getByTestId('case-detail-page')).toHaveCount(0);
+
+    await page.goto('/items/nie-ma-takiej-pozycji');
+    const itemDenied = page.getByTestId('access-denied');
+    await expect(itemDenied).toBeVisible();
+    await expect(itemDenied).toHaveAttribute('data-error-code', 'not_found');
+    await expect(page.getByTestId('provenance-page')).toHaveCount(0);
   });
 });

@@ -11,7 +11,9 @@ export function contextTools(services: PlatformServices): Array<ModuleToolDefini
     {
       name: 'get_context',
       description:
-        'Zwraca aktualny kontekst aplikacji: rozmowe, przestrzen canvas, zaznaczony zasob, filtry i niezapisane szkice formularzy. Wywolaj to na poczatku zadania i ponownie, jesli zadanie trwa dlugo.',
+        'Zwraca aktualny kontekst aplikacji: rozmowe, przestrzen canvas, zaznaczony zasob, filtry i niezapisane szkice formularzy. ' +
+        'filters[<id widoku>] to stan widoku z chwili wyslania polecenia: zawezenie (predicates), sortowanie (sort), strona (page) i liczby (matched z total). ' +
+        'Wywolaj to na poczatku zadania i ponownie, jesli zadanie trwa dlugo.',
       effect: 'read',
       alwaysLoad: true,
       inputSchema: z.object({}),
@@ -27,6 +29,8 @@ export function contextTools(services: PlatformServices): Array<ModuleToolDefini
           resourceSummary,
           selection: ctx.appContext.selection,
           filters: ctx.appContext.filters,
+          filtersNote:
+            'Stan widoku (zawezenie, sortowanie, strona) zmienia tylko to, co i w jakiej kolejnosci widac. Dane w bazie sa bez zmian.',
           viewport: ctx.appContext.viewport,
           unsavedDrafts: ctx.appContext.drafts,
           /*

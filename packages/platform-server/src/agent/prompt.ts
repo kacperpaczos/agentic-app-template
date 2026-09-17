@@ -1,8 +1,15 @@
-import { FILE_ANALYSIS, type AppContext, type ReadOperationSummary } from '@platform/contracts';
+import {
+  FILE_ANALYSIS,
+  viewStateContextSchema,
+  type AppContext,
+  type ReadOperationSummary,
+} from '@platform/contracts';
 import type { ComponentCatalog } from '../registry/catalog.ts';
 import type { ServerModuleRegistry } from '../registry/modules.ts';
 import { describeReadOperations } from '../registry/read-operations.ts';
+import { sortableFieldsOfTarget } from '../registry/view-sorting.ts';
 import { mcpToolName } from './mcp.ts';
+import { agentViewsPromptSection } from './tools/agent-views.ts';
 
 export interface PromptInput {
   registry: ServerModuleRegistry;
@@ -48,7 +55,7 @@ export function buildSystemPrompt(input: PromptInput): string {
     `- zasob: ${ctx.resource ? `${ctx.resource.kind}:${ctx.resource.id}` : '(brak)'}`,
     input.resourceSummary ? `- opis zasobu: ${input.resourceSummary}` : '',
     `- zaznaczenie: ${ctx.selection.length ? ctx.selection.map((s) => `${s.kind}:${s.id}`).join(', ') : '(brak)'}`,
-    `- filtry: ${Object.keys(ctx.filters).length ? JSON.stringify(ctx.filters) : '(brak)'}`,
+    ...describeFilters(ctx.filters),
     /*
      * The marker of the screen at send time. The description itself is not in
      * the prompt: by the time the agent acts on it, it may be gone — `ui_state`
@@ -148,6 +155,7 @@ export function buildSystemPrompt(input: PromptInput): string {
       'danych (kolumny, serie, pola, filtr, sortowanie) wskazujesz wylacznie wymienione pola rekordow.',
       ...readOperations.map(describeReadOperationLine),
     );
+    parts.push(...agentViewsPromptSection(input.catalog.openui));
   }
 
   /*
@@ -186,6 +194,20 @@ export function buildSystemPrompt(input: PromptInput): string {
       'Wynik ui_navigate zawiera executed=true/false. Jesli false, powiedz uzytkownikowi,',
       'czego nie udalo sie zrobic i dlaczego — nie twierdz, ze cos otworzyles.',
       'Pokazanie ustawienia niczego w nim nie zmienia.',
+      /*
+       * The list the sentences above call "ponizsza lista" — directly under
+       * them, not after the sections on narrowing and ordering, which only
+       * refer to the fields each entry names.
+       */
+      'Cele interfejsu (zawezanie po: pola dla ui_filter; sortowanie po: pola dla ui_sort):',
+      ...uiTargets.map((t) => {
+        const sortable = sortableFieldsOfTarget(input.registry, t.id);
+        return (
+          `- ${t.id} [${t.kind}] ${t.label}: ${t.description}` +
+          (t.filter ? ` | zawezanie po: ${t.filter.fields.map((f) => f.field).join(', ')}` : '') +
+          (sortable?.length ? ` | sortowanie po: ${sortable.map((f) => f.field).join(', ')}` : '')
+        );
+      }),
       '',
       '## Zawezanie widoku',
       /*
@@ -205,6 +227,18 @@ export function buildSystemPrompt(input: PromptInput): string {
       'Wynik zawiera filtered.matched i filtered.total — podaj te liczby zamiast liczyc samodzielnie.',
       'Zeby przywrocic pelny widok, wywolaj ui_filter z clear=true.',
       '',
+      '## Sortowanie i strony widoku',
+      `Gdy uzytkownik chce zobaczyc dane w innej kolejnosci ("posortuj po X", "od najwiekszego"), uzyj ${mcpToolName('ui_sort')}`,
+      'z polem i kierunkiem (asc rosnaco, desc malejaco). Nie przepisuj posortowanych wierszy do rozmowy.',
+      'Pola, po ktorych wolno sortowac, podaje ui_catalog jako sortableFields; inne pole zostanie odrzucone',
+      '(unknown_field albo not_sortable) razem z lista dozwolonych. clear=true przywraca domyslny porzadek.',
+      'Wynik zawiera sorted i page (index = numer strony, count = liczba stron) — mow o tym, co potwierdzil klient.',
+      'Zmiana zawezenia albo sortowania wraca do pierwszej strony.',
+      'ZAWEZENIE I SORTOWANIE ZMIENIAJA TYLKO PREZENTACJE — to, ktore rekordy i w jakiej kolejnosci widac.',
+      'Nie zmieniaja danych w bazie: nie mow, ze cos usunales, ukryles na stale albo przestawiles w danych.',
+      'Aktualny stan widoku uzytkownika (zawezenie, sortowanie, strona, pokazane X z Y) jest w kontekscie',
+      'aplikacji powyzej i w filters zwracanym przez get_context — z chwili wyslania polecenia.',
+      '',
       '## Stan ekranu',
       /*
        * The confirmation of a command says the client carried it out, not what
@@ -221,17 +255,39 @@ export function buildSystemPrompt(input: PromptInput): string {
       'Komponent ze state=loading jeszcze nic nie pokazuje: odczytaj ponownie z minVersion = version + 1.',
       'Porownuj wersje z „ekran przy wyslaniu polecenia” w kontekscie: nizsza wersja tej samej karty jest starsza niz to,',
       'co uzytkownik widzial, wysylajac polecenie.',
-      ...uiTargets.map(
-        (t) =>
-          `- ${t.id} [${t.kind}] ${t.label}: ${t.description}` +
-          (t.filter ? ` | zawezanie po: ${t.filter.fields.map((f) => f.field).join(', ')}` : ''),
-      ),
     );
   }
 
   if (briefings) parts.push('', '# Moduly biznesowe', briefings);
 
   return parts.filter((p) => p !== '').join('\n');
+}
+
+/**
+ * The context's filters, one line per view.
+ *
+ * A view's state (`AppContext.filters[targetId]`, sent by the client from the
+ * view that applied it) is written out in words, so the model reads "narrowed
+ * to country PL, sorted by name descending, page 1 of 2, 3 of 4 shown" instead
+ * of parsing JSON. Anything else a module put there is passed on as it is.
+ */
+function describeFilters(filters: AppContext['filters']): string[] {
+  const entries = Object.entries(filters);
+  if (entries.length === 0) return ['- filtry: (brak)'];
+  return entries.map(([key, value]) => {
+    const view = viewStateContextSchema.safeParse(value);
+    if (!view.success) return `- filtr ${key}: ${JSON.stringify(value)}`;
+    const { predicates, sort, page, matched, total } = view.data;
+    const narrowing = predicates.length
+      ? predicates.map((p) => `${p.field} ${p.op} ${Array.isArray(p.value) ? p.value.join('|') : String(p.value)}`).join(', ')
+      : 'brak';
+    const order = sort ? `${sort.field} ${sort.direction === 'desc' ? 'malejaco' : 'rosnaco'}` : 'domyslne';
+    const paging = page ? `strona ${page.index} z ${page.count} (po ${page.size})` : 'bez stron';
+    return (
+      `- stan widoku ${key} (tylko prezentacja, dane bez zmian): zawezenie ${narrowing}; ` +
+      `sortowanie ${order}; ${paging}; pokazane ${matched} z ${total}`
+    );
+  });
 }
 
 /** One read operation, with its record and fields when it declares them. */

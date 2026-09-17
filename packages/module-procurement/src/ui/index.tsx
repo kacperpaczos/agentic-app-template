@@ -1,17 +1,19 @@
-import { z } from 'zod';
 import { defineComponent } from '@openuidev/react-lang';
 import type { ConversationStarterContribution, MenuItemContribution } from '@platform/contracts';
 import type { UiModule } from '@platform/ui';
 import { MODULE_ID } from '../shared/index.ts';
+import { PROCUREMENT_OPENUI_COMPONENTS } from '../shared/openui-components.ts';
 import {
   ComparisonTableCard,
   CostChartCard,
   procurementCardRenderers,
 } from './cards.tsx';
+import { procurementDetailOpenuiComponents } from './detailComponents.tsx';
 import { CaseDetailPage, CasesPage, DataPage, ItemProvenancePage } from './pages.tsx';
 
 export { CaseDetailPage, CasesPage, DataPage, ItemProvenancePage } from './pages.tsx';
 export * from './cards.tsx';
+export * from './detailComponents.tsx';
 
 const menu: MenuItemContribution[] = [
   { id: 'procurement.cases', section: 'records', label: 'Wszystkie sprawy', to: '/cases', order: 10 },
@@ -38,16 +40,18 @@ const starters: ConversationStarterContribution[] = [
  * or inside an `openui` card. They render the same React components as the
  * canvas cards, so a table written by the agent and a table in the default
  * layout are the same table reading the same backend data.
+ *
+ * Name, description and props schema of every one of them come from
+ * `shared/openui-components.ts`, which the server half declares too — see there
+ * for why.
  */
+const { OfferComparison, OfferCostChart } = PROCUREMENT_OPENUI_COMPONENTS;
 const openuiComponents = [
+  ...procurementDetailOpenuiComponents,
   defineComponent({
-    name: 'OfferComparison',
-    description:
-      'Tabela porownawcza ofert dla sprawy zakupowej. Dane pobiera backend; podaj wylacznie identyfikator sprawy.',
-    props: z.object({
-      caseId: z.string().describe('Identyfikator sprawy zakupowej'),
-      showExcluded: z.boolean().optional().describe('Czy pokazac oferty wykluczone z rankingu'),
-    }),
+    name: OfferComparison.name,
+    description: OfferComparison.description,
+    props: OfferComparison.propsSchema,
     component: ({ props }) => (
       <ComparisonTableCard
         cardId={`openui-${String(props.caseId)}`}
@@ -56,9 +60,9 @@ const openuiComponents = [
     ),
   }),
   defineComponent({
-    name: 'OfferCostChart',
-    description: 'Wykres kosztu calkowitego ofert w sprawie zakupowej.',
-    props: z.object({ caseId: z.string().describe('Identyfikator sprawy zakupowej') }),
+    name: OfferCostChart.name,
+    description: OfferCostChart.description,
+    props: OfferCostChart.propsSchema,
     component: ({ props }) => (
       <CostChartCard cardId={`openui-chart-${String(props.caseId)}`} props={{ caseId: props.caseId }} />
     ),

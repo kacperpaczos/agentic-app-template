@@ -94,6 +94,18 @@ export const canvasSpaceSchema = z.object({
 });
 export type CanvasSpace = z.infer<typeof canvasSpaceSchema>;
 
+/**
+ * Scope kind of a conversation's "agent views" space: `scopeKind` is this,
+ * `scopeId` the conversation id.
+ *
+ * The one scope the platform itself interprets. A space of this kind is where
+ * the agent presents data for one conversation, so it accepts only data
+ * components, module components and plain layout and text — never a component
+ * that would draw numbers the model typed in — and it goes when its
+ * conversation is deleted.
+ */
+export const AGENT_VIEWS_SCOPE_KIND = 'conversation';
+
 export const canvasStateSchema = z.object({
   space: canvasSpaceSchema,
   cards: z.array(canvasCardSchema),

@@ -12,7 +12,7 @@ import {
   type Viewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import type { CanvasCard } from '@platform/contracts';
+import { AGENT_VIEWS_SCOPE_KIND, type CanvasCard } from '@platform/contracts';
 import {
   useCanvasState,
   useRemoveCard,
@@ -81,7 +81,24 @@ function CardNode({ id, data }: NodeProps<Node<CardNodeData>>) {
 
 const nodeTypes = { card: CardNode };
 
-function CanvasInner({ spaceId }: { spaceId: string }) {
+interface CanvasSurfaceProps {
+  spaceId: string;
+  /**
+   * Whether pan and zoom are the working canvas's, reported to the agent as
+   * `AppContext.viewport`. Off for a canvas that is not the user's workspace
+   * (agent views): its viewport is still saved with its own space, but must not
+   * pass for the position on the working canvas.
+   */
+  publishViewport?: boolean;
+  /** Shown over a space with no cards. */
+  emptyMessage?: string;
+}
+
+function CanvasInner({
+  spaceId,
+  publishViewport = true,
+  emptyMessage = 'Pusta przestrzen. Popros agenta o dodanie karty.',
+}: CanvasSurfaceProps) {
   const { data, isLoading, error } = useCanvasState(spaceId);
   const updateGeometry = useUpdateGeometry(spaceId);
   const saveViewport = useSaveViewport(spaceId);
@@ -150,27 +167,40 @@ function CanvasInner({ spaceId }: { spaceId: string }) {
           });
           if (change.dragging === false) scheduleFlush();
         } else if (change.type === 'dimensions' && change.dimensions) {
+          const stored = data?.cards.find((c) => c.id === change.id)?.geometry;
+          const width = Math.round(change.dimensions.width);
+          const height = Math.round(change.dimensions.height);
+          /*
+           * React Flow reports a card's size every time it measures it — on
+           * mount, and again whenever the cards are re-read (an agent changed
+           * one of them). A measurement equal to the stored size is not a
+           * resize and writes nothing. When it is one, the position written
+           * with it is the card's own: falling back to (0, 0), as this did,
+           * moved every card the user had not dragged in this session onto
+           * the first one the moment anything was measured.
+           */
+          if (stored && stored.width === width && stored.height === height) continue;
           const current = pending.current.get(change.id);
           const local = localGeometry[change.id];
           pending.current.set(change.id, {
-            x: Math.round(current?.x ?? local?.x ?? 0),
-            y: Math.round(current?.y ?? local?.y ?? 0),
-            width: Math.round(change.dimensions.width),
-            height: Math.round(change.dimensions.height),
+            x: Math.round(current?.x ?? local?.x ?? stored?.x ?? 0),
+            y: Math.round(current?.y ?? local?.y ?? stored?.y ?? 0),
+            width,
+            height,
           });
           scheduleFlush();
         }
       }
     },
-    [scheduleFlush, localGeometry],
+    [scheduleFlush, localGeometry, data],
   );
 
   const onMoveEnd = useCallback(
     (_e: unknown, viewport: Viewport) => {
-      setViewport(viewport);
+      if (publishViewport) setViewport(viewport);
       saveViewport.mutate(viewport);
     },
-    [saveViewport, setViewport],
+    [saveViewport, setViewport, publishViewport],
   );
 
   if (error) return <QueryErrorState error={error} what="przestrzeni pracy" />;
@@ -195,11 +225,21 @@ function CanvasInner({ spaceId }: { spaceId: string }) {
       <Controls showInteractive={false} />
       <MiniMap pannable zoomable />
       {data.cards.length === 0 && (
-        <div className="pf-state pf-state--empty pf-state--overlay">
-          Pusta przestrzen. Popros agenta o dodanie karty.
-        </div>
+        <div className="pf-state pf-state--empty pf-state--overlay">{emptyMessage}</div>
       )}
     </ReactFlow>
+  );
+}
+
+/**
+ * A canvas over one explicitly named space, independent of the space the user
+ * is working in (`AppState.spaceId`), which it neither reads nor changes.
+ */
+export function CanvasSurface(props: CanvasSurfaceProps) {
+  return (
+    <ReactFlowProvider>
+      <CanvasInner {...props} key={props.spaceId} />
+    </ReactFlowProvider>
   );
 }
 
@@ -213,8 +253,10 @@ export function CanvasHost() {
   const { data, isLoading } = useSpaces();
 
   useEffect(() => {
-    if (spaceId || !data?.spaces.length) return;
-    setSpace(data.spaces[0]!.id);
+    // A conversation's agent views space is not a workspace: it has its own page.
+    const working = data?.spaces.find((sp) => sp.scopeKind !== AGENT_VIEWS_SCOPE_KIND);
+    if (spaceId || !working) return;
+    setSpace(working.id);
   }, [spaceId, data, setSpace]);
 
   if (!spaceId) {

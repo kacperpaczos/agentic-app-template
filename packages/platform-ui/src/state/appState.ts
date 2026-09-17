@@ -1,5 +1,11 @@
 import { create } from 'zustand';
-import type { AppContext } from '@platform/contracts';
+import type {
+  AppContext,
+  DataSort,
+  ViewFilterPredicate,
+  ViewPage,
+  ViewStateContext,
+} from '@platform/contracts';
 import { uiSnapshotSession } from './uiSnapshot.ts';
 
 export type RunPhase =
@@ -59,6 +65,47 @@ export const emptyRun = (): ConversationRun => ({
   unseenResult: false,
 });
 
+/**
+ * What the primary instance of one view is showing, as it counted it.
+ *
+ * Reported by the view (`DataTable`) while it is mounted and dropped when it
+ * unmounts, so the store holds the state of the views actually on screen —
+ * the banner describes it, the acknowledgement of an agent's command reads it,
+ * and `toAppContext()` sends it with the next command.
+ */
+export interface ViewStateReport {
+  targetId: string;
+  /** The instance reporting; only it may withdraw the report. */
+  instanceId: string;
+  /** `viewAddressKey` of the address state the view applied. */
+  address: string;
+  /** The address bar's narrowing in force. */
+  predicates: ViewFilterPredicate[];
+  /** Order in force, and the label of its field. */
+  sort: DataSort | null;
+  sortLabel: string | null;
+  /** True when the order is the address bar's rather than the composition's. */
+  sortFromAddress: boolean;
+  /** An order the address asked for and the view set aside. */
+  rejectedSort: (DataSort & { reason: 'unknown_field' | 'not_sortable' }) | null;
+  page: ViewPage | null;
+  /** The page the address asked for when it did not exist (the nearest is shown). */
+  clampedFrom: number | null;
+  /** Records left after the narrowing. */
+  matched: number;
+  /** Records the view would show without the narrowing. */
+  total: number;
+}
+
+/** The part of a report the agent's context carries. */
+export const viewStateContextOf = (r: ViewStateReport): ViewStateContext => ({
+  predicates: r.predicates,
+  sort: r.sort,
+  page: r.page,
+  matched: r.matched,
+  total: r.total,
+});
+
 export interface DraftRecord {
   formId: string;
   entity: string;
@@ -111,6 +158,14 @@ interface AppState {
    */
   filterOutcome: { targetId: string; matched: number; total: number } | null;
   /**
+   * State of each view on screen, keyed by target id — see `ViewStateReport`.
+   *
+   * Held here, not only in the address, because the address says what was
+   * *asked for* and this says what the view *did* with it: the order actually
+   * applied, the page after clamping, how many records that left.
+   */
+  viewStates: Record<string, ViewStateReport>;
+  /**
    * Lifecycle of every run the client knows about, **keyed by conversation**.
    *
    * Keyed, and not a single record, because a run belongs to its conversation
@@ -141,6 +196,10 @@ interface AppState {
   setAttachments: (ids: string[]) => void;
   setAgentFilterKey: (key: string | null) => void;
   reportFilterOutcome: (outcome: { targetId: string; matched: number; total: number }) => void;
+  /** Records a view's state; a report equal to the stored one changes nothing. */
+  reportViewState: (report: ViewStateReport) => void;
+  /** Withdraws a view's report, if it is still this instance's. */
+  dropViewState: (targetId: string, instanceId: string) => void;
   /** Merges a patch into one conversation's run record, creating it if absent. */
   patchRun: (conversationId: string, patch: Partial<ConversationRun>) => void;
   /** Reads one conversation's run record, or an empty one. */
@@ -175,6 +234,7 @@ export const useAppState = create<AppState>((set, get) => ({
   attachments: [],
   agentFilterKey: null,
   filterOutcome: null,
+  viewStates: {},
   runs: {},
 
   setSpace: (id) => set({ spaceId: id }),
@@ -216,6 +276,19 @@ export const useAppState = create<AppState>((set, get) => ({
         ? s
         : { filterOutcome },
     ),
+  reportViewState: (report) =>
+    set((s) =>
+      JSON.stringify(s.viewStates[report.targetId]) === JSON.stringify(report)
+        ? s
+        : { viewStates: { ...s.viewStates, [report.targetId]: report } },
+    ),
+  dropViewState: (targetId, instanceId) =>
+    set((s) => {
+      if (s.viewStates[targetId]?.instanceId !== instanceId) return s;
+      const next = { ...s.viewStates };
+      delete next[targetId];
+      return { viewStates: next };
+    }),
   patchRun: (conversationId, patch) =>
     set((s) => ({
       runs: { ...s.runs, [conversationId]: { ...(s.runs[conversationId] ?? emptyRun()), ...patch } },
@@ -235,7 +308,15 @@ export const useAppState = create<AppState>((set, get) => ({
       spaceId: s.spaceId,
       resource: s.resource,
       selection: s.selection,
-      filters: s.filters,
+      /*
+       * Read when the command is sent, from the views that are on screen at
+       * that moment: the next turn starts from the narrowing, order and page
+       * the user is looking at, not from whatever the agent last asked for.
+       */
+      filters: {
+        ...s.filters,
+        ...Object.fromEntries(Object.values(s.viewStates).map((r) => [r.targetId, viewStateContextOf(r)])),
+      },
       viewport: s.viewport,
       drafts: Object.values(s.drafts).map((d) => ({
         formId: d.formId,

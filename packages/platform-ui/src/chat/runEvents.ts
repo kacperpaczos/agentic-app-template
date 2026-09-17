@@ -129,6 +129,13 @@ export function applyRunEvent(
     case PLATFORM_CUSTOM_EVENTS.canvasChanged: {
       const spaceId = value.spaceId as string | undefined;
       if (spaceId) void ctx.qc.invalidateQueries({ queryKey: qk.space(spaceId) });
+      /*
+       * A conversation's agent views are read by conversation, not by space
+       * (the page may not know the space yet — the first view creates it), so
+       * the event cannot name their cache entry. Every conversation's views are
+       * refreshed; only the one on screen is actually re-read.
+       */
+      void ctx.qc.invalidateQueries({ queryKey: qk.agentViewsAll() });
       break;
     }
     case PLATFORM_CUSTOM_EVENTS.dataChanged:

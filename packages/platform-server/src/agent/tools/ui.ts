@@ -1,12 +1,14 @@
 import { z } from 'zod';
 import {
+  AGENT_VIEWS_SCOPE_KIND,
   AppError,
   UI_COMMAND_FAILURES,
   VIEW_FILTER_OPS,
   type ModuleToolDefinition,
   type ToolCallContext,
 } from '@platform/contracts';
-import type { PlatformServices } from '../../services/index.ts';
+import { sortableFieldsOfTarget } from '../../registry/view-sorting.ts';
+import { assertOwnConversationViews, type PlatformServices } from '../../services/index.ts';
 
 /**
  * Moving the interface: the catalog of places, navigation and narrowing.
@@ -41,14 +43,27 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
             label: f.label,
             values: f.values,
           })),
+          /*
+           * Present only for a view whose records can be ordered: the declared,
+           * sortable fields of its primary read. `ui_sort` refuses anything else.
+           */
+          sortableFields: sortableFieldsOfTarget(services.modules, t.id)?.map((f) => ({
+            field: f.field,
+            label: f.label,
+            type: f.type,
+          })),
         })),
-        spaces: services.canvas.listSpaces(ctx.ownerId).map((sp) => ({
-          spaceId: sp.id,
-          title: sp.title,
-          scopeKind: sp.scopeKind,
-          scopeId: sp.scopeId,
-          current: sp.id === ctx.appContext.spaceId,
-        })),
+        // Another conversation's agent views are not a place this run may take the user or edit.
+        spaces: services.canvas
+          .listSpaces(ctx.ownerId)
+          .filter((sp) => sp.scopeKind !== AGENT_VIEWS_SCOPE_KIND || sp.scopeId === ctx.conversationId)
+          .map((sp) => ({
+            spaceId: sp.id,
+            title: sp.title,
+            scopeKind: sp.scopeKind,
+            scopeId: sp.scopeId,
+            current: sp.id === ctx.appContext.spaceId,
+          })),
         currentSpaceId: ctx.appContext.spaceId,
       }),
     },
@@ -90,7 +105,7 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
         if (input.spaceId) {
           // Ownership, before anything is asked of the browser: a space the
           // owner may not see must fail here, not silently on screen.
-          services.canvas.getState(input.spaceId, ctx.ownerId);
+          assertOwnConversationViews(services.canvas.getSpace(input.spaceId, ctx.ownerId), ctx.conversationId);
         }
         const result = await ctx.requestUi({
           targetId: input.targetId,
@@ -119,8 +134,10 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
         'uzytkownik ma je zobaczyc w widoku. Pola do zawezania podaje ui_catalog jako ' +
         'filterableFields; pole spoza tej listy jest odrzucane. Zawsze podaj label — krotkie zdanie ' +
         'po polsku, ktore uzytkownik zobaczy nad widokiem. Przekaz clear=true, zeby przywrocic ' +
+        '(tylko widok z filterableFields; inny cel odpowiada not_filterable i nic nie zmienia) ' +
         'pelny widok. Zwraca to, co KLIENT faktycznie pokazal, razem z liczba wierszy ' +
-        '(filtered.matched z filtered.total) — podaj te liczby uzytkownikowi zamiast zgadywac.',
+        '(filtered.matched z filtered.total) i strona (page) — podaj te liczby uzytkownikowi zamiast ' +
+        'zgadywac. Zawezenie zmienia tylko prezentacje, nie dane.',
       effect: 'read',
       alwaysLoad: true,
       inputSchema: z.object({
@@ -159,19 +176,25 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
         }
 
         /*
-         * Clearing is allowed on any view — putting a screen back the way it
-         * was must never depend on the view still declaring what it accepts.
+         * A target that declares no narrowing has nothing to narrow — and
+         * nothing to clear. Answered here, before the browser is asked: a
+         * "cleared" for it would be a success nothing applied, and performing it
+         * would move the user to that target's screen for nothing.
+         *
+         * On a view that does declare one, clearing always goes through,
+         * whatever its address holds at the moment — putting a screen back the
+         * way it was must never depend on first working out what is applied.
          */
         const clearing = input.clear === true;
+        if (!known.filter) {
+          return {
+            executed: false,
+            reason: UI_COMMAND_FAILURES.notFilterable,
+            targetId: known.id,
+            label: known.label,
+          };
+        }
         if (!clearing) {
-          if (!known.filter) {
-            return {
-              executed: false,
-              reason: UI_COMMAND_FAILURES.notFilterable,
-              targetId: known.id,
-              label: known.label,
-            };
-          }
           const predicates = input.predicates ?? [];
           if (predicates.length === 0) {
             throw new AppError(
@@ -219,6 +242,8 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
           url: result.url,
           cleared: clearing && result.executed,
           filtered: result.filtered,
+          // A narrowing returns to the first page; the view says how many there are.
+          page: result.page,
           uiVersion: result.uiVersion,
           uiClientId: result.uiClientId,
           uiPublication: result.uiPublication,

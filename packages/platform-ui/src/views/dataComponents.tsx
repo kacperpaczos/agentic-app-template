@@ -1,5 +1,6 @@
 import { defineComponent } from '@openuidev/react-lang';
 import {
+  DATA_COMPONENT_DESCRIPTIONS,
   dataChartPropsSchema,
   dataSummaryPropsSchema,
   dataTablePropsSchema,
@@ -22,24 +23,19 @@ import { DataTableView } from './DataTable.tsx';
 export const platformDataComponents = [
   defineComponent({
     name: 'DataTable',
-    description:
-      'Tabela rekordow zarejestrowanej operacji odczytu. Dane pobiera backend; podaj zrodlo {operation, input} ' +
-      'i opcjonalnie kolumny (pola deskryptora), tytul, rozmiar strony, stale zawezenie i porzadek. Nigdy nie wpisuj wartosci.',
+    description: DATA_COMPONENT_DESCRIPTIONS.DataTable,
     props: dataTablePropsSchema,
     component: ({ props }) => <DataTableView {...(props as DataTableProps)} />,
   }),
   defineComponent({
     name: 'DataChart',
-    description:
-      'Wykres (bar, line, pie) rekordow zarejestrowanej operacji odczytu: kategorie z pola x, serie z pol liczbowych ' +
-      'deskryptora. Dane i jednostki pochodza z backendu; podpis podaje serie, jednostke i zakres wartosci.',
+    description: DATA_COMPONENT_DESCRIPTIONS.DataChart,
     props: dataChartPropsSchema,
     component: ({ props }) => <DataChartView {...(props as DataChartProps)} />,
   }),
   defineComponent({
     name: 'DataSummary',
-    description:
-      'Podsumowanie rekordow zarejestrowanej operacji odczytu jako pary etykieta-wartosc dla wskazanych pol deskryptora.',
+    description: DATA_COMPONENT_DESCRIPTIONS.DataSummary,
     props: dataSummaryPropsSchema,
     component: ({ props }) => <DataSummaryView {...(props as DataSummaryProps)} />,
   }),

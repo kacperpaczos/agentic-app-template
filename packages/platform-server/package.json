@@ -11,6 +11,7 @@
     "@hono/node-server": "1.19.7",
     "@mastra/claude": "0.3.1",
     "@mastra/core": "1.66.0",
+    "@openuidev/lang-core": "0.2.18",
     "@platform/contracts": "workspace:*",
     "better-sqlite3": "13.0.3",
     "drizzle-orm": "0.45.2",

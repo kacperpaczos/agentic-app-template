@@ -16,6 +16,7 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { collectToolEntries, platformTools, type PlatformInstance } from '@platform/server';
 import { composeApp } from '../../apps/server/src/compose.ts';
+import { agentViewsScript } from './agent-views-scenario.ts';
 import { scriptedAgent, type Step } from './scripted-agent.ts';
 
 /**
@@ -240,6 +241,81 @@ const SCENARIOS: Record<string, Step[]> = {
     { kind: 'wait', delayMs: 150 },
     { kind: 'text', text: 'root = DataTable({operation: "procurement.suppliers"}, ["name", "country"])' },
   ],
+  /*
+   * The view's state through the agent's real tools: the run first reads its
+   * own context (what the client sent with the command), then narrows and
+   * orders the suppliers through the actual `ui_filter` and `ui_sort` handlers
+   * and the runtime's acknowledgement gate. Played again as a second command,
+   * its `get_context` shows the state the first one left on screen.
+   */
+  'viewstate-filter-sort': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'call', name: 'get_context', maxChars: 3000 },
+    {
+      kind: 'call',
+      name: 'ui_filter',
+      input: {
+        targetId: 'procurement.data',
+        predicates: [{ field: 'country', op: 'eq', value: 'PL' }],
+        label: 'tylko dostawcy z Polski',
+      },
+    },
+    { kind: 'call', name: 'ui_sort', input: { targetId: 'procurement.data', field: 'name', direction: 'desc' } },
+    { kind: 'text', text: 'Zawezilem i posortowalem widok.' },
+  ],
+  /*
+   * The same narrowing and the same order asked for twice. The second time
+   * nothing in the address changes, and the answer must still be the state on
+   * screen — executed, with its counts — not `not_applied`.
+   */
+  'viewstate-repeat': [
+    { kind: 'wait', delayMs: 150 },
+    {
+      kind: 'call',
+      name: 'ui_filter',
+      input: { targetId: 'procurement.data', predicates: [{ field: 'country', op: 'eq', value: 'PL' }], label: 'z Polski' },
+    },
+    { kind: 'call', name: 'ui_sort', input: { targetId: 'procurement.data', field: 'name', direction: 'desc' } },
+    {
+      kind: 'call',
+      name: 'ui_filter',
+      input: { targetId: 'procurement.data', predicates: [{ field: 'country', op: 'eq', value: 'PL' }], label: 'z Polski' },
+    },
+    { kind: 'call', name: 'ui_sort', input: { targetId: 'procurement.data', field: 'name', direction: 'desc' } },
+    { kind: 'text', text: 'Powtorzylem zawezenie i sortowanie.' },
+  ],
+  /*
+   * An exact narrowing on a text field (`eq`), which the user's controls, where
+   * a text field means "contains", must not widen when a different field is
+   * changed.
+   */
+  'viewstate-exact-name': [
+    { kind: 'wait', delayMs: 150 },
+    {
+      kind: 'call',
+      name: 'ui_filter',
+      input: { targetId: 'procurement.data', predicates: [{ field: 'name', op: 'eq', value: 'NordAV' }], label: 'dokladnie NordAV' },
+    },
+    { kind: 'text', text: 'Zawezilem do nazwy NordAV.' },
+  ],
+  /*
+   * Orders the view cannot take: a field the read does not have and one it
+   * declares unsortable. Both must be refused by name, before the browser is
+   * asked for anything, and the screen must stay as it was.
+   */
+  'viewstate-sort-refused': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'call', name: 'ui_sort', input: { targetId: 'procurement.data', field: 'wojewodztwo', direction: 'asc' } },
+    { kind: 'call', name: 'ui_sort', input: { targetId: 'procurement.data', field: 'contactEmail', direction: 'asc' } },
+    { kind: 'text', text: 'Zglaszam odmowy sortowania.' },
+  ],
+  /* The agent puts the view back: its own order, no narrowing, the first page. */
+  'viewstate-clear': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'call', name: 'ui_sort', input: { targetId: 'procurement.data', clear: true } },
+    { kind: 'call', name: 'ui_filter', input: { targetId: 'procurement.data', clear: true } },
+    { kind: 'text', text: 'Przywrocilem domyslny widok.' },
+  ],
   'tool-error': [
     {
       kind: 'tool',
@@ -255,10 +331,20 @@ const SCENARIOS: Record<string, Step[]> = {
   ],
 };
 
+/**
+ * Scenarios whose steps depend on the user's message — a whole conversation
+ * played by one server instance.
+ */
+const CONVERSATION_SCENARIOS: Record<string, (prompt: string) => Step[]> = {
+  'agent-views': agentViewsScript,
+};
+
 const scenario = process.env.SCRIPT ?? 'tool-then-text';
-const steps = SCENARIOS[scenario];
+const steps = SCENARIOS[scenario] ?? CONVERSATION_SCENARIOS[scenario];
 if (!steps) {
-  console.error(`[scripted] nieznany scenariusz "${scenario}". Dostepne: ${Object.keys(SCENARIOS).join(', ')}`);
+  console.error(
+    `[scripted] nieznany scenariusz "${scenario}". Dostepne: ${[...Object.keys(SCENARIOS), ...Object.keys(CONVERSATION_SCENARIOS)].join(', ')}`,
+  );
   process.exit(2);
 }
 

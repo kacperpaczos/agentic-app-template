@@ -1,5 +1,6 @@
 import { AppError, type CardComponentDescriptor, type CardSpec } from '@platform/contracts';
 import type { ServerModuleRegistry } from './modules.ts';
+import { OpenUiServerCatalog, validateComposition, type CompositionMode } from './openui-validation.ts';
 
 /**
  * Server-side component catalog.
@@ -11,8 +12,13 @@ import type { ServerModuleRegistry } from './modules.ts';
  */
 export class ComponentCatalog {
   readonly #byId = new Map<string, CardComponentDescriptor>();
+  readonly #registry: ServerModuleRegistry;
+  /** The OpenUI Lang half of the catalog, which `openui` cards are parsed against. */
+  readonly openui: OpenUiServerCatalog;
 
   constructor(registry: ServerModuleRegistry, platformComponents: CardComponentDescriptor[] = []) {
+    this.#registry = registry;
+    this.openui = new OpenUiServerCatalog(registry.modules.flatMap((m) => m.openuiComponents ?? []));
     for (const c of platformComponents) this.#byId.set(c.id, c);
     for (const mod of registry.modules) {
       for (const c of mod.cardComponents ?? []) {
@@ -47,14 +53,28 @@ export class ComponentCatalog {
 
   /**
    * Validates a card spec and returns the normalised version (props coerced by
-   * the component schema). Throws instead of mutating on any problem.
+   * the component schema, OpenUI source trimmed and unfenced). Throws instead of
+   * mutating on any problem.
+   *
+   * `mode` is `agent-views` for a card in a conversation's agent views space —
+   * see `CanvasService.compositionModeOfSpace` — and `catalog` otherwise.
    */
-  validate(spec: CardSpec): CardSpec {
+  validate(spec: CardSpec, options: { mode?: CompositionMode } = {}): CardSpec {
     if (spec.kind === 'openui') {
-      if (!spec.source.trim()) {
-        throw new AppError('validation_failed', 'Pusta kompozycja OpenUI.');
-      }
-      return spec;
+      const { source } = validateComposition({
+        source: spec.source,
+        mode: options.mode ?? 'catalog',
+        catalog: this.openui,
+        reads: this.#registry,
+      });
+      return { kind: 'openui', source };
+    }
+    if (options.mode === 'agent-views') {
+      throw new AppError(
+        'validation_failed',
+        `Widok agenta jest kompozycja OpenUI (kind: "openui"); karta komponentu ${spec.component} nie jest tu dozwolona.`,
+        { reason: 'component_not_allowed' },
+      );
     }
     const descriptor = this.#byId.get(spec.component);
     if (!descriptor) {

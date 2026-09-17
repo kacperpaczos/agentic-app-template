@@ -4,7 +4,10 @@ import { applyViewFilter } from '@platform/contracts';
 import type {
   ArtifactMeta,
   AuthStatus,
+  CanvasCard,
+  CanvasSpace,
   CanvasState,
+  ReadOperationSummary,
   CardGeometry,
   CardSpec,
   StoredFile,
@@ -46,6 +49,14 @@ export const qk = {
    */
   read: (operation: string, input: unknown) =>
     ['read', accessScope(), operation, stableJson(input ?? {})] as const,
+  readOperations: () => ['read-operations', accessScope()] as const,
+  /**
+   * A conversation's agent views. Under `canvas`, so the end of a run refreshes
+   * them with every other canvas read; a `canvas_changed` event during the run
+   * invalidates {@link qk.agentViewsAll} explicitly (see `runEvents.ts`).
+   */
+  agentViews: (conversationId: string) => ['canvas', accessScope(), 'agent-views', conversationId] as const,
+  agentViewsAll: () => ['canvas', accessScope(), 'agent-views'] as const,
   uiTargets: () => ['ui-targets', accessScope()] as const,
   uiViews: () => ['ui-views', accessScope()] as const,
 };
@@ -140,6 +151,26 @@ export const useUiTargets = () =>
     queryFn: () => apiGet<{ targets: UiTarget[] }>('/api/ui/targets'),
     staleTime: 5 * 60_000,
     select: (d) => d.targets,
+  });
+
+/** Every registered read by name. Changes only when modules change. */
+export const useReadOperations = () =>
+  useQuery({
+    queryKey: qk.readOperations(),
+    queryFn: () => apiGet<{ operations: ReadOperationSummary[] }>('/api/read/operations'),
+    staleTime: 5 * 60_000,
+    select: (d) => d.operations,
+  });
+
+/** A conversation's agent views: its space, or none yet, and the cards in it. */
+export const useAgentViews = (conversationId: string | null) =>
+  useQuery({
+    queryKey: conversationId ? qk.agentViews(conversationId) : ['canvas', 'agent-views', 'none'],
+    queryFn: () =>
+      apiGet<{ conversationId: string; space: CanvasSpace | null; cards: CanvasCard[] }>(
+        `/api/conversations/${conversationId}/agent-views`,
+      ),
+    enabled: Boolean(conversationId),
   });
 
 /** Module screens as compositions. Changes only when modules change. */

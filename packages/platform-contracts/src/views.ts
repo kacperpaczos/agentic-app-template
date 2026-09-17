@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { APP_ERROR_CODES } from './errors.ts';
-import { viewFilterPredicateSchema } from './ui.ts';
+import { dataSortSchema, viewFilterPredicateSchema, viewPageSchema } from './ui.ts';
 
 /**
  * Data views: what a module's read returns, how a screen is composed from it,
@@ -77,7 +77,10 @@ export const recordFieldSchema = z
       .array(z.object({ value: z.string().max(120), label: z.string().max(120) }))
       .max(60)
       .optional(),
-    /** Whether a view may be ordered by this field. */
+    /**
+     * Whether a view may be ordered by this field. A declared field is
+     * sortable unless it says `false` (see `checkSortField`).
+     */
     sortable: z.boolean().optional(),
   })
   .superRefine((f, ctx) => {
@@ -235,12 +238,6 @@ export type ViewDefinition = z.infer<typeof viewDefinitionSchema>;
 export const DATA_COMPONENTS = ['DataTable', 'DataChart', 'DataSummary'] as const;
 export type DataComponentName = (typeof DATA_COMPONENTS)[number];
 
-export const dataSortSchema = z.object({
-  field: fieldName,
-  direction: z.enum(['asc', 'desc']).describe('asc rosnaco, desc malejaco'),
-});
-export type DataSort = z.infer<typeof dataSortSchema>;
-
 const dataFilterSchema = z
   .array(viewFilterPredicateSchema)
   .max(8)
@@ -248,7 +245,7 @@ const dataFilterSchema = z
 
 /*
  * Key order is the positional argument order in OpenUI Lang
- * (`DataTable(source, columns, title, pageSize, filter, sort)`), so it is part
+ * (`DataTable(source, columns, title, pageSize, filter, sort, groupBy)`), so it is part
  * of the contract: reordering these keys changes the meaning of every stored
  * composition.
  */
@@ -264,6 +261,13 @@ export const dataTablePropsSchema = z.object({
   pageSize: z.number().int().min(1).max(200).optional().describe('Liczba wierszy na strone'),
   filter: dataFilterSchema.optional(),
   sort: dataSortSchema.optional().describe('Porzadek wierszy'),
+  /*
+   * Appended last on purpose: it is a new positional argument, and every stored
+   * composition written before it must keep its meaning.
+   */
+  groupBy: fieldName
+    .optional()
+    .describe('Pole grupujace wiersze; kazda grupa ma naglowek z wartoscia i liczba rekordow'),
 });
 export type DataTableProps = z.infer<typeof dataTablePropsSchema>;
 
@@ -294,6 +298,23 @@ export const dataSummaryPropsSchema = z.object({
   title: z.string().max(200).optional().describe('Tytul podsumowania'),
 });
 export type DataSummaryProps = z.infer<typeof dataSummaryPropsSchema>;
+
+/**
+ * What the catalog says about each data component. One text for the browser's
+ * `defineComponent` and the server's catalog, which must describe the same
+ * component the same way (compared by the catalog parity test).
+ */
+export const DATA_COMPONENT_DESCRIPTIONS: Record<DataComponentName, string> = {
+  DataTable:
+    'Tabela rekordow zarejestrowanej operacji odczytu. Dane pobiera backend; podaj zrodlo {operation, input} ' +
+    'i opcjonalnie kolumny (pola deskryptora), tytul, rozmiar strony, stale zawezenie, porzadek i pole grupowania. ' +
+    'Nigdy nie wpisuj wartosci.',
+  DataChart:
+    'Wykres (bar, line, pie) rekordow zarejestrowanej operacji odczytu: kategorie z pola x, serie z pol liczbowych ' +
+    'deskryptora. Dane i jednostki pochodza z backendu; podpis podaje serie, jednostke i zakres wartosci.',
+  DataSummary:
+    'Podsumowanie rekordow zarejestrowanej operacji odczytu jako pary etykieta-wartosc dla wskazanych pol deskryptora.',
+};
 
 /** Props schema of each data component, for whoever validates a composition. */
 export const DATA_COMPONENT_PROPS = {
@@ -372,13 +393,7 @@ export const semanticInstanceSchema = z
     filter: z.array(viewFilterPredicateSchema).max(28),
     sort: dataSortSchema.nullable(),
     /** `index` counts from 1. Null when the instance does not paginate. */
-    page: z
-      .object({
-        index: z.number().int().min(1),
-        size: z.number().int().min(1),
-        count: z.number().int().min(0),
-      })
-      .nullable(),
+    page: viewPageSchema.nullable(),
     /** Records on screen, at most the limit. Empty unless `ready`. */
     visibleRecordIds: z.array(z.string().max(128)).max(SEMANTIC_VISIBLE_RECORDS_LIMIT),
     /**

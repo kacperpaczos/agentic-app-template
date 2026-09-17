@@ -11,7 +11,7 @@ import { RunRegistry } from './runs.ts';
 import { UiSnapshotStore } from './ui-snapshots.ts';
 
 export { ArtifactService } from './artifacts.ts';
-export { CanvasService } from './canvas.ts';
+export { CanvasService, assertOwnConversationViews } from './canvas.ts';
 export { ConversationService, deriveTitle } from './conversations.ts';
 export { FileService, sanitizeFilename } from './files.ts';
 export { IdempotencyStore } from './idempotency.ts';
