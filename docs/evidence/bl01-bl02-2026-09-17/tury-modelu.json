@@ -181,8 +181,9 @@
     },
     {
       "etap": "domkniecie-T27-krok-2-i-krok-6",
-      "tury": "18-",
-      "przyznane": 4
+      "tury": "18-21",
+      "przyznane": 4,
+      "uwaga": "tura 18 stracona na wlasny blad: stala MODEL_TURN_BUDGET nie byla podniesiona przed uruchomieniem"
     }
   ]
 }
