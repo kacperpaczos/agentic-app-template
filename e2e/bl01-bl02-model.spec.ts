@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test } from './support/fixtures.ts';
 import { type Locator, type Page } from '@playwright/test';
@@ -46,10 +46,36 @@ const AGENT_TIMEOUT = 420_000;
 
 /** Turns of the subscription this file may spend, retries included (Task 8 budget). */
 const MODEL_TURN_BUDGET = 12;
-let modelTurns = 0;
 
 const EVIDENCE_DIR = resolve(process.cwd(), 'docs/evidence/bl01-bl02-2026-09-17');
 const CODE_COMMIT = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: process.cwd() }).toString().trim();
+
+/**
+ * The turn ledger, kept on disk.
+ *
+ * The budget is for the whole task, not for one process: running T25 again
+ * after fixing the test still costs a turn, and a counter that starts at zero
+ * every invocation would hide exactly the spending the budget exists to
+ * bound. So each command is written down before it is sent, with what it was
+ * and which run it started, and the ledger is part of the evidence.
+ */
+const LEDGER = resolve(EVIDENCE_DIR, 'tury-modelu.json');
+
+interface TurnLedger {
+  budzet: number;
+  wydane: number;
+  tury: Array<{ nr: number; o: string; proba: string; polecenie: string; runId?: string }>;
+}
+
+function readLedger(): TurnLedger {
+  if (!existsSync(LEDGER)) return { budzet: MODEL_TURN_BUDGET, wydane: 0, tury: [] };
+  return JSON.parse(readFileSync(LEDGER, 'utf8')) as TurnLedger;
+}
+
+function writeLedger(ledger: TurnLedger): void {
+  mkdirSync(EVIDENCE_DIR, { recursive: true });
+  writeFileSync(LEDGER, `${JSON.stringify(ledger, null, 2)}\n`);
+}
 
 /* -------------------------------------------------------------------------- */
 /*  Evidence                                                                  */
@@ -111,12 +137,15 @@ async function openApp(page: Page, path = '/'): Promise<void> {
  * "the command carried the state of the view" is a claim about what left the
  * browser, and the request body is the only place that is true or false.
  */
-async function sendForRun(page: Page, text: string): Promise<{ runId: string; context: any }> {
-  modelTurns += 1;
-  expect(
-    modelTurns,
-    `budzet Task 8 to ${MODEL_TURN_BUDGET} tur modelu — proba wyslania tury ${modelTurns}`,
-  ).toBeLessThanOrEqual(MODEL_TURN_BUDGET);
+async function sendForRun(page: Page, text: string, proba = ''): Promise<{ runId: string; context: any }> {
+  const ledger = readLedger();
+  const nr = ledger.wydane + 1;
+  ledger.wydane = nr;
+  ledger.tury.push({ nr, o: new Date().toISOString(), proba, polecenie: text });
+  writeLedger(ledger);
+  expect(nr, `budzet Task 8 to ${MODEL_TURN_BUDGET} tur modelu — proba wyslania tury ${nr}`).toBeLessThanOrEqual(
+    MODEL_TURN_BUDGET,
+  );
 
   const request = page.waitForRequest((r) => r.url().endsWith('/api/agui/run') && r.method() === 'POST');
   const composer = page.locator('.openui-agent-thread-composer__input');
@@ -126,6 +155,10 @@ async function sendForRun(page: Page, text: string): Promise<{ runId: string; co
   const sent = await request;
   const runId = (await sent.response())?.headers()['x-run-id'];
   expect(runId, 'naglowek X-Run-Id').toBeTruthy();
+  const updated = readLedger();
+  const entry = updated.tury.find((t) => t.nr === nr);
+  if (entry) entry.runId = runId!;
+  writeLedger(updated);
   return { runId: runId!, context: sent.postDataJSON().context };
 }
 
@@ -400,7 +433,7 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
 
       /* ------------------------ the question, as asked ----------------------- */
       const polecenie = 'Jaki NIP ma dostawca NordAV OY?';
-      const { runId, context } = await sendForRun(page, polecenie);
+      const { runId, context } = await sendForRun(page, polecenie, 'T25');
       expect(context.ui, 'polecenie nie nioslo znacznika ekranu').toBeTruthy();
       const phase = await settled(page, runId);
       const conversationId = param(page, 'c')!;
@@ -491,7 +524,7 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       await shot(page, 't25-wskazana-wartosc.png');
       evidence.werdykt = 'zaliczona';
     } finally {
-      evidence.turyModeluLacznie = modelTurns;
+      evidence.turyModeluWydaneLacznie = readLedger().wydane;
       writeEvidence('t25-wskazanie-wartosci.json', evidence);
     }
   });
@@ -523,7 +556,7 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
 
       /* ------------------------ 1. narrow and order -------------------------- */
       const first = 'Pokaz tylko polskich dostawcow, posortowanych po nazwie od Z do A.';
-      const run1 = await sendForRun(page, first);
+      const run1 = await sendForRun(page, first, evidence.proba as string);
       // The first command left the view as the user had it: nothing narrowed.
       expect(run1.context.filters['procurement.data']).toMatchObject({ predicates: [], sort: null });
       const phase1 = await settled(page, run1.runId);
@@ -578,7 +611,7 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       expect(expectedRecord.id).not.toBe(before.records[0]!.id);
 
       const second = 'Ktory dostawca jest teraz na pierwszym miejscu tej listy i jaki ma NIP?';
-      const run2 = await sendForRun(page, second);
+      const run2 = await sendForRun(page, second, evidence.proba as string);
       // (d) The command carried the view exactly as the screen had it.
       expect(run2.context.filters['procurement.data']).toEqual({
         predicates: [{ field: 'country', op: 'eq', value: 'PL' }],
@@ -611,7 +644,7 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
 
       /* ---------------------- 3. remove the narrowing ------------------------ */
       const third = 'Usun zawezenie i pokaz z powrotem wszystkich dostawcow.';
-      const run3 = await sendForRun(page, third);
+      const run3 = await sendForRun(page, third, evidence.proba as string);
       const phase3 = await settled(page, run3.runId);
       evidence.przebiegi.push(await runFacts(page, conversationId, run3.runId, third));
       expect(phase3).toBe('succeeded');
@@ -628,7 +661,7 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
 
       evidence.werdykt = 'zaliczona';
     } finally {
-      evidence.turyModeluLacznie = modelTurns;
+      evidence.turyModeluWydaneLacznie = readLedger().wydane;
       writeEvidence('t26-zawezenie-rozmowa.json', evidence);
     }
   });
@@ -667,7 +700,7 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       /* --------------------------- 1. the listing ---------------------------- */
       const first =
         'Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.';
-      const run1 = await sendForRun(page, first);
+      const run1 = await sendForRun(page, first, evidence.proba as string);
       const phase1 = await settled(page, run1.runId);
       const conversationId = param(page, 'c')!;
       evidence.rozmowa = conversationId;
@@ -709,7 +742,7 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
 
       /* ---------------------------- 2. the chart ----------------------------- */
       const second = 'Dodaj do tego wykres cen jednostkowych tych pozycji.';
-      const run2 = await sendForRun(page, second);
+      const run2 = await sendForRun(page, second, evidence.proba as string);
       const phase2 = await settled(page, run2.runId);
       evidence.przebiegi.push(await runFacts(page, conversationId, run2.runId, second));
       expect(phase2).toBe('succeeded');
@@ -738,7 +771,7 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
 
       /* ----------------------- 3. the scope, by talking ---------------------- */
       const third = 'Ogranicz zestawienie do pozycji dostawcy MediaPro Systemy.';
-      const run3 = await sendForRun(page, third);
+      const run3 = await sendForRun(page, third, evidence.proba as string);
       const phase3 = await settled(page, run3.runId);
       evidence.przebiegi.push(await runFacts(page, conversationId, run3.runId, third));
       expect(phase3).toBe('succeeded');
@@ -871,7 +904,7 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
 
       evidence.werdykt = 'zaliczona';
     } finally {
-      evidence.turyModeluLacznie = modelTurns;
+      evidence.turyModeluWydaneLacznie = readLedger().wydane;
       writeEvidence('t27-widoki-agenta.json', evidence);
       // The shared instance's seed is other suites' fixture; put the price back.
       if (restore) await restore().catch(() => undefined);

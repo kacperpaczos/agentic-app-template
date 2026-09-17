@@ -1,0 +1,14 @@
+{
+  "budzet": 12,
+  "wydane": 1,
+  "tury": [
+    {
+      "nr": 1,
+      "o": "2026-09-17T19:41:04.000Z",
+      "proba": "T25",
+      "polecenie": "Jaki NIP ma dostawca NordAV OY?",
+      "runId": "run_e3f0eb8de955422387a8",
+      "uwaga": "proba 1 — aplikacja wykonala zadanie poprawnie (found/shown/matchesBackend = true), test oblal przez wlasny blad czytania wyniku narzedzia przez MCP"
+    }
+  ]
+}

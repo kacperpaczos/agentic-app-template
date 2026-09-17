@@ -1,0 +1,41 @@
+{
+  "zapisano": "2026-09-17T19:41:37.009Z",
+  "kodCommit": "c3090022eab5e458ff9975e70a5ad098e14cd407",
+  "zrodlo": "prawdziwy model (subskrypcja Claude), instancja testowa suity przegladarkowej",
+  "spec": "e2e/bl01-bl02-model.spec.ts",
+  "proba": "T25",
+  "kryteria": [
+    "L2.16",
+    "L6.16"
+  ],
+  "werdykt": "niezaliczona",
+  "przebiegi": [
+    {
+      "runId": "run_e3f0eb8de955422387a8",
+      "polecenie": "Jaki NIP ma dostawca NordAV OY?",
+      "status": "succeeded",
+      "czasMs": 33029,
+      "pierwszyTekstMs": 13806,
+      "wKolejceMs": 3,
+      "narzedzia": [
+        "ToolSearch",
+        "procurement_search",
+        "ui_show_value"
+      ],
+      "wersjaEkranuPrzyWyslaniu": 1
+    }
+  ],
+  "warunekWstepny": {
+    "zawezenie": "country=PL (ustawione kontrolka przez uzytkownika)",
+    "rekordPoszukiwany": "NordAV OY",
+    "widocznyPrzedPoleceniem": false
+  },
+  "detektorT25": [
+    "narzedzie nie znalazlo wartosci w backendzie",
+    "klient nie potwierdzil pokazania (reason=-)",
+    "wartosc na ekranie nie zgadza sie z backendem",
+    "potwierdzenie nie wskazuje tego rekordu i pola",
+    "potwierdzona wartosc to nie wartosc backendu"
+  ],
+  "turyModeluLacznie": 1
+}

@@ -79,6 +79,32 @@ export const highlights = (page: Page): Promise<Highlight[]> =>
   page.evaluate(() => ((window as unknown as { __highlights?: Highlight[] }).__highlights ?? []) as Highlight[]);
 
 /**
+ * What one `TOOL_CALL_RESULT` carries, whichever path produced it.
+ *
+ * A scripted handler's answer is logged as the object itself; the same handler
+ * reached through MCP by the real model is logged as the protocol's content
+ * blocks (`[{type: "text", text: "<json>"}]`). The detector reads both runs, so
+ * the unwrapping belongs here rather than in one of them — the first real-model
+ * run of proba T25 failed on exactly this while the application had done
+ * everything right.
+ */
+function parseToolContent(raw: string): any {
+  const value = JSON.parse(raw);
+  const blocks =
+    Array.isArray(value) && value.every((b) => b && typeof b === 'object' && b.type === 'text')
+      ? (value as Array<{ text: string }>)
+      : null;
+  if (!blocks) return value;
+  const text = blocks.map((b) => b.text).join('');
+  try {
+    return JSON.parse(text);
+  } catch {
+    // A tool that answers in prose: keep it readable rather than throwing.
+    return { text };
+  }
+}
+
+/**
  * What each tool call of a run returned, from the run's own persisted event log.
  *
  * `baseUrl` is explicit because a suite running its own server on its own port
@@ -98,7 +124,7 @@ export async function toolResults(
   for (const e of events) {
     if (e.name === 'TOOL_CALL_START') names.set(e.payload.toolCallId, e.payload.toolCallName);
     if (e.name === 'TOOL_CALL_RESULT') {
-      out.push({ name: names.get(e.payload.toolCallId) ?? '?', result: JSON.parse(e.payload.content) });
+      out.push({ name: names.get(e.payload.toolCallId) ?? '?', result: parseToolContent(e.payload.content) });
     }
   }
   return out;
