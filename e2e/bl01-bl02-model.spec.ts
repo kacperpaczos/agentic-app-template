@@ -307,9 +307,12 @@ async function expectInstanceMatchesBackend(
    * finding, not a 404 from a helper.
    */
   expect(
-    { state: instance.state, error: instance.error, source: instance.source },
-    'komponent danych nie pokazuje rekordow',
-  ).toMatchObject({ state: 'ready' });
+    instance.state,
+    `komponent danych nie pokazuje rekordow: ${JSON.stringify({
+      error: instance.error,
+      source: instance.source,
+    })}`,
+  ).toBe('ready');
 
   const backend = await readBackend(page, instance.source.operation, instance.source.input);
   const descriptor = backend.descriptor!;
@@ -344,9 +347,12 @@ async function expectInstanceMatchesBackend(
 /** A chart's caption states the range of each series; the range comes from the backend. */
 async function expectChartMatchesBackend(page: Page, scope: Page | Locator, instance: any): Promise<void> {
   expect(
-    { state: instance.state, error: instance.error, source: instance.source },
-    'wykres nie pokazuje wartosci',
-  ).toMatchObject({ state: 'ready' });
+    instance.state,
+    `wykres nie pokazuje wartosci: ${JSON.stringify({
+      error: instance.error,
+      source: instance.source,
+    })}`,
+  ).toBe('ready');
 
   const backend = await readBackend(page, instance.source.operation, instance.source.input);
   const descriptor = backend.descriptor!;
@@ -849,6 +855,21 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       await shot(page, 't27-zestawienie.png');
 
       /* ---------------------------- 2. the chart ----------------------------- */
+      /*
+       * Open finding (2026-09-17, run_96c52b19607e4a21a589). The agent patched
+       * its card with
+       * `DataChart({operation: "procurement.case_offer_items", input: {caseId}}, "bar", "name", ["unitPriceMinor"], …)`.
+       * The server's validator accepted it — the field is numeric and declared —
+       * but the case's items are priced in PLN *and* EUR, and a money series
+       * carries the record's own currency, so the chart refuses to draw:
+       * „Seria Cena jednostkowa laczy rozne jednostki (PLN, EUR); zawez dane do
+       * jednej jednostki.” The agent then told the user it had added the chart.
+       * Nothing made it look: the prompt requires `ui_state` after
+       * `ui_navigate`/`ui_filter`/`ui_sort`, not after `agent_view_create`/
+       * `agent_view_update`, and the tool's own answer says nothing about what
+       * the card renders. This step therefore fails on purpose until one of the
+       * two is closed — see `task-8-report.md`.
+       */
       const second = 'Dodaj do tego wykres cen jednostkowych tych pozycji.';
       const run2 = await sendForRun(page, second, evidence.proba as string);
       const phase2 = await settled(page, run2.runId);

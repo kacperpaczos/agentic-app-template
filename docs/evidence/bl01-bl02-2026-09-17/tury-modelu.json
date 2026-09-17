@@ -1,6 +1,6 @@
 {
   "budzet": 12,
-  "wydane": 9,
+  "wydane": 11,
   "tury": [
     {
       "nr": 1,
@@ -65,6 +65,20 @@
       "proba": "T27",
       "polecenie": "Zestaw mi w widokach agenta pozycje ofert tej sprawy: dostawca, nazwa pozycji i cena jednostkowa.",
       "runId": "run_443631b2fddf406eaf31"
+    },
+    {
+      "nr": 10,
+      "o": "2026-09-17T19:58:22.287Z",
+      "proba": "T27",
+      "polecenie": "Zestaw mi w widokach agenta pozycje ofert tej sprawy: dostawca, nazwa pozycji i cena jednostkowa.",
+      "runId": "run_0de7b080d1764c2fbcca"
+    },
+    {
+      "nr": 11,
+      "o": "2026-09-17T19:58:50.504Z",
+      "proba": "T27",
+      "polecenie": "Dodaj do tego wykres cen jednostkowych tych pozycji.",
+      "runId": "run_96c52b19607e4a21a589"
     }
   ]
 }
