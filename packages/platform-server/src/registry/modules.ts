@@ -13,6 +13,7 @@ import { buildUiTargetCatalog } from './ui-targets.ts';
 import { OpenUiServerCatalog, validateComposition } from './openui-validation.ts';
 import type { ReadOperationLookup } from './read-operations.ts';
 import { checkReadDescriptor, checkViewAgainstTarget, checkViewShape } from './views.ts';
+import { checkRecordActions } from './record-actions.ts';
 
 export interface RegisteredRoute {
   method: 'get' | 'post' | 'patch' | 'delete';
@@ -70,7 +71,8 @@ export class ServerModuleRegistry {
       if (this.#readOperations.has(qualifiedName) || readOperations.has(qualifiedName)) {
         throw new AppError('conflict', `Operacja odczytu ${qualifiedName} juz istnieje.`);
       }
-      checkReadDescriptor(qualifiedName, op);
+      const descriptor = checkReadDescriptor(qualifiedName, op);
+      if (descriptor) checkRecordActions({ moduleId: mod.meta.id, operation: qualifiedName, descriptor, tools: mod.tools });
       readOperations.set(qualifiedName, { qualifiedName, moduleId: mod.meta.id, definition: op });
     }
 

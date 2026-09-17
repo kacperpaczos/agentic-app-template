@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { applyViewFilter } from '@platform/contracts';
+import { applyViewFilter, stableJson } from '@platform/contracts';
 import type {
   ArtifactMeta,
   AuthStatus,
@@ -61,14 +61,8 @@ export const qk = {
   uiViews: () => ['ui-views', accessScope()] as const,
 };
 
-/** JSON with object keys in sorted order, for use in cache keys. */
-export function stableJson(value: unknown): string {
-  return JSON.stringify(value, (_key, v: unknown) =>
-    v && typeof v === 'object' && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
-      : v,
-  );
-}
+/** JSON with object keys in sorted order, for use in cache keys (shared with the server). */
+export { stableJson };
 
 /**
  * Marks every cached business read stale: module routes and registered reads.

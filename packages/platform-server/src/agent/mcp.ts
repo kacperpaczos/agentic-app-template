@@ -54,6 +54,33 @@ export type ToolInvocationResult = {
 };
 
 /**
+ * Validates a tool call's arguments against the tool's schema and runs its
+ * handler with the given context. Throws what the handler throws.
+ *
+ * The one execution of a tool: the MCP server wraps it into a tool result
+ * ({@link invokeTool}), and a record action performed from a table
+ * (`POST /api/actions`) calls it directly — so a user's click and the model's
+ * call pass the same validation into the same handler.
+ */
+export async function executeTool(
+  entry: Pick<ToolEntry, 'localName' | 'def'>,
+  args: unknown,
+  ctx: ToolCallContext,
+): Promise<unknown> {
+  const { localName, def } = entry;
+  const parsed = def.inputSchema.safeParse(args ?? {});
+  if (!parsed.success) {
+    throw new AppError('validation_failed', `Nieprawidlowe wejscie narzedzia ${localName}.`, {
+      issues: parsed.error.issues.map((i) => ({
+        path: i.path.join('.'),
+        message: i.message,
+      })),
+    });
+  }
+  return def.handler(parsed.data as never, ctx);
+}
+
+/**
  * Runs one tool call: validate the arguments against the tool's schema, call
  * its handler with the run's context, and turn the outcome into an MCP result.
  *
@@ -66,18 +93,8 @@ export async function invokeTool(
   args: unknown,
   ctx: ToolCallContext,
 ): Promise<ToolInvocationResult> {
-  const { localName, def } = entry;
   try {
-    const parsed = def.inputSchema.safeParse(args ?? {});
-    if (!parsed.success) {
-      throw new AppError('validation_failed', `Nieprawidlowe wejscie narzedzia ${localName}.`, {
-        issues: parsed.error.issues.map((i) => ({
-          path: i.path.join('.'),
-          message: i.message,
-        })),
-      });
-    }
-    const result = await def.handler(parsed.data as never, ctx);
+    const result = await executeTool(entry, args, ctx);
     return {
       content: [{ type: 'text' as const, text: JSON.stringify(result ?? null) }],
     };

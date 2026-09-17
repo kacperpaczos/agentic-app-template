@@ -16,6 +16,7 @@ import { useDescribeInstance } from '../state/uiSemantics.ts';
 import { useViewAddress } from '../state/viewFilter.ts';
 import { DataFrame, EmptyBody, FailureBody, LoadingBody } from './DataFrame.tsx';
 import { FilterBar, HeaderCell, Pager, nextSort } from './DataTableControls.tsx';
+import { RecordActionCell, RecordActionStatus, RecordActionsHeader, useRecordActions } from './RecordActions.tsx';
 import { withGrouping } from './grouping.ts';
 import { buildDataModel, describeDataInstance } from './model.ts';
 import { useDataModel } from './useDataModel.ts';
@@ -63,7 +64,7 @@ export function DataTableView(props: DataTableProps) {
   const narrowing =
     address && address.predicates.length > 0 ? { targetId: address.targetId, predicates: address.predicates } : null;
 
-  const { state, model, error, response } = useDataModel(
+  const { state, model, error, response, refreshing } = useDataModel(
     props.source,
     (response) =>
       withGrouping(
@@ -117,6 +118,9 @@ export function DataTableView(props: DataTableProps) {
     // `reportKey` is the value of `report`.
   }, [reportKey, reportViewState, dropViewState]);
 
+  // The read's own record actions (`RecordActions.tsx`): the same in every table over it.
+  const recordActions = useRecordActions(props.source, response?.descriptor);
+
   const filterable = Boolean(address && address.filterFields.length > 0);
   const sortable = Boolean(address && model?.descriptor.fields.some(isSortableField));
   const shownState = model && model.records.length === 0 ? 'empty' : state;
@@ -139,16 +143,18 @@ export function DataTableView(props: DataTableProps) {
             ...(sortable ? ['sort'] : []),
             ...(model.page && model.page.count > 1 ? ['page'] : []),
             ...(model.descriptor.record.route ? ['open_record'] : []),
+            ...recordActions.actions.map((a) => `action:${a.id}`),
           ]
         : [],
     }),
   );
 
-  const frame = { instanceId, component: 'DataTable', operation: props.source.operation, title: props.title };
+  const frame = { instanceId, component: 'DataTable', operation: props.source.operation, title: props.title, refreshing };
   if (state === 'loading') return <DataFrame {...frame} state="loading"><LoadingBody /></DataFrame>;
   if (!model) {
     return (
       <DataFrame {...frame} state={state === 'forbidden' ? 'forbidden' : 'error'}>
+        <RecordActionStatus controller={recordActions} formShown={false} />
         <FailureBody error={error} />
       </DataFrame>
     );
@@ -184,6 +190,7 @@ export function DataTableView(props: DataTableProps) {
             )}
           </td>
         ))}
+        <RecordActionCell controller={recordActions} record={record} descriptor={descriptor} />
       </tr>
     );
   };
@@ -193,6 +200,14 @@ export function DataTableView(props: DataTableProps) {
    * place in both: narrowing to nothing must leave the user the fields to
    * change it with, and pressing "Apply" must not move the focus away.
    */
+  // A refusal is shown in its form while the form is on screen, above the table otherwise.
+  const formShown = Boolean(
+    shownState !== 'empty' &&
+      recordActions.open &&
+      model.shown.some((r) => recordIdOf(r, descriptor) === recordActions.open!.recordId),
+  );
+  const columnCount = model.fields.length + (recordActions.actions.length > 0 ? 1 : 0);
+
   return (
     <DataFrame {...frame} state={shownState === 'empty' ? 'empty' : 'ready'}>
       {address && filterable && (
@@ -202,6 +217,7 @@ export function DataTableView(props: DataTableProps) {
           onApply={(predicates) => address.change({ predicates })}
         />
       )}
+      <RecordActionStatus controller={recordActions} formShown={formShown} />
       {shownState === 'empty' ? (
         <EmptyBody total={outcome?.total ?? model.total} matched={0} />
       ) : (
@@ -211,6 +227,7 @@ export function DataTableView(props: DataTableProps) {
               {model.fields.map((f) => (
                 <HeaderCell key={f.field} field={f} sortable={isSortableField(f)} sort={model.sort} onSort={onSort} />
               ))}
+              <RecordActionsHeader controller={recordActions} />
             </tr>
           </thead>
           {model.grouping ? (
@@ -222,7 +239,7 @@ export function DataTableView(props: DataTableProps) {
             model.grouping.groups.map((group) => (
               <tbody key={group.key} data-group-field={model.grouping!.field.field} data-group-key={group.key}>
                 <tr className="pf-table__group">
-                  <th colSpan={model.fields.length} scope="rowgroup">
+                  <th colSpan={columnCount} scope="rowgroup">
                     {model.grouping!.field.label}: {group.label}{' '}
                     <span
                       className="pf-muted"

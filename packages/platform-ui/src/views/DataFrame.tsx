@@ -21,6 +21,13 @@ export function DataFrame(props: {
   state: DataState;
   title?: string;
   as?: 'section' | 'figure';
+  /**
+   * The records shown are being read again (after a change, or the end of a
+   * run). Said on the frame — `data-refreshing`, `aria-busy`, a visible note —
+   * so the previous values are not presented as current while they may no
+   * longer be.
+   */
+  refreshing?: boolean;
   children: ReactNode;
 }) {
   const Root = props.as ?? 'section';
@@ -31,8 +38,14 @@ export function DataFrame(props: {
       data-component={props.component}
       data-operation={props.operation}
       data-state={props.state}
-      aria-busy={props.state === 'loading' || undefined}
+      data-refreshing={props.refreshing ? 'true' : undefined}
+      aria-busy={props.state === 'loading' || props.refreshing || undefined}
     >
+      {props.refreshing && (
+        <div className="pf-data__refreshing" role="status" data-testid="data-refreshing">
+          Odswiezanie danych…
+        </div>
+      )}
       {props.title && Root === 'section' && <h2 className="pf-data__title">{props.title}</h2>}
       {props.children}
     </Root>

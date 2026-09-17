@@ -100,7 +100,8 @@ export const requirementRecords: ReadResultDescriptor = {
  */
 export const caseOfferItemRecords: ReadResultDescriptor = {
   collection: 'items',
-  record: { kind: 'offer_item', idField: 'id' },
+  // `titleField` names the item in each row's action button for a screen reader.
+  record: { kind: 'offer_item', idField: 'id', titleField: 'name' },
   fields: [
     { field: 'supplierName', label: 'Dostawca', type: 'text', sortable: true },
     { field: 'name', label: 'Nazwa', type: 'text', sortable: true },
@@ -108,6 +109,25 @@ export const caseOfferItemRecords: ReadResultDescriptor = {
     { field: 'quantityMilli', label: 'Ilosc', type: 'quantity_milli', unitField: 'unit' },
     { field: 'unitPriceMinor', label: 'Cena jednostkowa', type: 'money_minor', unitField: 'currency' },
     { field: 'currency', label: 'Waluta', type: 'text', sortable: true },
+  ],
+  /*
+   * Changing an item's unit price from any table over this read — the case
+   * screen's and every agent view's — through `update_offer_item`, the tool the
+   * agent calls. The tool takes the price in whole currency units (`unitPrice`,
+   * converted to grosze by the service), so the form field is a `number`, typed
+   * the way the table prints it (`12 400,50`).
+   */
+  actions: [
+    {
+      id: 'change_unit_price',
+      label: 'Zmien cene',
+      tool: 'update_offer_item',
+      input: [
+        { key: 'itemId', from: '$record.id' },
+        { key: 'unitPrice', from: '$form.unitPrice' },
+      ],
+      form: [{ key: 'unitPrice', label: 'Nowa cena jednostkowa', type: 'number' }],
+    },
   ],
 };
 
