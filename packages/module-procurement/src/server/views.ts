@@ -118,7 +118,7 @@ const op = (name: string) => `${MODULE_ID}.${name}`;
  * table is the platform's `DataTable`, bound to a registered read, so it holds
  * no data of its own and shows exactly what `POST /api/read` returns for the
  * signed-in owner. Positional arguments follow `dataTablePropsSchema`:
- * `DataTable(source, columns, title, pageSize, filter, sort)`; `null` skips an
+ * `DataTable(source, columns, title, pageSize, filter, sort, groupBy)`; `null` skips an
  * optional one (here the title — the page has its own heading).
  *
  * The two detail screens below are reached from a record's own `route` (the

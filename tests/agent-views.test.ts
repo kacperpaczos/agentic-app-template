@@ -568,6 +568,31 @@ describe('narzedzia widokow agenta', () => {
     expect(current.body).toMatchObject({ unchanged: true, specVersion: 2 });
   });
 
+  it('pelne zrodlo z nierozpoznana linia lub powtorzona nazwa jest odrzucane, nie uznane za brak zmian — z tytulem i bez', async () => {
+    const conv = newConversation();
+    const ctx = context(conv.id);
+    const source = ['root = Stack([opis, tabela])', 'opis = TextContent("Oferty w sprawie")', `tabela = DataTable(${comparison()})`].join('\n');
+    const created = await call('agent_view_create', { title: 'Przed', source }, ctx);
+    const cardId = created.body.cardId as string;
+    const cases: Array<{ source: string; reason: CompositionRefusal; text: RegExp }> = [
+      { source: `${source}\n@@@ smieci`, reason: 'syntax', text: /Nie rozpoznano instrukcji "@@@ smieci"/ },
+      { source: `${source}\nopis = TextContent("Drugi opis")`, reason: 'duplicate_statement', text: /Instrukcja opis jest zdefiniowana 2 razy/ },
+    ];
+    for (const c of cases) {
+      for (const title of [undefined, 'Po']) {
+        const out = await call('agent_view_update', { cardId, source: c.source, ...(title ? { title } : {}) }, ctx);
+        expect(out.ok, `${c.reason} title=${title}`).toBe(false);
+        expect(out.body.details?.reason, `${c.reason} title=${title}`).toBe(c.reason);
+        expect(out.body.message).toMatch(c.text);
+      }
+    }
+    expect(h.platform.services.canvas.getCard(cardId, h.ownerId)).toMatchObject({
+      title: 'Przed',
+      specVersion: 1,
+      spec: { kind: 'openui', source },
+    });
+  });
+
   it('widok innej rozmowy lub innego wlasciciela jest odrzucany; bez rozmowy nie ma widokow', async () => {
     const a = newConversation();
     const b = newConversation();

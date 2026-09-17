@@ -14,6 +14,7 @@ import {
   compositionRefusal,
   normalizeCompositionSource,
   sameComposition,
+  statementsOf,
   type OpenUiServerCatalog,
 } from '../../registry/openui-validation.ts';
 import type { PlatformServices } from '../../services/index.ts';
@@ -191,6 +192,13 @@ export function agentViewTools(services: PlatformServices): Array<ModuleToolDefi
           next = patched.unchanged ? current : patched.source;
         } else if (input.source !== undefined) {
           const source = normalizeCompositionSource(input.source);
+          /*
+           * The list of statements is checked as written before it is compared:
+           * the comparison reads statements only, so a garbled line or a name
+           * given twice would otherwise make a bad source look unchanged.
+           */
+          const written = statementsOf(source);
+          if (written.problems.length > 0) throw compositionRefusal(written.problems);
           next = sameComposition(source, current) ? current : source;
         }
         // A stale version is a conflict whether or not anything would change.
