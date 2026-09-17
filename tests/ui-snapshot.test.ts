@@ -40,9 +40,16 @@ import {
   type PlatformInstance,
 } from '@platform/server';
 import {
+  AccessContextChanged,
   UiSnapshotSession,
+  accessScope,
+  apiPut,
   buildUiSnapshotContent,
   createShellSnapshotSource,
+  listInstances,
+  registerInstance,
+  unregisterInstance,
+  useUiSemantics,
   performAndAcknowledge,
   qk,
   resetAccessContext,
@@ -1040,21 +1047,22 @@ describe('I2: wersja nalezy do karty, zamkniete i milczace karty', () => {
 });
 
 describe('I3: opis nie zalezy od przypadkowej zawartosci pamieci podrecznej', () => {
-  it('wyrzucenie katalogu i widokow z pamieci nie zmienia opisu ani wersji; zmiana wlasciciela porzuca zapamietane', () => {
+  it('wyrzucenie katalogu i widokow z pamieci nie zmienia opisu ani wersji; po zmianie wlasciciela pierwszy opis znow nazywa cel', () => {
     const qc = new QueryClient();
     setAccessContext(qc, 'local-user');
+    const source = createShellSnapshotSource({
+      qc,
+      location: () => ({ pathname: '/settings', search: '' }),
+      shell: () => ({ conversationId: 'cnv_a', spaceId: null }),
+      instances: () => [],
+    });
     try {
+      const s = new UiSnapshotSession({ identity: sessionIdentityStore(), send: async () => {} });
+      s.setSource(source);
+      // Before the catalog has loaded the screen is not described at all.
+      expect(s.capture()).toBeNull();
       qc.setQueryData(qk.uiTargets(), { targets: h.platform.services.modules.uiTargets() });
       qc.setQueryData(qk.uiViews(), { views: h.platform.services.modules.views() });
-      const s = new UiSnapshotSession({ identity: sessionIdentityStore(), send: async () => {} });
-      s.setSource(
-        createShellSnapshotSource({
-          qc,
-          location: () => ({ pathname: '/settings', search: '' }),
-          shell: () => ({ conversationId: 'cnv_a', spaceId: null }),
-          instances: () => [],
-        }),
-      );
       const first = s.capture()!;
       expect(first.target).toEqual({ id: 'platform.settings', kind: 'view', label: 'Ustawienia' });
 
@@ -1064,12 +1072,19 @@ describe('I3: opis nie zalezy od przypadkowej zawartosci pamieci podrecznej', ()
       expect(qc.getQueryData(qk.uiTargets())).toBeUndefined();
       expect(s.capture()).toBe(first);
 
-      // Another owner: nothing of the previous one's is described.
+      // Another owner: nothing of the previous one's is described, and nothing without the new owner's catalog.
       setAccessContext(qc, 'other-user');
+      expect(s.capture()).toBeNull();
+      expect(s.contextMarker()).toBeNull();
+      qc.setQueryData(qk.uiTargets(), { targets: h.platform.services.modules.uiTargets() });
       const other = s.capture()!;
       expect(other.version).toBe(first.version + 1);
-      expect(other.target).toBeNull();
+      // The first description after the switch names the screen again…
+      expect(other.target).toEqual({ id: 'platform.settings', kind: 'view', label: 'Ustawienia' });
+      // …and not the conversation the shell was holding when the switch happened.
+      expect(other.conversationId).toBeNull();
     } finally {
+      source.dispose();
       resetAccessContext();
     }
   });
@@ -1336,6 +1351,151 @@ describe('Fix round 2', () => {
     expect(uiCommandResultSchema.safeParse(posted[0]).success).toBe(true);
     for (const status of ['unreachable', 'not_described']) {
       expect(uiCommandResultSchema.safeParse({ commandId: 'uic_abcdefgh', executed: true, uiPublication: status }).success).toBe(true);
+    }
+  });
+});
+
+/* ========================================================================== */
+/*  Fix round 3: nothing from before an identity switch                       */
+/* ========================================================================== */
+
+describe('Fix round 3', () => {
+  it('A1: rejestr nie wymienia opisow zapisanych przed przelaczeniem tozsamosci, dopoki komponent ich nie opisze ponownie', () => {
+    const qc = new QueryClient();
+    setAccessContext(qc, 'local-user');
+    try {
+      const before = instance('DataTable-przed', { visibleRecordIds: ['s1', 's2', 's3'] });
+      expect(registerInstance(before)).toBe(true);
+      expect(listInstances().map((i) => i.instanceId)).toContain('DataTable-przed');
+
+      setAccessContext(qc, 'other-user');
+      // Still mounted, not re-rendered: its entry stays, but it is not a description of this identity's screen.
+      expect(useUiSemantics.getState().instances['DataTable-przed']).toBeDefined();
+      expect(listInstances().map((i) => i.instanceId)).not.toContain('DataTable-przed');
+
+      // Described again after the switch — even with the same content — it is listed.
+      expect(registerInstance(before)).toBe(true);
+      expect(listInstances().map((i) => i.instanceId)).toContain('DataTable-przed');
+      unregisterInstance('DataTable-przed');
+      expect(useUiSemantics.getState().epochs['DataTable-przed']).toBeUndefined();
+    } finally {
+      unregisterInstance('DataTable-przed');
+      resetAccessContext();
+    }
+  });
+
+  it('A1: po przelaczeniu nowy wlasciciel nie dostaje ani instancji, ani rozmowy, ani przestrzeni poprzedniego (flush i heartbeat)', async () => {
+    const qc = new QueryClient();
+    setAccessContext(qc, 'local-user');
+    const stores: Record<string, UiSnapshotStore> = { 'local-user': new UiSnapshotStore(), 'other-user': new UiSnapshotStore() };
+    const shell = { conversationId: 'cnv_of_local_user' as string | null, spaceId: 'spc_of_local_user' as string | null };
+    const source = createShellSnapshotSource({ qc, location: () => ({ pathname: '/settings', search: '' }), shell: () => shell, instances: listInstances });
+    const s = new UiSnapshotSession({
+      identity: sessionIdentityStore(),
+      send: async (snap) => void stores[accessScope()]!.publish(accessScope(), snap),
+      alive: async (ref) => stores[accessScope()]!.touch(accessScope(), ref.clientId, ref.version),
+    });
+    s.setSource(source);
+    try {
+      registerInstance(instance('DataTable-w-czacie', { viewId: null, visibleRecordIds: ['rec_local_1', 'rec_local_2', 'rec_local_3'] }));
+      qc.setQueryData(qk.uiTargets(), { targets: h.platform.services.modules.uiTargets() });
+      expect((await s.flush()).status).toBe('published');
+      const mine = stores['local-user']!.forClient('local-user', s.clientId)!;
+      expect(mine.instances.map((i) => i.instanceId)).toEqual(['DataTable-w-czacie']);
+      expect(mine).toMatchObject({ conversationId: 'cnv_of_local_user', spaceId: 'spc_of_local_user' });
+
+      // Settings → switch identity. The chat's table does not re-render; the shell keeps its ids.
+      setAccessContext(qc, 'other-user');
+      expect((await s.flush()).status).toBe('not_described'); // the new owner's catalog is not loaded yet
+      await s.heartbeat();
+      expect(stores['other-user']!.forClient('other-user', s.clientId)).toBeNull();
+
+      qc.setQueryData(qk.uiTargets(), { targets: h.platform.services.modules.uiTargets() });
+      expect((await s.flush()).status).toBe('published');
+      await s.heartbeat();
+      const theirs = stores['other-user']!.forClient('other-user', s.clientId)!;
+      expect(theirs.instances).toEqual([]);
+      expect(theirs.conversationId).toBeNull();
+      expect(theirs.spaceId).toBeNull();
+      expect(JSON.stringify(theirs)).not.toContain('rec_local_');
+      expect(JSON.stringify(theirs)).not.toContain('_of_local_user');
+      expect(theirs.target?.id).toBe('platform.settings');
+
+      // Once the shell moves to the new owner's conversation, it is reported.
+      shell.conversationId = 'cnv_of_other_user';
+      expect((await s.flush()).status).toBe('published');
+      expect(stores['other-user']!.forClient('other-user', s.clientId)?.conversationId).toBe('cnv_of_other_user');
+    } finally {
+      unregisterInstance('DataTable-w-czacie');
+      source.dispose();
+      resetAccessContext();
+    }
+  });
+
+  it('M1: odmowa przeczytana po przelaczeniu nie wysyla opisu poprzedniego wlasciciela pod nowa tozsamoscia karty ani nie zglasza go dalej', async () => {
+    let owner = 'local-user';
+    const sent: Array<{ owner: string; clientId: string }> = [];
+    const alive: string[] = [];
+    const reports: string[] = [];
+    const s = new UiSnapshotSession({
+      identity: sessionIdentityStore(),
+      scope: () => owner,
+      report: (m) => void reports.push(m),
+      send: async (snap) => {
+        sent.push({ owner, clientId: snap.clientId });
+        // The switch happens while this request's refusal is being read.
+        owner = 'other-user';
+        throw new AppError('conflict', 'wersja nie nowsza');
+      },
+      alive: async () => {
+        alive.push(owner);
+        return false;
+      },
+    });
+    s.setSource(() => buildUiSnapshotContent({ url: '/', pathname: '/', conversationId: 'cnv_of_local_user', spaceId: null, instances: [], targets: [], views: [], canvas: undefined }));
+    expect(await s.flush()).toEqual({ status: 'unreachable' });
+    expect(sent).toEqual([{ owner: 'local-user', clientId: expect.any(String) }]);
+    expect(alive).toEqual([]);
+    expect(reports).toEqual([]);
+
+    // A plain refusal read across a switch is not reported to (or passed on to) the new identity either.
+    owner = 'local-user';
+    const t = new UiSnapshotSession({
+      identity: sessionIdentityStore(),
+      scope: () => owner,
+      report: (m) => void reports.push(m),
+      send: async () => {
+        owner = 'other-user';
+        throw new AppError('validation_failed', 'Nieprawidlowy opis interfejsu.');
+      },
+      alive: async () => void alive.push(owner) as unknown as boolean,
+    });
+    t.setSource(() => buildUiSnapshotContent({ url: '/', pathname: '/', conversationId: null, spaceId: null, instances: [], targets: [], views: [], canvas: undefined }));
+    expect(await t.flush()).toEqual({ status: 'unreachable' });
+    expect(alive).toEqual([]);
+    expect(t.lastRejection()).toBeNull();
+  });
+
+  it('M1: api() nie oddaje odmowy przeczytanej juz po przelaczeniu tozsamosci', async () => {
+    const qc = new QueryClient();
+    setAccessContext(qc, 'local-user');
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      ({
+        ok: false,
+        status: 409,
+        // The body arrives after the identity has changed.
+        json: async () => {
+          setAccessContext(qc, 'other-user');
+          return { error: { code: 'conflict', message: 'wersja nie nowsza' } };
+        },
+      }) as unknown as Response) as typeof fetch;
+    try {
+      const error = await apiPut('/api/ui/snapshot', {}).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(AccessContextChanged);
+    } finally {
+      globalThis.fetch = original;
+      resetAccessContext();
     }
   });
 });

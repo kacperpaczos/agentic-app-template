@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { create } from 'zustand';
 import { semanticInstanceSchema, type SemanticInstance } from '@platform/contracts';
+import { accessEpoch } from '../api/accessContext.ts';
 
 /**
  * What the mounted data components say they are showing.
@@ -28,9 +29,19 @@ interface UiSemanticsState {
    * same order unless one mounted or unmounted.
    */
   order: string[];
+  /**
+   * The access epoch each description was recorded under.
+   *
+   * Switching identity empties the query cache but does not re-render what is
+   * mounted, so a component can keep describing the previous identity's
+   * records for as long as nothing re-renders it. Such a description is kept
+   * here (its component still owns the entry) but is not listed: only
+   * descriptions recorded under the identity signed in now are.
+   */
+  epochs: Record<string, number>;
 }
 
-export const useUiSemantics = create<UiSemanticsState>(() => ({ instances: {}, order: [] }));
+export const useUiSemantics = create<UiSemanticsState>(() => ({ instances: {}, order: [], epochs: {} }));
 
 /**
  * Records one instance's description, or replaces it in place.
@@ -52,12 +63,15 @@ export function registerInstance(description: SemanticInstance): boolean {
     );
     return false;
   }
-  const current = useUiSemantics.getState().instances[parsed.data.instanceId];
-  if (current && JSON.stringify(current) === JSON.stringify(parsed.data)) return true;
   const id = parsed.data.instanceId;
+  const epoch = accessEpoch();
+  const state = useUiSemantics.getState();
+  const current = state.instances[id];
+  if (current && state.epochs[id] === epoch && JSON.stringify(current) === JSON.stringify(parsed.data)) return true;
   useUiSemantics.setState((s) => ({
     instances: { ...s.instances, [id]: parsed.data },
     order: id in s.instances ? s.order : [...s.order, id],
+    epochs: { ...s.epochs, [id]: epoch },
   }));
   return true;
 }
@@ -67,14 +81,20 @@ export function unregisterInstance(instanceId: string): void {
     if (!(instanceId in s.instances)) return s;
     const next = { ...s.instances };
     delete next[instanceId];
-    return { instances: next, order: s.order.filter((id) => id !== instanceId) };
+    const epochs = { ...s.epochs };
+    delete epochs[instanceId];
+    return { instances: next, order: s.order.filter((id) => id !== instanceId), epochs };
   });
 }
 
-/** Every instance mounted right now, in registration order. */
+/**
+ * Every instance mounted right now and described under the identity signed in
+ * now, in registration order.
+ */
 export function listInstances(): SemanticInstance[] {
-  const { instances, order } = useUiSemantics.getState();
-  return order.map((id) => instances[id]!);
+  const { instances, order, epochs } = useUiSemantics.getState();
+  const epoch = accessEpoch();
+  return order.filter((id) => epochs[id] === epoch).map((id) => instances[id]!);
 }
 
 /**

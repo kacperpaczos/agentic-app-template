@@ -21,10 +21,12 @@ import { apiPost, apiPut } from '../api/client.ts';
  *
  * **What goes in.** Only what the application already states about itself:
  * the descriptions the mounted data components registered (`uiSemantics`), the
- * address, the conversation and space the shell holds, and three things the
- * query cache holds anyway — the catalog of targets, the module views and the
- * active space's cards. Nothing is read from the markup and nothing is fetched
- * for the purpose: what the tab has not loaded is described as unknown.
+ * address, the conversation and space the shell holds, and three queries — the
+ * catalog of targets, the module views and the active space's cards — which the
+ * shell's publisher keeps loaded on every screen for this purpose
+ * (`UiSnapshotPublisher`, `createShellSnapshotSource`). Nothing is read from the
+ * markup; what has not loaded yet is described as unknown, and a screen whose
+ * catalog is still loading is not described at all.
  *
  * **When the version moves.** Only when the description changes — the same
  * screen assembled twice is the same version, so a reader waiting for "newer
@@ -247,7 +249,7 @@ export class UiSnapshotSession {
   readonly #scope: () => string;
   readonly #report: (message: string, detail: unknown) => void;
   #identity: UiClientIdentity;
-  #source: (() => UiSnapshotContent) | null = null;
+  #source: (() => UiSnapshotContent | null) | null = null;
   /*
    * Every description is kept with the access scope (signed-in identity) it was
    * captured under. Nothing captured under one identity is ever sent, vouched
@@ -281,8 +283,11 @@ export class UiSnapshotSession {
     return this.#identity.clientId;
   }
 
-  /** Where descriptions come from; the shell's publisher installs it while mounted. */
-  setSource(source: (() => UiSnapshotContent) | null): void {
+  /**
+   * Where descriptions come from; the shell's publisher installs it while
+   * mounted. A source answering `null` has nothing to describe yet.
+   */
+  setSource(source: (() => UiSnapshotContent | null) | null): void {
     this.#source = source;
     if (!source && this.#timer) {
       clearTimeout(this.#timer);
@@ -333,6 +338,7 @@ export class UiSnapshotSession {
     if (!this.#source) return this.#current;
     const scope = this.#scope();
     const content = this.#source();
+    if (!content) return this.#currentInScope();
     const key = `${scope}|${JSON.stringify(content)}`;
     if (this.#current && this.#current.clientId === this.#identity.clientId && key === this.#currentKey) {
       return this.#current;
@@ -379,7 +385,7 @@ export class UiSnapshotSession {
       for (;;) {
         const now = Date.now();
         const quiet = now - Math.max(this.#lastChangeAt, started) >= settleMs;
-        const loading = this.#source?.().instances.some((i) => i.state === 'loading') ?? false;
+        const loading = this.#source?.()?.instances.some((i) => i.state === 'loading') ?? false;
         if ((quiet && !loading) || now - started >= maxSettleMs) break;
         await sleep(Math.min(settleMs, 50, Math.max(1, maxSettleMs - (now - started))));
       }
@@ -465,7 +471,7 @@ export class UiSnapshotSession {
         await this.#send(snapshot);
         return this.#accepted(snapshot, scope);
       } catch (err) {
-        if (!(err instanceof AppError && err.code === 'conflict')) return this.#failed(snapshot, err);
+        if (!(err instanceof AppError && err.code === 'conflict')) return this.#failed(snapshot, err, scope);
         /*
          * The backend already has a newer version under this identity: another
          * tab carries it (a duplicated tab copies `sessionStorage`). This tab
@@ -482,11 +488,13 @@ export class UiSnapshotSession {
           this.#store.save(this.#identity);
           this.#current = { ...this.#current, clientId: this.#identity.clientId, version: 2 };
         }
+        // The refusal may have been read across an identity switch: nothing described before it goes out after it.
+        if (this.#scope() !== scope) return { status: 'unreachable' };
         try {
           await this.#send(renewed);
           return this.#accepted(renewed, scope);
         } catch (again) {
-          return this.#failed(renewed, again);
+          return this.#failed(renewed, again, scope);
         }
       }
     });
@@ -508,8 +516,9 @@ export class UiSnapshotSession {
    * the older description it holds stops passing for the current one
    * (`superseded`) instead of staying fresh on the strength of heartbeats.
    */
-  #failed(snapshot: UiSnapshot, err: unknown): UiPublication {
-    if (!(err instanceof AppError)) return { status: 'unreachable' };
+  #failed(snapshot: UiSnapshot, err: unknown, scope: string): UiPublication {
+    // A refusal addressed to another identity says nothing to this one, and is not passed on to it.
+    if (!(err instanceof AppError) || this.#scope() !== scope) return { status: 'unreachable' };
     const { code, message, details } = err;
     this.#lastRejection = { clientId: snapshot.clientId, version: snapshot.version, code, message, details };
     this.#report(`[uiSnapshot] opis ekranu w wersji ${snapshot.version} nie zostal opublikowany: ${code} — ${message}`, details);

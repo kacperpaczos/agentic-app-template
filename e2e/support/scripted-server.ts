@@ -231,6 +231,15 @@ const SCENARIOS: Record<string, Step[]> = {
     { kind: 'call', name: 'ui_state', maxChars: 160 },
     { kind: 'text', text: 'Koniec pracy w tle.' },
   ],
+  /*
+   * An answer that is an OpenUI composition: the chat renders a data component
+   * that stays mounted on whatever screen the user moves to — including
+   * Settings, where the identity can be switched under it.
+   */
+  'chat-data-table': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'text', text: 'root = DataTable({operation: "procurement.suppliers"}, ["name", "country"])' },
+  ],
   'tool-error': [
     {
       kind: 'tool',

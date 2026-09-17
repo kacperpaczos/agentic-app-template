@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouterState } from '@tanstack/react-router';
+import { accessEpoch, onAccessContextChange } from '../api/accessContext.ts';
 import { useCanvasState, useUiTargets, useViewDefinitions } from '../api/queries.ts';
 import { useAppState } from '../state/appState.ts';
 import { listInstances, useUiSemantics } from '../state/uiSemantics.ts';
@@ -30,22 +31,29 @@ export function UiSnapshotPublisher() {
   const qc = useQueryClient();
   const href = useRouterState({ select: (s) => s.location.href });
   const spaceId = useAppState((s) => s.spaceId);
+  /*
+   * An identity switch empties the cache without re-rendering anything, so the
+   * three queries below would stay attached to destroyed entries and never load
+   * for the new identity. Re-rendering on a switch makes them observe (and
+   * fetch) the new identity's keys.
+   */
+  const [, setEpoch] = useState(accessEpoch);
+  useEffect(() => onAccessContextChange(() => setEpoch(accessEpoch())), []);
   useUiTargets();
   useViewDefinitions();
   useCanvasState(spaceId);
 
   useEffect(() => {
-    uiSnapshotSession.setSource(
-      createShellSnapshotSource({
-        qc,
-        location: () => ({ pathname: window.location.pathname, search: window.location.search }),
-        shell: () => {
-          const s = useAppState.getState();
-          return { conversationId: s.conversationId, spaceId: s.spaceId };
-        },
-        instances: listInstances,
-      }),
-    );
+    const source = createShellSnapshotSource({
+      qc,
+      location: () => ({ pathname: window.location.pathname, search: window.location.search }),
+      shell: () => {
+        const s = useAppState.getState();
+        return { conversationId: s.conversationId, spaceId: s.spaceId };
+      },
+      instances: listInstances,
+    });
+    uiSnapshotSession.setSource(source);
 
     const changed = () => uiSnapshotSession.changed();
     const unsubscribe = [
@@ -88,6 +96,7 @@ export function UiSnapshotPublisher() {
       window.removeEventListener('pageshow', onPageShow);
       document.removeEventListener('visibilitychange', onVisible);
       uiSnapshotSession.setSource(null);
+      source.dispose();
     };
   }, [qc]);
 

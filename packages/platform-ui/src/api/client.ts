@@ -47,7 +47,12 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   });
   if (accessEpoch() !== issuedAt) throw new AccessContextChanged();
-  if (!res.ok) throw await parseError(res);
+  if (!res.ok) {
+    const error = await parseError(res);
+    // Reading the error body is another await: a refusal addressed to the previous context is not this one's.
+    if (accessEpoch() !== issuedAt) throw new AccessContextChanged();
+    throw error;
+  }
   if (res.status === 204) return undefined as T;
   const body = (await res.json()) as T;
   if (accessEpoch() !== issuedAt) throw new AccessContextChanged();

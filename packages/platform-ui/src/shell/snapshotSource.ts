@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { CanvasState, SemanticInstance, UiTarget, ViewDefinition } from '@platform/contracts';
-import { accessScope } from '../api/accessContext.ts';
+import { accessScope, onAccessContextChange } from '../api/accessContext.ts';
 import { qk } from '../api/queries.ts';
 import { buildUiSnapshotContent, type UiSnapshotContent } from '../state/uiSnapshot.ts';
 
@@ -9,9 +9,15 @@ export interface ShellSnapshotDeps {
   /** The address as the browser shows it. */
   location: () => { pathname: string; search: string };
   shell: () => { conversationId: string | null; spaceId: string | null };
+  /** Descriptions recorded under the identity signed in now (`listInstances`). */
   instances: () => SemanticInstance[];
   scope?: () => string;
+  /** Subscribes to identity switches; defaults to the application's own. */
+  onAccessChange?: (listener: () => void) => () => void;
 }
+
+/** A description source that also stops listening when disposed. */
+export type ShellSnapshotSource = (() => UiSnapshotContent | null) & { dispose(): void };
 
 /**
  * Where the shell's description of the screen comes from.
@@ -23,8 +29,19 @@ export interface ShellSnapshotDeps {
  * version that has lost the screen's target, view or cards. Remembered values
  * are dropped when the owner changes — another owner's catalog or cards are
  * never described.
+ *
+ * **Nothing from before an identity switch.** The shell's conversation and
+ * space are not reset by a switch, so the ids held at that moment are not
+ * reported (as `null`) until the shell moves to another one; component
+ * descriptions from before the switch are filtered out by the registry itself.
+ *
+ * **No description without the catalog.** While the catalog is still loading
+ * for the signed-in owner — right after a switch, or at startup — the screen
+ * cannot be named, and a description that says "no target" would be a wrong
+ * one: the source answers `null` (nothing to describe yet) until it arrives,
+ * or until loading it has failed.
  */
-export function createShellSnapshotSource(deps: ShellSnapshotDeps): () => UiSnapshotContent {
+export function createShellSnapshotSource(deps: ShellSnapshotDeps): ShellSnapshotSource {
   const scope = deps.scope ?? accessScope;
   let known: {
     scope: string;
@@ -32,16 +49,34 @@ export function createShellSnapshotSource(deps: ShellSnapshotDeps): () => UiSnap
     views?: ViewDefinition[];
     canvas?: CanvasState;
   } = { scope: scope() };
+  /* Shell ids held when the identity last changed; `undefined` — no longer filtered. */
+  const heldAtSwitch: { conversationId?: string | null; spaceId?: string | null } = {};
+  const stop = (deps.onAccessChange ?? onAccessContextChange)(() => {
+    const held = deps.shell();
+    heldAtSwitch.conversationId = held.conversationId;
+    heldAtSwitch.spaceId = held.spaceId;
+  });
 
-  return () => {
+  const unlessHeld = (key: 'conversationId' | 'spaceId', value: string | null): string | null => {
+    if (heldAtSwitch[key] === undefined) return value;
+    if (value === heldAtSwitch[key]) return null;
+    heldAtSwitch[key] = undefined; // the shell has moved on: its ids are the new identity's
+    return value;
+  };
+
+  const source = () => {
     const owner = scope();
     if (known.scope !== owner) known = { scope: owner };
-    const { conversationId, spaceId } = deps.shell();
 
     const targets = deps.qc.getQueryData<{ targets: UiTarget[] }>(qk.uiTargets())?.targets;
     if (targets) known.targets = targets;
+    if (!known.targets && deps.qc.getQueryState(qk.uiTargets())?.status !== 'error') return null;
     const views = deps.qc.getQueryData<{ views: ViewDefinition[] }>(qk.uiViews())?.views;
     if (views) known.views = views;
+
+    const shell = deps.shell();
+    const conversationId = unlessHeld('conversationId', shell.conversationId);
+    const spaceId = unlessHeld('spaceId', shell.spaceId);
     const canvas = spaceId ? deps.qc.getQueryData<CanvasState>(qk.space(spaceId)) : undefined;
     if (canvas) known.canvas = canvas;
 
@@ -58,4 +93,5 @@ export function createShellSnapshotSource(deps: ShellSnapshotDeps): () => UiSnap
       canvas: known.canvas,
     });
   };
+  return Object.assign(source, { dispose: stop });
 }

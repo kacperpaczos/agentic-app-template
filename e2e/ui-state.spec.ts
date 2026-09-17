@@ -383,6 +383,41 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     expect(result).toEqual({ stale: true, reason: 'other_conversation', version: null, capturedAt: null, ageMs: null, snapshot: null });
   });
 
+  test('przelaczenie tozsamosci na Ustawieniach: nowy wlasciciel nie dostaje tabeli z czatu ani rozmowy poprzedniego', async ({ page }) => {
+    await scripted.restart('chat-data-table');
+    await openApp(page, '/settings');
+    await send(page, 'Pokaz dostawcow tutaj w rozmowie.');
+    await settled(page);
+    const table = page.locator('.pf-chat [data-ui-instance][data-component="DataTable"]');
+    await expect(table).toHaveAttribute('data-state', 'ready');
+    const { ids: mine } = await suppliers(page);
+    const conversationId = await conversationOnScreen(page);
+    const clientId = await clientIdOf(page);
+
+    // As the first owner: the chat's table and the conversation are described.
+    const before = await published(
+      page,
+      (s) => s.conversationId === conversationId && s.instances.some((i: any) => i.component === 'DataTable' && i.state === 'ready'),
+    );
+    expect(before.instances.find((i: any) => i.component === 'DataTable').visibleRecordIds).toEqual(mine);
+
+    // The switch, on Settings, with the table still on screen in the chat.
+    const owner = page.getByTestId('access-owner');
+    const was = (await owner.textContent())?.trim() ?? '';
+    await page.getByTestId('switch-access-context').click();
+    await expect(owner).not.toHaveText(was);
+    await expect(table).toHaveAttribute('data-state', 'ready'); // not re-rendered: still the first owner's rows
+
+    // What the new owner's backend holds for this tab (the page's session is now the new owner's).
+    const after = await published(page, (s) => s.target?.id === 'platform.settings');
+    expect(after.clientId).toBe(clientId);
+    expect(after.conversationId).not.toBe(conversationId);
+    expect(after.conversationId).toBeNull();
+    const text = JSON.stringify(after);
+    for (const id of mine) expect(text).not.toContain(id);
+    expect(after.instances.some((i: any) => i.state === 'ready' && i.matched === mine.length)).toBe(false);
+  });
+
   test('wykonanie rozmowy A, gdy przegladarka pokazuje B, dostaje other_conversation', async ({ page }) => {
     await scripted.restart('ui-state-late');
     await openApp(page, '/data');

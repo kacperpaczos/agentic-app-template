@@ -23,6 +23,21 @@ import type { QueryClient } from '@tanstack/react-query';
 let currentOwner: string | null = null;
 let epoch = 0;
 let controller = new AbortController();
+const switchListeners = new Set<() => void>();
+
+/**
+ * Called right after every switch, once the previous context's requests are
+ * aborted and its cache is gone.
+ *
+ * Needed because emptying the cache does not re-render what is mounted:
+ * TanStack's `QueryCache.clear()` destroys queries without telling their
+ * observers. Whatever keeps state about the previous identity outside the
+ * cache — or reads the cache only when it re-renders — has to be told.
+ */
+export function onAccessContextChange(listener: () => void): () => void {
+  switchListeners.add(listener);
+  return () => switchListeners.delete(listener);
+}
 
 /** Monotonic counter; changes on every access-context switch. */
 export const accessEpoch = (): number => epoch;
@@ -64,6 +79,7 @@ export function setAccessContext(qc: QueryClient, ownerId: string): boolean {
     controller = new AbortController();
     void qc.cancelQueries();
     qc.clear();
+    for (const listener of [...switchListeners]) listener();
   }
   return switching;
 }
