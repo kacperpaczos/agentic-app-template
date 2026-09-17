@@ -14,7 +14,14 @@ import { assertIsolatedInstance, assertTestBaseUrl, TestIsolationError } from '.
  * call `verifyIsolatedInstance` for their own base URL; the fixture covers the
  * shared instance.
  */
-export const test = base.extend<Record<string, never>, { isolatedInstance: void }>({
+/*
+ * `object` and not `Record<string, never>` for the test-scoped fixtures: the
+ * latter puts an index signature of `never` on the fixture table, so every
+ * entry — including the worker fixture below — is checked against
+ * `TestFixture<never, …>` and its `use(): void` no longer fits. The suite adds
+ * no test-scoped fixtures, which is what `object` says.
+ */
+export const test = base.extend<object, { isolatedInstance: void }>({
   isolatedInstance: [
     async ({}, use, workerInfo) => {
       const baseURL = workerInfo.project.use.baseURL;
