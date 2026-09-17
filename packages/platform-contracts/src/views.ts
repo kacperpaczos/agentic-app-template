@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { APP_ERROR_CODES } from './errors.ts';
-import { dataSortSchema, viewFilterPredicateSchema, viewPageSchema } from './ui.ts';
+import { dataSortSchema, dataSourceSchema, viewFilterPredicateSchema, viewPageSchema } from './ui.ts';
 
 /**
  * Data views: what a module's read returns, how a screen is composed from it,
@@ -171,24 +171,11 @@ export type ReadResultDescriptor = z.infer<typeof readResultDescriptorSchema>;
 /*  Data source                                                               */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Which registered read a data component (or a live artifact) re-runs.
- *
- * Never code, never SQL, never values: a qualified operation name and the input
- * the operation's own schema validates. `input` is a loose object rather than
- * `z.record()` so that the schema can be offered to the model over MCP.
+/*
+ * `dataSourceSchema` — which registered read a data component re-runs — lives in
+ * `ui.ts`, beside the other schemas the interface commands share, so a command
+ * can name the read of the instance it points at without an import cycle.
  */
-export const dataSourceSchema = z.object({
-  /** Qualified operation name, `<moduleId>.<operation>`. */
-  operation: z
-    .string()
-    .min(1)
-    .max(200)
-    .describe('Kwalifikowana nazwa zarejestrowanej operacji odczytu, np. "modul.operacja"'),
-  /** Input for the operation; validated against the operation's own schema. */
-  input: z.looseObject({}).optional().describe('Wejscie operacji zgodne z jej schematem'),
-});
-export type DataSource = z.infer<typeof dataSourceSchema>;
 
 /* -------------------------------------------------------------------------- */
 /*  Module views                                                              */

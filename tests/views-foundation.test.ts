@@ -881,6 +881,8 @@ describe('szew narzedzi i prompt', () => {
       'agent_view_create',
       'agent_view_update',
       'agent_view_remove',
+      // Appended by showing a record's value; the order before it is unchanged.
+      'ui_show_value',
     ]);
   });
 

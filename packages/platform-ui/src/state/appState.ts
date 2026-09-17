@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type {
   AppContext,
   DataSort,
+  UiRevealAdjustment,
   ViewFilterPredicate,
   ViewPage,
   ViewStateContext,
@@ -106,6 +107,22 @@ export const viewStateContextOf = (r: ViewStateReport): ViewStateContext => ({
   total: r.total,
 });
 
+/**
+ * The value the agent last pointed at, and what it changed on screen to get
+ * there — shown above the view while the user is still looking at that state.
+ */
+export interface RevealNotice {
+  /** The screen and view state it applies to (`revealAddress`). */
+  address: string;
+  recordKind: string;
+  recordId: string;
+  /** The record's title as the table renders it, when it has one. */
+  recordTitle: string | null;
+  field: string;
+  fieldLabel: string;
+  adjustments: UiRevealAdjustment[];
+}
+
 export interface DraftRecord {
   formId: string;
   entity: string;
@@ -165,6 +182,8 @@ interface AppState {
    * applied, the page after clamping, how many records that left.
    */
   viewStates: Record<string, ViewStateReport>;
+  /** The agent's last shown value, for the banner (see `RevealNotice`). */
+  revealNotice: RevealNotice | null;
   /**
    * Lifecycle of every run the client knows about, **keyed by conversation**.
    *
@@ -200,6 +219,7 @@ interface AppState {
   reportViewState: (report: ViewStateReport) => void;
   /** Withdraws a view's report, if it is still this instance's. */
   dropViewState: (targetId: string, instanceId: string) => void;
+  setRevealNotice: (notice: RevealNotice | null) => void;
   /** Merges a patch into one conversation's run record, creating it if absent. */
   patchRun: (conversationId: string, patch: Partial<ConversationRun>) => void;
   /** Reads one conversation's run record, or an empty one. */
@@ -235,6 +255,7 @@ export const useAppState = create<AppState>((set, get) => ({
   agentFilterKey: null,
   filterOutcome: null,
   viewStates: {},
+  revealNotice: null,
   runs: {},
 
   setSpace: (id) => set({ spaceId: id }),
@@ -289,6 +310,7 @@ export const useAppState = create<AppState>((set, get) => ({
       delete next[targetId];
       return { viewStates: next };
     }),
+  setRevealNotice: (revealNotice) => set({ revealNotice }),
   patchRun: (conversationId, patch) =>
     set((s) => ({
       runs: { ...s.runs, [conversationId]: { ...(s.runs[conversationId] ?? emptyRun()), ...patch } },

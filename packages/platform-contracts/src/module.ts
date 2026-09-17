@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import type { DataSort, UiCommandResult, UiTarget, ViewFilter } from './ui.ts';
+import type { DataSort, UiCommandResult, UiReveal, UiTarget, ViewFilter } from './ui.ts';
 import type { AppContext } from './agent.ts';
 import type { CardSpec } from './canvas.ts';
 import type { ReadResultDescriptor, ViewDefinition } from './views.ts';
@@ -192,6 +192,8 @@ export interface ToolCallContext {
     /** Order to apply; `null` returns the view to its own. Omitted leaves it alone. */
     sort?: DataSort | null;
     reason?: string;
+    /** A record's field to bring on screen and point at (see `uiRevealSchema`). */
+    reveal?: UiReveal;
   }) => Promise<UiCommandResult>;
 }
 

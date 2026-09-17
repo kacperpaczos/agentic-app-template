@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { dataSourceSchema } from './views.ts';
+import { dataSourceSchema } from './ui.ts';
 
 /**
  * Artifacts are platform-owned. Identity is the `id`; the title is a label and

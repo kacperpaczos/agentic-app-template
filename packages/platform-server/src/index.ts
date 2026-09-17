@@ -26,6 +26,7 @@ export * from './registry/read-operations.ts';
 export * from './registry/openui-validation.ts';
 export * from './registry/views.ts';
 export * from './registry/view-sorting.ts';
+export * from './registry/record-presentation.ts';
 export * from './services/index.ts';
 export * from './services/base-data.ts';
 export * from './agent/runtime.ts';

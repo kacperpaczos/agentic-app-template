@@ -3,6 +3,7 @@ import { describePredicate, viewAddressKey, viewStatePatch } from '@platform/con
 import { useUiTargets } from '../api/queries.ts';
 import { useAppState } from '../state/appState.ts';
 import { useActiveViewFilter, useActiveViewReport } from '../state/viewFilter.ts';
+import { revealAddress } from './uiReveal.ts';
 
 /**
  * Says that this view is narrowed, by what, and gives the way back.
@@ -25,6 +26,12 @@ import { useActiveViewFilter, useActiveViewReport } from '../state/viewFilter.ts
  * only a narrowing this session's agent performed is attributed to the agent.
  * That flag is transient interface state and stays in memory, where it belongs.
  *
+ * **A value the agent pointed at is announced here too.** Bringing one record's
+ * field on screen may mean removing the narrowing that hid it or turning the
+ * page (`shell/uiReveal.ts`). Those are changes to what the user is looking at,
+ * made by somebody else, so they are stated in the same place and in the same
+ * words as a narrowing — and only while that state is still on screen.
+ *
  * **Order and page are described too.** A view sorted by something other than
  * its own order, or showing a later page or a page it had to clamp, is also
  * "not what it would show on its own" — so the same banner says so, from what
@@ -36,14 +43,18 @@ export function ViewFilterBanner() {
   const report = useActiveViewReport();
   const outcome = useAppState((s) => s.filterOutcome);
   const agentApplied = useAppState((s) => s.agentFilterKey);
+  const notice = useAppState((s) => s.revealNotice);
   const targets = useUiTargets();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const search = useRouterState({ select: (s) => s.location.search as Record<string, unknown> });
   const navigate = useNavigate();
 
   const sorted = report?.sortFromAddress ? report : null;
   const paged = report?.page && (report.page.index > 1 || report.clampedFrom !== null) ? report : null;
   const rejected = report?.rejectedSort ?? null;
-  if (!filter && !sorted && !paged && !rejected) return null;
+  // A notice belongs to the screen and the view state it was made on.
+  const shown = notice && notice.address === revealAddress(pathname, search) ? notice : null;
+  if (!filter && !sorted && !paged && !rejected) return shown ? <RevealNotice notice={shown} /> : null;
 
   const targetId = filter?.targetId ?? report!.targetId;
   const fields = targets.data?.find((t) => t.id === targetId)?.filter?.fields ?? [];
@@ -72,6 +83,8 @@ export function ViewFilterBanner() {
   };
 
   return (
+    <>
+      {shown && <RevealNotice notice={shown} />}
     <div className="pf-viewfilter" role="status" data-testid="view-filter-banner">
       <span className="pf-viewfilter__mark" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="16" height="16" focusable="false">
@@ -139,6 +152,57 @@ export function ViewFilterBanner() {
       >
         {filter ? 'Pokaz pelny widok' : 'Przywroc domyslny widok'}
       </button>
+    </div>
+    </>
+  );
+}
+
+/**
+ * What the agent pointed at, and what it changed to get there.
+ *
+ * Stated because the change is otherwise invisible: a view whose narrowing was
+ * removed looks like a view nobody narrowed, and a user who set that narrowing
+ * has to be told it is gone — by whom and why.
+ */
+function RevealNotice({ notice }: { notice: NonNullable<ReturnType<typeof useAppState.getState>['revealNotice']> }) {
+  return (
+    <div className="pf-viewfilter" role="status" data-testid="view-reveal-notice">
+      <span className="pf-viewfilter__mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="16" height="16" focusable="false">
+          {/* A pointer: this value was pointed at, not merely shown. */}
+          <path
+            d="M5 3l14 8-6 1.5L10 19 5 3Z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </span>
+      <span className="pf-viewfilter__text">
+        <strong>Agent wskazal wartosc.</strong> Pole „{notice.fieldLabel}” rekordu{' '}
+        <span data-testid="view-reveal-record" data-record-kind={notice.recordKind} data-record-id={notice.recordId}>
+          {notice.recordTitle ? `„${notice.recordTitle}”` : notice.recordId}
+        </span>
+        .
+        {notice.adjustments.map((a, i) => (
+          <span
+            key={`${a.kind}-${i}`}
+            className="pf-viewfilter__part"
+            data-testid="view-reveal-adjustment"
+            data-kind={a.kind}
+          >
+            {' '}
+            {a.kind === 'filter_cleared'
+              ? `Zdjeto zawezenie: ${a.detail}.`
+              : a.kind === 'page_changed'
+                ? `Zmieniono ${a.detail}.`
+                : `${a.detail}.`}
+          </span>
+        ))}{' '}
+        <span className="pf-viewfilter__part">Zmiany dotycza tylko tego, co widac — dane sa bez zmian.</span>
+      </span>
     </div>
   );
 }

@@ -258,6 +258,29 @@ export function buildSystemPrompt(input: PromptInput): string {
       'odczytaj ponownie z minVersion = version + 1; puste cards z cardsState none to brak przestrzeni do pokazania.',
       'Porownuj wersje z „ekran przy wyslaniu polecenia” w kontekscie: nizsza wersja tej samej karty jest starsza niz to,',
       'co uzytkownik widzial, wysylajac polecenie.',
+      '',
+      '## Pokazanie wartosci pola rekordu',
+      /*
+       * Finding a value and showing it are different acts. Asked "what is the
+       * tax id of X", an answer typed into the chat leaves the user looking at
+       * a screen that may not even contain X — filtered out, on another page,
+       * in another view. The rule makes the screen the answer, and makes the
+       * client's confirmation the only ground for saying it is on screen.
+       */
+      'Gdy uzytkownik pyta o wartosc pola konkretnego rekordu ("jaki jest NIP dostawcy X", "pokaz cene tej pozycji"):',
+      `1. znajdz rekord i jego identyfikator narzedziem modulu (wyszukiwanie, lista) — ${mcpToolName('ui_show_value')} nie szuka po nazwie;`,
+      '2. wywolaj ui_show_value z recordKind (rodzaj rekordu z deskryptora operacji odczytu), recordId (wartosc pola id',
+      '   jako tekst) i field (pole z deskryptora). Aplikacja sama wybiera widok, w razie potrzeby usuwa zawezenie, ktore',
+      '   ukrywa rekord, przechodzi na jego strone i podswietla komorke.',
+      'found=true znaczy tylko, ze backend ma rekord (backend.displayedText); shown=true znaczy, ze KLIENT wskazal pole.',
+      'Mow, ze pokazales wartosc, TYLKO gdy shown=true, i podaj ja z revealed.displayedText. matchesBackend=false: powiedz,',
+      'ze wartosc na ekranie rozni sie od backendu. Wymien adjustments (np. usuniete zawezenie, zmieniona strona) —',
+      'to zmiany prezentacji, dane sa bez zmian. Odpowiedz tylko tekstem z wartoscia NIE zastepuje pokazania.',
+      'ambiguous: rekord jest w kilku miejscach — wybierz targetId z candidates (albo zapytaj uzytkownika) i wywolaj ponownie.',
+      'no_renderer: aplikacja nie ma miejsca, ktore pokazuje takie rekordy lub to pole (detail) — powiedz to wprost;',
+      'wartosc mozesz podac slownie tylko z zaznaczeniem, ze jej nie pokazano. unknown_field, record_not_found, forbidden,',
+      'not_present, not_visible, inactive_conversation, no_client: powiedz, czego nie udalo sie zrobic i dlaczego.',
+      'Po ui_show_value opis ekranu odczytasz przez ui_state z minVersion = uiVersion i clientId = uiClientId.',
     );
   }
 
