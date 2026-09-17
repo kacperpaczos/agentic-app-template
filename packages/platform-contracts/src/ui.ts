@@ -360,10 +360,20 @@ export const UI_COMMAND_ACK_MARGIN_MS = 1000;
 /**
  * Whether the acknowledgement names the screen's description version:
  * `published` — yes (`uiVersion`, `uiClientId`); `timeout` — the budget ran out
- * first; `rejected` — the backend refused the description; `skipped` — nothing
- * was described (the command came from a conversation the tab is not showing).
+ * first; `rejected` — the backend refused the description (a backend answer,
+ * and only that); `unreachable` — the description did not get an answer from
+ * the backend; `not_described` — the tab had no description to send (none
+ * captured under the identity signed in now); `skipped` — not described on
+ * purpose (the command came from a conversation the tab is not showing).
  */
-export const UI_PUBLICATION_STATUSES = ['published', 'timeout', 'rejected', 'skipped'] as const;
+export const UI_PUBLICATION_STATUSES = [
+  'published',
+  'timeout',
+  'rejected',
+  'unreachable',
+  'not_described',
+  'skipped',
+] as const;
 export type UiPublicationStatus = (typeof UI_PUBLICATION_STATUSES)[number];
 
 export const uiCommandResultSchema = z.object({

@@ -36,7 +36,8 @@ export function uiStateTools(services: PlatformServices): Array<ModuleToolDefini
         'tej wersji. stale=true oznacza, ze opis nie jest potwierdzonym aktualnym stanem — reason mowi ' +
         'dlaczego: no_client (zadna karta nie opisala ekranu), other_conversation (karta pokazuje inna ' +
         'rozmowe), older_than_requested (zwrocony opis jest starszy niz wymagany), client_gone (karta ' +
-        'zamknieta), client_inactive (karta dawno nie dala znaku zycia). ' +
+        'zamknieta), client_inactive (karta dawno nie dala znaku zycia), superseded (karta pokazuje juz ' +
+        'nowszy ekran, ktorego opisu nie udalo sie zapisac). ' +
         'Nie opisuj ekranu na podstawie opisu ze stale=true tak, jakby byl aktualny.',
       effect: 'read',
       alwaysLoad: true,

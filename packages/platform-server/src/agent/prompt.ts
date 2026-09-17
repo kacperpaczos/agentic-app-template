@@ -56,7 +56,9 @@ export function buildSystemPrompt(input: PromptInput): string {
      */
     `- ekran przy wyslaniu polecenia: ${
       ctx.ui
-        ? `opis w wersji ${ctx.ui.version} (karta ${ctx.ui.clientId}), widok ${ctx.ui.viewId ?? '(brak)'}, adres ${ctx.ui.url}`
+        ? `opis w wersji ${ctx.ui.version} (karta ${ctx.ui.clientId}), widok ${ctx.ui.viewId ?? '(brak)'}, adres ${ctx.ui.url}` +
+          // A cut address may end in the middle of a value; say so rather than let it read as the whole.
+          (ctx.ui.urlTruncated ? ` [adres skrocony do ${ctx.ui.url.length} znakow — pelny jest dluzszy]` : '')
         : '(brak opisu)'
     }`,
     ctx.drafts.length

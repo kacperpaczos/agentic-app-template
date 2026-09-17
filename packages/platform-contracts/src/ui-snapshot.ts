@@ -137,7 +137,10 @@ export type UiSnapshot = z.infer<typeof uiSnapshotSchema>;
  *  - `client_gone` — the tab asked about (or the one a version belongs to) was
  *    closed, or the backend does not know it;
  *  - `client_inactive` — the tab's description is returned, but the tab has not
- *    shown a sign of life for longer than {@link UI_CLIENT_INACTIVE_AFTER_MS}.
+ *    shown a sign of life for longer than {@link UI_CLIENT_INACTIVE_AFTER_MS};
+ *  - `superseded` — the tab is open but says its screen has moved on to a
+ *    version the backend does not have (the tab's newer description was
+ *    refused); the older description is returned, and is not the screen.
  */
 export const UI_STATE_REASONS = [
   'no_client',
@@ -145,6 +148,7 @@ export const UI_STATE_REASONS = [
   'other_conversation',
   'client_gone',
   'client_inactive',
+  'superseded',
 ] as const;
 export type UiStateReason = (typeof UI_STATE_REASONS)[number];
 

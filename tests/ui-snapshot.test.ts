@@ -1179,3 +1179,163 @@ describe('R1: wspolny budzet potwierdzenia komendy UI', () => {
     }
   });
 });
+
+/* ========================================================================== */
+/*  Fix round 2: identity isolation, honest heartbeat, prompt flag, statuses  */
+/* ========================================================================== */
+
+describe('Fix round 2', () => {
+  const sleepMs = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  it('N1: opis zlozony pod poprzednia tozsamoscia nie wychodzi po przelaczeniu — heartbeat, kolejka, wycofanie i marker', async () => {
+    let owner = 'local-user';
+    const stores: Record<string, UiSnapshotStore> = { 'local-user': new UiSnapshotStore(), 'other-user': new UiSnapshotStore() };
+    // Every request lands in the store of whoever is signed in when it is made, as the session cookie does.
+    const sent: Array<{ owner: string; version: number; conversationId: string | null }> = [];
+    const retired: Array<{ owner: string; version: number }> = [];
+    let release: (() => void) | null = null;
+    let conversationId = 'cnv_of_local_user';
+    const s = new UiSnapshotSession({
+      identity: sessionIdentityStore(),
+      scope: () => owner,
+      send: async (snap) => {
+        const to = owner;
+        if (snap.version === 2) await new Promise<void>((r) => (release = r));
+        sent.push({ owner: to, version: snap.version, conversationId: snap.conversationId });
+        stores[to]!.publish(to, snap);
+      },
+      alive: async (ref) => stores[owner]!.touch(owner, ref.clientId, ref.version),
+      retire: (ref) => void retired.push({ owner, version: ref.version }),
+    });
+    s.setSource(() =>
+      buildUiSnapshotContent({ url: '/data', pathname: '/data', conversationId, spaceId: null, instances: [instance('DataTable-a')], targets: [], views: [], canvas: undefined }),
+    );
+
+    expect((await s.flush()).status).toBe('published'); // v1, local-user
+
+    // A description captured as local-user is queued behind one still on its way…
+    conversationId = 'cnv_of_local_user_2';
+    const inFlight = s.flush({ timeoutMs: 5000 }); // v2, blocked in send
+    await sleepMs(10);
+    conversationId = 'cnv_of_local_user_3';
+    const queued = s.flush({ timeoutMs: 5000 }); // v3 captured as local-user, queued
+    await sleepMs(10);
+
+    // …and the user switches identity (Settings → another user).
+    owner = 'other-user';
+    release!();
+    expect((await inFlight).status).toBe('published'); // it had already left as local-user
+    expect(await queued).toEqual({ status: 'not_described' });
+
+    // The heartbeat, the retirement and the command marker have nothing to offer the new identity.
+    await s.heartbeat();
+    s.closing();
+    expect(s.contextMarker()).toBeNull();
+
+    expect(sent.filter((x) => x.owner === 'other-user')).toEqual([]);
+    expect(retired).toEqual([]);
+    expect(stores['other-user']!.forClient('other-user', s.clientId)).toBeNull();
+
+    // Captured as the new identity, it is published to the new identity only.
+    conversationId = 'cnv_of_other_user';
+    const own = await s.flush();
+    expect(own.status).toBe('published');
+    expect(sent.at(-1)).toMatchObject({ owner: 'other-user', conversationId: 'cnv_of_other_user' });
+    expect(stores['other-user']!.forClient('other-user', s.clientId)?.conversationId).toBe('cnv_of_other_user');
+    expect(sent.filter((x) => x.owner === 'other-user')).toHaveLength(1);
+    expect(s.contextMarker()?.version).toBe((own as { snapshot: UiSnapshot }).snapshot.version);
+  });
+
+  it('N2: po odrzuceniu nowszego opisu karta nie podtrzymuje starszego — backend zglasza superseded', async () => {
+    const store = new UiSnapshotStore();
+    const owner = h.ownerId;
+    const reports: string[] = [];
+    const vouched: number[] = [];
+    let url = '/data';
+    const s = new UiSnapshotSession({
+      identity: sessionIdentityStore(),
+      scope: () => owner,
+      report: (message) => void reports.push(message),
+      send: async (snap) => {
+        if (snap.url === '/odrzucany') throw new AppError('validation_failed', 'Nieprawidlowy opis interfejsu.', { reason: 'invalid_snapshot' });
+        store.publish(owner, snap);
+      },
+      alive: async (ref) => {
+        vouched.push(ref.version);
+        return store.touch(owner, ref.clientId, ref.version);
+      },
+    });
+    s.setSource(() =>
+      buildUiSnapshotContent({ url, pathname: url, conversationId: 'cnv_a', spaceId: null, instances: [], targets: [], views: [], canvas: undefined }),
+    );
+
+    expect((await s.flush()).status).toBe('published');
+    expect(store.evaluate(owner, 'cnv_a')).toMatchObject({ stale: false, version: 1 });
+
+    // The screen moves on; its description is refused by the backend.
+    url = '/odrzucany';
+    expect(await s.flush()).toEqual({ status: 'rejected', code: 'validation_failed' });
+    await sleepMs(10);
+    expect(store.evaluate(owner, 'cnv_a')).toMatchObject({ stale: true, reason: 'superseded', version: 1 });
+
+    // Heartbeats keep the tab alive but never vouch for version 1 again, and do not resend the refused 2.
+    vouched.length = 0;
+    await s.heartbeat();
+    await s.heartbeat();
+    expect(vouched).toEqual([2, 2]);
+    const after = store.evaluate(owner, 'cnv_a');
+    expect(after).toMatchObject({ stale: true, reason: 'superseded', version: 1 });
+    expect(reports).toHaveLength(1);
+
+    // The store: an older touch is not a vouch either; a live, current tab is preferred to a superseded one.
+    expect(store.touch(owner, s.clientId, 1)).toBe(false);
+    expect(store.evaluate(owner, 'cnv_a').reason).toBe('superseded');
+    store.publish(owner, snapshot({ clientId: 'ui_tab_other_live', version: 1, conversationId: 'cnv_a' }));
+    expect(store.evaluate(owner, 'cnv_a')).toMatchObject({ stale: false });
+    expect(store.evaluate(owner, 'cnv_a').snapshot?.clientId).toBe('ui_tab_other_live');
+
+    // Once a newer description is accepted, the tab's own description is current again.
+    url = '/data?country=PL';
+    expect((await s.flush()).status).toBe('published');
+    expect(store.evaluate(owner, 'cnv_a', { clientId: s.clientId })).toMatchObject({ stale: false, version: 3 });
+  });
+
+  it('N3: prompt mowi, ze adres ekranu zostal skrocony', () => {
+    const base = { registry: h.platform.registry, catalog: h.platform.services.catalog, resourceSummary: null, workspaceDir: null, stagedFiles: [], toolkit: [] };
+    const cut = 'x'.repeat(UI_URL_MAX_LENGTH);
+    const truncated = buildSystemPrompt({ ...base, appContext: context({ ui: { version: 4, clientId: 'ui_tab_aaaaaaaa', viewId: null, url: cut, urlTruncated: true } }) });
+    expect(truncated).toContain(`adres ${cut} [adres skrocony do 2000 znakow — pelny jest dluzszy]`);
+    const whole = buildSystemPrompt({ ...base, appContext: context({ ui: { version: 4, clientId: 'ui_tab_aaaaaaaa', viewId: null, url: '/data' } }) });
+    expect(whole).not.toContain('adres skrocony');
+  });
+
+  it('N5: rejected tylko dla odmowy backendu; brak opisu i brak polaczenia maja wlasne statusy', async () => {
+    const reports: string[] = [];
+    const nothing = new UiSnapshotSession({ identity: sessionIdentityStore(), send: async () => {}, scope: () => 'x', report: (m) => void reports.push(m) });
+    expect(await nothing.flush()).toEqual({ status: 'not_described' });
+
+    const offline = new UiSnapshotSession({
+      identity: sessionIdentityStore(),
+      send: async () => {
+        throw new TypeError('Failed to fetch');
+      },
+      scope: () => 'x',
+      report: (m) => void reports.push(m),
+    });
+    offline.setSource(() => buildUiSnapshotContent({ url: '/', pathname: '/', conversationId: null, spaceId: null, instances: [], targets: [], views: [], canvas: undefined }));
+    expect(await offline.flush()).toEqual({ status: 'unreachable' });
+    expect(offline.lastRejection()).toBeNull();
+    expect(reports).toEqual([]);
+
+    const posted: UiCommandResult[] = [];
+    await performAndAcknowledge(
+      { commandId: 'uic_abcdefgh', runId: 'run_x', conversationId: 'cnv_a', targetId: 'procurement.data', spaceId: null },
+      { perform: async () => ({ commandId: 'uic_abcdefgh', executed: true }), session: nothing, post: async (_r, r) => void posted.push(r) },
+    );
+    expect(posted[0]).toMatchObject({ uiPublication: 'not_described' });
+    expect(uiCommandResultSchema.safeParse(posted[0]).success).toBe(true);
+    for (const status of ['unreachable', 'not_described']) {
+      expect(uiCommandResultSchema.safeParse({ commandId: 'uic_abcdefgh', executed: true, uiPublication: status }).success).toBe(true);
+    }
+  });
+});

@@ -220,13 +220,20 @@ export interface UiSnapshotFlushOptions {
 }
 
 /**
- * What became of a publication: accepted (with the description the backend
- * now has), refused by the backend (`code`), or still unanswered when the
- * caller stopped waiting.
+ * What became of a publication:
+ *  - `published` — the backend accepted it (with the description it now has);
+ *  - `rejected` — the backend refused it (`code`), and only that;
+ *  - `unreachable` — it did not get an answer from the backend (network, or the
+ *    signed-in identity changed while it was on its way);
+ *  - `not_described` — there was nothing to send: no description was captured
+ *    under the identity signed in now;
+ *  - `timeout` — still unanswered when the caller stopped waiting.
  */
 export type UiPublication =
   | { status: 'published'; snapshot: UiSnapshot }
   | { status: 'rejected'; code: string }
+  | { status: 'unreachable' }
+  | { status: 'not_described' }
   | { status: 'timeout' };
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -241,10 +248,19 @@ export class UiSnapshotSession {
   readonly #report: (message: string, detail: unknown) => void;
   #identity: UiClientIdentity;
   #source: (() => UiSnapshotContent) | null = null;
+  /*
+   * Every description is kept with the access scope (signed-in identity) it was
+   * captured under. Nothing captured under one identity is ever sent, vouched
+   * for, retired or put into a command under another: after a switch the tab
+   * has no description until it captures one as the new identity.
+   */
   #current: UiSnapshot | null = null;
+  #currentScope: string | null = null;
   #currentKey: string | null = null;
   #published: UiSnapshot | null = null;
-  #lastRejection: { version: number; code: string; message: string; details: unknown } | null = null;
+  #publishedScope: string | null = null;
+  #lastRejection: { clientId: string; version: number; code: string; message: string; details: unknown } | null =
+    null;
   #timer: ReturnType<typeof setTimeout> | null = null;
   #chain: Promise<unknown> = Promise.resolve();
   #lastChangeAt = 0;
@@ -274,7 +290,7 @@ export class UiSnapshotSession {
     }
   }
 
-  /** The latest description assembled, published or not. */
+  /** The latest description assembled, published or not (under whichever identity). */
   current(): UiSnapshot | null {
     return this.#current;
   }
@@ -285,13 +301,18 @@ export class UiSnapshotSession {
   }
 
   /** The last description the backend refused, and why. Cleared by the next accepted one. */
-  lastRejection(): { version: number; code: string; message: string; details: unknown } | null {
+  lastRejection(): { clientId: string; version: number; code: string; message: string; details: unknown } | null {
     return this.#lastRejection;
+  }
+
+  /** The current description, if it was captured under the identity signed in now. */
+  #currentInScope(): UiSnapshot | null {
+    return this.#current && this.#currentScope === this.#scope() ? this.#current : null;
   }
 
   /** What a command carries about the screen it was sent from (`AppContext.ui`). */
   contextMarker(): AppContext['ui'] {
-    const s = this.#current;
+    const s = this.#currentInScope();
     if (!s) return null;
     // Cut again here: the marker must never be what makes a command invalid.
     const { url, urlTruncated } = clampUiUrl(s.url);
@@ -310,14 +331,16 @@ export class UiSnapshotSession {
    */
   capture(): UiSnapshot | null {
     if (!this.#source) return this.#current;
+    const scope = this.#scope();
     const content = this.#source();
-    const key = `${this.#scope()}|${JSON.stringify(content)}`;
+    const key = `${scope}|${JSON.stringify(content)}`;
     if (this.#current && this.#current.clientId === this.#identity.clientId && key === this.#currentKey) {
       return this.#current;
     }
     this.#identity = { clientId: this.#identity.clientId, version: this.#identity.version + 1 };
     this.#store.save(this.#identity);
     this.#currentKey = key;
+    this.#currentScope = scope;
     this.#current = {
       version: this.#identity.version,
       clientId: this.#identity.clientId,
@@ -372,20 +395,31 @@ export class UiSnapshotSession {
   }
 
   /**
-   * Says the tab is still open, at the version the backend should hold; when
-   * the backend does not hold it (it restarted, or retired the tab), publishes
-   * it again.
+   * Says the tab is still open **showing its current description**.
+   *
+   * Only the current capture is vouched for — never an older one the backend
+   * happens to hold: after a newer description was refused, the older one no
+   * longer matches the screen, and the backend is told so (it then reports it
+   * `superseded`). When the backend does not know the current version at all
+   * (restart, retirement), it is captured afresh and published — unless this
+   * very version was already refused. Nothing is done for a description
+   * captured under another identity.
    */
   async heartbeat(): Promise<void> {
-    const snapshot = this.#published ?? this.#current;
+    const scope = this.#scope();
+    const snapshot = this.#currentInScope();
     if (!snapshot || !this.#alive) return;
     let known = false;
     try {
       known = await this.#alive({ clientId: snapshot.clientId, version: snapshot.version });
     } catch {
-      return; // unreachable backend: the next beat tries again
+      return; // unreachable backend, or the identity changed on the way: the next beat tries again
     }
-    if (!known) void this.#publishCurrent(true);
+    if (known || this.#scope() !== scope) return;
+    const refused = this.#lastRejection;
+    if (refused && refused.clientId === snapshot.clientId && refused.version === snapshot.version) return;
+    this.capture();
+    void this.#publishCurrent(true);
   }
 
   /** Beats every `intervalMs` until the returned function is called. */
@@ -396,7 +430,8 @@ export class UiSnapshotSession {
 
   /** The tab is closing: its description should stop being handed out. */
   closing(): void {
-    const snapshot = this.#current ?? this.#published;
+    const scope = this.#scope();
+    const snapshot = this.#currentInScope() ?? (this.#publishedScope === scope ? this.#published : null);
     if (!snapshot || !this.#retire) return;
     try {
       this.#retire({ clientId: snapshot.clientId, version: snapshot.version });
@@ -407,21 +442,30 @@ export class UiSnapshotSession {
 
   /**
    * Publishes the current description, one publication at a time, so the
-   * backend receives this tab's versions in order.
+   * backend receives this tab's versions in order. The identity is checked when
+   * the description is about to leave, not when it was queued: a description
+   * captured under the previous identity is not sent after a switch.
    */
   #publishCurrent(resend = false): Promise<UiPublication> {
     const run = this.#chain.then(async (): Promise<UiPublication> => {
-      const snapshot = this.#current;
-      if (!snapshot) return { status: 'rejected', code: 'nothing_described' };
+      const scope = this.#scope();
+      const snapshot = this.#currentInScope();
+      if (!snapshot) return { status: 'not_described' };
       const done = this.#published;
-      if (!resend && done && done.clientId === snapshot.clientId && done.version === snapshot.version) {
+      if (
+        !resend &&
+        done &&
+        this.#publishedScope === scope &&
+        done.clientId === snapshot.clientId &&
+        done.version === snapshot.version
+      ) {
         return { status: 'published', snapshot };
       }
       try {
         await this.#send(snapshot);
-        return this.#accepted(snapshot);
+        return this.#accepted(snapshot, scope);
       } catch (err) {
-        if (!(err instanceof AppError && err.code === 'conflict')) return this.#rejected(snapshot, err);
+        if (!(err instanceof AppError && err.code === 'conflict')) return this.#failed(snapshot, err);
         /*
          * The backend already has a newer version under this identity: another
          * tab carries it (a duplicated tab copies `sessionStorage`). This tab
@@ -440,9 +484,9 @@ export class UiSnapshotSession {
         }
         try {
           await this.#send(renewed);
-          return this.#accepted(renewed);
+          return this.#accepted(renewed, scope);
         } catch (again) {
-          return this.#rejected(renewed, again);
+          return this.#failed(renewed, again);
         }
       }
     });
@@ -450,23 +494,26 @@ export class UiSnapshotSession {
     return run;
   }
 
-  #accepted(snapshot: UiSnapshot): UiPublication {
+  #accepted(snapshot: UiSnapshot, scope: string): UiPublication {
     this.#published = snapshot;
+    this.#publishedScope = scope;
     this.#lastRejection = null;
     return { status: 'published', snapshot };
   }
 
   /**
-   * A refused description is reported, never dropped in silence: the agent is
-   * then told the screen is not described (`no_client`, `older_than_requested`)
-   * and whoever looks at the console can see why.
+   * A description that did not reach the backend is `unreachable` and simply
+   * tried again later. One the backend refused is reported, never dropped in
+   * silence, and the backend is told the tab now shows this newer screen, so
+   * the older description it holds stops passing for the current one
+   * (`superseded`) instead of staying fresh on the strength of heartbeats.
    */
-  #rejected(snapshot: UiSnapshot, err: unknown): UiPublication {
-    const code = err instanceof AppError ? err.code : 'unreachable';
-    const message = err instanceof Error ? err.message : String(err);
-    const details = err instanceof AppError ? err.details : undefined;
-    this.#lastRejection = { version: snapshot.version, code, message, details };
+  #failed(snapshot: UiSnapshot, err: unknown): UiPublication {
+    if (!(err instanceof AppError)) return { status: 'unreachable' };
+    const { code, message, details } = err;
+    this.#lastRejection = { clientId: snapshot.clientId, version: snapshot.version, code, message, details };
     this.#report(`[uiSnapshot] opis ekranu w wersji ${snapshot.version} nie zostal opublikowany: ${code} — ${message}`, details);
+    void this.#alive?.({ clientId: snapshot.clientId, version: snapshot.version }).catch(() => false);
     return { status: 'rejected', code };
   }
 }

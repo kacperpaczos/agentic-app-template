@@ -30,7 +30,9 @@ import {
  * (`retire`); an open one says so every `UI_CLIENT_HEARTBEAT_MS` (`touch`). A
  * description whose tab has been silent for `UI_CLIENT_INACTIVE_AFTER_MS` — a
  * tab closed without a word, or one that signed in as somebody else — is still
- * returned, marked stale (`client_inactive`).
+ * returned, marked stale (`client_inactive`). A tab that says it shows a
+ * newer version than the one held (its newer description was refused) keeps
+ * its older description marked `superseded`.
  */
 
 interface StoredSnapshot {
@@ -39,6 +41,12 @@ interface StoredSnapshot {
   receivedAt: number;
   /** Server clock of the tab's last publication or heartbeat. */
   seenAt: number;
+  /**
+   * A newer version the tab says it shows, which this backend does not have
+   * (its publication was refused). Set, the stored description is not the
+   * tab's screen any more.
+   */
+  supersededBy?: number;
   /** Serialised content without version and capture time, for idempotent re-publication. */
   contentKey: string;
 }
@@ -162,14 +170,27 @@ export class UiSnapshotStore {
   /**
    * The tab is still open, showing this version. False when the backend does
    * not hold that version of that tab — the tab should publish it again.
+   *
+   * A version newer than the one held is not a sign that the held description
+   * is still right: the tab is alive, but its screen has moved on to something
+   * this backend does not have, so the held description is marked superseded
+   * rather than kept fresh.
    */
   touch(ownerId: string, clientId: string, version: number): boolean {
     const owner = this.#owners.get(ownerId);
     const stored = owner?.clients.get(clientId);
-    if (!owner || !stored || stored.snapshot.version !== version) return false;
+    if (!owner || !stored) return false;
+    const held = stored.snapshot.version;
+    if (version < held) return false;
     stored.seenAt = Date.now();
+    if (version > held) stored.supersededBy = Math.max(stored.supersededBy ?? 0, version);
     this.#wake(owner);
-    return true;
+    /*
+     * A tab's versions only grow, so once it has said it shows something newer,
+     * a word about the held version is a late message, not a vouch: the mark
+     * stays until a newer description is accepted (which replaces the entry).
+     */
+    return version === held && stored.supersededBy === undefined;
   }
 
   /**
@@ -228,6 +249,7 @@ export class UiSnapshotStore {
     const acknowledged = opts.acknowledged ?? null;
     const now = Date.now();
     const alive = (s: StoredSnapshot) => now - s.seenAt <= UI_CLIENT_INACTIVE_AFTER_MS;
+    const current = (s: StoredSnapshot) => alive(s) && s.supersededBy === undefined;
     const showing = (s: StoredSnapshot | undefined): s is StoredSnapshot =>
       Boolean(s && s.snapshot.conversationId === conversationId);
 
@@ -244,9 +266,9 @@ export class UiSnapshotStore {
       if (!owner || owner.clients.size === 0) return absent('no_client');
       const preferred = [acknowledged?.clientId, context?.clientId]
         .map((id) => (id ? owner.clients.get(id) : undefined))
-        .find((s) => showing(s) && alive(s));
+        .find((s) => showing(s) && current(s));
       const onConversation = [...owner.clients.values()].filter(showing).reverse();
-      stored = preferred ?? onConversation.find(alive) ?? onConversation[0];
+      stored = preferred ?? onConversation.find(current) ?? onConversation.find(alive) ?? onConversation[0];
       if (!stored) return absent('other_conversation');
     }
 
@@ -260,9 +282,11 @@ export class UiSnapshotStore {
     );
     const reason: UiStateReason | undefined = !alive(stored)
       ? 'client_inactive'
-      : snapshot.version < required
-        ? 'older_than_requested'
-        : undefined;
+      : stored.supersededBy !== undefined
+        ? 'superseded'
+        : snapshot.version < required
+          ? 'older_than_requested'
+          : undefined;
     // The verdict first, the description last: whoever reads the start knows whether to trust the rest.
     return {
       stale: reason !== undefined,
