@@ -23,7 +23,9 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
       description:
         'Wypisuje widoki, ustawienia i elementy interfejsu, ktore mozesz otworzyc lub pokazac, ' +
         'oraz przestrzenie pracy uzytkownika. Wywolaj to ZANIM zaczniesz opisywac uzytkownikowi ' +
-        'droge do czegokolwiek — jesli cel jest na liscie, po prostu go otworz przez ui_navigate.',
+        'droge do czegokolwiek — jesli cel jest na liscie, po prostu go otworz przez ui_navigate. ' +
+        'filterableFields podaje pola do zawezania razem z values — zadeklarowanymi wartosciami pola. ' +
+        'Jesli values sa podane, wpisz jedna z nich doslownie; innej wartosci to pole nie ma.',
       effect: 'read',
       alwaysLoad: true,
       inputSchema: z.object({}),
@@ -132,7 +134,9 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
         'Zaweza widok do wierszy spelniajacych warunki — i JEST to domyslny sposob odpowiadania ' +
         'na prosby typu "pokaz tylko X". Nie przepisuj pasujacych wierszy do rozmowy zamiast tego: ' +
         'uzytkownik ma je zobaczyc w widoku. Pola do zawezania podaje ui_catalog jako ' +
-        'filterableFields; pole spoza tej listy jest odrzucane. Zawsze podaj label — krotkie zdanie ' +
+        'filterableFields; pole spoza tej listy jest odrzucane. Gdy pole ma zadeklarowane values, ' +
+        'wartosc musi byc jedna z nich, wpisana doslownie (np. kod kraju PL, nie "Polska") — nie dochodz ' +
+        'do niej probami, bo kazda nietrafiona zostawia uzytkownika z pustym widokiem. Zawsze podaj label — krotkie zdanie ' +
         'po polsku, ktore uzytkownik zobaczy nad widokiem. Przekaz clear=true, zeby przywrocic ' +
         '(tylko widok z filterableFields; inny cel odpowiada not_filterable i nic nie zmienia) ' +
         'pelny widok. Zwraca to, co KLIENT faktycznie pokazal, razem z liczba wierszy ' +
