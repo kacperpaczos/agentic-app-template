@@ -1,6 +1,6 @@
 {
-  "zapisano": "2026-09-17T20:43:30.284Z",
-  "kodCommit": "30aaf8f8a09c749cb04d0d90d1e1ddfa6e28d014",
+  "zapisano": "2026-09-17T21:06:07.633Z",
+  "kodCommit": "9ffd570e84539bfe033e7837b6a54a57f14015ee",
   "zrodlo": "prawdziwy model (subskrypcja Claude), instancja testowa suity przegladarkowej",
   "spec": "e2e/bl01-bl02-model.spec.ts",
   "proba": "T27",
@@ -14,48 +14,22 @@
   "werdykt": "niezaliczona",
   "przebiegi": [
     {
-      "runId": "run_335ba5ea2b1a47cfb046",
+      "runId": "run_94540037b0394f86878f",
       "polecenie": "Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.",
       "status": "succeeded",
-      "czasMs": 34147,
-      "pierwszyTekstMs": 9472,
-      "wKolejceMs": 3,
+      "czasMs": 56498,
+      "pierwszyTekstMs": 16172,
+      "wKolejceMs": 2,
       "narzedzia": [
         "ToolSearch",
         "procurement_search",
         "agent_view_create",
         "ui_state"
       ]
-    },
-    {
-      "runId": "run_efa90d9f55664e7c9e39",
-      "polecenie": "Dodaj do tego wykres cen jednostkowych tych pozycji.",
-      "status": "succeeded",
-      "czasMs": 42835,
-      "pierwszyTekstMs": 10268,
-      "wKolejceMs": 1,
-      "narzedzia": [
-        "ToolSearch",
-        "agent_views_list",
-        "agent_view_update",
-        "ui_state"
-      ]
-    },
-    {
-      "runId": "run_893c41ea783949bdbb7a",
-      "polecenie": "Zawez zestawienie i wykres do pozycji w PLN.",
-      "status": "succeeded",
-      "czasMs": 34581,
-      "pierwszyTekstMs": 19130,
-      "wKolejceMs": 1,
-      "narzedzia": [
-        "agent_view_update",
-        "ui_state"
-      ]
     }
   ],
   "scenariusz": "T27 — uzytkownik nazywa sprawe jej kodem; polecenie wyslane z przestrzeni „Widoki agenta” (scenariusz, ktory przed Task 9 oblal dwukrotnie)",
-  "rozmowa": "cnv_e4d046d996cd4077ac78",
+  "rozmowa": "cnv_0aae128cdf97413e81be",
   "odpowiedziNarzedzia": {
     "zestawienie": [
       {
@@ -64,50 +38,26 @@
         "warnings": []
       }
     ],
-    "odczytalEkranPoZapisie": true,
-    "wykres": {
-      "zapisy": [
-        {
-          "rendered": false,
-          "unchanged": false,
-          "warnings": [
-            "unit_from_record"
-          ]
-        }
-      ],
-      "odczytalEkranPoZapisie": true
-    },
-    "zmianaZakresu": {
-      "zapisy": [
-        {
-          "rendered": false,
-          "unchanged": false,
-          "warnings": [
-            "unit_from_record"
-          ]
-        }
-      ],
-      "odczytalEkranPoZapisie": true
-    }
+    "odczytalEkranPoZapisie": true
   },
   "zestawienie": {
     "kartyZTegoWykonania": [
-      "crd_fd1c74706dbf4edeb503"
+      "crd_15e8591d36ef4b97a8e1"
     ],
     "kompozycja": [
       {
-        "id": "crd_fd1c74706dbf4edeb503",
+        "id": "crd_15e8591d36ef4b97a8e1",
         "title": "Pozycje ofert PC-2026-01",
         "spec": {
           "kind": "openui",
-          "source": "root = DataTable({operation: \"procurement.case_offer_items\", input: {caseId: \"pcs_0a8a9a7d69ca494eb1dd\"}}, [\"supplierName\", \"name\", \"unitPriceMinor\"], \"Pozycje ofert: dostawca, nazwa i cena jednostkowa\")"
+          "source": "root = DataTable({operation: \"procurement.case_offer_items\", input: {caseId: \"pcs_962957f778814c949877\"}}, [\"supplierName\", \"name\", \"unitPriceMinor\"], \"Pozycje ofert\")"
         }
       }
     ],
     "zrodloInstancji": {
       "operation": "procurement.case_offer_items",
       "input": {
-        "caseId": "pcs_0a8a9a7d69ca494eb1dd"
+        "caseId": "pcs_962957f778814c949877"
       }
     },
     "stanInstancji": "ready",
@@ -116,32 +66,5 @@
     "wersjaKompozycji": 1,
     "operacja": "procurement.case_offer_items"
   },
-  "wykres": {
-    "kartaWykresu": "crd_fd1c74706dbf4edeb503",
-    "nowaKarta": false,
-    "operacja": "procurement.case_offer_items",
-    "serie": [
-      "unitPriceMinor"
-    ],
-    "stanPoDodaniu": "error",
-    "bladPoDodaniu": {
-      "code": "validation_failed",
-      "message": "Seria Cena jednostkowa laczy rozne jednostki (PLN, EUR); zawez dane do jednej jednostki."
-    },
-    "stanPoZmianieZakresu": "ready"
-  },
-  "zmianaZakresu": {
-    "waluty": [
-      "PLN"
-    ],
-    "wierszy": 12,
-    "wersjaKompozycji": 3
-  },
-  "mutacja": {
-    "gdzie": "akcja rekordu w widoku agenta",
-    "rekord": "pci_4a66a7de841d4a4f9602",
-    "nowaWartosc": "7777,50 PLN",
-    "widokOdswiezonyBezPrzeladowania": true
-  },
-  "turyModeluWydaneLacznie": 16
+  "turyModeluWydaneLacznie": 19
 }
