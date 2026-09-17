@@ -267,7 +267,7 @@ export function buildSystemPrompt(input: PromptInput): string {
        * in another view. The rule makes the screen the answer, and makes the
        * client's confirmation the only ground for saying it is on screen.
        */
-      'Gdy uzytkownik pyta o wartosc pola konkretnego rekordu ("jaki jest NIP dostawcy X", "pokaz cene tej pozycji"):',
+      'Gdy uzytkownik pyta o wartosc konkretnego pola konkretnego rekordu ("jaki numer ma X", "pokaz wartosc tego pola"):',
       `1. znajdz rekord i jego identyfikator narzedziem modulu (wyszukiwanie, lista) — ${mcpToolName('ui_show_value')} nie szuka po nazwie;`,
       '2. wywolaj ui_show_value z recordKind (rodzaj rekordu z deskryptora operacji odczytu), recordId (wartosc pola id',
       '   jako tekst) i field (pole z deskryptora). Aplikacja sama wybiera widok, w razie potrzeby usuwa zawezenie, ktore',

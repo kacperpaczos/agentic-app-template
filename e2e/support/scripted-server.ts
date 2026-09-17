@@ -17,6 +17,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { collectToolEntries, platformTools, type PlatformInstance } from '@platform/server';
 import { composeApp } from '../../apps/server/src/compose.ts';
 import { agentViewsScript } from './agent-views-scenario.ts';
+import { showValueScript } from './show-value-scenario.ts';
 import { scriptedAgent, type CallRecord, type Step } from './scripted-agent.ts';
 
 /**
@@ -387,6 +388,7 @@ const SCENARIOS: Record<string, Step[]> = {
  */
 const CONVERSATION_SCENARIOS: Record<string, (prompt: string) => Step[]> = {
   'agent-views': agentViewsScript,
+  'show-value': showValueScript,
 };
 
 const scenario = process.env.SCRIPT ?? 'tool-then-text';
