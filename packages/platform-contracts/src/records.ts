@@ -191,13 +191,16 @@ function comparable(record: DataRecord, field: RecordField): number | string | n
     return Number.isNaN(t) ? null : t;
   }
   if (field.type === 'boolean') return raw === true ? 1 : 0;
+  // An enum is ordered by what the user reads, not by its stored code.
+  if (field.type === 'enum') return formatFieldValue(record, field);
   return String(raw);
 }
 
 /**
  * Records ordered by one declared field, by the field's type: numbers and
- * amounts numerically, dates chronologically, text in Polish collation.
- * Empty values go last in either direction; equal values keep their order.
+ * amounts numerically, dates chronologically, text in Polish collation, enums
+ * by their labels. Empty values go last in either direction; equal values keep
+ * their order.
  */
 export function sortRecords(
   records: readonly DataRecord[],

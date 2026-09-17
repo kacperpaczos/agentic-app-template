@@ -364,6 +364,12 @@ describe('formatowanie i porzadek wedlug typu pola', () => {
     expect(() => sortRecords(rows, { field: 'nieznane', direction: 'asc' }, descriptor)).toThrowError(
       /Pola nieznane nie sa zadeklarowane/,
     );
+    // Enums by label: code `b` reads "alfa", code `a` reads "zeta".
+    const coded: ReadResultDescriptor = {
+      record: { kind: 'x', idField: 'id' },
+      fields: [{ field: 's', label: 'S', type: 'enum', values: [{ value: 'a', label: 'zeta' }, { value: 'b', label: 'alfa' }] }],
+    };
+    expect(ids(sortRecords([{ id: '1', s: 'a' }, { id: '2', s: 'b' }], { field: 's', direction: 'asc' }, coded))).toEqual(['2', '1']);
   });
 
   it('rekordy wg deskryptora: brak kolekcji to blad, nie pusta lista; trasa rekordu', () => {
