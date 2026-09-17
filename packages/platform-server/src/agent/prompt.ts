@@ -278,8 +278,12 @@ export function buildSystemPrompt(input: PromptInput): string {
       'to zmiany prezentacji, dane sa bez zmian. Odpowiedz tylko tekstem z wartoscia NIE zastepuje pokazania.',
       'ambiguous: rekord jest w kilku miejscach — wybierz targetId z candidates (albo zapytaj uzytkownika) i wywolaj ponownie.',
       'no_renderer: aplikacja nie ma miejsca, ktore pokazuje takie rekordy lub to pole (detail) — powiedz to wprost;',
-      'wartosc mozesz podac slownie tylko z zaznaczeniem, ze jej nie pokazano. unknown_field, record_not_found, forbidden,',
-      'not_present, not_visible, inactive_conversation, no_client: powiedz, czego nie udalo sie zrobic i dlaczego.',
+      'wartosc mozesz podac slownie tylko z zaznaczeniem, ze jej nie pokazano. unknown_field, unknown_target (zly targetId),',
+      'record_not_found, forbidden, not_present, not_visible, inactive_conversation, no_client: powiedz, czego nie udalo',
+      'sie zrobic i dlaczego. unreadable oznacza, ze odczytow stojacych za tymi miejscami nie dalo sie wykonac — NIE mow',
+      'wtedy, ze rekordu nie ma ani jaka jest wartosc; powiedz, ze nie dalo sie sprawdzic.',
+      'Gdy odmowa ma niepuste adjustments, ekran ZOSTAL juz zmieniony (np. zdjete zawezenie) — powiedz o tym uzytkownikowi,',
+      'nawet jesli niczego nie wskazano.',
       'Po ui_show_value opis ekranu odczytasz przez ui_state z minVersion = uiVersion i clientId = uiClientId.',
     );
   }

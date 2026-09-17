@@ -114,12 +114,19 @@ export const viewStateContextOf = (r: ViewStateReport): ViewStateContext => ({
 export interface RevealNotice {
   /** The screen and view state it applies to (`revealAddress`). */
   address: string;
+  /**
+   * Whether the value was actually pointed at. False when the command changed
+   * the presentation and then could not show the cell — the change is on
+   * screen either way, so it is announced either way.
+   */
+  shown: boolean;
   recordKind: string;
   recordId: string;
-  /** The record's title as the table renders it, when it has one. */
+  /** The record's title as the table renders it; null when it is not known. */
   recordTitle: string | null;
   field: string;
-  fieldLabel: string;
+  /** The field's label from the descriptor; null when it is not known yet. */
+  fieldLabel: string | null;
   adjustments: UiRevealAdjustment[];
 }
 
@@ -182,7 +189,7 @@ interface AppState {
    * applied, the page after clamping, how many records that left.
    */
   viewStates: Record<string, ViewStateReport>;
-  /** The agent's last shown value, for the banner (see `RevealNotice`). */
+  /** What the agent's last reveal changed and whether it pointed at anything (see `RevealNotice`). */
   revealNotice: RevealNotice | null;
   /**
    * Lifecycle of every run the client knows about, **keyed by conversation**.

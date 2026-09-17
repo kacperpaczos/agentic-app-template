@@ -1,10 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   AGENT_VIEWS_SCOPE_KIND,
+  AppError,
   PLATFORM_CUSTOM_EVENTS,
+  SHOW_VALUE_REFUSALS,
   UI_COMMAND_FAILURES,
   UI_REVEAL_ADJUSTMENT_KINDS,
+  filterFromSearch,
   formatFieldValue,
+  parseAddressSearch,
+  applySearchPatch,
+  stringifyAddressSearch,
+  viewAddressKey,
   uiCommandResultSchema,
   uiCommandSchema,
   type AppContext,
@@ -24,8 +31,14 @@ import {
   platformTools,
   presentationCandidates,
 } from '@platform/server';
-import { locateRecord, type RecordLocation } from '../packages/platform-ui/src/views/revealTarget.ts';
-import { planReveal, revealAddress } from '../packages/platform-ui/src/shell/uiReveal.ts';
+import {
+  locateRecord,
+  registerRevealTarget,
+  type RecordLocation,
+  type RevealTarget,
+} from '../packages/platform-ui/src/views/revealTarget.ts';
+import { performReveal, planReveal, revealAddress, revealNoticeText } from '../packages/platform-ui/src/shell/uiReveal.ts';
+import { useAppState } from '../packages/platform-ui/src/state/appState.ts';
 import { createHarness, type Harness } from './helpers.ts';
 
 /**
@@ -71,7 +84,7 @@ async function callTool(
   name: string,
   input: Record<string, unknown>,
   ack: (command: UiCommand, runtime: AgentRuntime) => void | Promise<void>,
-  opts: { ownerId?: string; conversationId?: string; context?: AppContext } = {},
+  opts: { ownerId?: string; conversationId?: string; context?: AppContext; ctxConversationId?: string | null } = {},
 ): Promise<ToolRun> {
   const ownerId = opts.ownerId ?? h.ownerId;
   const runtime = new AgentRuntime(h.platform.services);
@@ -102,7 +115,7 @@ async function callTool(
   const ctx: ToolCallContext = {
     ownerId,
     appContext,
-    conversationId,
+    conversationId: opts.ctxConversationId === undefined ? conversationId : opts.ctxConversationId,
     runId: run.id,
     workspaceDir: null,
     emit: () => {},
@@ -153,8 +166,8 @@ const revealsIt = (record: Record<string, unknown>, field: string, descriptor: R
           displayedText: formatFieldValue(record, shownField),
           rawValue: (record[field] ?? null) as never,
           page,
-          adjustments: [{ kind: 'filter_cleared', detail: 'Kraj: PL', predicates: [{ field: 'country', op: 'eq', value: 'PL' }] }],
         },
+        adjustments: [{ kind: 'filter_cleared', detail: 'Kraj: PL', predicates: [{ field: 'country', op: 'eq', value: 'PL' }] }],
       }),
     );
   };
@@ -180,6 +193,45 @@ async function addAgentView(conversationId: string, title: string, source: strin
     ownerId,
   );
 }
+
+/** A tab's description of a record screen showing one case's offer items. */
+const caseDetailSnapshot = (conversationId: string, caseId: string, itemId: string): UiSnapshot => ({
+  version: 3,
+  clientId: 'ui_tab_show_value',
+  capturedAt: new Date().toISOString(),
+  conversationId,
+  spaceId: null,
+  url: `/cases/${caseId}`,
+  urlTruncated: false,
+  target: null,
+  view: { id: 'procurement.case.detail', title: 'Szczegoly sprawy', compositionVersion: 'x-1' },
+  cards: [],
+  cardsSpaceId: null,
+  cardsState: 'none',
+  cardsOmitted: 0,
+  instances: [
+    {
+      instanceId: 'DataTable-items',
+      component: 'DataTable',
+      viewId: 'procurement.case.detail',
+      source: { operation: 'procurement.case_offer_items', input: { caseId } },
+      state: 'ready',
+      error: null,
+      record: { kind: 'offer_item', idField: 'id' },
+      fields: [],
+      filter: [],
+      sort: null,
+      page: null,
+      visibleRecordIds: [itemId],
+      matched: 1,
+      total: 1,
+      actions: [],
+      groupBy: null,
+    },
+  ],
+  instancesOmitted: 0,
+  actions: ['navigate'],
+});
 
 const candidatesFor = (recordKind: string, opts: { cards?: CanvasCard[]; displayed?: any } = {}) =>
   presentationCandidates({
@@ -358,7 +410,6 @@ describe('ui_show_value', () => {
             displayedText: '000',
             rawValue: '000',
             page: null,
-            adjustments: [],
           },
         });
       },
@@ -385,7 +436,6 @@ describe('ui_show_value', () => {
             displayedText: String(other.taxId),
             rawValue: other.taxId,
             page: null,
-            adjustments: [],
           },
         });
       },
@@ -408,7 +458,6 @@ describe('ui_show_value', () => {
             displayedText: String(s.taxId),
             rawValue: s.taxId,
             page: null,
-            adjustments: [],
           },
         });
       },
@@ -544,7 +593,7 @@ describe('ui_show_value', () => {
       silent,
       { conversationId: conv.id },
     );
-    expect(ambiguous.result).toMatchObject({ reason: 'ambiguous', found: true, shown: false });
+    expect(ambiguous.result).toMatchObject({ reason: 'ambiguous', found: true, shown: false, fieldLabel: 'NIP' });
     expect(ambiguous.result.candidates.map((c: any) => c.targetId)).toEqual(['procurement.data', card.id]);
     expect(ambiguous.emitted).toHaveLength(0);
 
@@ -567,7 +616,11 @@ describe('ui_show_value', () => {
       { recordKind: 'supplier', recordId: s.id, field: 'taxId', targetId: 'nie.ma.takiego' },
       silent,
     );
-    expect(unknown.result).toMatchObject({ reason: 'unknown_target', requested: 'nie.ma.takiego' });
+    expect(unknown.result).toMatchObject({
+      reason: SHOW_VALUE_REFUSALS.unknownTarget,
+      requested: 'nie.ma.takiego',
+      fieldLabel: 'NIP',
+    });
     expect(unknown.result.candidates.map((c: any) => c.targetId)).toEqual(['procurement.data']);
 
     const wrongPlace = await callTool(
@@ -583,44 +636,7 @@ describe('ui_show_value', () => {
     const caseId = h.service.listCases(h.ownerId)[0]!.id;
     const items = h.service.listCaseOfferItems(caseId, h.ownerId);
     const item = items[0]!;
-    const snapshot: UiSnapshot = {
-      version: 3,
-      clientId: 'ui_tab_show_value',
-      capturedAt: new Date().toISOString(),
-      conversationId: conv.id,
-      spaceId: null,
-      url: `/cases/${caseId}`,
-      urlTruncated: false,
-      target: null,
-      view: { id: 'procurement.case.detail', title: 'Szczegoly sprawy', compositionVersion: 'x-1' },
-      cards: [],
-      cardsSpaceId: null,
-      cardsState: 'none',
-      cardsOmitted: 0,
-      instances: [
-        {
-          instanceId: 'DataTable-items',
-          component: 'DataTable',
-          viewId: 'procurement.case.detail',
-          source: { operation: 'procurement.case_offer_items', input: { caseId } },
-          state: 'ready',
-          error: null,
-          record: { kind: 'offer_item', idField: 'id' },
-          fields: [],
-          filter: [],
-          sort: null,
-          page: null,
-          visibleRecordIds: [item.id],
-          matched: items.length,
-          total: items.length,
-          actions: [],
-          groupBy: null,
-        },
-      ],
-      instancesOmitted: 0,
-      actions: ['navigate'],
-    };
-    h.platform.services.uiSnapshots.publish(h.ownerId, snapshot);
+    h.platform.services.uiSnapshots.publish(h.ownerId, caseDetailSnapshot(conv.id, caseId, item.id));
 
     const descriptor = h.platform.registry.readOperation('procurement.case_offer_items')!.definition.result!;
     const { result, emitted } = await callTool(
@@ -637,6 +653,97 @@ describe('ui_show_value', () => {
     expect(result).toMatchObject({ shown: true, matchesBackend: true, fieldLabel: 'Cena jednostkowa' });
     // The amount is compared as the backend formats it, with the record's own currency.
     expect(result.backend.displayedText).toBe(formatFieldValue(item as never, descriptor.fields.find((f) => f.field === 'unitPriceMinor')!));
+  });
+
+  it('odczytu nie dalo sie wykonac: unreadable, nie record_not_found', async () => {
+    /*
+     * "There is no such record" is a claim about the data; "I could not read"
+     * is a claim about this run. Only the first may be repeated to the user, so
+     * a failed read must not be answered as an absent record.
+     */
+    const conv = h.platform.services.conversations.create({ ownerId: h.ownerId, firstMessage: { content: 'x' } });
+    const caseId = h.service.listCases(h.ownerId)[0]!.id;
+    const offerId = h.service.compare(caseId, h.ownerId).rows[0]!.offerId;
+    await addAgentView(
+      conv.id,
+      'Oferty',
+      `root = DataTable({operation: "procurement.comparison", input: {caseId: "${caseId}"}}, ["supplierName", "totalMinor"])`,
+    );
+    const entry = h.platform.registry.readOperation('procurement.comparison')!.definition;
+    const original = entry.run;
+    // The module's own read fails the way an integration can fail, not the way access does.
+    (entry as { run: unknown }).run = async () => {
+      throw new AppError('integration_failed', 'Zrodlo danych nie odpowiada.');
+    };
+    try {
+      const { result, emitted } = await callTool(
+        'ui_show_value',
+        { recordKind: 'offer', recordId: offerId, field: 'totalMinor' },
+        silent,
+        { conversationId: conv.id },
+      );
+      expect(result).toMatchObject({
+        reason: SHOW_VALUE_REFUSALS.unreadable,
+        found: false,
+        shown: false,
+        fieldLabel: 'Suma',
+      });
+      expect(result.unreadable[0]).toMatchObject({ place: 'agent_view', code: 'integration_failed' });
+      expect(result.checked).toBeUndefined();
+      expect(emitted).toHaveLength(0);
+    } finally {
+      (entry as { run: unknown }).run = original;
+    }
+  });
+
+  it('wykonanie bez rozmowy nie bierze ekranu z opisu innej rozmowy', async () => {
+    /*
+     * The description belongs to a conversation. A run without one must not
+     * borrow the screen of the conversation its command's context names — the
+     * agent views above refuse exactly that, and a record screen is no different.
+     */
+    const conv = h.platform.services.conversations.create({ ownerId: h.ownerId, firstMessage: { content: 'x' } });
+    const caseId = h.service.listCases(h.ownerId)[0]!.id;
+    const item = h.service.listCaseOfferItems(caseId, h.ownerId)[0]!;
+    h.platform.services.uiSnapshots.publish(h.ownerId, caseDetailSnapshot(conv.id, caseId, item.id));
+
+    const withRun = await callTool(
+      'ui_show_value',
+      { recordKind: 'offer_item', recordId: item.id, field: 'unitPriceMinor' },
+      silent,
+      { conversationId: conv.id },
+    );
+    expect(withRun.emitted).toHaveLength(1);
+
+    const without = await callTool(
+      'ui_show_value',
+      { recordKind: 'offer_item', recordId: item.id, field: 'unitPriceMinor' },
+      silent,
+      { conversationId: conv.id, ctxConversationId: null, context: { ...EMPTY_CONTEXT(conv.id) } },
+    );
+    expect(without.result).toMatchObject({ reason: SHOW_VALUE_REFUSALS.noRenderer, detail: 'kind_not_rendered' });
+    expect(without.emitted).toHaveLength(0);
+  });
+
+  it('zmiana prezentacji z odmowy klienta trafia do wyniku narzedzia', async () => {
+    const s = supplier();
+    const { result } = await callTool(
+      'ui_show_value',
+      { recordKind: 'supplier', recordId: s.id, field: 'taxId' },
+      async (command, runtime) => {
+        // The client cleared the narrowing, then could not find the cell.
+        runtime.acknowledgeUiCommand({
+          commandId: command.commandId,
+          executed: false,
+          reason: UI_COMMAND_FAILURES.notPresent,
+          adjustments: [{ kind: 'filter_cleared', detail: 'Kraj: PL', predicates: [{ field: 'country', op: 'eq', value: 'PL' }] }],
+        });
+      },
+    );
+    expect(result).toMatchObject({ executed: false, reason: UI_COMMAND_FAILURES.notPresent, found: true, shown: false });
+    expect(result.adjustments).toEqual([
+      { kind: 'filter_cleared', detail: 'Kraj: PL', predicates: [{ field: 'country', op: 'eq', value: 'PL' }] },
+    ]);
   });
 
   it('kontrakt narzedzia: tylko odczyt, zawsze w promptcie, schemat zgodny z MCP', () => {
@@ -660,6 +767,9 @@ describe('ui_show_value', () => {
     expect(prompt).toContain('mcp__app__ui_show_value');
     expect(prompt).toContain('Mow, ze pokazales wartosc, TYLKO gdy shown=true');
     expect(prompt).toContain('Odpowiedz tylko tekstem z wartoscia NIE zastepuje pokazania.');
+    expect(prompt).toContain('unknown_target');
+    expect(prompt).toContain('unreadable oznacza, ze odczytow stojacych za tymi miejscami nie dalo sie wykonac');
+    expect(prompt).toContain('ekran ZOSTAL juz zmieniony');
   });
 });
 
@@ -847,10 +957,10 @@ describe('kontrakt polecenia i potwierdzenia', () => {
         displayedText: '5213456789',
         rawValue: '5213456789',
         page: { index: 2, size: 10, count: 2 },
-        adjustments: [{ kind: 'page_changed', detail: 'strona 1 → 2', from: 1, to: 2 }],
       },
+      adjustments: [{ kind: 'page_changed', detail: 'strona 1 → 2', from: 1, to: 2 }],
     });
-    expect(ack.revealed!.adjustments[0]!.kind).toBe('page_changed');
+    expect(ack.adjustments![0]!.kind).toBe('page_changed');
     expect(UI_REVEAL_ADJUSTMENT_KINDS).toEqual(['filter_cleared', 'page_changed', 'card_focused']);
 
     // A presentation must name a place; an adjustment must be one of the kinds.
@@ -858,10 +968,227 @@ describe('kontrakt polecenia i potwierdzenia', () => {
       uiCommandSchema.parse({ ...command, reveal: { ...command.reveal, presentation: { kind: 'somewhere' } } }),
     ).toThrow();
     expect(() =>
-      uiCommandResultSchema.parse({
-        ...ack,
-        revealed: { ...ack.revealed, adjustments: [{ kind: 'data_changed', detail: 'x' }] },
-      }),
+      uiCommandResultSchema.parse({ ...ack, adjustments: [{ kind: 'data_changed', detail: 'x' }] }),
     ).toThrow();
+    // A change reported without anything shown is a legitimate acknowledgement.
+    const changedOnly = uiCommandResultSchema.parse({
+      commandId: 'uic_12345678',
+      executed: false,
+      reason: 'not_present',
+      adjustments: [{ kind: 'filter_cleared', detail: 'Kraj: PL' }],
+    });
+    expect(changedOnly.revealed).toBeUndefined();
+    expect(changedOnly.adjustments).toHaveLength(1);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  What the command does to the screen when it cannot finish                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A page just real enough for `performReveal` to run in: an address it can
+ * navigate, a table that answers where the record is, and at most one cell.
+ *
+ * Built by hand rather than with a browser because what is under test is the
+ * order of events — the narrowing is cleared *before* the cell is looked for —
+ * and a browser cannot be made to fail at that point on purpose.
+ */
+function fakeScreen(opts: {
+  search: string;
+  /** The cell the reveal will find, or none. */
+  cell?: { text: string; rect?: { top: number; left: number; width: number; height: number } } | null;
+  /** Whether the tab paints: a hidden tab never calls back. */
+  frames?: 'paint' | 'never';
+}) {
+  const location = { pathname: '/data', search: opts.search };
+  const marks: string[] = [];
+  const cell = opts.cell
+    ? {
+        textContent: opts.cell.text,
+        getBoundingClientRect: () => opts.cell!.rect ?? { top: 100, left: 100, width: 80, height: 20 },
+        scrollIntoView: () => {},
+        setAttribute: (name: string, value: string) => marks.push(`${name}=${value}`),
+        removeAttribute: () => {},
+        closest: () => null,
+        parentElement: null,
+      }
+    : null;
+
+  const saved = {
+    window: (globalThis as Record<string, unknown>).window,
+    document: (globalThis as Record<string, unknown>).document,
+    CSS: (globalThis as Record<string, unknown>).CSS,
+    raf: (globalThis as Record<string, unknown>).requestAnimationFrame,
+    styles: (globalThis as Record<string, unknown>).getComputedStyle,
+  };
+  Object.assign(globalThis as Record<string, unknown>, {
+    window: { location, innerWidth: 1280, innerHeight: 800, setTimeout: (fn: () => void, ms: number) => setTimeout(fn, ms) },
+    document: { querySelector: (selector: string) => (selector.includes('td[data-record-kind') ? cell : null) },
+    CSS: { escape: (value: string) => value },
+    requestAnimationFrame: (cb: (t: number) => void) => {
+      if (opts.frames !== 'never') setTimeout(() => cb(Date.now()), 0);
+      return 1;
+    },
+    getComputedStyle: () => ({ overflowX: 'visible', overflowY: 'visible' }),
+  });
+
+  const FILTER_FIELDS = [{ field: 'country', label: 'Kraj (kod ISO)' }];
+  const names = FILTER_FIELDS.map((f) => f.field);
+  const hidden = { field: 'country', op: 'eq' as const, value: 'PL' };
+
+  /** The table: the record is hidden by `country=PL` and sits on the second page. */
+  const table = (): RevealTarget => {
+    const search = parseAddressSearch(location.search);
+    const predicates = filterFromSearch(search, names);
+    return {
+      instanceId: 'DataTable-fake',
+      viewId: 'procurement.data',
+      source: { operation: 'procurement.suppliers' },
+      address: { targetId: 'procurement.data', key: viewAddressKey(search, names), predicates, filterFields: FILTER_FIELDS },
+      locate: (_recordId, _field, o): RecordLocation => {
+        const narrowing = o?.narrowing ?? predicates;
+        if (narrowing.some((p) => p.field === 'country')) {
+          return { status: 'excluded_by_narrowing', excluding: [hidden], kept: [], pageShown: 1 };
+        }
+        const page = Number(search.page ?? '1');
+        return {
+          status: 'present',
+          record: { id: 'pcs_1', taxId: '5213456789' },
+          field: { field: 'taxId', label: 'NIP', type: 'text' },
+          page: 2,
+          pageShown: page,
+          pageSize: 10,
+          pageCount: 2,
+          title: 'Dostawca DE 10',
+        };
+      },
+      showPage: null,
+    };
+  };
+  const withdraw = registerRevealTarget(table);
+
+  const navigate = async (options: {
+    to: string;
+    search: Record<string, unknown> | ((prev: Record<string, unknown>) => Record<string, unknown>);
+  }) => {
+    const prev = parseAddressSearch(location.search);
+    const next = typeof options.search === 'function' ? options.search(prev) : options.search;
+    location.pathname = options.to;
+    location.search = stringifyAddressSearch(applySearchPatch({}, next as Record<string, string | undefined>));
+    return undefined;
+  };
+
+  return {
+    location,
+    marks,
+    navigate,
+    dispose: () => {
+      withdraw();
+      Object.assign(globalThis as Record<string, unknown>, {
+        window: saved.window,
+        document: saved.document,
+        CSS: saved.CSS,
+        requestAnimationFrame: saved.raf,
+        getComputedStyle: saved.styles,
+      });
+      useAppState.getState().setRevealNotice(null);
+    },
+  };
+}
+
+const command = {
+  commandId: 'uic_reveal01',
+  runId: 'run_1',
+  conversationId: 'cnv_1',
+  targetId: 'procurement.data',
+  reveal: {
+    recordKind: 'supplier',
+    recordId: 'pcs_1',
+    field: 'taxId',
+    presentation: { kind: 'view' as const, viewId: 'procurement.data' },
+    source: { operation: 'procurement.suppliers' },
+  },
+};
+
+const catalog = [
+  { id: 'procurement.data', kind: 'view' as const, label: 'Dostawcy', description: 'lista', to: '/data' },
+];
+
+describe('zmiana prezentacji przezywa odmowe', () => {
+  let screen: ReturnType<typeof fakeScreen>;
+  afterEach(() => screen.dispose());
+
+  const reveal = () =>
+    performReveal(command, { catalog, navigate: screen.navigate, until: Date.now() + 700 });
+
+  it('komorki nie ma: not_present, ale zdjete zawezenie jest zgloszone i widoczne w pasku', async () => {
+    screen = fakeScreen({ search: '?country=PL', cell: null });
+    const result = await reveal();
+
+    expect(result).toMatchObject({ executed: false, reason: UI_COMMAND_FAILURES.notPresent });
+    // The change the user is now looking at travels with the refusal…
+    expect(result.adjustments).toEqual([
+      { kind: 'filter_cleared', detail: 'Kraj (kod ISO): PL', predicates: [{ field: 'country', op: 'eq', value: 'PL' }] },
+      { kind: 'page_changed', detail: 'strona 1 → 2', from: 1, to: 2 },
+    ]);
+    // …and it really is what the screen shows.
+    expect(screen.location.search).toBe('?page=2');
+    // …and the screen says so, without claiming anything was pointed at.
+    const notice = useAppState.getState().revealNotice!;
+    expect(notice).toMatchObject({ shown: false, recordId: 'pcs_1', field: 'taxId' });
+    expect(notice.adjustments).toHaveLength(2);
+    const text = revealNoticeText(notice);
+    expect(text.headline).toBe('Agent zmienil widok, szukajac wartosci.');
+    expect(text.subject).toContain('nie zostalo wskazane');
+    expect(text.changes[0]).toBe('Zdjeto zawezenie: Kraj (kod ISO): PL.');
+  });
+
+  it('komorka poza widocznym obszarem: not_visible z wartoscia, zmianami i paskiem', async () => {
+    screen = fakeScreen({
+      search: '?country=PL',
+      cell: { text: '5213456789', rect: { top: 4000, left: 100, width: 80, height: 20 } },
+    });
+    const result = await reveal();
+
+    expect(result).toMatchObject({ executed: false, reason: UI_COMMAND_FAILURES.notVisible, highlighted: false });
+    expect(result.revealed).toMatchObject({ recordId: 'pcs_1', field: 'taxId', displayedText: '5213456789' });
+    expect(result.adjustments?.map((a) => a.kind)).toEqual(['filter_cleared', 'page_changed']);
+    expect(screen.marks).toEqual([]);
+    const notice = useAppState.getState().revealNotice!;
+    expect(notice.shown).toBe(false);
+    expect(revealNoticeText(notice).subject).toContain('Pole „NIP” rekordu „Dostawca DE 10”');
+  });
+
+  it('karta, ktora nie rysuje klatek: odpowiedz w budzecie, bez udawania, ze cos widac', async () => {
+    // A hidden tab paints nothing; waiting for a frame would hang the command
+    // past the server's budget and turn a performed change into `no_client`.
+    screen = fakeScreen({ search: '?country=PL', cell: { text: '5213456789' }, frames: 'never' });
+    const until = Date.now() + 700;
+    const started = Date.now();
+    const result = await performReveal(command, { catalog, navigate: screen.navigate, until });
+
+    expect(Date.now()).toBeLessThan(until + 200);
+    expect(started).toBeLessThan(Date.now() + 1);
+    expect(result).toMatchObject({ executed: false, reason: UI_COMMAND_FAILURES.notVisible, highlighted: false });
+    expect(result.adjustments?.map((a) => a.kind)).toEqual(['filter_cleared', 'page_changed']);
+    expect(screen.marks).toEqual([]);
+  });
+
+  it('komorka w widoku: wskazana, podswietlona, a zmiany sa w wyniku i w pasku', async () => {
+    screen = fakeScreen({ search: '?country=PL', cell: { text: '5213456789' } });
+    const result = await reveal();
+
+    expect(result).toMatchObject({ executed: true, highlighted: true });
+    expect(result.revealed).toMatchObject({ rawValue: '5213456789', page: { index: 2, size: 10, count: 2 } });
+    expect(result.adjustments?.map((a) => a.kind)).toEqual(['filter_cleared', 'page_changed']);
+    expect(screen.marks).toEqual(['data-ui-highlight=true']);
+    const notice = useAppState.getState().revealNotice!;
+    expect(notice.shown).toBe(true);
+    expect(revealNoticeText(notice)).toMatchObject({
+      headline: 'Agent wskazal wartosc.',
+      subject: 'Pole „NIP” rekordu „Dostawca DE 10”.',
+      note: 'Zmiany dotycza tylko tego, co widac — dane sa bez zmian.',
+    });
   });
 });

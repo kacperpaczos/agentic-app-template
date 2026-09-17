@@ -3,7 +3,7 @@ import { describePredicate, viewAddressKey, viewStatePatch } from '@platform/con
 import { useUiTargets } from '../api/queries.ts';
 import { useAppState } from '../state/appState.ts';
 import { useActiveViewFilter, useActiveViewReport } from '../state/viewFilter.ts';
-import { revealAddress } from './uiReveal.ts';
+import { revealAddress, revealNoticeText } from './uiReveal.ts';
 
 /**
  * Says that this view is narrowed, by what, and gives the way back.
@@ -165,8 +165,9 @@ export function ViewFilterBanner() {
  * has to be told it is gone — by whom and why.
  */
 function RevealNotice({ notice }: { notice: NonNullable<ReturnType<typeof useAppState.getState>['revealNotice']> }) {
+  const text = revealNoticeText(notice);
   return (
-    <div className="pf-viewfilter" role="status" data-testid="view-reveal-notice">
+    <div className="pf-viewfilter" role="status" data-testid="view-reveal-notice" data-shown={String(notice.shown)}>
       <span className="pf-viewfilter__mark" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="16" height="16" focusable="false">
           {/* A pointer: this value was pointed at, not merely shown. */}
@@ -181,11 +182,10 @@ function RevealNotice({ notice }: { notice: NonNullable<ReturnType<typeof useApp
         </svg>
       </span>
       <span className="pf-viewfilter__text">
-        <strong>Agent wskazal wartosc.</strong> Pole „{notice.fieldLabel}” rekordu{' '}
+        <strong>{text.headline}</strong>{' '}
         <span data-testid="view-reveal-record" data-record-kind={notice.recordKind} data-record-id={notice.recordId}>
-          {notice.recordTitle ? `„${notice.recordTitle}”` : notice.recordId}
+          {text.subject}
         </span>
-        .
         {notice.adjustments.map((a, i) => (
           <span
             key={`${a.kind}-${i}`}
@@ -194,14 +194,10 @@ function RevealNotice({ notice }: { notice: NonNullable<ReturnType<typeof useApp
             data-kind={a.kind}
           >
             {' '}
-            {a.kind === 'filter_cleared'
-              ? `Zdjeto zawezenie: ${a.detail}.`
-              : a.kind === 'page_changed'
-                ? `Zmieniono ${a.detail}.`
-                : `${a.detail}.`}
+            {text.changes[i]}
           </span>
         ))}{' '}
-        <span className="pf-viewfilter__part">Zmiany dotycza tylko tego, co widac — dane sa bez zmian.</span>
+        <span className="pf-viewfilter__part">{text.note}</span>
       </span>
     </div>
   );

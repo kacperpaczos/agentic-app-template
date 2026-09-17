@@ -78,7 +78,12 @@ function agentViewCards(services: PlatformServices, ctx: ToolCallContext): Canva
  * parameters of a screen nobody is looking at are not the server's to guess.
  */
 function displayedView(services: PlatformServices, ctx: ToolCallContext): DisplayedView | null {
-  const conversationId = ctx.conversationId ?? ctx.appContext.conversationId;
+  /*
+   * The run's own conversation, never the one the command's context happens to
+   * name: a description bound to another conversation is another conversation's
+   * screen, which this run may not read (the agent views above refuse it too).
+   */
+  const conversationId = ctx.conversationId;
   if (!conversationId) return null;
   const ui = ctx.appContext.ui;
   const state = services.uiSnapshots.evaluate(ctx.ownerId, conversationId, {
@@ -103,8 +108,10 @@ export function uiShowValueTools(services: PlatformServices): Array<ModuleToolDe
         'rekord; backend.displayedText to jego wartosc) od shown (KLIENT potwierdzil, ze wskazal to pole) i podaje ' +
         'matchesBackend. Mow, ze pokazales wartosc, tylko gdy shown=true. adjustments opisuja zmiany prezentacji ' +
         '(dane sa bez zmian). Odmowy: unknown_field, no_renderer (nigdzie nie pokazuje sie takich rekordow albo tego ' +
-        'pola), ambiguous (kilka miejsc — wybierz targetId z candidates), record_not_found, forbidden; po stronie ' +
-        'klienta: inactive_conversation, not_present, not_visible, no_client.',
+        'pola), ambiguous (kilka miejsc — wybierz targetId z candidates), record_not_found, forbidden, ' +
+        'unreadable (odczytu nie dalo sie wykonac — NIE mow, ze rekordu nie ma), unknown_target (targetId nie wskazuje ' +
+        'zadnego widoku ani karty); po stronie klienta: inactive_conversation, not_present, not_visible, no_client. ' +
+        'adjustments moga byc niepuste takze przy odmowie klienta — wtedy ekran juz zostal zmieniony i trzeba to powiedziec.',
       effect: 'read',
       alwaysLoad: true,
       inputSchema: z.object({
@@ -146,6 +153,8 @@ export function uiShowValueTools(services: PlatformServices): Array<ModuleToolDe
             available: declared.map((f) => ({ field: f.field, label: f.label, type: f.type })),
           };
         }
+        // From here the field is known, so every answer can name it the way the user sees it.
+        const asked = { ...base, fieldLabel: fieldDef.label };
 
         const cards = agentViewCards(services, ctx);
         let pool = presentationCandidates({
@@ -166,8 +175,8 @@ export function uiShowValueTools(services: PlatformServices): Array<ModuleToolDe
               services.modules.uiTargets().some((t) => t.id === input.targetId) ||
               cards.some((c) => c.id === input.targetId);
             return {
-              ...base,
-              reason: known ? SHOW_VALUE_REFUSALS.noRenderer : 'unknown_target',
+              ...asked,
+              reason: known ? SHOW_VALUE_REFUSALS.noRenderer : SHOW_VALUE_REFUSALS.unknownTarget,
               ...(known ? { detail: 'target_does_not_render_kind' } : {}),
               requested: input.targetId,
               candidates: everywhere.filter((c) => c.fields.includes(field)).map(describeCandidate),
@@ -175,17 +184,16 @@ export function uiShowValueTools(services: PlatformServices): Array<ModuleToolDe
           }
         }
         if (pool.length === 0) {
-          return { ...base, reason: SHOW_VALUE_REFUSALS.noRenderer, detail: 'kind_not_rendered' };
+          return { ...asked, reason: SHOW_VALUE_REFUSALS.noRenderer, detail: 'kind_not_rendered' };
         }
 
         const showing = pool.filter((c) => c.fields.includes(field));
         if (showing.length === 0) {
           // Records of this kind are on screen somewhere, but never with this field.
           return {
-            ...base,
+            ...asked,
             reason: SHOW_VALUE_REFUSALS.noRenderer,
             detail: 'field_not_shown',
-            fieldLabel: fieldDef.label,
             shownIn: pool.map(describeCandidate),
           };
         }
@@ -241,14 +249,22 @@ export function uiShowValueTools(services: PlatformServices): Array<ModuleToolDe
           const refused = outcomes.filter((o): o is Extract<CandidateRead, { status: 'forbidden' }> => o.status === 'forbidden');
           if (refused.length > 0) {
             return {
-              ...base,
+              ...asked,
               reason: SHOW_VALUE_REFUSALS.forbidden,
               refused: refused.map((o) => ({ ...describeCandidate(o.candidate), message: o.message })),
               ...(unreadable.length ? { unreadable } : {}),
             };
           }
+          /*
+           * Nothing could be read at all, so nothing is known about the record.
+           * Saying "no such record" here would turn a failure to look into a
+           * fact about the data — which the agent would then repeat.
+           */
+          if (unreadable.length === outcomes.length) {
+            return { ...asked, reason: SHOW_VALUE_REFUSALS.unreadable, unreadable };
+          }
           return {
-            ...base,
+            ...asked,
             reason: SHOW_VALUE_REFUSALS.recordNotFound,
             checked: outcomes.map((o) => ({
               ...describeCandidate(o.candidate),
@@ -259,7 +275,7 @@ export function uiShowValueTools(services: PlatformServices): Array<ModuleToolDe
         }
         if (present.length > 1) {
           return {
-            ...base,
+            ...asked,
             found: true,
             reason: SHOW_VALUE_REFUSALS.ambiguous,
             candidates: present.map((o) => describeCandidate(o.candidate)),
@@ -299,7 +315,8 @@ export function uiShowValueTools(services: PlatformServices): Array<ModuleToolDe
           target: describeCandidate(candidate),
           backend,
           ...(revealed ? { revealed } : {}),
-          adjustments: revealed?.adjustments ?? [],
+          // Reported even when nothing was shown: the user is looking at the change.
+          adjustments: result.adjustments ?? [],
           highlighted: result.highlighted ?? false,
           url: result.url,
           // The screen's description after the change, and the tab it belongs to: pass both to ui_state.

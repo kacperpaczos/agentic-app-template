@@ -410,6 +410,11 @@ export const recordValueSchema = z.union([z.string().max(10_000), z.number(), z.
 /**
  * What the client revealed, as it found it on screen — the client's own
  * statement, compared with the backend by the server, never taken on trust.
+ *
+ * The changes of presentation it made are **not** here: they are on the result
+ * itself (`uiCommandResultSchema.adjustments`), because a change can outlive a
+ * refusal — the narrowing is already gone when the cell turns out not to be
+ * there — and a change nobody reports is a change the user cannot undo.
  */
 export const uiRevealedSchema = z.object({
   recordKind: z.string().max(80),
@@ -421,7 +426,6 @@ export const uiRevealedSchema = z.object({
   rawValue: recordValueSchema,
   /** The page the record is on after the reveal; null when the table does not page. */
   page: viewPageSchema.nullable(),
-  adjustments: z.array(uiRevealAdjustmentSchema).max(8),
 });
 export type UiRevealed = z.infer<typeof uiRevealedSchema>;
 
@@ -436,7 +440,13 @@ export type UiRevealed = z.infer<typeof uiRevealedSchema>;
  *    are listed and one must be named (`targetId`);
  *  - `record_not_found` — none of the places that render the kind has this
  *    record, as read for the signed-in owner;
- *  - `forbidden` — the reads behind those places are refused for this owner.
+ *  - `forbidden` — the reads behind those places are refused for this owner;
+ *  - `unreadable` — those reads failed for another reason, so nothing is known
+ *    about the record. Distinct from `record_not_found` on purpose: "it is not
+ *    there" and "I could not look" are different claims, and only the first one
+ *    may be repeated to the user as a fact;
+ *  - `unknown_target` — the `targetId` given names no view, card or catalog
+ *    target this run could use.
  *
  * The client adds its own (`UI_COMMAND_FAILURES`): `inactive_conversation`,
  * `not_present`, `not_visible`, `no_client`.
@@ -447,6 +457,8 @@ export const SHOW_VALUE_REFUSALS = {
   ambiguous: 'ambiguous',
   recordNotFound: 'record_not_found',
   forbidden: 'forbidden',
+  unreadable: 'unreadable',
+  unknownTarget: 'unknown_target',
 } as const;
 export type ShowValueRefusal = (typeof SHOW_VALUE_REFUSALS)[keyof typeof SHOW_VALUE_REFUSALS];
 
@@ -620,10 +632,16 @@ export const uiCommandResultSchema = z.object({
   uiPublication: z.enum(UI_PUBLICATION_STATUSES).optional(),
   /**
    * For a `reveal`: the record and field the client pointed at, with the text
-   * and the value on screen and every change of presentation it made. Present
-   * only when a cell was found; `highlighted` says whether it was brought into
-   * view.
+   * and the value on screen. Present only when a cell was found; `highlighted`
+   * says whether it was brought into view.
    */
   revealed: uiRevealedSchema.optional(),
+  /**
+   * Changes of presentation the client made carrying the command out —
+   * reported **whatever the outcome**. A cleared narrowing or a turned page
+   * outlives a refusal: the user is looking at it, so the agent is told about
+   * it even when nothing was pointed at.
+   */
+  adjustments: z.array(uiRevealAdjustmentSchema).max(8).optional(),
 });
 export type UiCommandResult = z.infer<typeof uiCommandResultSchema>;

@@ -164,6 +164,21 @@ export function revealTargets(): RevealTarget[] {
   return [...mounted.values()].filter((m) => m.epoch === epoch).map((m) => m.current());
 }
 
+/**
+ * Offers one table for as long as the caller keeps the returned withdrawal.
+ *
+ * Used by the hook below; exported because the command that reveals a value
+ * talks to this registry and nothing else, so its behaviour can be exercised
+ * without mounting a component.
+ */
+export function registerRevealTarget(current: () => RevealTarget, epoch: number = accessEpoch()): () => void {
+  const id = current().instanceId;
+  mounted.set(id, { epoch, current });
+  return () => {
+    if (mounted.get(id)?.epoch === epoch) mounted.delete(id);
+  };
+}
+
 /** What `DataTable` passes on every render. */
 export interface RevealTargetInput {
   instanceId: string;
@@ -188,10 +203,8 @@ export function useRevealTarget(input: RevealTargetInput): void {
   latest.current = input;
   const epoch = accessEpoch();
   useEffect(() => {
-    const id = input.instanceId;
-    mounted.set(id, {
-      epoch,
-      current: () => {
+    return registerRevealTarget(
+      () => {
         const t = latest.current;
         return {
           instanceId: t.instanceId,
@@ -213,9 +226,7 @@ export function useRevealTarget(input: RevealTargetInput): void {
           showPage: t.address ? null : t.setLocalPage,
         };
       },
-    });
-    return () => {
-      if (mounted.get(id)?.epoch === epoch) mounted.delete(id);
-    };
+      epoch,
+    );
   }, [input.instanceId, epoch]);
 }

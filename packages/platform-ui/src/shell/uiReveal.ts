@@ -18,7 +18,7 @@ import {
   type ViewFilterPredicate,
 } from '@platform/contracts';
 import { focusCanvasCard } from '../canvas/canvasFocus.ts';
-import { useAppState } from '../state/appState.ts';
+import { useAppState, type RevealNotice } from '../state/appState.ts';
 import { revealTargets, type RecordLocation, type RevealTarget } from '../views/revealTarget.ts';
 import { pollUntil } from './uiCommandAck.ts';
 
@@ -167,7 +167,31 @@ function findTable(reveal: UiReveal): RevealTarget | null {
   );
 }
 
-const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+/**
+ * Waits for the next painted frame, but never past the command's deadline.
+ *
+ * An unbounded `requestAnimationFrame` await is not safe inside a budgeted
+ * command: a hidden tab paints no frames at all, so the wait would never
+ * resolve, no acknowledgement would be posted and the server would report
+ * `no_client` — about a command that had already changed the screen. Returns
+ * whether a frame actually came, so a caller can say it could not check
+ * instead of claiming it did.
+ */
+function nextFrame(until: number): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const finish = (framed: boolean) => {
+      if (settled) return;
+      settled = true;
+      resolve(framed);
+    };
+    requestAnimationFrame(() => finish(true));
+    window.setTimeout(() => finish(false), Math.max(0, Math.min(FRAME_WAIT_MS, until - Date.now())));
+  });
+}
+
+/** Longest wait for one frame; a painting tab answers in well under this. */
+const FRAME_WAIT_MS = 120;
 
 /** Whether the element's centre is on screen and not clipped by any scrolling or clipping ancestor. */
 function inView(el: HTMLElement): boolean {
@@ -191,7 +215,13 @@ function inView(el: HTMLElement): boolean {
  * scrolling the page would move the canvas's container under the library that
  * positions it.
  */
-async function bringIntoView(cell: HTMLElement, reveal: UiReveal, adjustments: UiRevealAdjustment[]): Promise<boolean> {
+async function bringIntoView(
+  cell: HTMLElement,
+  reveal: UiReveal,
+  adjustments: UiRevealAdjustment[],
+  until: number,
+): Promise<boolean> {
+  let framed = true;
   if (reveal.presentation.kind === 'agent_view') {
     const body = cell.closest<HTMLElement>('.pf-card__body');
     if (body) {
@@ -202,23 +232,46 @@ async function bringIntoView(cell: HTMLElement, reveal: UiReveal, adjustments: U
       body.scrollTop += (c.top - b.top - (b.height - c.height) / 2) / (zoom || 1);
       body.scrollLeft += (c.left - b.left - (b.width - c.width) / 2) / (zoom || 1);
     }
-    await nextFrame();
-    if (!inView(cell) && focusCanvasCard(reveal.presentation.cardId)) {
+    framed = await nextFrame(until);
+    if (framed && !inView(cell) && focusCanvasCard(reveal.presentation.cardId)) {
       adjustments.push({ kind: 'card_focused', detail: 'kanwa przesunieta do karty' });
-      await nextFrame();
-      await nextFrame();
+      framed = (await nextFrame(until)) && (await nextFrame(until));
     }
   } else {
     cell.scrollIntoView({ block: 'center', inline: 'nearest' });
-    await nextFrame();
+    framed = await nextFrame(until);
   }
-  return inView(cell);
+  // No frame, no check: a tab that is not painting cannot be said to be showing it.
+  return framed && inView(cell);
 }
 
 const currentUrl = () => window.location.pathname + window.location.search;
 
 /** Waits and polls like the other UI commands, within the command's budget. */
 const POLL = { attempts: 80, intervalMs: 60 };
+
+/**
+ * The sentences the banner shows about a reveal — one place, so what the user
+ * reads and what the tests assert cannot drift apart.
+ */
+export function revealNoticeText(notice: RevealNotice): { headline: string; subject: string; changes: string[]; note: string } {
+  const field = notice.fieldLabel ?? notice.field;
+  const record = notice.recordTitle ? `„${notice.recordTitle}”` : notice.recordId;
+  return {
+    headline: notice.shown ? 'Agent wskazal wartosc.' : 'Agent zmienil widok, szukajac wartosci.',
+    subject: notice.shown
+      ? `Pole „${field}” rekordu ${record}.`
+      : `Pole „${field}” rekordu ${record} nie zostalo wskazane.`,
+    changes: notice.adjustments.map((a) =>
+      a.kind === 'filter_cleared'
+        ? `Zdjeto zawezenie: ${a.detail}.`
+        : a.kind === 'page_changed'
+          ? `Zmieniono ${a.detail}.`
+          : `${a.detail}.`,
+    ),
+    note: 'Zmiany dotycza tylko tego, co widac — dane sa bez zmian.',
+  };
+}
 
 export async function performReveal(
   command: UiCommand & { reveal: UiReveal },
@@ -235,11 +288,37 @@ export async function performReveal(
 ): Promise<UiCommandResult> {
   const { reveal } = command;
   const base = { commandId: command.commandId, targetId: command.targetId };
+  /** Changes made to the presentation so far; reported and announced whatever happens next. */
+  const adjustments: UiRevealAdjustment[] = [];
+  /**
+   * Says on screen what this command changed and whether it pointed at
+   * anything — called as soon as the screen changes, not only on success.
+   *
+   * A narrowing cleared by a command that then failed is still cleared: the
+   * user is looking at a view they did not narrow, so something has to say who
+   * changed it and why. The change is **not** undone: it is the state in which
+   * the record is reachable, and putting it back would hide the record again
+   * while claiming nothing happened.
+   */
+  const announce = (shown: boolean, found?: { recordTitle: string | null; fieldLabel: string }) => {
+    if (!shown && adjustments.length === 0) return;
+    useAppState.getState().setRevealNotice({
+      address: revealAddress(window.location.pathname, parseAddressSearch(window.location.search)),
+      shown,
+      recordKind: reveal.recordKind,
+      recordId: reveal.recordId,
+      recordTitle: found?.recordTitle ?? null,
+      field: reveal.field,
+      fieldLabel: found?.fieldLabel ?? null,
+      adjustments: [...adjustments],
+    });
+  };
   const refuse = (reason: UiCommandFailure, extra: Partial<UiCommandResult> = {}): UiCommandResult => ({
     ...base,
     executed: false,
     reason,
     url: currentUrl(),
+    ...(adjustments.length ? { adjustments: [...adjustments] } : {}),
     ...extra,
   });
   const poll = <T>(probe: () => T | null) => pollUntil(probe, { ...POLL, until: deps.until });
@@ -288,7 +367,7 @@ export async function performReveal(
   });
   if (plan.kind === 'wait') return refuse(UI_COMMAND_FAILURES.notPresent);
   if (plan.kind === 'refuse') return refuse(plan.reason);
-  const adjustments = [...plan.adjustments];
+  adjustments.push(...plan.adjustments);
 
   if (plan.kind === 'address' && table.address) {
     const names = table.address.filterFields.map((f) => f.field);
@@ -309,8 +388,11 @@ export async function performReveal(
       // The command's own navigation to this screen is not a state the user had: one history entry.
       replace: navigated,
     });
+    // The screen has changed; from here every answer says so, including a refusal.
+    announce(false);
   } else if (plan.kind === 'page') {
     table.showPage?.(plan.page);
+    announce(false);
   }
 
   /* The record on the page shown, and its cell. */
@@ -331,7 +413,7 @@ export async function performReveal(
   if (!shown) return refuse(UI_COMMAND_FAILURES.notPresent);
   const { at, cell } = shown;
 
-  const visible = await bringIntoView(cell, reveal, adjustments);
+  const visible = await bringIntoView(cell, reveal, adjustments, deps.until);
   const page =
     at.pageShown !== null && at.pageSize !== null && at.pageCount !== null
       ? { index: at.pageShown, size: at.pageSize, count: at.pageCount }
@@ -343,25 +425,22 @@ export async function performReveal(
     displayedText: (cell.textContent ?? '').trim(),
     rawValue: recordValue(at.record, reveal.field),
     page,
-    adjustments,
   };
-  if (!visible) return refuse(UI_COMMAND_FAILURES.notVisible, { highlighted: false, revealed });
+  if (!visible) {
+    // The cell exists; it could not be brought in front of the user. Whatever
+    // was changed to get this far is still on screen, and still reported.
+    announce(false, { recordTitle: at.title, fieldLabel: at.field.label });
+    return refuse(UI_COMMAND_FAILURES.notVisible, { highlighted: false, revealed });
+  }
 
   markHighlighted(cell);
-  useAppState.getState().setRevealNotice({
-    address: revealAddress(window.location.pathname, parseAddressSearch(window.location.search)),
-    recordKind: reveal.recordKind,
-    recordId: reveal.recordId,
-    recordTitle: at.title,
-    field: reveal.field,
-    fieldLabel: at.field.label,
-    adjustments,
-  });
+  announce(true, { recordTitle: at.title, fieldLabel: at.field.label });
   return {
     ...base,
     executed: true,
     highlighted: true,
     revealed,
+    ...(adjustments.length ? { adjustments: [...adjustments] } : {}),
     ...(page ? { page } : {}),
     url: currentUrl(),
   };

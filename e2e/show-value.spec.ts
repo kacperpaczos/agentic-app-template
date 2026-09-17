@@ -277,6 +277,7 @@ test.describe('wskazanie wartosci pola rekordu', () => {
     await expect(page.getByTestId('data-page-status')).toHaveText('Strona 2 z 2');
 
     /* The banner says who changed what, and that the data did not change. */
+    await expect(notice(page)).toHaveAttribute('data-shown', 'true');
     await expect(notice(page)).toContainText('Agent wskazal wartosc.');
     await expect(notice(page)).toContainText('Pole „NIP”');
     await expect(notice(page)).toContainText(SHOWN_SUPPLIER);
