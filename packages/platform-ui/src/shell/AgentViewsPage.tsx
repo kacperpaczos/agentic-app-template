@@ -3,7 +3,7 @@ import { useAgentViews } from '../api/queries.ts';
 import { CanvasSurface } from '../canvas/CanvasHost.tsx';
 import { QueryErrorState } from '../components/ErrorState.tsx';
 import { AGENT_VIEWS_SCOPE_KIND, type CanvasCard, type CanvasSpace } from '@platform/contracts';
-import { useDisplayCanvas, type DisplayedCanvas } from '../state/displayedCanvas.ts';
+import { cardsOnScreen, useDisplayCanvas, type DisplayedCanvas } from '../state/displayedCanvas.ts';
 import { useSessionLocation } from '../state/sessionLocation.ts';
 
 /**
@@ -35,10 +35,11 @@ export function agentViewsDisplay(input: {
 }): DisplayedCanvas | null {
   const scopeKind = AGENT_VIEWS_SCOPE_KIND;
   if (!input.conversationId) return { spaceId: null, scopeKind, cards: [], state: 'none' };
-  // An error is shown even when older data is still cached: that data is not on screen.
-  if (input.failed) return { spaceId: null, scopeKind, cards: null, state: 'error' };
-  if (!input.data) return { spaceId: null, scopeKind, cards: null, state: 'loading' };
-  const { space, cards } = input.data;
+  // Error before data, loading before both — the shared rule, so an error here
+  // and an error on the canvas itself are the same answer.
+  const loaded = cardsOnScreen({ spaceId: null, scopeKind, data: input.data, error: input.failed });
+  if (loaded.state !== 'loaded') return loaded;
+  const { space, cards } = input.data!;
   if (!space) return { spaceId: null, scopeKind, cards: [], state: 'none' };
   if (cards.length === 0) return { spaceId: space.id, scopeKind, cards: [], state: 'loaded' };
   return null;

@@ -13,6 +13,10 @@ playwright-report/
 .e2e-data/
 .e2e-scripted*/
 
+# Licznik tur subskrypcji wydanych przez spece modelowe. Kopia robocza, nie
+# dowód: rejestr zamkniętego grantu leży w docs/evidence/ i nikt go nie nadpisuje.
+.e2e-model-turns/
+
 # Kopie stanu lokalnego — zawierają PRAWDZIWE dane użytkownika (rozmowy,
 # kompozycje, pliki). Nie mogą trafić do repozytorium ani do obrazu.
 backups/

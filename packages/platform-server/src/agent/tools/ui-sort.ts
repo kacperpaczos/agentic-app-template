@@ -39,7 +39,11 @@ export function uiSortTools(services: PlatformServices): Array<ModuleToolDefinit
         'ma sortowalne rekordy; inny cel odpowiada not_sortable i nic nie zmienia). ' +
         'Sortowanie zmienia tylko prezentacje, nie dane. Zmiana kolejnosci wraca do pierwszej strony. ' +
         'Zwraca to, co KLIENT faktycznie pokazal: sorted (pole i kierunek) i page (strona, rozmiar, ' +
-        'liczba stron). Jesli executed=false, nie twierdz, ze widok jest posortowany.',
+        'liczba stron). Jesli executed=false, nie twierdz, ze widok jest posortowany. Odmowa not_applied znaczy, ze ' +
+        'zaden widok nie zastosowal kolejnosci (wada) — ponawianie nic nie da; powiedz o tym zamiast probowac dalej. ' +
+        'Odmowa mixed_units znaczy, ze rekordy na ekranie maja to pole w roznych jednostkach (np. PLN i EUR), wiec zadna ' +
+        'kolejnosc po nim nie jest rankingiem: rejectedSort.units wymienia te jednostki — zawez widok do jednej z nich ' +
+        '(ui_filter) i posortuj ponownie. NIE podawaj wtedy zadnej listy "od najdrozszych".',
       effect: 'read',
       alwaysLoad: true,
       inputSchema: z.object({
@@ -118,6 +122,8 @@ export function uiSortTools(services: PlatformServices): Array<ModuleToolDefinit
           url: result.url,
           cleared: clearing && result.executed,
           sorted: result.sorted,
+          // An order the view judged and set aside, with the units when that is why.
+          ...(result.rejectedSort ? { rejectedSort: result.rejectedSort } : {}),
           page: result.page,
           filtered: result.filtered,
           // The screen's description after the change, and the tab it belongs to: pass both to ui_state.

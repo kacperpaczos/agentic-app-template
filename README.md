@@ -190,12 +190,22 @@ zapisuje, nie loguje i nie przesyła. Odświeżaniem logowania zajmuje się Clau
 
 ```bash
 pnpm verify          # kontrola granicy, spójność dokumentów oceny, typy, build i testy (bez modelu)
-pnpm test:e2e        # testy w przeglądarce na zbudowanej aplikacji; kilka z nich używa prawdziwego modelu
+pnpm test:e2e        # testy w przeglądarce na zbudowanej aplikacji; bez testów z prawdziwym modelem
+pnpm test:e2e:model  # tylko testy z prawdziwym modelem — kosztują 11 tur subskrypcji na przebieg
 pnpm check:module-swap   # próba podmiany modułu przykładowego na kontrolny, na kopii repozytorium
 ```
 
 `pnpm test:e2e` działa na istniejącym buildzie, więc uruchamiaj go po `pnpm verify` albo `pnpm build`.
 Testy startują własne serwery na portach 8792–8799 z własnymi katalogami danych.
+`pnpm typecheck` (w `pnpm verify`) sprawdza pakiety i osobno katalog `e2e/` (`tsconfig.e2e.json`).
+
+Trzy spece odpowiadają **prawdziwym modelem** i wydają tury subskrypcji: `e2e/bl01-bl02-model.spec.ts`
+(7 tur), `e2e/agent-ui.spec.ts` (2) i `e2e/files-agent.spec.ts` (2). Domyślny przebieg ich nie zawiera —
+wypisuje, co pominął i ile by to kosztowało — a `pnpm test:e2e:model` (`APP_E2E_MODEL=1`) uruchamia
+wyłącznie je. Licznik wydanych tur leży w `.e2e-model-turns/` (poza repozytorium); dowody przebiegu
+zapisują się pod stemplem przebiegu w `docs/evidence/<zadanie>/runs/`, więc nie nadpisują zapisanych
+wyników prób odbiorowych. Jeśli budżet tur nie pokrywa całego spec-a odbiorowego, spec pomija próby
+z komunikatem, zanim cokolwiek wyśle do modelu — zamiast wydać turę i paść na następnej.
 
 `pnpm acceptance` i `scripts/run-agent.mjs` działają inaczej: łączą się z **działającą** instancją
 (domyślnie `http://127.0.0.1:8791`) i zmieniają jej dane. Kieruj je tylko na osobną instancję z

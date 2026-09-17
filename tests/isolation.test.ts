@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -17,6 +17,26 @@ import {
   TEST_PORT_RANGE,
   TestIsolationError,
 } from '../e2e/support/isolation.ts';
+import {
+  ACCEPTANCE_TEST_TURNS,
+  ACCEPTANCE_TURNS_NEEDED,
+  EVIDENCE_ROOT,
+  MODEL_OPT_IN_ENV,
+  MODEL_SPEC_FILES,
+  MODEL_SPEC_PATTERNS,
+  MODEL_SPEC_TURNS,
+  MODEL_TURNS_PER_RUN,
+  RECORDED_LEDGER,
+  RUN_STAMP,
+  WORKING_LEDGER,
+  acceptancePreflight,
+  budgetPreflight,
+  evidencePath,
+  modelSpecsNotice,
+  modelSpecsRequested,
+  readLedger,
+  runEvidenceDir,
+} from '../e2e/support/model-turns.ts';
 
 /**
  * The isolation guard, tested against the configurations that actually caused
@@ -213,5 +233,116 @@ describe('serwer odmawia startu przy niezgodnej konfiguracji', () => {
     } as NodeJS.ProcessEnv);
     expect(config.instanceLabel).toBe(TEST_INSTANCE_LABEL);
     expect(config.dataDir).toBe(dir);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The other thing a browser run must not destroy: the record of what the
+ * subscription already paid for.
+ *
+ * `pnpm test:e2e` used to run the three model specs with everything else. On the
+ * committed state that meant spending turn 22 of a 22-turn budget in T25, then
+ * failing the guard in T26 and T27 — whose `finally` blocks write the proba's
+ * verdict — so a routine full run turned three recorded "zaliczona" into
+ * "niezaliczona" and rewrote the ledger of a closed grant. Every assertion here
+ * is one half of that: not reachable by default, not counted in the evidence,
+ * not written over the evidence.
+ */
+describe('spece z prawdziwym modelem: opt-in i nienaruszalnosc dowodow', () => {
+  it('domyslny przebieg nie ma projektu, ktory obejmuje spece modelowe; opt-in ma tylko je', async () => {
+    const { default: config } = await import('../playwright.config.ts');
+    const projects = config.projects!;
+    expect(projects).toHaveLength(1);
+    expect(projects[0]!.name).toBe('chromium');
+    // Excluded by the project's own file set: no argument or grep can reach them.
+    expect(projects[0]!.testIgnore).toEqual(MODEL_SPEC_PATTERNS);
+    expect(projects[0]!.testMatch).toBeUndefined();
+    expect(MODEL_SPEC_PATTERNS).toEqual([
+      '**/bl01-bl02-model.spec.ts',
+      '**/agent-ui.spec.ts',
+      '**/files-agent.spec.ts',
+    ]);
+    expect(modelSpecsRequested({} as NodeJS.ProcessEnv)).toBe(false);
+    expect(modelSpecsRequested({ [MODEL_OPT_IN_ENV]: '1' } as NodeJS.ProcessEnv)).toBe(true);
+  });
+
+  it('pominiecie jest powiedziane, z kosztem w turach', () => {
+    const skipped = modelSpecsNotice({} as NodeJS.ProcessEnv);
+    for (const file of MODEL_SPEC_FILES) expect(skipped).toContain(file);
+    expect(skipped).toContain(String(MODEL_TURNS_PER_RUN));
+    expect(skipped).toContain('pnpm test:e2e:model');
+    expect(modelSpecsNotice({ [MODEL_OPT_IN_ENV]: '1' } as NodeJS.ProcessEnv)).toContain('wyda do');
+  });
+
+  it('licznik tur jest w kopii roboczej (ignorowanej przez git), a nie w dowodach', () => {
+    expect(WORKING_LEDGER.startsWith(resolve(REPO, '.e2e-model-turns'))).toBe(true);
+    expect(WORKING_LEDGER.startsWith(EVIDENCE_ROOT)).toBe(false);
+    expect(readFileSync(resolve(REPO, '.gitignore'), 'utf8')).toContain('.e2e-model-turns/');
+    // The closed grant is the starting count, never a file this suite writes.
+    expect(RECORDED_LEDGER).toBe(resolve(EVIDENCE_ROOT, 'tury-modelu.json'));
+    const seeded = readLedger(22);
+    const recorded = JSON.parse(readFileSync(RECORDED_LEDGER, 'utf8')) as { wydane: number };
+    expect(seeded.wydane).toBe(recorded.wydane);
+  });
+
+  it('budzet niepokrywajacy calego speca: decyzja o pominieciu, z rejestrem, sufitem i brakiem', () => {
+    /*
+     * The straznik per polecenie nie wystarcza sam: przy 21 z 22 tur przepuscil
+     * T25 (jedna tura naprawde wyslana) i dopiero T26 odmowil. Sprawdzenie
+     * wstepne pyta o caly spec, zanim cokolwiek pojdzie do modelu.
+     */
+    const short = budgetPreflight({ budget: 22, spent: 21, needed: ACCEPTANCE_TURNS_NEEDED });
+    expect(short.ok).toBe(false);
+    expect(short).toMatchObject({ budget: 22, spent: 21, left: 1, needed: 7, shortfall: 6 });
+    const message = (short as { message: string }).message;
+    expect(message).toContain('21 z 22');
+    expect(message).toContain('zostaje 1');
+    expect(message).toContain('potrzebuje 7');
+    expect(message).toContain('brakuje 6');
+    expect(message).toContain('NIC nie zostalo wyslane do modelu');
+    expect(message).toContain('grantu koordynatora');
+    expect(message).toContain(WORKING_LEDGER);
+
+    // Dokladnie tyle, ile spec potrzebuje, wystarcza; o jedna mniej — nie.
+    expect(budgetPreflight({ budget: 28, spent: 21, needed: ACCEPTANCE_TURNS_NEEDED }).ok).toBe(true);
+    expect(budgetPreflight({ budget: 27, spent: 21, needed: ACCEPTANCE_TURNS_NEEDED }).ok).toBe(false);
+    // Wyczerpany i przekroczony rejestr tez jest pominieciem, nie przebiegiem.
+    expect(budgetPreflight({ budget: 22, spent: 22, needed: ACCEPTANCE_TURNS_NEEDED })).toMatchObject({ ok: false, shortfall: 7 });
+    expect(budgetPreflight({ budget: 22, spent: 30, needed: ACCEPTANCE_TURNS_NEEDED })).toMatchObject({ ok: false, left: -8 });
+    // Swiezy grant z zapasem: przebieg.
+    expect(budgetPreflight({ budget: 40, spent: 21, needed: ACCEPTANCE_TURNS_NEEDED })).toMatchObject({ ok: true, left: 19 });
+
+    // Koszt zadeklarowany per proba i koszt speca nie moga sie rozjechac.
+    expect(Object.values(ACCEPTANCE_TEST_TURNS).reduce((a, b) => a + b, 0)).toBe(ACCEPTANCE_TURNS_NEEDED);
+    expect(MODEL_SPEC_TURNS['bl01-bl02-model.spec.ts']).toBe(ACCEPTANCE_TURNS_NEEDED);
+
+    // Na stanie galezi (zamkniety grant) spec jest pomijany, a nie uruchamiany.
+    expect(acceptancePreflight(22).ok).toBe(false);
+  });
+
+  it('spec odbiorowy pomija proby na podstawie sprawdzenia wstepnego, zanim cokolwiek wysle', () => {
+    // Statyczna kontrola polaczenia: samo wykonanie hooka wymagaloby uruchomienia
+    // speca modelowego, czego to zadanie nie robi (grant zamkniety).
+    const source = readFileSync(resolve(REPO, 'e2e/bl01-bl02-model.spec.ts'), 'utf8');
+    expect(source).toContain('const preflight = acceptancePreflight(MODEL_TURN_BUDGET);');
+    expect(source).toContain('test.skip(!preflight.ok, preflight.ok ? \'\' : preflight.message);');
+    // Skip w beforeEach, czyli przed cialem testu — a wiec przed sendForRun.
+    const hook = source.indexOf('test.beforeEach(');
+    expect(hook).toBeGreaterThan(-1);
+    expect(hook).toBeLessThan(source.indexOf('await sendForRun('));
+  });
+
+  it('dowody przebiegu ida pod stempel przebiegu — zapisane werdykty sa nie do nadpisania', () => {
+    for (const name of ['t25-wskazanie-wartosci.json', 't26-zawezenie-rozmowa.json', 't27-widoki-agenta.json', 'tury-modelu.json']) {
+      const recorded = resolve(EVIDENCE_ROOT, name);
+      expect(evidencePath(name)).not.toBe(recorded);
+      expect(evidencePath(name).startsWith(resolve(EVIDENCE_ROOT, 'runs'))).toBe(true);
+    }
+    expect(runEvidenceDir()).toBe(resolve(EVIDENCE_ROOT, 'runs', RUN_STAMP));
+    // A name that could climb out of the run's directory is not a file name.
+    expect(() => evidencePath('../t25-wskazanie-wartosci.json')).toThrow(/zwykla nazwa pliku/);
+    expect(() => evidencePath('runs/../t25.json')).toThrow(/zwykla nazwa pliku/);
   });
 });

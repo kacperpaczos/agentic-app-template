@@ -772,6 +772,26 @@ describe('ui_show_value', () => {
     expect(prompt).toContain('unreadable oznacza, ze odczytow stojacych za tymi miejscami nie dalo sie wykonac');
     expect(prompt).toContain('ekran ZOSTAL juz zmieniony');
   });
+
+  it('odswiezany widok to refreshing, nie not_applied — w opisie narzedzia i w podpowiedzi', () => {
+    const tool = platformTools(h.platform.services).find((t) => t.name === 'ui_show_value')!;
+    // The model is told the benign case by its own name, and never learns the
+    // defect's name as a reason to try again.
+    expect(tool.description).toContain('refreshing (widok wlasnie odswieza dane — sprobuj ponownie)');
+    expect(tool.description).not.toContain('not_applied');
+
+    const prompt = buildSystemPrompt({
+      registry: h.platform.registry,
+      catalog: h.platform.services.catalog,
+      appContext: EMPTY_CONTEXT('c1'),
+      resourceSummary: null,
+      readOperations: [],
+      toolNames: [],
+      workspaceDir: null,
+    } as never);
+    expect(prompt).toContain('refreshing to co innego niz not_applied');
+    expect(prompt).toContain('not_applied znaczy, ze zaden widok nie zastosowal zmiany');
+  });
 });
 
 /* -------------------------------------------------------------------------- */
@@ -1229,7 +1249,7 @@ describe('zmiana prezentacji przezywa odmowe', () => {
     expect(result.revealed).toMatchObject({ displayedText: 'nowa', rawValue: '9999' });
   });
 
-  it('tabela, ktora nie przestaje sie odswiezac: not_applied, nie falszywe wskazanie', async () => {
+  it('tabela, ktora nie przestaje sie odswiezac: refreshing (nie not_applied), bez falszywego wskazania', async () => {
     screen = fakeScreen({
       search: '?country=PL',
       cell: { text: 'stara' },
@@ -1237,7 +1257,11 @@ describe('zmiana prezentacji przezywa odmowe', () => {
       settledValue: { text: 'nowa', raw: '9999' },
     });
     const result = await reveal();
-    expect(result).toMatchObject({ executed: false, reason: UI_COMMAND_FAILURES.notApplied });
+    // A read that had not settled is worth asking about again; `not_applied`
+    // says the opposite (nothing applied the command), so the two must not
+    // share a word — the tool description and the prompt act on each.
+    expect(result).toMatchObject({ executed: false, reason: UI_COMMAND_FAILURES.refreshing });
+    expect(result.reason).not.toBe(UI_COMMAND_FAILURES.notApplied);
     expect(result.revealed).toBeUndefined();
   });
 

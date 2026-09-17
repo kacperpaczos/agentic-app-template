@@ -7,7 +7,10 @@ import {
   fieldUnitOf,
   formatFieldValue,
   isNumericField,
+  mixedUnits,
+  mixedUnitsMessage,
   numericFieldValue,
+  unitsInPlay,
   pageSlice,
   pickFields,
   recordIdOf,
@@ -22,6 +25,7 @@ import {
   type ReadResponse,
   type ReadResultDescriptor,
   type RecordField,
+  type RejectedSort,
   type SemanticInstance,
   type ViewFilterOutcome,
   type ViewFilterPredicate,
@@ -61,7 +65,7 @@ export interface DataModel {
   /** True when `sort` came from the address bar. */
   sortFromAddress: boolean;
   /** An order the address asked for and the view set aside, and why. */
-  rejectedSort: (DataSort & { reason: 'unknown_field' | 'not_sortable' }) | null;
+  rejectedSort: RejectedSort | null;
   /** The page shown, when the component pages its records. */
   page: PageSlice | null;
 }
@@ -133,11 +137,24 @@ export function buildDataModel(input: {
   let rejectedSort: DataModel['rejectedSort'] = null;
   if (input.addressSort) {
     const check = checkSortField(descriptor, input.addressSort.field);
-    if (check.ok) {
-      sort = input.addressSort;
-      sortFromAddress = true;
-    } else {
+    if (!check.ok) {
       rejectedSort = { ...input.addressSort, reason: check.reason };
+    } else {
+      /*
+       * Whether the records can be ranked by this field at all is a question
+       * about the records, not about the descriptor — an amount's unit may live
+       * on each record (`unitField`) — so it is asked here, with the rows in
+       * hand, by the one rule a chart's series uses. Mixed units set the order
+       * aside like any other order the view cannot honour; the composition's
+       * own order is refused outright instead (`sortRecords`), because it is
+       * part of the composition.
+       */
+      const mixed = mixedUnits(records, check.field);
+      if (mixed) rejectedSort = { ...input.addressSort, reason: 'mixed_units', units: mixed };
+      else {
+        sort = input.addressSort;
+        sortFromAddress = true;
+      }
     }
   }
   if (sort) records = sortRecords(records, sort, descriptor);
@@ -202,17 +219,12 @@ export function buildChartModel(model: DataModel, x: string, seriesNames: readon
         `Pole ${field.field} (${field.label}) nie jest liczbowe i nie moze tworzyc serii wykresu.`,
       );
     }
-    const units = new Set(
-      model.records
-        .filter((r) => numericFieldValue(r, field) !== null)
-        .map((r) => fieldUnitOf(r, field) ?? ''),
-    );
-    if (units.size > 1) {
-      throw new AppError(
-        'validation_failed',
-        `Seria ${field.label} laczy rozne jednostki (${[...units].join(', ')}); zawez dane do jednej jednostki.`,
-      );
+    const mixed = mixedUnits(model.records, field);
+    if (mixed) {
+      throw new AppError('validation_failed', mixedUnitsMessage(`Seria ${field.label}`, mixed));
     }
+    // One unit by now, or none at all — from the same traversal the rule uses.
+    const [unit] = unitsInPlay(model.records, field);
     const values = model.records.map((r) => numericFieldValue(r, field));
     let lowest: { value: number; record: DataRecord } | null = null;
     let highest: { value: number; record: DataRecord } | null = null;
@@ -222,7 +234,6 @@ export function buildChartModel(model: DataModel, x: string, seriesNames: readon
       if (!lowest || value < lowest.value) lowest = { value, record };
       if (!highest || value > highest.value) highest = { value, record };
     }
-    const [unit] = [...units];
     return {
       field: field.field,
       label: field.label,

@@ -173,6 +173,23 @@ export const dataSortSchema = z.object({
 export type DataSort = z.infer<typeof dataSortSchema>;
 
 /**
+ * An order a view was asked for and set aside instead of applying, and why.
+ *
+ * One shape for the three answers, because one reader after another has to pass
+ * it on unchanged: the model the table builds, the state the view reports, the
+ * acknowledgement the agent's command gets back. `mixed_units` is the only one
+ * that needs the records rather than the descriptor — the unit of a value can
+ * live on the record (`RecordField.unitField`) — so it is decided where the
+ * records are, and carries the units it found so every reader can name them.
+ */
+export const rejectedSortSchema = dataSortSchema.extend({
+  reason: z.enum(['unknown_field', 'not_sortable', 'mixed_units']),
+  /** The units in play, when they are what made the order impossible. */
+  units: z.array(z.string().max(40)).max(20).optional(),
+});
+export type RejectedSort = z.infer<typeof rejectedSortSchema>;
+
+/**
  * Which registered read a data component (or a live artifact) re-runs.
  *
  * Never code, never SQL, never values: a qualified operation name and the input
@@ -449,7 +466,8 @@ export type UiRevealed = z.infer<typeof uiRevealedSchema>;
  *    target this run could use.
  *
  * The client adds its own (`UI_COMMAND_FAILURES`): `inactive_conversation`,
- * `not_present`, `not_visible`, `no_client`.
+ * `not_present`, `not_visible`, `refreshing` (the view was still being read —
+ * worth asking again), `no_client`.
  */
 export const SHOW_VALUE_REFUSALS = {
   unknownField: 'unknown_field',
@@ -534,6 +552,17 @@ export const UI_COMMAND_FAILURES = {
    */
   notSortable: 'not_sortable',
   /**
+   * The field may be ordered by, but the records on screen are in several units
+   * of it (amounts in PLN and in EUR), so no one order over them is a ranking.
+   *
+   * Refused rather than applied, for the same reason a chart refuses a series
+   * mixing units: the numbers compare, the quantities they stand for do not,
+   * and a list the user reads as "most expensive first" would be a claim the
+   * data cannot support. The units found are reported with it, so the answer
+   * says what to narrow to.
+   */
+  mixedUnits: 'mixed_units',
+  /**
    * The client could not load the view definitions it needs to tell whether
    * the target's view can apply the change and report it. Nothing was done;
    * asking again may succeed. Never reported as a refusal of the field or as a
@@ -541,15 +570,43 @@ export const UI_COMMAND_FAILURES = {
    */
   viewsUnavailable: 'views_unavailable',
   /**
-   * The narrowing was accepted but no view reported applying it.
+   * The command was accepted but no view reported carrying it out.
    *
    * Distinct from a successful narrowing that matched nothing: "the screen now
    * shows none of the rows" is an answer, "nothing on screen used the
    * narrowing" is a defect, and telling them apart is the point.
+   *
+   * **A defect signal, and only that.** Trying again cannot help: the same
+   * command on the same screen would not be applied again either. A view that
+   * is merely still being read is {@link UI_COMMAND_FAILURES.refreshing}, which
+   * *is* worth retrying — reporting that one as `not_applied` made the same
+   * word mean both "this is broken" and "ask me again in a moment", so neither
+   * could be acted on.
    */
   notApplied: 'not_applied',
+  /**
+   * The view was still fetching its records when the command's budget ran out,
+   * so the screen never reached a state the command could confirm.
+   *
+   * Nothing is wrong and nothing is claimed: the records on screen were the
+   * ones about to be replaced, and pointing at one of them would have compared
+   * a value that is already old with the backend. Asking again once the read
+   * settles is the right move — which is exactly what `not_applied` is not.
+   */
+  refreshing: 'refreshing',
 } as const;
 export type UiCommandFailure = (typeof UI_COMMAND_FAILURES)[keyof typeof UI_COMMAND_FAILURES];
+
+/**
+ * How a view's reason for setting an order aside becomes the answer a command
+ * gets back — one mapping, so the view, the acknowledgement and the tool all
+ * call the same refusal by the same name.
+ */
+export const REJECTED_SORT_FAILURES: Record<RejectedSort['reason'], UiCommandFailure> = {
+  unknown_field: UI_COMMAND_FAILURES.unknownField,
+  not_sortable: UI_COMMAND_FAILURES.notSortable,
+  mixed_units: UI_COMMAND_FAILURES.mixedUnits,
+};
 
 /** A browser tab's identity (see `uiSnapshotSchema`): random, URL-safe, kept for the life of the tab. */
 export const uiClientIdSchema = z
@@ -616,6 +673,13 @@ export const uiCommandResultSchema = z.object({
   sorted: dataSortSchema.nullable().optional(),
   /** The page on screen after the command, when the view pages its records. */
   page: viewPageSchema.optional(),
+  /**
+   * An order the view set aside instead of applying, with why and — for
+   * `mixed_units` — the units it found. Present only when a command asked for
+   * an order the view could not honour, so `executed: false` can say which of
+   * the orders is on screen and what would make the asked-for one possible.
+   */
+  rejectedSort: rejectedSortSchema.optional(),
   /**
    * Version of the tab's interface description published after the command
    * was carried out (see `uiSnapshotSchema`). The tab publishes before it

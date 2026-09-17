@@ -111,7 +111,7 @@ export function uiShowValueTools(services: PlatformServices): Array<ModuleToolDe
         'pola), ambiguous (kilka miejsc — wybierz targetId z candidates), record_not_found, forbidden, ' +
         'unreadable (odczytu nie dalo sie wykonac — NIE mow, ze rekordu nie ma), unknown_target (targetId nie wskazuje ' +
         'zadnego widoku ani karty); po stronie klienta: inactive_conversation, not_present, not_visible, ' +
-        'not_applied (widok wlasnie odswieza dane — sprobuj ponownie), no_client. ' +
+        'refreshing (widok wlasnie odswieza dane — sprobuj ponownie), no_client. ' +
         'adjustments moga byc niepuste takze przy odmowie klienta — wtedy ekran juz zostal zmieniony i trzeba to powiedziec.',
       effect: 'read',
       alwaysLoad: true,

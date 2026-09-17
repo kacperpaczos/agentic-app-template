@@ -309,6 +309,8 @@ export function buildSystemPrompt(input: PromptInput): string {
       'record_not_found, forbidden, not_present, not_visible, inactive_conversation, no_client: powiedz, czego nie udalo',
       'sie zrobic i dlaczego. unreadable oznacza, ze odczytow stojacych za tymi miejscami nie dalo sie wykonac — NIE mow',
       'wtedy, ze rekordu nie ma ani jaka jest wartosc; powiedz, ze nie dalo sie sprawdzic.',
+      'refreshing to co innego niz not_applied: widok wlasnie pobieral dane i nic nie zostalo wskazane — sprobuj ponownie,',
+      'nie mow, ze rekordu nie ma. not_applied znaczy, ze zaden widok nie zastosowal zmiany — ponawianie nic nie da, powiedz o tym.',
       'Gdy odmowa ma niepuste adjustments, ekran ZOSTAL juz zmieniony (np. zdjete zawezenie) — powiedz o tym uzytkownikowi,',
       'nawet jesli niczego nie wskazano.',
       'Po ui_show_value opis ekranu odczytasz przez ui_state z minVersion = uiVersion i clientId = uiClientId.',

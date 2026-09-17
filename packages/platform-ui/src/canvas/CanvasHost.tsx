@@ -23,7 +23,7 @@ import {
 import { useAppState } from '../state/appState.ts';
 import { CardBody } from './CardBody.tsx';
 import { QueryErrorState } from '../components/ErrorState.tsx';
-import { useDisplayCanvas } from '../state/displayedCanvas.ts';
+import { cardsOnScreen, useDisplayCanvas } from '../state/displayedCanvas.ts';
 import { registerCanvasFocus } from './canvasFocus.ts';
 
 /**
@@ -102,13 +102,14 @@ function CanvasInner({
   emptyMessage = 'Pusta przestrzen. Popros agenta o dodanie karty.',
 }: CanvasSurfaceProps) {
   const { data, isLoading, error } = useCanvasState(spaceId);
-  // The space on screen and its cards, for the screen's description (`state/displayedCanvas.ts`).
-  useDisplayCanvas({
-    spaceId,
-    scopeKind: data?.space.scopeKind ?? null,
-    cards: data?.cards ?? null,
-    state: data ? 'loaded' : error ? 'error' : 'loading',
-  });
+  /*
+   * The space on screen and its cards, for the screen's description
+   * (`state/displayedCanvas.ts`). Decided by the same rule as every other
+   * screen showing cards, in the same order this component renders them: the
+   * error below wins over cached data, so the description cannot name cards
+   * while the user is looking at `QueryErrorState`.
+   */
+  useDisplayCanvas(cardsOnScreen({ spaceId, scopeKind: data?.space.scopeKind ?? null, data, error }));
   const updateGeometry = useUpdateGeometry(spaceId);
   const saveViewport = useSaveViewport(spaceId);
   const setViewport = useAppState((s) => s.setViewport);

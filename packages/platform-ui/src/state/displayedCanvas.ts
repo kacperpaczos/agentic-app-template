@@ -59,6 +59,29 @@ export function setDisplayedCanvas(key: string, displayed: DisplayedCanvas | nul
   });
 }
 
+/**
+ * What a screen showing a space's cards reports about them, from its query.
+ *
+ * The order of the three answers is the rule, and it is one rule for every such
+ * screen: a failed load is what the user is looking at **even when older cards
+ * are still cached**, so the error comes before the data. Asked the other way
+ * round (`data ? 'loaded' : error ? 'error' : 'loading'`), a refetch that fails
+ * over a filled cache describes cards nobody is looking at — and the agent then
+ * talks about them.
+ */
+export function cardsOnScreen(input: {
+  spaceId: string | null;
+  scopeKind: string | null;
+  data: { cards: CanvasCard[] } | null | undefined;
+  /** The query's failure, in whatever form the screen has it. */
+  error: unknown;
+}): DisplayedCanvas {
+  const { spaceId, scopeKind } = input;
+  if (input.error) return { spaceId, scopeKind, cards: null, state: 'error' };
+  if (!input.data) return { spaceId, scopeKind, cards: null, state: 'loading' };
+  return { spaceId, scopeKind, cards: input.data.cards, state: 'loaded' };
+}
+
 /** The most recently mounted display of a space, under the identity signed in now. */
 export function displayedCanvas(): DisplayedCanvas | null {
   const epoch = accessEpoch();

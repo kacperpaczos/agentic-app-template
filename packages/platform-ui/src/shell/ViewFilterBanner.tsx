@@ -1,5 +1,5 @@
 import { useNavigate, useRouterState } from '@tanstack/react-router';
-import { describePredicate, viewAddressKey, viewStatePatch } from '@platform/contracts';
+import { describePredicate, viewAddressKey, viewStatePatch, type RejectedSort } from '@platform/contracts';
 import { useUiTargets } from '../api/queries.ts';
 import { useAppState } from '../state/appState.ts';
 import { useActiveViewFilter, useActiveViewReport } from '../state/viewFilter.ts';
@@ -38,6 +38,17 @@ import { revealAddress, revealNoticeText } from './uiReveal.ts';
  * the view reports having applied (`viewStates`), and the same button puts the
  * whole view back: no narrowing, its own order, the first page.
  */
+/**
+ * Why an order the address asked for is not the order on screen, in the words
+ * the user needs: for mixed units that means naming them, because narrowing to
+ * one of them is what makes the order possible.
+ */
+function rejectedSortReason(rejected: RejectedSort): string {
+  if (rejected.reason === 'not_sortable') return 'pole nie jest sortowalne';
+  if (rejected.reason === 'unknown_field') return 'nie ma takiego pola';
+  return `wartosci sa w roznych jednostkach (${(rejected.units ?? []).join(', ')}), wiec taka kolejnosc nie jest rankingiem`;
+}
+
 export function ViewFilterBanner() {
   const filter = useActiveViewFilter();
   const report = useActiveViewReport();
@@ -133,7 +144,7 @@ export function ViewFilterBanner() {
         {rejected && (
           <span className="pf-viewfilter__part" data-testid="view-sort-rejected">
             {' '}
-            Sortowanie po „{rejected.field}” pominiete — {rejected.reason === 'not_sortable' ? 'pole nie jest sortowalne' : 'nie ma takiego pola'}.
+            Sortowanie po „{rejected.field}” pominiete — {rejectedSortReason(rejected)}.
           </span>
         )}
         {paged?.page && (

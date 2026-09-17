@@ -12,6 +12,7 @@ import {
   numericFieldValue,
   readResultDescriptorSchema,
   recordRouteOf,
+  mixedUnits,
   recordsOf,
   semanticInstanceSchema,
   sortRecords,
@@ -538,6 +539,35 @@ describe('formatowanie i porzadek wedlug typu pola', () => {
     expect(ids(sortRecords([{ id: '1', s: 'a' }, { id: '2', s: 'b' }], { field: 's', direction: 'asc' }, coded))).toEqual(['2', '1']);
   });
 
+  it('porzadek po kwotach w dwoch walutach jest odmawiany z nazwami jednostek — ta sama regula co seria wykresu', () => {
+    const rows = [
+      { id: '1', name: 'Zeta', total: 90000, currency: 'PLN' },
+      { id: '2', name: 'Lampa', total: 20000, currency: 'EUR' },
+    ];
+    const totalField = descriptor.fields.find((x) => x.field === 'total')!;
+    // The rule itself: which units are in play, and whether they are one.
+    expect(mixedUnits(rows, totalField)).toEqual(['PLN', 'EUR']);
+    expect(mixedUnits(rows.slice(0, 1), totalField)).toBeNull();
+    // An empty amount is in no unit, so it cannot make a single-currency column mixed.
+    expect(mixedUnits([...rows.slice(0, 1), { id: '3', total: null, currency: 'EUR' }], totalField)).toBeNull();
+
+    // 20000 < 90000 as integers; 200,00 EUR against 900,00 PLN is not a ranking.
+    let refused: AppError | null = null;
+    try {
+      sortRecords(rows, { field: 'total', direction: 'desc' }, descriptor);
+    } catch (e) {
+      refused = AppError.from(e);
+    }
+    expect(refused, 'porzadek po kwotach w dwoch walutach nie zostal odmowiony').toBeTruthy();
+    expect(refused!.code).toBe('validation_failed');
+    expect(refused!.message).toBe('Kolejnosc wedlug pola Suma laczy rozne jednostki (PLN, EUR); zawez dane do jednej jednostki.');
+    expect(refused!.details).toMatchObject({ reason: 'mixed_units', field: 'total', units: ['PLN', 'EUR'] });
+
+    // Narrowed to one currency the same order is fine, and text is never a scale.
+    expect(sortRecords(rows.slice(0, 1), { field: 'total', direction: 'desc' }, descriptor).map((r) => r.id)).toEqual(['1']);
+    expect(sortRecords(rows, { field: 'name', direction: 'asc' }, descriptor).map((r) => r.id)).toEqual(['2', '1']);
+  });
+
   it('rekordy wg deskryptora: brak kolekcji to blad, nie pusta lista; trasa rekordu', () => {
     expect(() => recordsOf({ inne: [] }, descriptor)).toThrowError(AppError);
     expect(() => recordsOf({ inne: [] }, descriptor)).toThrowError(/nie zawiera kolekcji "rows"/);
@@ -790,6 +820,63 @@ describe('model komponentow danych', () => {
     c.dispose();
   });
 
+  it('sortowanie po kwocie w dwoch walutach: kompozycja odmawia, adres jest pomijany z jednostkami', () => {
+    const byTotal = { field: 'totalMinor', direction: 'desc' as const };
+    const currencies = new Set(recordsOf(comparison.result, comparison.descriptor!).map((r) => r.currency));
+    expect(currencies.size, 'zasiew porownania ma byc w dwoch walutach').toBeGreaterThan(1);
+
+    /*
+     * The composition's own order is part of the composition, so it is refused
+     * outright — exactly as a chart series mixing units is, and as a misnamed
+     * column is. A table that ordered them anyway would print "od najdrozszych"
+     * over two currencies.
+     */
+    expect(() =>
+      buildDataModel({ response: comparison, fieldNames: ['supplierName', 'totalMinor', 'currency'], sort: byTotal }),
+    ).toThrowError(/Kolejnosc wedlug pola Suma laczy rozne jednostki \(PLN, EUR\)/);
+
+    /*
+     * The address bar's order is set aside instead — a link is not an error
+     * screen — and the records stay in the view's own order, with the units
+     * reported so the banner and `ui_sort` can name them.
+     */
+    const fromAddress = buildDataModel({
+      response: comparison,
+      fieldNames: ['supplierName', 'totalMinor', 'currency'],
+      addressSort: byTotal,
+    });
+    expect(fromAddress.sort).toBeNull();
+    expect(fromAddress.sortFromAddress).toBe(false);
+    expect(fromAddress.rejectedSort).toEqual({ ...byTotal, reason: 'mixed_units', units: ['PLN', 'EUR'] });
+    const unordered = buildDataModel({ response: comparison, fieldNames: ['supplierName', 'totalMinor', 'currency'] });
+    expect(fromAddress.records.map((r) => r.id)).toEqual(unordered.records.map((r) => r.id));
+    // And what the agent is told the view is doing is the order actually applied.
+    expect(
+      describeDataInstance({
+        instanceId: 'DataTable-mixed',
+        component: 'DataTable',
+        viewId: null,
+        source: { operation: 'procurement.comparison', input: { caseId } },
+        state: 'ready',
+        model: fromAddress,
+        actions: [],
+      }).sort,
+    ).toBeNull();
+
+    // Narrowed to one currency, the same order is a ranking and is applied.
+    const pln = [{ field: 'currency', op: 'eq' as const, value: 'PLN' }];
+    const ranked = buildDataModel({
+      response: comparison,
+      fieldNames: ['supplierName', 'totalMinor', 'currency'],
+      filter: pln,
+      addressSort: byTotal,
+    });
+    expect(ranked.rejectedSort).toBeNull();
+    expect(ranked.sort).toEqual(byTotal);
+    const totals = ranked.records.map((r) => r.totalMinor as number);
+    expect([...totals].sort((a, b) => b - a)).toEqual(totals);
+  });
+
   it('wykres: serie liczbowe w jednej jednostce, zakres jak w komorce tabeli', () => {
     const pln = [{ field: 'currency', op: 'eq' as const, value: 'PLN' }];
     const data = buildDataModel({ response: comparison, fieldNames: ['supplierName', 'totalMinor'], filter: pln });
@@ -810,6 +897,8 @@ describe('model komponentow danych', () => {
     const mixed = buildDataModel({ response: comparison, fieldNames: ['supplierName', 'totalMinor'] });
     expect(() => buildChartModel(mixed, 'supplierName', ['totalMinor'])).toThrowError(/laczy rozne jednostki/);
     expect(() => buildChartModel(mixed, 'totalMinor', ['supplierName'])).toThrowError(/nie jest liczbowe/);
+    // And neither can one ranking: the chart's rule and the order's are one rule.
+    expect(mixedUnits(mixed.records, mixed.descriptor.fields.find((x) => x.field === 'totalMinor')!)).toContain('EUR');
     expect(
       dataChartPropsSchema.safeParse({ source: { operation: 'x.y' }, kind: 'pie', x: 'a', series: ['b', 'c'] }).success,
     ).toBe(false);

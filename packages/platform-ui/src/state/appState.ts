@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type {
   AppContext,
   DataSort,
+  RejectedSort,
   UiRevealAdjustment,
   ViewFilterPredicate,
   ViewPage,
@@ -87,8 +88,8 @@ export interface ViewStateReport {
   sortLabel: string | null;
   /** True when the order is the address bar's rather than the composition's. */
   sortFromAddress: boolean;
-  /** An order the address asked for and the view set aside. */
-  rejectedSort: (DataSort & { reason: 'unknown_field' | 'not_sortable' }) | null;
+  /** An order the address asked for and the view set aside, and why. */
+  rejectedSort: RejectedSort | null;
   page: ViewPage | null;
   /** The page the address asked for when it did not exist (the nearest is shown). */
   clampedFrom: number | null;

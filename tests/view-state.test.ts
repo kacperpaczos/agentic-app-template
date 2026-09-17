@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   PLATFORM_CUSTOM_EVENTS,
+  REJECTED_SORT_FAILURES,
   UI_COMMAND_FAILURES,
   appContextSchema,
   checkSortField,
@@ -556,6 +557,41 @@ describe('ui_sort', () => {
       available: [],
     });
     expect(emitted).toHaveLength(0);
+  });
+
+  it('kolejnosc po polu w dwoch jednostkach: mixed_units z nazwami jednostek, nie not_applied', async () => {
+    /*
+     * The server cannot know this before asking: the unit of an amount lives on
+     * the record (`unitField`), so only the view with the rows in hand can say
+     * that no order over them is a ranking. What it says must reach the agent
+     * by name, with the units — "nothing applied it" would send it retrying.
+     */
+    const rejectedSort = { field: 'name', direction: 'asc' as const, reason: 'mixed_units' as const, units: ['PLN', 'EUR'] };
+    const { result } = await callTool(
+      'ui_sort',
+      { targetId: 'procurement.data', field: 'name' },
+      async (command, runtime) => {
+        runtime.acknowledgeUiCommand({
+          commandId: command.commandId,
+          targetId: command.targetId,
+          executed: false,
+          reason: REJECTED_SORT_FAILURES[rejectedSort.reason],
+          rejectedSort,
+          sorted: null,
+        });
+      },
+    );
+    expect(result).toMatchObject({ executed: false, reason: 'mixed_units', rejectedSort });
+    expect(result.sorted).toBeNull();
+    // One mapping for all three reasons a view may set an order aside.
+    expect(REJECTED_SORT_FAILURES).toEqual({
+      unknown_field: UI_COMMAND_FAILURES.unknownField,
+      not_sortable: UI_COMMAND_FAILURES.notSortable,
+      mixed_units: UI_COMMAND_FAILURES.mixedUnits,
+    });
+    const description = platformTools(h.platform.services).find((t) => t.name === 'ui_sort')!.description!;
+    expect(description).toContain('mixed_units');
+    expect(description).toContain('rejectedSort.units');
   });
 
   it('odmowa klienta (not_applied) jest raportowana, nie nadpisywana', async () => {

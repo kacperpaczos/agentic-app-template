@@ -1,6 +1,4 @@
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdirSync } from 'node:fs';
 import { expect, test } from './support/fixtures.ts';
 import { type Locator, type Page } from '@playwright/test';
 import {
@@ -17,6 +15,16 @@ import {
   toolResults,
   watchHighlights,
 } from './support/show-value-probe.ts';
+import {
+  RECORDED_LEDGER,
+  WORKING_LEDGER,
+  acceptancePreflight,
+  evidencePath,
+  readLedger as readTurnLedger,
+  runEvidenceDir,
+  writeEvidence,
+  writeLedger as writeTurnLedger,
+} from './support/model-turns.ts';
 
 /**
  * Proby odbiorowe T25, T26 i T27 — z prawdziwym modelem.
@@ -32,9 +40,13 @@ import {
  * right thing has to pass.
  *
  * This is the only suite besides `agent-ui.spec.ts` and `files-agent.spec.ts`
- * that spends subscription turns, so the budget is enforced in code
+ * that spends subscription turns, so nothing runs it by accident: the default
+ * `pnpm test:e2e` has no project that matches these three files at all, and
+ * reaching them takes an explicit `pnpm test:e2e:model`
+ * (`support/model-turns.ts`). Inside, the budget is enforced in code
  * (`MODEL_TURN_BUDGET`) rather than left to care: every command goes through
- * `sendForRun`, which counts it and refuses to send the thirteenth.
+ * `sendForRun`, which writes it down and refuses to send one over the
+ * ceiling.
  *
  * The negative controls of each proba that are *deterministic* are not repeated
  * here with model turns — they are established without a model in
@@ -68,71 +80,43 @@ const AGENT_TIMEOUT = 420_000;
  */
 const MODEL_TURN_BUDGET = 22;
 
-const EVIDENCE_DIR = resolve(process.cwd(), 'docs/evidence/bl01-bl02-2026-09-17');
-const CODE_COMMIT = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: process.cwd() }).toString().trim();
-
 /**
- * The turn ledger, kept on disk.
+ * The turn ledger and this run's evidence — both in `support/model-turns.ts`.
  *
- * The budget is for the whole task, not for one process: running T25 again
- * after fixing the test still costs a turn, and a counter that starts at zero
- * every invocation would hide exactly the spending the budget exists to
- * bound. So each command is written down before it is sent, with what it was
- * and which run it started, and the ledger is part of the evidence.
+ * Two files on purpose. The budget is for the plan, not for one process:
+ * running T25 again after fixing the test still costs a turn, and a counter
+ * starting at zero every invocation would hide exactly the spending the budget
+ * exists to bound. So the tally lives in the working copy
+ * ({@link WORKING_LEDGER}, gitignored) and is seeded once from the committed
+ * ledger of the closed grant ({@link RECORDED_LEDGER}), which this spec only
+ * ever reads. Everything this run produces lands under its own run stamp, so no
+ * verdict recorded by an earlier run can be overwritten by a later one — least
+ * of all by the `finally` blocks below, which write "niezaliczona" whenever a
+ * proba does not finish.
  */
-const LEDGER = resolve(EVIDENCE_DIR, 'tury-modelu.json');
-
-interface TurnLedger {
-  budzet: number;
-  wydane: number;
-  tury: Array<{ nr: number; o: string; proba: string; polecenie: string; runId?: string; etap?: string }>;
-}
 
 /** Which grant a turn is spent from; written next to every turn in the ledger. */
 const TURN_STAGE = process.env.APP_T8_STAGE ?? 'domkniecie-T27-krok-2-i-krok-6';
 
-function readLedger(): TurnLedger {
-  if (!existsSync(LEDGER)) return { budzet: MODEL_TURN_BUDGET, wydane: 0, tury: [] };
-  return JSON.parse(readFileSync(LEDGER, 'utf8')) as TurnLedger;
-}
-
-function writeLedger(ledger: TurnLedger): void {
-  mkdirSync(EVIDENCE_DIR, { recursive: true });
-  writeFileSync(LEDGER, `${JSON.stringify(ledger, null, 2)}\n`);
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Evidence                                                                  */
-/* -------------------------------------------------------------------------- */
+const readLedger = () => readTurnLedger(MODEL_TURN_BUDGET);
+const writeLedger = writeTurnLedger;
 
 /**
- * One file per proba, written whether it passed or not.
+ * Can this spec be paid for at all — asked once, before the first command.
  *
- * Deliberately assembled from named fields rather than from whole API objects:
- * a run record carries `claudeSessionId`, which is nobody's business outside
- * the machine it was made on.
+ * Decided here, at load, and not per test: the question is whether what is left
+ * covers the **whole** spec (`ACCEPTANCE_TEST_TURNS` in `support/model-turns.ts`,
+ * one entry per proba), so asking it again after T25 has spent its turn would
+ * skip the rest of a perfectly funded run. Without this, a tally of 21 against a
+ * ceiling of 22 lets T25 send a real command and then trips the per-command
+ * guard in T26 — a paid turn burned for nothing.
  */
-function writeEvidence(name: string, body: Record<string, unknown>): void {
-  mkdirSync(EVIDENCE_DIR, { recursive: true });
-  writeFileSync(
-    resolve(EVIDENCE_DIR, name),
-    `${JSON.stringify(
-      {
-        zapisano: new Date().toISOString(),
-        kodCommit: CODE_COMMIT,
-        zrodlo: 'prawdziwy model (subskrypcja Claude), instancja testowa suity przegladarkowej',
-        spec: 'e2e/bl01-bl02-model.spec.ts',
-        ...body,
-      },
-      null,
-      2,
-    )}\n`,
-  );
-}
+const preflight = acceptancePreflight(MODEL_TURN_BUDGET);
+let preflightAnnounced = false;
 
 const shot = async (page: Page, name: string) => {
-  mkdirSync(EVIDENCE_DIR, { recursive: true });
-  await page.screenshot({ path: resolve(EVIDENCE_DIR, name), fullPage: false });
+  mkdirSync(runEvidenceDir(), { recursive: true });
+  await page.screenshot({ path: evidencePath(name), fullPage: false });
 };
 
 /* -------------------------------------------------------------------------- */
@@ -497,6 +481,20 @@ async function changeUnitPrice(page: Page, table: Locator, recordId: string, typ
 
 test.describe('proby odbiorowe z prawdziwym modelem', () => {
   test.describe.configure({ timeout: AGENT_TIMEOUT });
+
+  /*
+   * The skip happens in `beforeEach`, so it is decided before a test body runs
+   * and therefore before anything reaches the composer. A skipped proba claims
+   * nothing: no turn is spent, no evidence is written, and the recorded
+   * verdicts of the run that did prove these criteria stay exactly as they are.
+   */
+  test.beforeEach(() => {
+    if (!preflight.ok && !preflightAnnounced) {
+      preflightAnnounced = true;
+      console.log(`[e2e] ${preflight.message}`);
+    }
+    test.skip(!preflight.ok, preflight.ok ? '' : preflight.message);
+  });
 
   test('T25 — pytanie o wartosc pola rekordu ukrytego zawezeniem konczy sie wskazaniem tego pola na ekranie', async ({
     page,
