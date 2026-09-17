@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { rowMatchesFilter } from '@platform/contracts';
+import { applyViewFilter } from '@platform/contracts';
 import type {
   ArtifactMeta,
   AuthStatus,
@@ -9,6 +9,7 @@ import type {
   CardSpec,
   StoredFile,
   UiTarget,
+  ViewDefinition,
 } from '@platform/contracts';
 import { accessScope, setAccessContext } from './accessContext.ts';
 import { apiDelete, apiGet, apiPatch, apiPost, ensureSession } from './client.ts';
@@ -39,8 +40,36 @@ export const qk = {
   artifact: (id: string) => ['artifact', accessScope(), id] as const,
   files: (scope?: string) => ['files', accessScope(), scope ?? 'all'] as const,
   module: (path: string) => ['module', accessScope(), path] as const,
+  /**
+   * One registered read with one input. The input is serialised with sorted
+   * keys, so `{a, b}` and `{b, a}` share a cache entry instead of racing.
+   */
+  read: (operation: string, input: unknown) =>
+    ['read', accessScope(), operation, stableJson(input ?? {})] as const,
   uiTargets: () => ['ui-targets', accessScope()] as const,
+  uiViews: () => ['ui-views', accessScope()] as const,
 };
+
+/** JSON with object keys in sorted order, for use in cache keys. */
+export function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) =>
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : v,
+  );
+}
+
+/**
+ * Marks every cached business read stale: module routes and registered reads.
+ *
+ * One function because the two must always move together — a mutation that
+ * refreshed a module screen but left a composed table on the same data showing
+ * the old rows would be two versions of one record on one screen.
+ */
+export function invalidateBusinessData(qc: QueryClient): void {
+  void qc.invalidateQueries({ queryKey: ['module'] });
+  void qc.invalidateQueries({ queryKey: ['read'] });
+}
 
 export interface PlatformStatus {
   auth: AuthStatus;
@@ -113,6 +142,15 @@ export const useUiTargets = () =>
     select: (d) => d.targets,
   });
 
+/** Module screens as compositions. Changes only when modules change. */
+export const useViewDefinitions = () =>
+  useQuery({
+    queryKey: qk.uiViews(),
+    queryFn: () => apiGet<{ views: ViewDefinition[] }>('/api/ui/views'),
+    staleTime: 5 * 60_000,
+    select: (d) => d.views,
+  });
+
 /**
  * A module view's data — narrowed, when the agent narrowed this view.
  *
@@ -156,11 +194,8 @@ export const useModuleData = <T>(moduleId: string, path: string, enabled = true)
        */
       return { data: query.data, outcome: null };
     }
-    const kept = rows.filter((row) => rowMatchesFilter(row, active.predicates));
-    return {
-      data: { ...source, [active.collection]: kept } as T,
-      outcome: { targetId: active.targetId, matched: kept.length, total: rows.length },
-    };
+    const { kept, outcome } = applyViewFilter(rows, active);
+    return { data: { ...source, [active.collection]: kept } as T, outcome };
   }, [active, query.data]);
 
   /*

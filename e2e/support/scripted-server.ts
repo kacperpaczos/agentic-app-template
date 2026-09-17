@@ -14,27 +14,9 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
-import type { ModelAgentLike } from '@platform/server';
+import { collectToolEntries, platformTools, type PlatformInstance } from '@platform/server';
 import { composeApp } from '../../apps/server/src/compose.ts';
-
-type Step =
-  | { kind: 'text'; text: string; delayMs?: number }
-  | { kind: 'tool'; name: string; input: unknown; result?: string; error?: string }
-  /** Time passing with nothing emitted — lets the browser settle and repaint. */
-  | { kind: 'wait'; delayMs: number }
-  /**
-   * Asks the browser to move the interface, through the real runtime gate, and
-   * records what the client reported back.
-   */
-  | {
-      kind: 'ui';
-      targetId: string;
-      spaceId?: string;
-      label?: string;
-      /** Narrowing to apply; `null` restores the full view. */
-      filter?: { predicates: Array<{ field: string; op: string; value: unknown }>; label: string } | null;
-    }
-  | { kind: 'fail'; message: string };
+import { scriptedAgent, type Step } from './scripted-agent.ts';
 
 /**
  * Scenarios the browser tests drive. Named so a spec reads as an intention
@@ -189,6 +171,16 @@ const SCENARIOS: Record<string, Step[]> = {
     { kind: 'ui', targetId: 'procurement.data', label: 'pelny widok', filter: null },
     { kind: 'text', text: 'Przywrocilem pelny widok.' },
   ],
+  /*
+   * A real tool call from the run: the handler of `ui_catalog` runs with the
+   * run's context and its actual answer reaches the chat, tool activity and
+   * text alike. Exercises the `call` step that later scenarios build on.
+   */
+  'call-ui-catalog': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'call', name: 'ui_catalog', maxChars: 4000 },
+    { kind: 'text', text: 'Odczytalem katalog.' },
+  ],
   'tool-error': [
     {
       kind: 'tool',
@@ -204,105 +196,6 @@ const SCENARIOS: Record<string, Step[]> = {
   ],
 };
 
-function scriptedAgent(steps: Step[]): ModelAgentLike {
-  const play = async (options: any) => {
-    const hooks = options?.sdkOptions?.hooks ?? {};
-    const fire = async (event: string, payload: Record<string, unknown>) => {
-      for (const group of hooks[event] ?? []) {
-        for (const hook of group.hooks ?? []) await hook({ hook_event_name: event, ...payload });
-      }
-    };
-    await fire('SessionStart', { session_id: 'sess_scripted' });
-
-    let seq = 0;
-    const emissions: Array<Record<string, unknown>> = [];
-    for (const step of steps) {
-      if (step.kind === 'tool') {
-        seq += 1;
-        const id = `tu_${seq}`;
-        await fire('PreToolUse', { tool_use_id: id, tool_name: step.name, tool_input: step.input });
-        if (step.error !== undefined) {
-          await fire('PostToolUseFailure', { tool_use_id: id, error: step.error });
-        } else {
-          await fire('PostToolUse', { tool_use_id: id, tool_response: step.result ?? 'ok' });
-        }
-      } else if (step.kind === 'text') {
-        emissions.push({ type: 'text-delta', payload: { text: step.text }, delayMs: step.delayMs ?? 0 });
-      } else if (step.kind === 'wait') {
-        emissions.push({ type: 'wait', delayMs: step.delayMs });
-      } else if (step.kind === 'ui') {
-        emissions.push({ type: 'ui', step });
-      } else {
-        emissions.push({ type: 'error', payload: { error: new Error(step.message) } });
-      }
-    }
-    await fire('Stop', { session_id: 'sess_scripted' });
-
-    /*
-     * Honours the abort signal, as the real SDK does. Without this a scripted
-     * run would ignore a cancellation and finish anyway — which would make a
-     * cancellation test measure nothing.
-     */
-    const signal: AbortSignal | undefined = options?.signal;
-    return {
-      fullStream: (async function* () {
-        for (const e of emissions) {
-          // Deltas are spaced out so the browser can observe growth, which is
-          // what a streaming assertion has to see.
-          if (e.delayMs) await new Promise((r) => setTimeout(r, e.delayMs as number));
-          if (signal?.aborted) throw signal.reason ?? new Error('run cancelled');
-          // A `wait` is elapsed time and nothing else — never an event.
-          if (e.type === 'wait') continue;
-          if (e.type === 'ui') {
-            /*
-             * The real gate: this resolves only when the browser acknowledges,
-             * or when the runtime times the command out. Whatever comes back is
-             * reported verbatim, so a scenario cannot claim a navigation the
-             * client did not perform.
-             */
-            const step = e.step as {
-              targetId: string;
-              spaceId?: string;
-              label?: string;
-              filter?: { predicates: unknown[]; label: string } | null;
-            };
-            const ctx = options?.toolContext;
-            let outcome: Record<string, unknown> = { executed: false, reason: 'no_tool_context' };
-            if (ctx?.requestUi) {
-              outcome = (await ctx.requestUi({
-                targetId: step.targetId,
-                spaceId: step.spaceId ?? null,
-                // `undefined` leaves any narrowing alone; `null` clears it.
-                ...(step.filter !== undefined
-                  ? {
-                      filter:
-                        step.filter === null
-                          ? null
-                          : { targetId: step.targetId, ...step.filter },
-                    }
-                  : {}),
-              })) as Record<string, unknown>;
-            }
-            const counted = outcome.filtered as { matched: number; total: number } | undefined;
-            yield {
-              type: 'text-delta',
-              payload: {
-                text:
-                  `[ui:${step.label ?? step.targetId}] executed=${outcome.executed} ` +
-                  `reason=${outcome.reason ?? '-'} ` +
-                  (counted ? `pokazane=${counted.matched}/${counted.total} ` : ''),
-              },
-            };
-            continue;
-          }
-          yield e;
-        }
-      })(),
-    };
-  };
-  return { stream: (_p, o) => play(o), resumeStream: (_i, o) => play(o) };
-}
-
 const scenario = process.env.SCRIPT ?? 'tool-then-text';
 const steps = SCENARIOS[scenario];
 if (!steps) {
@@ -310,7 +203,18 @@ if (!steps) {
   process.exit(2);
 }
 
-const platform = composeApp({ modelAgent: scriptedAgent(steps) });
+/*
+ * `call` steps run real tool handlers, so the agent needs the platform's tool
+ * list — which exists only once the platform does. Resolved lazily, when a step
+ * plays.
+ */
+let platform: PlatformInstance;
+platform = composeApp({
+  modelAgent: scriptedAgent(steps, {
+    tools: () =>
+      collectToolEntries({ registry: platform.registry, platformTools: platformTools(platform.services) }),
+  }),
+});
 const { app, config } = platform;
 
 const distDir = config.webDistDir ?? resolve(process.cwd(), 'apps/web/dist');

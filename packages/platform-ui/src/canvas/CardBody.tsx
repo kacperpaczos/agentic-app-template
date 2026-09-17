@@ -1,37 +1,23 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Renderer } from '@openuidev/react-lang';
 import type { CardSpec } from '@platform/contracts';
 import { useRegistry } from '../catalog/registry.tsx';
+import { RenderErrorBoundary } from '../components/RenderErrorBoundary.tsx';
 
 /**
  * One bad card must not take the canvas with it. A renderer that throws is
  * replaced by a readable failure inside its own frame; the rest of the
  * composition keeps working.
  */
-class CardErrorBoundary extends Component<
-  { children: ReactNode; label: string },
-  { message: string | null }
-> {
-  override state: { message: string | null } = { message: null };
-
-  static getDerivedStateFromError(error: unknown) {
-    return { message: error instanceof Error ? error.message : String(error) };
-  }
-
-  override componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('[card]', this.props.label, error, info.componentStack);
-  }
-
-  override render() {
-    if (this.state.message) {
-      return (
-        <div className="pf-state pf-state--error" role="alert">
-          Karta „{this.props.label}” nie mogla sie wyrenderowac: {this.state.message}
-        </div>
-      );
-    }
-    return this.props.children;
-  }
+function CardErrorBoundary({ children, label }: { children: ReactNode; label: string }) {
+  return (
+    <RenderErrorBoundary
+      label={label}
+      describe={(name, message) => `Karta „${name}” nie mogla sie wyrenderowac: ${message}`}
+    >
+      {children}
+    </RenderErrorBoundary>
+  );
 }
 
 /**

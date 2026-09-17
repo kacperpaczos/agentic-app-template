@@ -358,6 +358,17 @@ body {
 .pf-kv dt { color: var(--pf-muted); }
 .pf-kv dd { margin: 0; }
 
+/* ------------------------- composed views and data ------------------------ */
+
+.pf-composed-view { display: block; }
+.pf-data { margin: 0 0 16px; min-width: 0; }
+.pf-data__title { font-size: 14px; font-weight: 600; margin: 0 0 8px; }
+.pf-data__chart { width: 100%; min-height: 220px; }
+.pf-data__caption { color: var(--pf-muted); font-size: 12px; margin-top: 6px; }
+.pf-data__record + .pf-data__record { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pf-border); }
+/* dt/dd pairs are grouped for markup; the grid still lays them out as siblings. */
+.pf-data__pair { display: contents; }
+
 /* React Flow overrides: the node is our card, not a flow node. */
 .react-flow__node { padding: 0; border: none; background: transparent; border-radius: 0; width: auto; }
 .react-flow__node.selected .pf-card { border-color: var(--pf-accent); }

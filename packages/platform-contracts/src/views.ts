@@ -313,7 +313,7 @@ export const semanticInstanceSchema = z.object({
     )
     .max(60),
   /** Every predicate in force: the composition's own and the address bar's. */
-  filter: z.array(viewFilterPredicateSchema).max(16),
+  filter: z.array(viewFilterPredicateSchema).max(28),
   sort: dataSortSchema.nullable(),
   /** `index` counts from 1. Null when the instance does not paginate. */
   page: z

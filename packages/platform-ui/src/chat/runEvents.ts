@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { PLATFORM_CUSTOM_EVENTS, uiCommandSchema, type UiCommand } from '@platform/contracts';
-import { qk } from '../api/queries.ts';
+import { invalidateBusinessData, qk } from '../api/queries.ts';
 import { useAppState } from '../state/appState.ts';
 
 /**
@@ -113,7 +113,7 @@ export function applyRunEvent(
       // Final safety net: refresh anything the run might have touched without
       // announcing it. Cheap, and it guarantees the UI is never stale after a run.
       void ctx.qc.invalidateQueries({ queryKey: ['canvas'] });
-      void ctx.qc.invalidateQueries({ queryKey: ['module'] });
+      invalidateBusinessData(ctx.qc);
       void ctx.qc.invalidateQueries({ queryKey: ['artifacts'] });
       void ctx.qc.invalidateQueries({ queryKey: ['artifact'] });
       void ctx.qc.invalidateQueries({ queryKey: ['files'] });
@@ -132,11 +132,12 @@ export function applyRunEvent(
       break;
     }
     case PLATFORM_CUSTOM_EVENTS.dataChanged:
-      // Business data changed through a tool: refresh module reads, any canvas
-      // card that derives from them, and every open artifact — a live artifact
-      // re-runs its query on read, so invalidating it is what makes an open
-      // report reflect the mutation that just happened.
-      void ctx.qc.invalidateQueries({ queryKey: ['module'] });
+      // Business data changed through a tool: refresh module reads and
+      // registered reads (every data component), any canvas card that derives
+      // from them, and every open artifact — a live artifact re-runs its query
+      // on read, so invalidating it is what makes an open report reflect the
+      // mutation that just happened.
+      invalidateBusinessData(ctx.qc);
       void ctx.qc.invalidateQueries({ queryKey: ['canvas'] });
       void ctx.qc.invalidateQueries({ queryKey: ['artifact'] });
       break;

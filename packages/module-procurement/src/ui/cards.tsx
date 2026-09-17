@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { BarChart } from '@openuidev/react-ui';
-import { apiPatch, qk, useAppState, useModuleData, type CardComponent } from '@platform/ui';
+import { apiPatch, invalidateBusinessData, qk, useAppState, useModuleData, type CardComponent } from '@platform/ui';
 import {
   formatMinor,
   formatQuantity,
@@ -469,7 +469,7 @@ export const OfferItemFormCard: CardComponent = ({ cardId, props }) => {
       clearDraft(`item-${item?.id}`);
       setQuantity('');
       setUnitPrice('');
-      void qc.invalidateQueries({ queryKey: ['module'] });
+      invalidateBusinessData(qc);
       void qc.invalidateQueries({ queryKey: qk.spaces() });
     },
     onError: (e) => {
