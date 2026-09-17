@@ -1,0 +1,514 @@
+# Plan realizacji BL-01 i BL-02
+
+> Dokument roboczy architekta (koordynatora). Data: 2026-09-17. Gałąź integracyjna:
+> `bl01-bl02/integracja` (od `main` 7f569c0, kod d142b85).
+> **Wiążąca jest specyfikacja `docs/ARCHITECTURE.md`.** Ten plan jest jej argumentem: dzieli pracę,
+> ustala kontrakty między zadaniami i wymagane dowody. W sprzeczności rozstrzyga specyfikacja.
+
+## 0. Zakres i stan wyjściowy
+
+| Pakiet | Kryteria | Próba | Stan wyjściowy (docs/ACCEPTANCE.md) |
+|---|---|---|---|
+| BL-01 | L2.16, L2.17, L6.15, L6.16, L6.17 | T25, T26 | 3 niespełnione, 2 częściowe |
+| BL-02 | L3.14, L3.15, L3.16, L3.17, L3.18 | T27 | 2 niespełnione, 2 częściowe, 1 niesprawdzone |
+
+Przebieg bazowy na 7f569c0 (worktree integracyjny, 2026-09-17 15:39): `pnpm verify` exit 0,
+Vitest 23 pliki / 278 testów. Przed pracą przeczytaj treść swoich kryteriów w `docs/ARCHITECTURE.md`
+(sekcje warstw 2, 3, 6, „Interakcja agenta z aplikacją”, „Semantyczny interfejs i przestrzeń
+prezentacyjna agenta”, tabela prób T25–T27, „Jakość testów”) oraz ich wiersze w
+`docs/BACKLOG.md` (BL-01, BL-02). `AGENTS.md` obowiązuje w całości.
+
+## 1. Global Constraints (wiążą każde zadanie i każdy review)
+
+**G1. Instancja i dane użytkownika są nietykalne.**
+- Na tej maszynie działa instancja użytkownika: port **8791**, kod i dane w
+  `/home/paczos/Documents/AgenticApp`. Nie wykonuj tam żadnego polecenia, nie czytaj jej bazy,
+  nie wysyłaj żądań na 8791.
+- Nie wykonuj poleceń w `/home/paczos/Documents/agentic-app-template` (główny checkout) ani w
+  worktree innego zadania. Pracujesz **wyłącznie** w swoim worktree.
+- Powłoka narzędzia Bash wraca po każdym wywołaniu do `/home/paczos/Documents/AgenticApp`.
+  **Każde** polecenie zaczynaj od `cd <twój worktree> &&` albo używaj ścieżek bezwzględnych.
+  `pnpm build` uruchomiony w złym katalogu nadpisałby `dist/`, który serwuje instancja użytkownika.
+- Zakazane: `pnpm dev`, `pnpm acceptance`, `scripts/run-agent.mjs`, `pnpm reset`, `pkill`,
+  `killall`, `fuser -k`, zabijanie procesów po nazwie, czyszczenie portów, `git push`, operacje na
+  gałęziach innych niż własna, `git worktree remove`, zmiany w `~/.claude`.
+
+**G2. Git.** Commituj na swojej gałęzi, małymi commitami z opisem po polsku. Nie przepisuj historii
+opublikowanej przez innych, nie scalaj do `main`. Scalanie do gałęzi integracyjnej robi koordynator.
+
+**G3. Granica platforma–domena** (AGENTS.md): `packages/platform-*` bez importów `@module/*` i bez
+słownika domeny (`pnpm check:boundaries`). Brak funkcji platformy rozszerza się neutralnie domenowo w
+platformie; moduł dostarcza nazwy, pola, operacje i kompozycje. Moduły łączy tylko warstwa składania
+(`apps/server/src/compose.ts`, `apps/web/src/compose.tsx`, `apps/web/src/router.tsx`).
+
+**G4. Testy przeglądarkowe.**
+- Playwright uruchamiaj **wyłącznie** pod blokadą, wskazując pliki:
+  `cd <worktree> && flock -w 5400 /home/paczos/Documents/agentic-app-template-wt/.e2e.lock pnpm exec playwright test <pliki>`.
+  Pełnej suity (`pnpm test:e2e` bez plików) nie uruchamiasz — robi to koordynator.
+- Suita testuje build produkcyjny: przed e2e wykonaj `pnpm build` w swoim worktree.
+- Porty testowe 8792–8799 są przydzielone istniejącym specom. **Każdy nowy spec ze skryptowanym
+  modelem używa portu 8798** i własnego katalogu `.e2e-scripted-<nazwa>`, a instancję zatrzymuje w
+  `afterEach`/`afterAll`. Blokada gwarantuje, że dwa przebiegi nie działają jednocześnie.
+- Pliki specyfikacji z prawdziwym modelem (zużywają tury subskrypcji) pisze i uruchamia tylko
+  Zadanie 8. Pozostałe zadania nie uruchamiają `e2e/agent-ui.spec.ts` ani innych testów modelowych.
+
+**G5. Model.** Tylko subskrypcja Claude przez istniejący runtime. Zakaz klucza API, gatewaya, fallbacku.
+W zadaniach 1–7 zachowanie agenta dowodzi się skryptowanym modelem (`e2e/support/scripted-server.ts`)
+wywołującym **prawdziwe** handlery narzędzi — oznaczone w raporcie jako „test GUI bez modelu”
+albo „symulacja”, nigdy jako „rzeczywisty model”.
+
+**G6. Dowody** (AGENTS.md „Wymagane dowody”, ARCHITECTURE.md „Jakość testów”):
+- test GUI zaczyna się interakcją w GUI i kończy widocznym wynikiem; API może przygotować dane i
+  dodatkowo sprawdzić rezultat, ale nie zastępuje funkcji;
+- nowy obiekt (karta, widok) ma nowy identyfikator powiązany z badanym wykonaniem — zastany nie zalicza;
+- każda nowa funkcja krytyczna ma **kontrolę negatywną** z treści kryterium; dodatkowo w raporcie
+  opisz próbę zdolności wykrycia: na chwilę wycofaj kluczową linię poprawki (bez commitu), pokaż, że
+  test oblewa, przywróć — z poleceniem i wynikiem;
+- wartości na ekranie porównuje się z backendem (`/api/read`, trasy modułu), nigdy z tekstem modelu;
+- nieudane przebiegi zostają w raporcie z wyjaśnieniem.
+
+**G7. Zależności.** `pnpm install --frozen-lockfile`. Jedyna dopuszczona zmiana zależności:
+`@openuidev/lang-core@0.2.18` jako bezpośrednia zależność pakietu, który go importuje (wersja już
+jest w lockfile jako tranzytywna). Każda inna zmiana wymaga zgody koordynatora.
+
+**G8. Dokumenty prowadzi koordynator.** Nie edytuj `docs/ACCEPTANCE.md`, `docs/BACKLOG.md`,
+`docs/acceptance/assessment.json`, `FEEDBACK.md`, `README.md`, `docs/ARCHITECTURE.md`,
+`docs/NEW-APPLICATION.md`. Zamiast tego w raporcie zadania dodaj sekcję **„Kontrakt dla autora
+modułu”** (co moduł deklaruje, jakie są reguły i błędy). Komentarze w kodzie w dotychczasowym stylu
+repozytorium (angielskie, tłumaczące *dlaczego*), napisy UI po polsku jak w istniejącym kodzie.
+
+**G9. Kontrakty są jedne.** Typ TypeScript nie zastępuje walidacji w runtime. Schematy wystawiane
+modelowi: bez `z.record()`, `.optional()` zamiast `.default()` (strażnik `assertMcpCompatibleShape`).
+Nie duplikuj logiki (np. zawężania, formatowania, rozwiązywania operacji odczytu) — wydziel wspólną
+funkcję i użyj jej w obu miejscach.
+
+**G10. Bramka przed raportem DONE.** W swoim worktree: `pnpm verify` exit 0 oraz e2e plików
+dotkniętych zmianą i nowych (pod blokadą, po `pnpm build`). W raporcie: polecenia, kody wyjścia,
+liczby testów, lista uruchomionych speców, opis prób negatywnych.
+
+## 2. Decyzje architektoniczne
+
+**AD-1. Jeden runtime widoków dla widoków domyślnych i widoków agenta.** Robocze ekrany modułu są
+kompozycjami OpenUI Lang renderowanymi przez `Renderer` z `@openuidev/react-lang` na wspólnym
+katalogu (`registry.library`). Implementacja komponentów pozostaje w React. Powłoka, router i
+gotowy czat pozostają deterministycznym React (ARCHITECTURE.md, „Semantyczny interfejs…”).
+
+**AD-2. Dane wyłącznie przez deskryptor zarejestrowanego odczytu.** Komponenty danych dostają
+`source: { operation: "<modul>.<operacja>", input?: {...} }` — nazwę operacji z istniejącego
+rejestru `ModuleReadOperation` — nigdy wartości. Przeglądarka pobiera przez `POST /api/read`
+(właściciel z sesji, walidacja wejścia schematem operacji). Rozwiązywanie operacji jest jedną
+funkcją współdzieloną z artefaktami live. Cache TanStack Query: `['read', accessScope(), operation,
+stabilnyJSON(input)]`, unieważniany tam, gdzie dziś `['module']`.
+
+**AD-3. Deskryptor wyniku odczytu deklaruje moduł.** `ModuleReadOperation.result?:
+ReadResultDescriptor` = `{ collection?: string; record: { kind; idField; titleField? }; fields:
+RecordField[] }`, gdzie `RecordField = { field; label; type: 'text'|'number'|'money_minor'|
+'quantity_milli'|'date'|'boolean'|'enum'; unit?; unitField?; values?; sortable? }`. Deskryptor
+jest źródłem etykiet, formatowania, jednostek wykresu, dozwolonych pól sortowania, mapowania
+rekord–pole i walidacji kompozycji. Pole spoza deskryptora jest odrzucane z nazwą, nigdy zgadywane.
+Pola zawężania pozostają zadeklarowane w `UiTarget.filter` (istniejący kontrakt) i muszą należeć do
+deskryptora odczytu, z którego korzysta widok.
+
+**AD-4. Widoki modułu.** `ServerModule.views?: ViewDefinition[]`, `ViewDefinition = { id; title;
+composition: string /* OpenUI Lang */; params?: string[] }`. `id` widoku z własnym ekranem jest
+równy `id` jego `UiTarget`. Parametry trasy trafiają do kompozycji jako stan `$nazwa` (`initialState`
+Renderera). Serwer udostępnia `GET /api/ui/views`; przeglądarka renderuje `ComposedView`.
+
+**AD-5. Komponenty danych platformy** (neutralne domenowo, w katalogu OpenUI): `DataTable`,
+`DataChart`, `DataSummary`. Schematy propsów są w `@platform/contracts` (bez Reacta), żeby serwer
+mógł walidować kompozycje. Każdy wiersz/komórka niesie `data-record-kind`, `data-record-id`,
+`data-field`; korzeń instancji `data-ui-instance` i `data-component`. Każda zamontowana instancja
+zgłasza opis semantyczny do klienckiego rejestru `uiSemantics` (AD-7).
+
+**AD-6. Stan widoku w adresie.** Zawężenie (istniejące kodowanie `?pole=wartość`), sortowanie
+(`sort=pole` rosnąco, `sort=-pole` malejąco) i strona (`page=N`, od 1) dotyczą instancji głównej
+widoku z `UiTarget` i żyją w adresie. `sort` i `page` dołączają do kluczy zarezerwowanych.
+Kontrolki użytkownika i akcje agenta zmieniają ten sam adres; Wstecz cofa zmianę.
+`AppContext.filters` jest wypełniany z tego stanu w chwili wysłania polecenia.
+
+**AD-7. Semantyczny opis aktywnego UI.** Klient składa z rejestru `uiSemantics` wersjonowany
+snapshot (widok, wersja kompozycji, instancje, rekord–pole, filtry, sortowanie, strona, widoczne
+rekordy, dozwolone akcje), publikuje go do backendu (`PUT /api/ui/snapshot`), a narzędzie `ui_state`
+zwraca najnowszy snapshot klienta oglądającego rozmowę wykonania, z wersją i oceną świeżości.
+Potwierdzenie komendy UI niesie `uiVersion` snapshotu po jej wykonaniu. `AppContext.ui` niesie
+wersję z chwili wysłania polecenia.
+
+**AD-8. „Widoki agenta”.** Platformowa trasa `/agent-views`, pozycja nawigacji „Widoki agenta”, cel
+`platform.agentViews`. Każda rozmowa ma własną przestrzeń canvas o zakresie `conversation:<id>`;
+karty są kompozycjami `kind: 'openui'`. Narzędzia `agent_view_*` działają zawsze na przestrzeni
+rozmowy **wykonania** (nie aktywnego UI), więc zadanie w tle nie zmienia widoku innej rozmowy.
+Każda kompozycja OpenUI jest walidowana po stronie serwera parserem `@openuidev/lang-core`:
+nieznany komponent, niezarejestrowana operacja, niezgodne wejście i niezadeklarowane pole są
+odrzucane, a ostatnia poprawna wersja zostaje. W przestrzeni widoków agenta dozwolone są tylko
+komponenty danych, komponenty modułów i jawna lista komponentów układu/tekstu — komponenty
+przyjmujące wpisane przez model liczby (np. `Table`, `BarChart` z danymi literalnymi) są odrzucane.
+
+**AD-9. Interakcje przez te same operacje domenowe.** Deskryptor odczytu może zadeklarować akcje
+rekordu wskazujące narzędzie zapisu modułu. Platforma wykonuje je przez `POST /api/actions`
+(właściciel z sesji, ponowny odczyt rekordu, idempotencja, ten sam handler co MCP). Ten sam
+`DataTable` w widoku domyślnym i w widoku agenta wywołuje więc tę samą operację.
+
+## 3. Zadania, zależności i kolejność scalania
+
+```
+Fala 0:  Task 1 (fundament)
+Fala 1:  Task 2 (BL-01 stan widoku) | Task 3 (BL-01 opis UI) | Task 4 (BL-02 widoki agenta) | Task 5 (BL-02 ekrany modułu)
+Fala 2:  Task 6 (BL-01 wskazanie wartości) | Task 7 (BL-02 odświeżanie i interakcje)
+Fala 3:  Task 8 (próby z prawdziwym modelem T25–T27)
+```
+
+Każde zadanie startuje z bieżącej gałęzi integracyjnej po scaleniu fal wcześniejszych, we własnym
+worktree `/home/paczos/Documents/agentic-app-template-wt/<zadanie>` na gałęzi `bl01-bl02/<zadanie>`.
+
+---
+
+## Task 1: Fundament — widoki danych jako kompozycje OpenUI
+
+**Gałąź/worktree:** `t1-fundament`. **Kryteria:** fundament pod L3.14, L3.18, L2.17, L6.15 (samo w
+sobie nie zamyka żadnego). **Zależy od:** nic.
+
+**Cel.** Wprowadzić wspólne kontrakty i runtime AD-2…AD-5, przepiąć ekrany `/data` i `/cases` na
+kompozycje oraz przygotować szwy, na których zadania fali 1 pracują bez kolizji.
+
+**Musi:**
+1. **Kontrakty** — nowy plik `packages/platform-contracts/src/views.ts` (eksport z indeksu):
+   `FIELD_TYPES`, `recordFieldSchema`, `readResultDescriptorSchema`, `dataSourceSchema`
+   (`input` jako `z.looseObject({}).optional()`), `viewDefinitionSchema`, schematy propsów
+   `dataTablePropsSchema` (`source`, `columns?: string[]`, `title?`, `pageSize?` 1–200,
+   `filter?: ViewFilterPredicate[]`, `sort?: {field, direction: 'asc'|'desc'}`),
+   `dataChartPropsSchema` (`source`, `kind: 'bar'|'line'|'pie'`, `x`, `series: string[]`, `title?`,
+   `filter?`, `sort?`), `dataSummaryPropsSchema` (`source`, `fields: string[]`, `title?`),
+   `semanticInstanceSchema` (`instanceId`, `component`, `viewId|null`, `source`,
+   `record {kind, idField}`, `fields [{field,label,type,unit?}]`, `filter`, `sort|null`,
+   `page {index,size,count}|null`, `visibleRecordIds` ≤ 50, `matched`, `total`, `actions: string[]`).
+   W `module.ts`: `ModuleReadOperation.result?`, `ServerModule.views?`.
+2. **Serwer:**
+   - jedna funkcja rozwiązująca operację odczytu (nazwa → rejestr → walidacja wejścia → uruchomienie z
+     właścicielem), używana przez `ArtifactService.resolveLive`/`assertLiveSourceIsResolvable` i przez
+     nowe `POST /api/read` → `{ operation, result, descriptor, resolvedAt }`; błędy przez `AppError`
+     (nieznana operacja z listą dostępnych, `validation_failed`, `forbidden`/`not_found` z serwisu);
+   - `GET /api/read/operations` (nazwa kwalifikowana, opis, klucze wejścia, deskryptor) i
+     `GET /api/ui/views`;
+   - rejestr modułów: unikalne `id` widoków; przy starcie odmowa, gdy `UiTarget.filter.fields` celu
+     mającego widok nie należą do deskryptora odczytu tego widoku (moduł wskazuje go w definicji
+     widoku albo test jednostkowy wykazuje zgodność — wybierz jedno i uzasadnij);
+   - **szew narzędzi:** podziel `agent/platform-tools.ts` na katalog `agent/tools/` (`context.ts`,
+     `canvas.ts`, `ui.ts`, `files.ts`, `artifacts.ts`, `index.ts` składający `platformTools`) bez
+     zmiany zachowania, nazw ani kolejności narzędzi;
+   - prompt: sekcja operacji odczytu wypisuje także pola deskryptora (jedno miejsce).
+3. **Moduł procurement:** operacje odczytu `suppliers` i `cases` z deskryptorami (`supplier`/`case`),
+   deskryptory dla istniejących `comparison` i `case_overview` tam, gdzie wynik ma kolekcję rekordów;
+   `views` dla `procurement.data` i `procurement.cases` (kompozycje z `DataTable`). Trasy HTTP modułu
+   zostają.
+4. **UI platformy** (`packages/platform-ui/src/views/`):
+   - `useReadOperation(source, opts)` + `qk.read`; `['read']` unieważniane wszędzie tam, gdzie
+     `['module']` (m.in. `chat/runEvents.ts`);
+   - `DataTable`, `DataChart`, `DataSummary` zarejestrowane w katalogu OpenUI (wspólna biblioteka
+     dla widoków, kart `openui` i czatu); formatowanie wg typu pola (kwoty w groszach z walutą z
+     `unitField`, ilości w tysięcznych, daty) jako jedna funkcja; rozróżnione stany ładowania,
+     pusty, błąd, brak dostępu; atrybuty AD-5;
+   - `DataChart` na gotowych wykresach `@openuidev/react-ui`; dostępny podpis (`figcaption` lub
+     równoważny) z nazwami serii, jednostką i zakresem min–max wartości;
+   - rejestr `state/uiSemantics.ts` (rejestracja/wyrejestrowanie opisu instancji, odczyt listy) i
+     hook `useDescribeInstance` wołany przez komponenty danych — bez publikowania do backendu;
+   - zawężenie z adresu w `DataTable` będącym instancją główną widoku z `UiTarget.filter`: ta sama
+     semantyka i ten sam raport `reportFilterOutcome` co dziś w `useModuleData` — logika zawężania
+     wydzielona do wspólnej funkcji (G9);
+   - `ComposedView { viewId, params? }` z `data-testid="composed-view"` i `data-view-id`, ze stanami
+     ładowania, błędu i nieznanego widoku; ekrany `CasesPage` i `DataPage` renderują go, zachowując
+     `data-testid="cases-page"`/`"data-page"`.
+5. **Szew testów skryptowanych** w `e2e/support/scripted-server.ts`: krok `call` `{ name, input }`
+   wywołujący **prawdziwy** handler narzędzia platformy lub modułu z kontekstem wykonania, odpalający
+   hooki Pre/PostToolUse z rzeczywistym wynikiem i emitujący `[call:<nazwa>] <wynik JSON, skrócony>`.
+
+**Poza zakresem:** sortowanie, paginacja, kontrolki filtra (Task 2); publikacja snapshotu (Task 3);
+walidacja OpenUI (Task 4); ekrany szczegółów (Task 5).
+
+**Testy i dowody (minimum):**
+- Vitest `tests/views-foundation.test.ts`: `/api/read` — sukces z deskryptorem, nieznana operacja,
+  złe wejście, zasób innego właściciela; `/api/ui/views`; zgodność pól `UiTarget.filter` z deskryptorem
+  (z próbą negatywną: pole spoza deskryptora odrzucone przy starcie); formatowanie typów pól;
+  artefakty live nadal działają przez wspólną funkcję (istniejące testy zielone);
+  `tests/mcp-schema.test.ts` i testy narzędzi zielone po podziale.
+- E2E (bez modelu, instancja wspólna): nowy `e2e/composed-views.spec.ts` — `/data` i `/cases`
+  renderowane przez `composed-view`, wartości komórek równe `POST /api/read`, atrybuty rekord–pole
+  obecne; karta `openui` z nieistniejącą operacją pokazuje stan błędu, nie puste pole.
+- Istniejące `e2e/view-filter.spec.ts`, `e2e/app.spec.ts`, `e2e/ui-navigation.spec.ts` zielone.
+  Wolno zmienić wyłącznie selektory, nie asercje.
+
+---
+
+## Task 2: BL-01 — sortowanie, paginacja, kontrolki filtra i stan widoku w kontekście agenta
+
+**Gałąź/worktree:** `t2-stan-widoku`. **Kryteria:** **L2.17**; wkład do L6.17 (stan po akcji w
+kontekście), T26. **Zależy od:** Task 1.
+
+**Musi:**
+1. Stan widoku w adresie wg AD-6 dla instancji głównej `DataTable`: sortowanie wg typu pola
+   (liczby/kwoty liczbowo, daty chronologicznie, tekst `localeCompare('pl')`, puste na końcu),
+   strona z `pageSize`, reset strony przy zmianie filtra lub sortowania, strona spoza zakresu
+   przycinana i raportowana. Rozszerzona odmowa kluczy zarezerwowanych (`c`, `s`, `sort`, `page`).
+2. **Kontrolki użytkownika:** nagłówki sortowalnych kolumn jako przyciski z `aria-sort`, pasek
+   zawężenia z polami dla pól `UiTarget.filter` (lista wyboru dla `values`, pole tekstowe dla
+   pozostałych — `contains`), wyczyszczenie, paginacja „Poprzednia/Następna, strona X z Y”. Obsługa z
+   klawiatury, etykiety, widoczny fokus. Każda zmiana to nawigacja (Wstecz cofa). Pasek nad widokiem
+   opisuje też sortowanie i stronę.
+3. **Akcje agenta:** `uiCommandSchema.sort` (`{field, direction}` | `null` = wyczyść) i
+   `UiCommandResult.sorted?`, `page?`; narzędzie `ui_sort` w `agent/tools/ui-sort.ts`
+   (`targetId`, `field?`, `direction?`, `clear?`, `reason?`), odmowy po nazwie z listą dozwolonych
+   (`unknown_field` albo nowy kod `not_sortable`), `not_applied`, gdy żadna instancja nie zastosowała
+   sortowania; `ui_catalog` zwraca `sortableFields`. Wynik `ui_filter` niesie informację o stronie.
+4. **Kontekst:** stan aktywnego widoku trafia do `useAppState` i `toAppContext().filters =
+   { [targetId]: { predicates, sort, page, matched, total } }` w chwili wysłania; `get_context` i prompt
+   pokazują go; prompt uczy `ui_sort` i mówi, że filtr/sortowanie zmieniają prezentację, nie dane.
+
+**Poza zakresem:** snapshot i wersjonowanie (Task 3), odsłanianie rekordu (Task 6).
+
+**Testy i dowody (minimum):**
+- Vitest: kodowanie/dekodowanie `sort`/`page`, klucze zarezerwowane, porządek wg typów, matematyka
+  stron, mapowanie do `AppContext.filters`, odmowy `ui_sort`.
+- E2E skryptowane (port 8798, `.e2e-scripted-viewstate`): (a) agent ustawia zawężenie i sortowanie →
+  kolejność wierszy zgodna z posortowanymi danymi z `/api/read`, kontrolki pokazują stan
+  (`aria-sort`, wartości pól), adres zawiera parametry, **dane backendu niezmienione** (porównanie
+  przed/po); (b) użytkownik zmienia pole zawężenia w kontrolce → wiersze, adres i pasek; (c)
+  paginacja z więcej niż jedną stroną (test dopisuje rekordy do **własnej** bazy przed startem
+  instancji) i Wstecz; (d) kolejne polecenie wysłane z GUI niesie w `app_context` wykonania
+  (`GET /api/conversations/:id/runs` lub przechwycone żądanie) zawężenie i sortowanie; (e) negatywne:
+  niezadeklarowane pole sortowania odrzucone i widok nietknięty; zawężenie do zera wierszy pokazuje
+  stan pusty „0 z N”, nie błąd; wyczyszczenie przywraca pełny zakres i stronę 1.
+- `e2e/view-filter.spec.ts` i `e2e/composed-views.spec.ts` zielone.
+
+---
+
+## Task 3: BL-01 — semantyczny opis aktywnego UI i świeżość kontekstu
+
+**Gałąź/worktree:** `t3-opis-ui`. **Kryteria:** **L6.15**, **L6.17**. **Zależy od:** Task 1.
+
+**Musi:**
+1. Kontrakt `uiSnapshotSchema` (w `views.ts` albo osobnym pliku kontraktów) z limitami: `version`
+   (monotoniczna w obrębie klienta), `clientId`, `capturedAt`, `conversationId`, `spaceId`, `url`,
+   `view {id, title, compositionVersion}|null` (hash źródła kompozycji dla widoków modułu,
+   `specVersion` dla kart), `cards` aktywnej przestrzeni (`cardId`, `title`, komponent lub `openui`,
+   `specVersion`), `instances: SemanticInstance[]` (≤ 30), `actions` dozwolone na widoku.
+2. Klient: budowa snapshotu z `uiSemantics` i stanu powłoki; nowa wersja tylko przy istotnej zmianie;
+   `UiSnapshotPublisher` w powłoce publikuje z opóźnieniem (debounce) `PUT /api/ui/snapshot`;
+   `clientId` na kartę przeglądarki; `UiCommandRunner` przed wysłaniem potwierdzenia wymusza publikację
+   i dołącza `uiVersion`. `toAppContext().ui = { version, clientId, viewId, url }`
+   (`appContextSchema.ui` nullable z domyślnym `null`).
+3. Serwer: `services/ui-snapshots.ts` (pamięć procesu; klucz właściciel + `clientId`; indeks rozmowa →
+   najnowszy klient), `PUT /api/ui/snapshot` (walidacja, właściciel z sesji, limit rozmiaru),
+   `GET /api/ui/snapshot?conversationId=` (diagnostyka i testy, tylko własne).
+4. Narzędzie `ui_state` (`agent/tools/ui-state.ts`, `effect: 'read'`, `alwaysLoad`): wejście
+   `minVersion?`, `waitMs?` ≤ 5000; wynik `{ snapshot|null, version, capturedAt, ageMs, stale,
+   reason?: 'no_client'|'older_than_requested'|'other_conversation' }`; snapshot tylko od klienta,
+   którego aktywna rozmowa to rozmowa wykonania. Prompt: po `ui_navigate`/`ui_filter`/`ui_sort` odczytaj
+   `ui_state` z `minVersion` z wyniku, zanim opiszesz ekran; porównuj wersję z `AppContext.ui.version`.
+
+**Poza zakresem:** zmiany `DataTable` inne niż wymagane do opisu (stan sortowania i strony dostarcza
+Task 2 przez ten sam rejestr); odsłanianie wartości (Task 6).
+
+**Testy i dowody (minimum):**
+- Vitest: limity schematu, monotoniczność wersji, izolacja właścicieli (drugi właściciel nie czyta),
+  `other_conversation`, `minVersion` z oczekiwaniem i przekroczeniem czasu (`stale: true`),
+  `AppContext.ui` w wykonaniu.
+- E2E skryptowane (port 8798, `.e2e-scripted-uistate`): (a) wejście użytkownika na zawężony link
+  `/data?country=PL` → snapshot zawiera widok `procurement.data`, instancję `DataTable`, pola z
+  etykietami, predykaty i widoczne identyfikatory równe rekordom z `/api/read` po zawężeniu; (b)
+  wykonanie: `ui_filter` przez prawdziwy gate, potem krok `call` `ui_state` z `minVersion` =
+  `uiVersion` potwierdzenia → wynik ma nowszą wersję i nowy filtr; (c) negatywne: `minVersion` wyższe
+  niż jakakolwiek publikacja → `stale: true`; wykonanie rozmowy A, gdy przeglądarka pokazuje B →
+  `other_conversation`; kolejne polecenie niesie `AppContext.ui.version` równe wersji z chwili wysłania.
+
+---
+
+## Task 4: BL-02 — przestrzeń „Widoki agenta”, walidacja kompozycji i narzędzia
+
+**Gałąź/worktree:** `t4-widoki-agenta`. **Kryteria:** **L3.15**, **L3.16**, **L3.17**, część
+agentowa **L3.14**; wkład do L3.3, L3.12. **Zależy od:** Task 1.
+
+**Musi:**
+1. **Walidator** `packages/platform-server/src/registry/openui-validation.ts` na `@openuidev/lang-core`:
+   parsuje źródło, zbiera wywołania komponentów i ich argumenty; odrzuca nieznane komponenty, błędy
+   składni i źródła częściowe, komponenty danych z niezarejestrowaną operacją lub wejściem
+   niezgodnym ze schematem, pola (`columns`, `x`, `series`, `fields`, `filter.field`, `sort.field`,
+   `groupBy`) spoza deskryptora oraz serie nienumeryczne. Tryb `agent-views` z jawną listą
+   dozwolonych komponentów (AD-8). Używany przez `ComponentCatalog.validate` dla każdej karty `openui`
+   (nieznany komponent zawsze odrzucony) i przy starcie dla `ServerModule.views` (niepoprawny widok
+   modułu zatrzymuje start z czytelnym błędem). Serwerowa lista komponentów zgodna z biblioteką
+   przeglądarki — test zgodności nazw.
+2. **Przestrzeń rozmowy:** `canvas.ensureScopedSpace` z zakresem `conversation:<id>`; usunięcie
+   rozmowy usuwa jej przestrzeń widoków (bez osieroconych rekordów).
+3. **Narzędzia** `agent/tools/agent-views.ts`: `agent_views_list`, `agent_view_create {title, source,
+   operationId?}`, `agent_view_update {cardId, source? | patch?, title?, expectedSpecVersion?,
+   operationId?}` (patch = instrukcje OpenUI Lang scalane z istniejącą kompozycją przez
+   `mergeStatements`, pozostałe instrukcje bez zmian), `agent_view_remove {cardId}`. Zawsze przestrzeń
+   rozmowy wykonania; karta innej rozmowy lub właściciela odrzucona; emisja `canvas_changed`.
+4. **Komponenty:** `DataTable.groupBy?` (grupy z nagłówkami, liczność) i przełączanie
+   `DataChart.kind` — oba jako zmiana kompozycji; stan użytkownika w karcie (np. rozwinięcia, geometria)
+   przeżywa zmianę treści.
+5. **UI:** strona `AgentViewsPage` (platform-ui) na `/agent-views` (router w warstwie składania),
+   pozycja „Widoki agenta” w menu platformy, cel `platform.agentViews`; pokazuje przestrzeń aktywnej
+   rozmowy (z `c`), **bez zmiany** roboczej przestrzeni użytkownika (`s`); stany: brak rozmowy, brak
+   widoków, błąd; kompozycje przeżywają przeładowanie i przełączenie rozmowy.
+6. **Prompt:** kiedy tworzyć/zmieniać widok agenta, dobór formy do intencji bez nazwy komponentu od
+   użytkownika, wyłącznie komponenty danych z operacjami i polami z listy, zmiana istniejącego widoku
+   przez `patch`, zakaz wpisywania wartości, jawne ujawnienie ograniczenia katalogu, brak samowolnej
+   nawigacji.
+
+**Poza zakresem:** akcje rekordu i dowód odświeżania po mutacji (Task 7); ekrany szczegółów modułu
+(Task 5).
+
+**Testy i dowody (minimum):**
+- Vitest walidatora i narzędzi: każdy rodzaj odrzucenia z komunikatem, poprawne przyjęte, patch
+  zachowuje inne instrukcje, zakres rozmowy i właściciela, usunięcie rozmowy, start z niepoprawnym
+  widokiem modułu odrzucony.
+- E2E skryptowane (port 8798, `.e2e-scripted-agentviews`): wykonanie woła prawdziwe
+  `agent_view_create` (tabela z `procurement.comparison`) i drugi raz (wykres) → w „Widoki agenta”
+  (otwartych z nawigacji) widać nowe karty o identyfikatorach zwróconych w tym wykonaniu; wartości
+  równe `/api/read`; podpis wykresu (serie, jednostka, zakres) zgodny z backendem; `agent_view_update`
+  z patchem zmienia grupowanie/typ, druga karta i zmieniona przez użytkownika geometria bez zmian;
+  przeładowanie i przełączenie rozmów odtwarzają kompozycje właściwej rozmowy. Negatywne: nieznany
+  komponent odrzucony i poprzednia wersja widoczna; wykres z literalnymi liczbami odrzucony;
+  niezarejestrowana operacja odrzucona; wykonanie rozmowy A tworzy widok, gdy użytkownik jest w B —
+  adres i ekran B bez zmian, widok A nie pojawia się w B.
+
+---
+
+## Task 5: BL-02 — ekrany szczegółów modułu jako kompozycje
+
+**Gałąź/worktree:** `t5-ekrany-modulu`. **Kryteria:** część „widoki domyślne” **L3.14**; wkład do
+L2.1. **Zależy od:** Task 1.
+
+**Musi:**
+1. `/cases/$caseId` i `/items/$itemId` jako `ViewDefinition` z `params` (`$caseId`, `$itemId`),
+   renderowane przez `ComposedView`; ustawianie zasobu i przestrzeni przy otwarciu sprawy zostaje w
+   deterministycznym opakowaniu trasy.
+2. Części tabelaryczne jako `DataTable` na nowych odczytach z deskryptorami, w tym
+   `procurement.case_offer_items` (rekord `offer_item`, `idField` pozycji, pola: dostawca, nazwa,
+   jednostka, ilość `quantity_milli`, cena jednostkowa `money_minor` z walutą, waluta). Części
+   nietabelaryczne jako komponenty OpenUI modułu (`defineComponent`, typowane propsy).
+3. Zachowane `data-testid` (`case-detail-page`, `provenance-page`), linki i teksty, na których opierają
+   się istniejące testy; wszystkie wartości z backendu.
+
+**Poza zakresem:** karty canvasu sprawy (pozostają specyfikacjami `component`), akcje rekordu (Task 7).
+
+**Testy i dowody (minimum):** Vitest nowych odczytów (właściciel, brak rekordu, deskryptor);
+e2e: rozszerzenie `e2e/composed-views.spec.ts` o oba ekrany (wartości równe backendowi, `data-view-id`,
+brak rekordu → stan „nie istnieje”); `e2e/app.spec.ts` i `e2e/session-restore.spec.ts` zielone.
+
+---
+
+## Task 6: BL-01 — wskazanie wartości pola rekordu
+
+**Gałąź/worktree:** `t6-wskazanie-wartosci`. **Kryteria:** **L2.16**, **L6.16**; T25.
+**Zależy od:** Task 2, Task 3, Task 4 (parser kompozycji), Task 5 (widoki szczegółów jako kandydaci).
+
+**Musi:**
+1. Narzędzie `ui_show_value` (`agent/tools/ui-show-value.ts`): wejście `{ recordKind, recordId,
+   field, targetId?, reason? }`. Serwer wyznacza kandydatów: widoki modułów i karty widoków agenta
+   rozmowy, których kompozycja ma instancję danych z `record.kind = recordKind` i renderowanym polem.
+   Wyniki rozróżnione: `unknown_field`, `no_renderer` (brak kandydata), `ambiguous` (więcej niż jeden
+   kandydat bez `targetId`, z listą), `record_not_found`, `forbidden`, a po stronie klienta
+   `inactive_conversation`, `not_present`, `no_client`.
+2. Wartość backendu z odczytu kandydata (właściciel z sesji) **przed** komendą UI. Wynik narzędzia
+   rozróżnia `found` (backend) od `shown` (potwierdzenie klienta) i podaje `matchesBackend`.
+3. Klient: nawigacja do widoku, a gdy rekord ukrywa zawężenie lub paginacja — jawna zmiana prezentacji
+   (wyczyszczenie lub zmiana zawężenia, przejście na stronę) przez ten sam adres co Task 2, zgłoszona w
+   `adjustments`; przewinięcie i czasowe podświetlenie komórki `[data-record-kind][data-record-id]
+   [data-field]`; potwierdzenie `{ executed, revealed: { recordKind, recordId, field, displayedText,
+   rawValue, page, adjustments } }` i `uiVersion`. Dane biznesowe niezmienione.
+4. Prompt: pytanie o wartość pola rekordu → wyszukanie rekordu narzędziem modułu, potem
+   `ui_show_value`; odpowiedź tylko o tym, co potwierdził klient.
+
+**Testy i dowody (minimum):**
+- Vitest: wyznaczanie kandydatów 0/1/wiele, `unknown_field`, `record_not_found`, `forbidden` (drugi
+  właściciel), `no_renderer` (pole nierenderowane), porównanie z backendem.
+- E2E skryptowane (port 8798, `.e2e-scripted-showvalue`): rekord na drugiej stronie i ukryty zawężeniem
+  → otwarty właściwy widok, zawężenie jawnie zmienione (pasek), właściwa strona, podświetlona komórka
+  o właściwych atrybutach, `rawValue` = `/api/read`, snapshot `ui_state` z nową wersją. Negatywne:
+  błędny identyfikator → `record_not_found` i ekran bez zmian; niejednoznaczność; brak dostępu;
+  **kontrola detektora T25:** wykonanie, które odpowiada tylko tekstem, nie spełnia asercji próby.
+
+---
+
+## Task 7: BL-02 — odświeżanie po mutacji i interakcje widoków agenta
+
+**Gałąź/worktree:** `t7-interakcje`. **Kryteria:** **L3.18**. **Zależy od:** Task 4, Task 5.
+
+**Musi:**
+1. Kontrakt akcji rekordu w deskryptorze odczytu (AD-9): `actions?: [{ id, label, tool, input:
+   mapowanie kluczy wejścia narzędzia na `$record.<pole>` lub pole formularza, form?: [{ key, label,
+   type }] }]` — narzędzie musi być narzędziem zapisu tego modułu (sprawdzane przy starcie).
+2. `POST /api/actions { operation, action, recordId, values, operationId }`: właściciel z sesji,
+   ponowny odczyt rekordu przez odczyt operacji, budowa wejścia, wywołanie handlera narzędzia przez
+   rejestr (ten sam co MCP), idempotencja, odpowiedź ze zmienionymi zasobami; klient unieważnia
+   `['read']` i `['module']`.
+3. `DataTable` renderuje akcje rekordu (przycisk + mały formularz, dostępne z klawiatury) tak samo w
+   widoku domyślnym i w widoku agenta; błąd pokazany, a nieaktualne dane nie udają świeżych.
+4. Procurement: akcja zmiany ceny jednostkowej na `procurement.case_offer_items` przez istniejące
+   narzędzie aktualizacji pozycji oferty.
+
+**Testy i dowody (minimum):**
+- Vitest `/api/actions`: sukces zmienia dane, idempotencja, walidacja, rekord innego właściciela
+  odrzucony bez zmian, akcja wskazująca narzędzie odczytu lub obce odrzucona przy starcie.
+- E2E skryptowane (port 8798, `.e2e-scripted-interactions`): widok agenta (utworzony prawdziwym
+  narzędziem) z tabelą i wykresem nad danymi sprawy; (a) zmiana ceny akcją w widoku domyślnym →
+  tabela i wykres widoku agenta pokazują nowe wartości bez przeładowania; (b) zmiana przez narzędzie
+  MCP w wykonaniu (krok `call`) → oba widoki odświeżone; (c) akcja w widoku agenta → ta sama zmiana w
+  backendzie i w widoku domyślnym. Negatywne: akcja na rekordzie drugiego właściciela odrzucona i
+  dane bez zmian; nieudane odświeżenie pokazuje błąd, nie stare wartości.
+
+---
+
+## Task 8: Próby odbiorowe z prawdziwym modelem — T25, T26, T27
+
+**Gałąź/worktree:** `t8-proby-model`. **Kryteria:** dowody „rzeczywisty model” dla BL-01 i BL-02.
+**Zależy od:** Task 1–7 scalone.
+
+**Musi:**
+1. Spec `e2e/bl01-bl02-model.spec.ts` na instancji wspólnej (prawdziwy model), start z GUI
+   (kompozytor), asercje wyłącznie na DOM, adresie, potwierdzeniach UI, snapshotach i danych backendu —
+   nigdy na brzmieniu odpowiedzi.
+   - **T25:** pytanie o wartość pola rekordu spoza bieżącego widoku i ukrytego zawężeniem → właściwy
+     widok, podświetlone właściwe pole, `revealed` zgodne z backendem, nowa wersja `ui_state`.
+   - **T26:** polecenie zawężenia i sortowania → kontrolki i wiersze zgodne; kolejne pytanie w tej
+     samej rozmowie korzysta z zawężenia (wykonanie ma je w `app_context`; model wywołuje `ui_state`
+     lub odpowiada o zawężonym zbiorze); usunięcie zawężenia przywraca pełny zakres; dane backendu bez
+     zmian.
+   - **T27:** otwarcie „Widoki agenta”, zestawienie bez nazwy komponentu, dodanie wykresu, zmiana
+     zakresu rozmową, mutacja danych, przeładowanie → nowe identyfikatory z tego wykonania, wartości
+     równe backendowi, pozostałe karty zachowane, odświeżenie po mutacji.
+2. Kontrole negatywne na poziomie próby: odpowiedź tekstowa bez wskazania pola nie zalicza T25;
+   zmiana danych zamiast filtra oblewa T26; zastana karta i wartości niezgodne z backendem oblewają
+   T27. Kontrole deterministyczne z zadań 2–7 wskazane w raporcie.
+3. Budżet: najwyżej 12 tur modelu łącznie z powtórzeniami; każdy przebieg (także nieudany) zapisany w
+   `docs/evidence/bl01-bl02-2026-09-17/` (JSON z identyfikatorami wykonań, wersją kodu, wynikiem,
+   zrzuty) bez sekretów.
+
+---
+
+## 4. Mapa styków (pre-flight) i reguły scalania
+
+| Para | Wspólny plik / interfejs | Producent → konsument | Ryzyko i reguła |
+|---|---|---|---|
+| T1 → wszystkie | `views.ts`, `agent/tools/*`, `DataTable`, `uiSemantics`, `useReadOperation`, krok `call` | T1 produkuje | Kontrakty zamrożone po scaleniu T1; zmiana wymaga zgody koordynatora. |
+| T2 × T3 | `UiCommandRunner.perform`, `appState.toAppContext`, `prompt.ts`, scenariusze skryptowane, powłoka | T2: stan widoku i sort; T3: snapshot i `uiVersion` | T3 czyta stan tylko z `uiSemantics`, nie z wnętrza `DataTable`. Konflikty tekstowe rozwiązuje koordynator przy scaleniu. |
+| T2 × T4 | `DataTable` | T2: sort/strona; T4: `groupBy` | T4 dodaje grupowanie jako wydzieloną funkcję i minimalne wpięcie w render. |
+| T4 × T5 | `ServerModule.views`, router | T4: walidacja widoków przy starcie; T5: nowe widoki | Po scaleniu obu `pnpm verify` musi przejść — kompozycje T5 muszą przejść walidator T4. |
+| T6 ← T2, T3, T4, T5 | adres strony/filtra, `uiVersion`, parser kompozycji, widoki szczegółów | konsument | Fala 2 startuje po scaleniu całej fali 1. |
+| T7 ← T4, T5 | narzędzia widoków agenta, `procurement.case_offer_items` | konsument | Jw. |
+| T8 ← wszystkie | całość | konsument | Po scaleniu fali 2 i przeglądzie. |
+
+Scalanie: gałąź zadania po pozytywnym review → `git merge --no-ff` do `bl01-bl02/integracja` →
+`pnpm verify` na gałęzi integracyjnej. Konflikt nietrywialny: implementator zadania scala gałąź
+integracyjną do swojej, rozwiązuje, ponawia bramkę G10, a zakres scalenia przechodzi review.
+
+## 5. Odbiór przez koordynatora (po Task 8)
+
+1. Przegląd całej gałęzi (najmocniejszy model) z listą odroczonych uwag z ledgera.
+2. Niezależna weryfikacja w **świeżym** worktree gałęzi integracyjnej: `pnpm install
+   --frozen-lockfile`, `pnpm verify`, pełne `pnpm test:e2e` (pod blokadą), `pnpm check:module-swap`,
+   start produkcyjny na porcie testowym; porównanie stanu instancji użytkownika z zapisem bazowym.
+3. Ocena kryteriów wyłącznie na podstawie dowodów z tego kodu → `assessment.json`,
+   `pnpm acceptance:render`, `FEEDBACK.md`, `NEW-APPLICATION.md`, `README.md` (jeśli dotyczy),
+   raport architekta w `docs/RAPORT-ARCHITEKTA-BL01-BL02.md`.
