@@ -22,6 +22,8 @@ export function useDataModel<T>(
   error: unknown;
   /** Last response, when there is one — its descriptor describes a failed composition too. */
   response: ReadResponse | null;
+  /** The response shown is being read again; false while nothing is shown or the read failed. */
+  refreshing: boolean;
 } {
   const read = useReadOperation(source);
 
@@ -37,9 +39,10 @@ export function useDataModel<T>(
 
   const response = read.data ?? null;
   if (read.error) {
-    return { state: isAccessFailure(read.error) ? 'forbidden' : 'error', model: null, error: read.error, response };
+    const state = isAccessFailure(read.error) ? 'forbidden' : 'error';
+    return { state, model: null, error: read.error, response, refreshing: false };
   }
-  if (built.error) return { state: 'error', model: null, error: built.error, response };
-  if (!built.model) return { state: 'loading', model: null, error: null, response };
-  return { state: 'ready', model: built.model, error: null, response };
+  if (built.error) return { state: 'error', model: null, error: built.error, response, refreshing: false };
+  if (!built.model) return { state: 'loading', model: null, error: null, response, refreshing: false };
+  return { state: 'ready', model: built.model, error: null, response, refreshing: read.isFetching };
 }

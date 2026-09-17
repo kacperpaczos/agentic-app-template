@@ -1,6 +1,7 @@
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { AppError, type ModuleToolDefinition, type ToolCallContext } from '@platform/contracts';
 import type { ServerModuleRegistry } from '../registry/modules.ts';
+import { executeTool } from '../registry/tool-execution.ts';
 
 export interface McpHostTool {
   /** Name inside the MCP server. */
@@ -54,30 +55,20 @@ export type ToolInvocationResult = {
 };
 
 /**
- * Runs one tool call: validate the arguments against the tool's schema, call
- * its handler with the run's context, and turn the outcome into an MCP result.
+ * Runs one tool call for the MCP server: the shared {@link executeTool}, with
+ * the outcome turned into an MCP result.
  *
- * The only way a tool is executed, whoever asks — the MCP server the model
- * talks to, or a scripted stand-in in a test — so a test that calls a tool
- * exercises the validation and error mapping the model gets, not a copy.
+ * The error mapping the model sees is here; the validation and the handler are
+ * the ones every other caller uses, so a test that calls a tool exercises what
+ * the model gets, not a copy.
  */
 export async function invokeTool(
   entry: Pick<ToolEntry, 'localName' | 'def'>,
   args: unknown,
   ctx: ToolCallContext,
 ): Promise<ToolInvocationResult> {
-  const { localName, def } = entry;
   try {
-    const parsed = def.inputSchema.safeParse(args ?? {});
-    if (!parsed.success) {
-      throw new AppError('validation_failed', `Nieprawidlowe wejscie narzedzia ${localName}.`, {
-        issues: parsed.error.issues.map((i) => ({
-          path: i.path.join('.'),
-          message: i.message,
-        })),
-      });
-    }
-    const result = await def.handler(parsed.data as never, ctx);
+    const result = await executeTool(entry, args, ctx);
     return {
       content: [{ type: 'text' as const, text: JSON.stringify(result ?? null) }],
     };

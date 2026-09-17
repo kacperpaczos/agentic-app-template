@@ -31,7 +31,13 @@ async function readBackend(request: APIRequestContext, operation: string, input?
  * Every row and every shown cell equals the backend record, in the backend's
  * order, addressed by record kind, record id and field — not by position.
  */
-async function expectTableMatchesBackend(table: Locator, backend: ReadResponse, columns: string[]) {
+async function expectTableMatchesBackend(
+  table: Locator,
+  backend: ReadResponse,
+  columns: string[],
+  /** Header cells after the fields', e.g. the column of the read's record actions. */
+  extraHeaders: string[] = [],
+) {
   const descriptor = backend.descriptor!;
   const records = recordsOf(backend.result, descriptor);
   expect(records.length).toBeGreaterThan(0);
@@ -41,9 +47,10 @@ async function expectTableMatchesBackend(table: Locator, backend: ReadResponse, 
   expect(await rows.evaluateAll((trs) => trs.map((tr) => tr.getAttribute('data-record-id')))).toEqual(
     records.map((r) => String(r[descriptor.record.idField])),
   );
-  expect(await table.locator('thead th').evaluateAll((ths) => ths.map((th) => th.textContent))).toEqual(
-    columns.map((c) => descriptor.fields.find((f) => f.field === c)!.label),
-  );
+  expect(await table.locator('thead th').evaluateAll((ths) => ths.map((th) => th.textContent))).toEqual([
+    ...columns.map((c) => descriptor.fields.find((f) => f.field === c)!.label),
+    ...extraHeaders,
+  ]);
 
   for (const record of records) {
     const id = String(record[descriptor.record.idField]);
@@ -314,14 +321,13 @@ test.describe('ekrany szczegolow modulu: sprawa i pochodzenie pozycji', () => {
     const items = await readBackend(request, 'procurement.case_offer_items', { caseId });
     const itemsTable = view.locator('[data-operation="procurement.case_offer_items"][data-component="DataTable"]');
     await expect(itemsTable).toHaveAttribute('data-state', 'ready');
-    await expectTableMatchesBackend(itemsTable, items, [
-      'supplierName',
-      'name',
-      'unit',
-      'quantityMilli',
-      'unitPriceMinor',
-      'currency',
-    ]);
+    // The read declares a record action, so the table has its column too (L3.18).
+    await expectTableMatchesBackend(
+      itemsTable,
+      items,
+      ['supplierName', 'name', 'unit', 'quantityMilli', 'unitPriceMinor', 'currency'],
+      ['Akcje'],
+    );
 
     // The non-tabular part (CaseOfferSources) still carries the exact link text
     // and download links the rest of the suite (e2e/app.spec.ts) depends on.

@@ -239,6 +239,57 @@ describe('DataTable ze stronami i stanem widoku', () => {
   });
 });
 
+describe('DataTable z akcjami rekordu', () => {
+  const withActions: ReadResponse = {
+    ...response(2),
+    descriptor: {
+      ...descriptor,
+      actions: [
+        {
+          id: 'set_total',
+          label: 'Zmien sume',
+          tool: 'save',
+          input: [
+            { key: 'id', from: '$record.id' },
+            { key: 'total', from: '$form.total' },
+          ],
+          form: [{ key: 'total', label: 'Nowa suma', type: 'money_minor' }],
+        },
+      ],
+    },
+  };
+
+  it('kazdy wiersz ma przycisk akcji nazwany rekordem, opis wymienia action:<id>', () => {
+    const { description, html } = render(DataTableView, { source, columns: ['name', 'total'] }, { data: withActions });
+    expect(description.state).toBe('ready');
+    expect(description.actions).toContain('action:set_total');
+    expect(html).toContain('<th scope="col" class="pf-table__actions">Akcje</th>');
+    for (const [id, name] of [['t0', 'n0'], ['t1', 'n1']]) {
+      expect(html).toMatch(
+        new RegExp(
+          `<tr data-record-kind="thing" data-record-id="${id}">.*?<td class="pf-table__actions"><div class="pf-record-action__buttons">` +
+            `<button type="button" class="pf-btn pf-btn--tiny" data-record-action="set_total" aria-label="Zmien sume: ${name}">Zmien sume</button>`,
+        ),
+      );
+    }
+    // Value cells keep their attributes; the actions cell is not a field.
+    expect((html.match(/data-field=/g) ?? []).length).toBe(2 * 2 + 2);
+    // Not refreshing: nothing claims the rows are being re-read.
+    expect(html).not.toContain('data-refreshing');
+
+    // Grouped, the group heading spans the actions column too.
+    const grouped = render(DataTableView, { source, columns: ['name', 'total'], groupBy: 'currency' }, { data: withActions });
+    expect(grouped.html).toContain('<th colSpan="3" scope="rowgroup">');
+  });
+
+  it('tabela odczytu bez akcji nie ma kolumny akcji ani action:* w opisie', () => {
+    const { description, html } = render(DataTableView, { source, columns: ['name'] }, { data: response(2) });
+    expect(html).not.toContain('Akcje');
+    expect(html).not.toContain('data-record-action');
+    expect(description.actions.filter((a) => a.startsWith('action:'))).toEqual([]);
+  });
+});
+
 describe('DataChart', () => {
   it('odrzucona seria nieliczbowa: blad z przyczyna', () => {
     const { description } = render(

@@ -28,7 +28,7 @@ export function DataChartView(props: DataChartProps) {
   const instanceId = useInstanceId('DataChart');
   const view = useComposedView();
 
-  const { state, model, error, response } = useDataModel(
+  const { state, model, error, response, refreshing } = useDataModel(
     props.source,
     (response) => {
       const data = buildDataModel({
@@ -66,6 +66,7 @@ export function DataChartView(props: DataChartProps) {
     operation: props.source.operation,
     title: props.title,
     as: 'figure' as const,
+    refreshing,
   };
   const heading = props.title ? <div className="pf-data__title">{props.title}</div> : null;
 

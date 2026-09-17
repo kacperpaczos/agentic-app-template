@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { applyViewFilter } from '@platform/contracts';
+import { applyViewFilter, stableJson } from '@platform/contracts';
 import type {
   ArtifactMeta,
   AuthStatus,
@@ -61,14 +61,8 @@ export const qk = {
   uiViews: () => ['ui-views', accessScope()] as const,
 };
 
-/** JSON with object keys in sorted order, for use in cache keys. */
-export function stableJson(value: unknown): string {
-  return JSON.stringify(value, (_key, v: unknown) =>
-    v && typeof v === 'object' && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
-      : v,
-  );
-}
+/** JSON with object keys in sorted order, for use in cache keys (shared with the server). */
+export { stableJson };
 
 /**
  * Marks every cached business read stale: module routes and registered reads.
@@ -80,6 +74,22 @@ export function stableJson(value: unknown): string {
 export function invalidateBusinessData(qc: QueryClient): void {
   void qc.invalidateQueries({ queryKey: ['module'] });
   void qc.invalidateQueries({ queryKey: ['read'] });
+}
+
+/**
+ * Business data changed — announced by a tool during a run (`data_changed`) or
+ * saved by a record action the user performed: every module read and
+ * registered read is stale, and so is every open artifact, because a live
+ * artifact re-runs its read when it is shown.
+ *
+ * Deliberately not `['canvas']`: a change of business data changes no card. A
+ * run's event refreshes the canvas as well, for cards a tool may have changed
+ * without saying so — but doing that after a record action would re-render the
+ * card the user is acting in and take their open form with it.
+ */
+export function invalidateChangedData(qc: QueryClient): void {
+  invalidateBusinessData(qc);
+  void qc.invalidateQueries({ queryKey: ['artifact'] });
 }
 
 export interface PlatformStatus {
