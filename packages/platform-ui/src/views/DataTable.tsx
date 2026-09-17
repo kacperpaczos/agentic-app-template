@@ -15,6 +15,7 @@ import { useAppState } from '../state/appState.ts';
 import { useDescribeInstance } from '../state/uiSemantics.ts';
 import { useActiveViewFilter } from '../state/viewFilter.ts';
 import { DataFrame, EmptyBody, FailureBody, LoadingBody } from './DataFrame.tsx';
+import { withGrouping } from './grouping.ts';
 import { buildDataModel, describeDataInstance } from './model.ts';
 import { useDataModel } from './useDataModel.ts';
 import { useComposedView, useInstanceId } from './viewContext.ts';
@@ -51,15 +52,18 @@ export function DataTableView(props: DataTableProps) {
   const { state, model, error, response } = useDataModel(
     props.source,
     (response) =>
-      buildDataModel({
-        response,
-        fieldNames: props.columns,
-        filter: props.filter,
-        sort: props.sort,
-        narrowing,
-      }),
+      withGrouping(
+        buildDataModel({
+          response,
+          fieldNames: props.columns,
+          filter: props.filter,
+          sort: props.sort,
+          narrowing,
+        }),
+        props.groupBy,
+      ),
     // The renderer re-evaluates props on every render; compare them by value.
-    [JSON.stringify([props.columns, props.filter, props.sort]), narrowing],
+    [JSON.stringify([props.columns, props.filter, props.sort, props.groupBy]), narrowing],
   );
 
   const outcome = model?.outcome ?? null;
@@ -108,6 +112,33 @@ export function DataTableView(props: DataTableProps) {
   const { descriptor } = model;
   const linkField = linkColumn(descriptor, model.fields);
 
+  const renderRow = (record: DataRecord, index: number) => {
+    const id = recordIdOf(record, descriptor);
+    return (
+      <tr
+        key={id ?? `row-${index}`}
+        data-record-kind={descriptor.record.kind}
+        data-record-id={id ?? undefined}
+      >
+        {model.fields.map((f) => (
+          <td
+            key={f.field}
+            className={isNumericField(f) ? 'pf-num' : undefined}
+            data-record-kind={descriptor.record.kind}
+            data-record-id={id ?? undefined}
+            data-field={f.field}
+          >
+            {f.field === linkField ? (
+              <RecordLink record={record} descriptor={descriptor} field={f} id={id} />
+            ) : (
+              formatFieldValue(record, f)
+            )}
+          </td>
+        ))}
+      </tr>
+    );
+  };
+
   return (
     <DataFrame {...frame} state="ready">
       <table className="pf-table">
@@ -120,34 +151,27 @@ export function DataTableView(props: DataTableProps) {
             ))}
           </tr>
         </thead>
-        <tbody>
-          {model.records.map((record, index) => {
-            const id = recordIdOf(record, descriptor);
-            return (
-              <tr
-                key={id ?? `row-${index}`}
-                data-record-kind={descriptor.record.kind}
-                data-record-id={id ?? undefined}
-              >
-                {model.fields.map((f) => (
-                  <td
-                    key={f.field}
-                    className={isNumericField(f) ? 'pf-num' : undefined}
-                    data-record-kind={descriptor.record.kind}
-                    data-record-id={id ?? undefined}
-                    data-field={f.field}
-                  >
-                    {f.field === linkField ? (
-                      <RecordLink record={record} descriptor={descriptor} field={f} id={id} />
-                    ) : (
-                      formatFieldValue(record, f)
-                    )}
-                  </td>
-                ))}
+        {model.grouping ? (
+          /*
+           * One body per group, headed by the value and its count. The rows are
+           * the same rows as ungrouped — same attributes, same cells.
+           */
+          model.grouping.groups.map((group) => (
+            <tbody key={group.key} data-group-field={model.grouping!.field.field} data-group-key={group.key}>
+              <tr className="pf-table__group">
+                <th colSpan={model.fields.length} scope="rowgroup">
+                  {model.grouping!.field.label}: {group.label}{' '}
+                  <span className="pf-muted" data-group-count={group.records.length}>
+                    ({group.records.length})
+                  </span>
+                </th>
               </tr>
-            );
-          })}
-        </tbody>
+              {group.records.map((record, index) => renderRow(record, index))}
+            </tbody>
+          ))
+        ) : (
+          <tbody>{model.records.map((record, index) => renderRow(record, index))}</tbody>
+        )}
       </table>
     </DataFrame>
   );

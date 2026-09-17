@@ -369,6 +369,16 @@ body {
 /* dt/dd pairs are grouped for markup; the grid still lays them out as siblings. */
 .pf-data__pair { display: contents; }
 
+/* A grouped table: one heading row per group. */
+.pf-table__group th { background: #f1f5f9; color: var(--pf-text); font-size: 12px; text-transform: none; letter-spacing: 0; }
+
+/* Agent views: page header over a canvas filling the rest of the work surface. */
+.pf-agent-views { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.pf-agent-views__head { padding: 16px 20px 0; }
+.pf-agent-views__head h1 { font-size: 20px; margin: 0 0 4px; }
+.pf-agent-views > .pf-state { margin: 0 20px; }
+.pf-agent-views__canvas { flex: 1; min-height: 420px; position: relative; border-top: 1px solid var(--pf-border); }
+
 /* React Flow overrides: the node is our card, not a flow node. */
 .react-flow__node { padding: 0; border: none; background: transparent; border-radius: 0; width: auto; }
 .react-flow__node.selected .pf-card { border-color: var(--pf-accent); }

@@ -6,6 +6,7 @@ import {
   retainSearchParams,
 } from '@tanstack/react-router';
 import {
+  AgentViewsPage,
   AppShell,
   CanvasHost,
   FilesPage,
@@ -100,6 +101,12 @@ const spacesRoute = createRoute({
   component: WorkspacePage,
 });
 
+const agentViewsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/agent-views',
+  component: AgentViewsPage,
+});
+
 const filesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/files',
@@ -141,6 +148,7 @@ const itemProvenanceRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   canvasRoute,
   spacesRoute,
+  agentViewsRoute,
   filesRoute,
   settingsRoute,
   casesRoute,
