@@ -3,10 +3,12 @@ import {
   SEMANTIC_ERROR_MESSAGE_LIMIT,
   SEMANTIC_VISIBLE_RECORDS_LIMIT,
   applyViewFilter,
+  checkSortField,
   fieldUnitOf,
   formatFieldValue,
   isNumericField,
   numericFieldValue,
+  pageSlice,
   pickFields,
   recordIdOf,
   recordsOf,
@@ -16,6 +18,7 @@ import {
   type DataRecord,
   type DataSort,
   type DataSource,
+  type PageSlice,
   type ReadResponse,
   type ReadResultDescriptor,
   type RecordField,
@@ -41,14 +44,26 @@ export interface DataModel {
   descriptor: ReadResultDescriptor;
   /** Fields as the component renders them, in order. */
   fields: RecordField[];
-  /** Records after every predicate and the order. */
+  /** Records after every predicate and the order — all of them, on every page. */
   records: DataRecord[];
+  /** Records on the page shown; `records` itself when the component does not page. */
+  shown: DataRecord[];
   /** Records the read returned. */
   total: number;
+  /** Records left after the composition's own filter, before the address bar's narrowing. */
+  baseCount: number;
   /** Every predicate applied: the composition's, then the address bar's. */
   predicates: ViewFilterPredicate[];
   /** Set when the address bar's narrowing was applied, for the banner and the agent. */
   outcome: ViewFilterOutcome | null;
+  /** Order in force: the address bar's when it names a sortable field, else the composition's. */
+  sort: DataSort | null;
+  /** True when `sort` came from the address bar. */
+  sortFromAddress: boolean;
+  /** An order the address asked for and the view set aside, and why. */
+  rejectedSort: (DataSort & { reason: 'unknown_field' | 'not_sortable' }) | null;
+  /** The page shown, when the component pages its records. */
+  page: PageSlice | null;
 }
 
 export function buildDataModel(input: {
@@ -56,9 +71,16 @@ export function buildDataModel(input: {
   /** Fields to render; absent means every declared field. */
   fieldNames?: readonly string[];
   filter?: readonly ViewFilterPredicate[];
+  /** The composition's own order. */
   sort?: DataSort;
   /** The view's own narrowing from the address bar, for its primary instance only. */
   narrowing?: { targetId: string; predicates: ViewFilterPredicate[] } | null;
+  /** The view's order from the address bar, for its primary instance only; overrides `sort`. */
+  addressSort?: DataSort | null;
+  /** Records per page; absent means one unbroken list. */
+  pageSize?: number;
+  /** Page asked for, from 1; null or absent means the first. */
+  page?: number | null;
 }): DataModel {
   const { response } = input;
   const descriptor = response.descriptor;
@@ -72,10 +94,24 @@ export function buildDataModel(input: {
   const fields = pickFields(descriptor, input.fieldNames ?? descriptor.fields.map((f) => f.field));
   const composed = [...(input.filter ?? [])];
   pickFields(descriptor, composed.map((p) => p.field));
-  if (input.sort) pickFields(descriptor, [input.sort.field]);
+  if (input.sort) {
+    // The composition's own order is part of the composition: a field it may
+    // not use is refused like a misnamed column, not quietly ignored.
+    pickFields(descriptor, [input.sort.field]);
+    const check = checkSortField(descriptor, input.sort.field);
+    if (!check.ok) {
+      throw new AppError(
+        'validation_failed',
+        `Pole ${input.sort.field} jest oznaczone jako niesortowalne. ` +
+          `Mozna sortowac po: ${check.available.map((f) => f.field).join(', ') || '(brak pol)'}.`,
+        { reason: check.reason, available: check.available.map((f) => f.field) },
+      );
+    }
+  }
 
   const all = recordsOf(response.result, descriptor);
   let records = composed.length ? all.filter((r) => rowMatchesFilter(r, composed)) : all;
+  const baseCount = records.length;
 
   let outcome: ViewFilterOutcome | null = null;
   const predicates = [...composed];
@@ -86,9 +122,43 @@ export function buildDataModel(input: {
     predicates.push(...input.narrowing.predicates);
   }
 
-  if (input.sort) records = sortRecords(records, input.sort, descriptor);
+  /*
+   * The address bar's order wins over the composition's. One naming a field the
+   * read does not declare, or declares unsortable — a hand-edited link — is set
+   * aside and reported, rather than obeyed or turned into an error screen: the
+   * records are still worth showing, in the view's own order.
+   */
+  let sort: DataSort | null = input.sort ?? null;
+  let sortFromAddress = false;
+  let rejectedSort: DataModel['rejectedSort'] = null;
+  if (input.addressSort) {
+    const check = checkSortField(descriptor, input.addressSort.field);
+    if (check.ok) {
+      sort = input.addressSort;
+      sortFromAddress = true;
+    } else {
+      rejectedSort = { ...input.addressSort, reason: check.reason };
+    }
+  }
+  if (sort) records = sortRecords(records, sort, descriptor);
 
-  return { descriptor, fields, records, total: all.length, predicates, outcome };
+  const page = input.pageSize ? pageSlice(records.length, input.pageSize, input.page ?? null) : null;
+  const shown = page ? records.slice(page.start, page.end) : records;
+
+  return {
+    descriptor,
+    fields,
+    records,
+    shown,
+    total: all.length,
+    baseCount,
+    predicates,
+    outcome,
+    sort,
+    sortFromAddress,
+    rejectedSort,
+    page,
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -256,14 +326,19 @@ export function describeDataInstance(input: {
   const { model } = input;
 
   if (model && (input.state === 'ready' || input.state === 'empty')) {
+    // Only the page on screen is drawn; `matched` still counts every page.
     const drawn =
       input.state !== 'ready'
         ? []
         : input.visibleLimit !== undefined
-          ? model.records.slice(0, input.visibleLimit)
-          : model.records;
+          ? model.shown.slice(0, input.visibleLimit)
+          : model.shown;
     return {
       ...base,
+      // What the model applied, not what was asked for: an order the address
+      // named and the view set aside is not the order on screen.
+      sort: model.sort,
+      page: model.page ? { index: model.page.index, size: model.page.size, count: model.page.count } : null,
       error: null,
       record: { kind: model.descriptor.record.kind, idField: model.descriptor.record.idField },
       fields: model.fields.map((f) => {

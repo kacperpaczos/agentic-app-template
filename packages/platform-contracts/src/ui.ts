@@ -145,6 +145,32 @@ export function rowMatchesPredicate(row: unknown, predicate: ViewFilterPredicate
   }
 }
 
+/**
+ * Ordering a view: one declared field, one direction.
+ *
+ * Beside the narrowing because it is the same kind of thing — a state of the
+ * presentation, never of the data — and because a composition's own order
+ * (`DataTable(..., sort)`), the address bar and the agent's `ui_sort` all speak
+ * this one contract.
+ */
+export const dataSortSchema = z.object({
+  field: z
+    .string()
+    .min(1)
+    .max(80)
+    .describe('Nazwa pola rekordu zadeklarowanego w deskryptorze operacji odczytu'),
+  direction: z.enum(['asc', 'desc']).describe('asc rosnaco, desc malejaco'),
+});
+export type DataSort = z.infer<typeof dataSortSchema>;
+
+/** Which page of a view is on screen. `index` counts from 1; `count` is the number of pages. */
+export const viewPageSchema = z.object({
+  index: z.number().int().min(1),
+  size: z.number().int().min(1),
+  count: z.number().int().min(0),
+});
+export type ViewPage = z.infer<typeof viewPageSchema>;
+
 /** Every predicate must hold — narrowing is conjunctive, as a user expects. */
 export function rowMatchesFilter(row: unknown, predicates: ViewFilterPredicate[]): boolean {
   return predicates.every((p) => rowMatchesPredicate(row, p));
@@ -176,14 +202,21 @@ export function applyViewFilter<T>(
 /*  Narrowing in the address bar                                              */
 /* -------------------------------------------------------------------------- */
 
+/** Address-bar key of a view's order: `sort=name` ascending, `sort=-name` descending. */
+export const VIEW_SORT_SEARCH_KEY = 'sort';
+/** Address-bar key of a view's page, counted from 1: `page=2`. */
+export const VIEW_PAGE_SEARCH_KEY = 'page';
+
 /**
- * Search-parameter keys the session owns; a filterable field may not use them.
+ * Search-parameter keys a filterable field may not use.
  *
  * `c` is the conversation and `s` the workspace. They are retained across every
  * navigation, so a field of the same name would be carried onto screens it means
- * nothing on — and would fight the session for the same key.
+ * nothing on — and would fight the session for the same key. `sort` and `page`
+ * are the view's own order and page: a field of that name would be read as both
+ * a narrowing and an order, and neither reading would be right.
  */
-export const RESERVED_SEARCH_KEYS = ['c', 's'] as const;
+export const RESERVED_SEARCH_KEYS = ['c', 's', VIEW_SORT_SEARCH_KEY, VIEW_PAGE_SEARCH_KEY] as const;
 
 /**
  * A narrowing lives in the URL, one parameter per field: `?country=PL&name=~av`.
@@ -299,6 +332,11 @@ export const uiCommandSchema = z.object({
    * agent puts a view back the way it found it. Leaving it out changes nothing.
    */
   filter: viewFilterSchema.nullable().optional(),
+  /**
+   * Order to put the target view in. As with `filter`, `null` means *put the
+   * view back in its own order* and leaving it out changes nothing.
+   */
+  sort: dataSortSchema.nullable().optional(),
   /** Why the agent is doing it, shown to the user. */
   reason: z.string().max(200).optional(),
 });
@@ -325,6 +363,18 @@ export const UI_COMMAND_FAILURES = {
   notFilterable: 'not_filterable',
   /** A property the view does not declare. Refused by name, never guessed. */
   unknownField: 'unknown_field',
+  /**
+   * The view cannot be ordered by this: the field is declared but marked
+   * `sortable: false`, or the target has no view whose records could be ordered.
+   */
+  notSortable: 'not_sortable',
+  /**
+   * The client could not load the view definitions it needs to tell whether
+   * the target's view can apply the change and report it. Nothing was done;
+   * asking again may succeed. Never reported as a refusal of the field or as a
+   * success nobody checked.
+   */
+  viewsUnavailable: 'views_unavailable',
   /**
    * The narrowing was accepted but no view reported applying it.
    *
@@ -354,5 +404,12 @@ export const uiCommandResultSchema = z.object({
    * acknowledgement is that it means "the user is looking at it".
    */
   filtered: z.object({ matched: z.number(), total: z.number() }).optional(),
+  /**
+   * The order the view reports being in after the command — `null` for the
+   * read's own order. Reported by the view, for the same reason as `filtered`.
+   */
+  sorted: dataSortSchema.nullable().optional(),
+  /** The page on screen after the command, when the view pages its records. */
+  page: viewPageSchema.optional(),
 });
 export type UiCommandResult = z.infer<typeof uiCommandResultSchema>;

@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import type { UiCommandResult, UiTarget, ViewFilter } from './ui.ts';
+import type { DataSort, UiCommandResult, UiTarget, ViewFilter } from './ui.ts';
 import type { AppContext } from './agent.ts';
 import type { CardSpec } from './canvas.ts';
 import type { ReadResultDescriptor, ViewDefinition } from './views.ts';
@@ -189,6 +189,8 @@ export interface ToolCallContext {
     spaceId?: string | null;
     /** Narrowing to apply; `null` clears one. Omitted leaves the view alone. */
     filter?: ViewFilter | null;
+    /** Order to apply; `null` returns the view to its own. Omitted leaves it alone. */
+    sort?: DataSort | null;
     reason?: string;
   }) => Promise<UiCommandResult>;
 }

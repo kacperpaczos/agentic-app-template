@@ -439,6 +439,7 @@ export class AgentRuntime {
             // `undefined` and `null` differ here: the first leaves any narrowing
             // in place, the second is an explicit "show everything again".
             ...(command.filter !== undefined ? { filter: command.filter } : {}),
+            ...(command.sort !== undefined ? { sort: command.sort } : {}),
             reason: command.reason,
           },
           stream,

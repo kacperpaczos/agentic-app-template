@@ -867,6 +867,7 @@ describe('szew narzedzi i prompt', () => {
       'ui_catalog',
       'ui_navigate',
       'ui_filter',
+      'ui_sort',
       'files_list',
       'files_stage',
       'files_publish_version',

@@ -336,6 +336,42 @@ describe('strumien zdarzen AG-UI', () => {
     expect(resumed).toEqual([3]);
   });
 
+  it('czytelnik zajety wysylaniem nie gubi zdarzen wyemitowanych w tym czasie', async () => {
+    /*
+     * Seen in a browser run: a tool that asks the interface for something emits
+     * TOOL_CALL_START/ARGS/END and the UI command in one burst, and the reader
+     * was still writing the first of them to the socket. The reader then waited
+     * for a *next* event — which came only when the command timed out, eight
+     * seconds later — so the browser received the command after the server
+     * had given up on it.
+     */
+    const { stream } = makeStream();
+    const received: string[] = [];
+    let release!: () => void;
+    const slowWrite = new Promise<void>((r) => (release = r));
+    const reader = (async () => {
+      for await (const { event } of stream.read(0)) {
+        received.push(event.type);
+        if (received.length === 1) await slowWrite;
+      }
+    })();
+    const tick = () => new Promise((r) => setTimeout(r, 10));
+
+    await tick();
+    stream.toolStart('t1', 'mcp__app__ui_filter', 'm1');
+    await tick(); // the reader is now inside its slow write of TOOL_CALL_START
+    stream.toolArgs('t1', '{}');
+    stream.toolEnd('t1');
+    stream.custom('platform.ui_command', { commandId: 'uic_x' });
+    release();
+    await tick();
+
+    // Nothing else is emitted: everything already in the stream must arrive.
+    expect(received).toEqual(['TOOL_CALL_START', 'TOOL_CALL_ARGS', 'TOOL_CALL_END', 'CUSTOM']);
+    stream.close();
+    await reader;
+  });
+
   it('koduje zdarzenia dokladnie tak, jak oczekuje agUIAdapter', () => {
     const encoded = encodeSse({ type: 'TEXT_MESSAGE_CONTENT', messageId: 'm', delta: 'x' });
     expect(encoded).toBe('data: {"type":"TEXT_MESSAGE_CONTENT","messageId":"m","delta":"x"}\n\n');
