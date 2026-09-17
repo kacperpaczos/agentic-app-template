@@ -178,6 +178,17 @@ export function formatFieldValue(record: DataRecord, field: RecordField): string
   }
 }
 
+/**
+ * A field's stored value as a result or an acknowledgement carries it
+ * (`recordValueSchema`): a primitive, or null for anything else — a missing
+ * field, an object, an array. One implementation, so the value the server read
+ * and the value the browser says it is showing are comparable at all.
+ */
+export function recordValue(record: DataRecord, field: string): string | number | boolean | null {
+  const raw = record[field];
+  return typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean' ? raw : null;
+}
+
 /* -------------------------------------------------------------------------- */
 /*  Order                                                                     */
 /* -------------------------------------------------------------------------- */

@@ -1,11 +1,12 @@
 import {
+  AGENT_VIEWS_TARGET_ID,
   UI_COMMAND_FAILURES,
   applySearchPatch,
   describePredicate,
   parseAddressSearch,
+  recordValue,
   viewAddressKey,
   viewStatePatch,
-  type DataRecord,
   type DataSource,
   type UiCommand,
   type UiCommandFailure,
@@ -166,12 +167,6 @@ function findTable(reveal: UiReveal): RevealTarget | null {
   );
 }
 
-/** The field's value as it travels: records hold primitives. */
-const valueOf = (record: DataRecord, field: string): string | number | boolean | null => {
-  const raw = record[field];
-  return typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean' ? raw : null;
-};
-
 const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
 
 /** Whether the element's centre is on screen and not clipped by any scrolling or clipping ancestor. */
@@ -259,7 +254,7 @@ export async function performReveal(
   const route =
     reveal.presentation.kind === 'view'
       ? (deps.catalog.find((t) => t.id === (reveal.presentation as { viewId: string }).viewId && t.to)?.to ?? null)
-      : (deps.catalog.find((t) => t.id === 'platform.agentViews')?.to ?? null);
+      : (deps.catalog.find((t) => t.id === AGENT_VIEWS_TARGET_ID)?.to ?? null);
   if (reveal.presentation.kind === 'agent_view' && !route) return refuse(UI_COMMAND_FAILURES.unknownTarget);
   let navigated = false;
   if (route && window.location.pathname !== route) {
@@ -346,7 +341,7 @@ export async function performReveal(
     recordId: reveal.recordId,
     field: reveal.field,
     displayedText: (cell.textContent ?? '').trim(),
-    rawValue: valueOf(at.record, reveal.field),
+    rawValue: recordValue(at.record, reveal.field),
     page,
     adjustments,
   };

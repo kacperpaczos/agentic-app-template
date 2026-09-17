@@ -503,7 +503,7 @@ test.describe('wskazanie wartosci pola rekordu', () => {
     await page.goto(`${BASE}/cases/${caseId}`);
     await expect(page.getByTestId('case-detail-page')).toBeVisible();
     await watchHighlights(page);
-    const url = page.url();
+    const opened = { pathname: new URL(page.url()).pathname, params: viewParams(page) };
 
     const { runId } = await sendForRun(page, `Pokaz cene tej pozycji [pozycja-sprawy] pozycja=${item.id}`);
     await settled(page);
@@ -518,9 +518,14 @@ test.describe('wskazanie wartosci pola rekordu', () => {
       fieldLabel: 'Cena jednostkowa',
       target: { targetId: 'procurement.case.detail', place: 'view', operation: 'procurement.case_offer_items' },
     });
-    // Nothing had to be adjusted, and the screen is the one the user opened.
+    /*
+     * Nothing had to be adjusted, and the screen is the one the user opened —
+     * compared without the session's own parameters, which the command itself
+     * adds to the address when it names the conversation.
+     */
     expect(shown.adjustments).toEqual([]);
-    expect(page.url()).toBe(url);
+    expect(new URL(page.url()).pathname).toBe(opened.pathname);
+    expect(viewParams(page)).toEqual(opened.params);
 
     const cell = page.locator(
       `td[data-record-kind="offer_item"][data-record-id="${item.id}"][data-field="unitPriceMinor"]`,

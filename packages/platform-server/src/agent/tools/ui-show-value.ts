@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import {
   AGENT_VIEWS_SCOPE_KIND,
+  AGENT_VIEWS_TARGET_ID,
   AppError,
   SHOW_VALUE_REFUSALS,
   formatFieldValue,
   recordIdOf,
+  recordValue,
   recordsOf,
   rowMatchesFilter,
   type CanvasCard,
@@ -15,7 +17,6 @@ import {
 } from '@platform/contracts';
 import { prepareRead, runPreparedRead } from '../../registry/read-operations.ts';
 import {
-  AGENT_VIEWS_TARGET_ID,
   candidateMatches,
   declaredFieldsOfKind,
   declaredRecordKinds,
@@ -61,12 +62,6 @@ const describeCandidate = (c: PresentationCandidate) => ({
   operation: c.source.operation,
   fields: c.fields,
 });
-
-/** A stored value as it travels in a result: primitives, `undefined` as null. */
-const valueOf = (record: DataRecord, field: string): string | number | boolean | null => {
-  const raw = record[field];
-  return typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean' ? raw : null;
-};
 
 /** The cards of the run's conversation's agent views, or none. */
 function agentViewCards(services: PlatformServices, ctx: ToolCallContext): CanvasCard[] {
@@ -273,7 +268,7 @@ export function uiShowValueTools(services: PlatformServices): Array<ModuleToolDe
 
         const { candidate, record } = present[0]!;
         const shownField = candidate.descriptor.fields.find((f) => f.field === field)!;
-        const backend = { rawValue: valueOf(record, field), displayedText: formatFieldValue(record, shownField) };
+        const backend = { rawValue: recordValue(record, field), displayedText: formatFieldValue(record, shownField) };
         const result: UiCommandResult = await ctx.requestUi({
           targetId: candidate.uiTargetId ?? (candidate.presentation.kind === 'view' ? candidate.presentation.viewId : AGENT_VIEWS_TARGET_ID),
           spaceId: null,

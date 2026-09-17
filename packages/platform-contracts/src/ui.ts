@@ -17,6 +17,15 @@ import { z } from 'zod';
  * makes "no such target" a real answer instead of an improvised one.
  */
 
+/**
+ * The platform's own screen showing a conversation's agent views.
+ *
+ * Named in the contract because both halves need it without knowing each
+ * other: the server declares the target and points a command at it, the
+ * browser resolves it to a route when it has to open it.
+ */
+export const AGENT_VIEWS_TARGET_ID = 'platform.agentViews';
+
 export const UI_TARGET_KINDS = ['view', 'section', 'setting', 'element'] as const;
 export type UiTargetKind = (typeof UI_TARGET_KINDS)[number];
 

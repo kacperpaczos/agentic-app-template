@@ -1,13 +1,14 @@
 import { isASTNode } from '@openuidev/lang-core';
-import type {
-  CanvasCard,
-  DataSource,
-  ReadResultDescriptor,
-  RecordField,
-  SemanticInstance,
-  UiRevealPresentation,
-  ViewDefinition,
-  ViewFilterPredicate,
+import {
+  AGENT_VIEWS_TARGET_ID,
+  type CanvasCard,
+  type DataSource,
+  type ReadResultDescriptor,
+  type RecordField,
+  type SemanticInstance,
+  type UiRevealPresentation,
+  type ViewDefinition,
+  type ViewFilterPredicate,
 } from '@platform/contracts';
 import type { ServerModuleRegistry } from './modules.ts';
 import { findDataInstances, type OpenUiServerCatalog } from './openui-validation.ts';
@@ -40,9 +41,6 @@ import { findDataInstances, type OpenUiServerCatalog } from './openui-validation
  * summary draws a fixed number of records, so neither is a place a given
  * record's value is guaranteed to be shown.
  */
-
-/** The platform's catalog target of the agent views page. */
-export const AGENT_VIEWS_TARGET_ID = 'platform.agentViews';
 
 /** One data component instance that renders records of the kind asked about. */
 export interface PresentationCandidate {
