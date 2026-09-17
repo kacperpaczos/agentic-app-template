@@ -1,6 +1,6 @@
 {
   "budzet": 12,
-  "wydane": 1,
+  "wydane": 3,
   "tury": [
     {
       "nr": 1,
@@ -9,6 +9,20 @@
       "polecenie": "Jaki NIP ma dostawca NordAV OY?",
       "runId": "run_e3f0eb8de955422387a8",
       "uwaga": "proba 1 — aplikacja wykonala zadanie poprawnie (found/shown/matchesBackend = true), test oblal przez wlasny blad czytania wyniku narzedzia przez MCP"
+    },
+    {
+      "nr": 2,
+      "o": "2026-09-17T19:43:16.519Z",
+      "proba": "T25",
+      "polecenie": "Jaki NIP ma dostawca NordAV OY?",
+      "runId": "run_37fe29692e9f4a6e908e"
+    },
+    {
+      "nr": 3,
+      "o": "2026-09-17T19:44:18.940Z",
+      "proba": "T26",
+      "polecenie": "Pokaz tylko polskich dostawcow, posortowanych po nazwie od Z do A.",
+      "runId": "run_b1b0125692144790afbf"
     }
   ]
 }

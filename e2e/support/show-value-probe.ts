@@ -133,6 +133,21 @@ export async function toolResults(
 export const resultOf = (results: Array<{ name: string; result: any }>, tool: string) =>
   results.find((r) => r.name === `mcp__app__${tool}`)?.result;
 
+/** Every answer one tool gave in a run, in order — a real run may call it more than once. */
+export const allResultsOf = (results: Array<{ name: string; result: any }>, tool: string) =>
+  results.filter((r) => r.name === `mcp__app__${tool}`).map((r) => r.result);
+
+/**
+ * The *last* answer one tool gave in a run.
+ *
+ * What a run left on screen is what its last call to a UI tool did. A real
+ * model reaches the right narrowing by trying values — the first `ui_filter`
+ * of a run that ends correctly can perfectly well have matched nothing — so
+ * anything judging the end state has to read the end, not the beginning.
+ */
+export const lastResultOf = (results: Array<{ name: string; result: any }>, tool: string) =>
+  [...results].reverse().find((r) => r.name === `mcp__app__${tool}`)?.result;
+
 /**
  * The probe's verdict, as a list of what is missing — so a run that only talks
  * about the value fails it, and the caller can show *that* it fails and why.
@@ -147,7 +162,7 @@ export async function notShown(
   baseUrl = '',
 ): Promise<string[]> {
   const problems: string[] = [];
-  const result = resultOf(await toolResults(page, runId, baseUrl), 'ui_show_value');
+  const result = lastResultOf(await toolResults(page, runId, baseUrl), 'ui_show_value');
   if (!result) problems.push('wykonanie nie wywolalo ui_show_value');
   else {
     if (result.found !== true) problems.push('narzedzie nie znalazlo wartosci w backendzie');

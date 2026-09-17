@@ -10,7 +10,13 @@ import {
   type ReadResponse,
   type ReadResultDescriptor,
 } from '@platform/contracts';
-import { notShown, resultOf, toolResults, watchHighlights } from './support/show-value-probe.ts';
+import {
+  allResultsOf,
+  lastResultOf,
+  notShown,
+  toolResults,
+  watchHighlights,
+} from './support/show-value-probe.ts';
 
 /**
  * Proby odbiorowe T25, T26 i T27 — z prawdziwym modelem.
@@ -476,7 +482,7 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
 
       /* --------------- the tool's own answer, and the new context ------------ */
       const results = await toolResults(page, runId);
-      const shownResult = resultOf(results, 'ui_show_value');
+      const shownResult = lastResultOf(results, 'ui_show_value');
       expect(shownResult).toMatchObject({
         executed: true,
         found: true,
@@ -577,13 +583,21 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       );
       await expect(page.getByTestId('view-sort-state')).toHaveText('Sortowanie: Nazwa, malejaco.');
 
+      /*
+       * The *last* narrowing and ordering of the run are what the screen shows.
+       * A real model finds the value of a field by trying it: the first run of
+       * this proba narrowed to "Polska", then to "Poland", each answered
+       * `executed: true, matched: 0` — the platform applied exactly what it was
+       * asked for and said how much was left, and the agent corrected itself.
+       * Every attempt is written into the evidence below.
+       */
       const results1 = await toolResults(page, run1.runId);
-      expect(resultOf(results1, 'ui_filter')).toMatchObject({
+      expect(lastResultOf(results1, 'ui_filter')).toMatchObject({
         executed: true,
         targetId: 'procurement.data',
         filtered: { matched: polish.length, total: before.records.length },
       });
-      expect(resultOf(results1, 'ui_sort')).toMatchObject({
+      expect(lastResultOf(results1, 'ui_sort')).toMatchObject({
         executed: true,
         sorted: { field: 'name', direction: 'desc' },
       });
@@ -594,6 +608,15 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
         adres: viewParams(page),
         wiersze: polish.map((s) => s.name),
         daneBackendu: 'identyczne przed i po',
+        proByZawezenia: allResultsOf(results1, 'ui_filter').map((r: any) => ({
+          url: r.url ?? null,
+          cleared: r.cleared ?? null,
+          filtered: r.filtered ?? null,
+        })),
+        proByPorzadku: allResultsOf(results1, 'ui_sort').map((r: any) => ({
+          sorted: r.sorted ?? null,
+          cleared: r.cleared ?? null,
+        })),
       };
       await shot(page, 't26-zawezenie-i-sortowanie.png');
 
@@ -639,7 +662,7 @@ test.describe('proby odbiorowe z prawdziwym modelem', () => {
       expect(param(page, 'country')).toBe('PL');
       expect(param(page, 'sort')).toBe('-name');
       expect(await rowIds(page)).toEqual(polish.map((s) => s.id));
-      expect(resultOf(await toolResults(page, run2.runId), 'ui_show_value').adjustments).toEqual([]);
+      expect(lastResultOf(await toolResults(page, run2.runId), 'ui_show_value').adjustments).toEqual([]);
       expect((await backendSuppliers(page)).raw.result).toEqual(before.raw.result);
 
       /* ---------------------- 3. remove the narrowing ------------------------ */
