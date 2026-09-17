@@ -17,7 +17,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { collectToolEntries, platformTools, type PlatformInstance } from '@platform/server';
 import { composeApp } from '../../apps/server/src/compose.ts';
 import { agentViewsScript } from './agent-views-scenario.ts';
-import { scriptedAgent, type Step } from './scripted-agent.ts';
+import { scriptedAgent, type CallRecord, type Step } from './scripted-agent.ts';
 
 /**
  * Scenarios the browser tests drive. Named so a spec reads as an intention
@@ -181,6 +181,115 @@ const SCENARIOS: Record<string, Step[]> = {
     { kind: 'wait', delayMs: 150 },
     { kind: 'call', name: 'ui_catalog', maxChars: 4000 },
     { kind: 'text', text: 'Odczytalem katalog.' },
+  ],
+  /*
+   * Reading the screen's description (`ui_state`), as the agent would.
+   * The full results are in the conversation's tool messages; the chat shows
+   * the start of each so a test can see which call answered what.
+   */
+  'ui-state-read': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'call', name: 'ui_state', maxChars: 160 },
+    { kind: 'text', text: 'Odczytalem opis ekranu.' },
+  ],
+  /*
+   * Narrow through the real `ui_filter` handler and gate, then read the screen
+   * asking for at least the version the acknowledgement carried — and then the
+   * context the command itself was sent with.
+   */
+  'ui-state-after-filter': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'call', name: 'ui_state', maxChars: 160 },
+    {
+      kind: 'call',
+      name: 'ui_filter',
+      input: {
+        targetId: 'procurement.data',
+        predicates: [{ field: 'country', op: 'eq', value: 'PL' }],
+        label: 'tylko dostawcy z Polski',
+      },
+      maxChars: 400,
+    },
+    {
+      kind: 'call',
+      name: 'ui_state',
+      input: { minVersion: '$last.uiVersion', clientId: '$last.uiClientId' },
+      maxChars: 160,
+    },
+    { kind: 'call', name: 'get_context', maxChars: 160 },
+    { kind: 'text', text: 'Opisalem ekran po zawezeniu.' },
+  ],
+  /* A version no tab has published: the answer must be stale, after the wait. */
+  'ui-state-future-version': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'call', name: 'ui_state', input: { minVersion: 1_000_000, waitMs: 1500 }, maxChars: 160 },
+    { kind: 'text', text: 'Nie mam tak nowego opisu.' },
+  ],
+  /* Reads the screen late, after the user may have moved to another conversation. */
+  'ui-state-late': [
+    { kind: 'text', text: 'Zaczynam prace w tle. ', delayMs: 200 },
+    { kind: 'wait', delayMs: 10_000 },
+    { kind: 'call', name: 'ui_state', maxChars: 160 },
+    { kind: 'text', text: 'Koniec pracy w tle.' },
+  ],
+  /*
+   * Order through the real `ui_sort` handler and gate, then read the screen with
+   * the version and tab its acknowledgement carried.
+   */
+  'ui-state-after-sort': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'call', name: 'ui_sort', input: { targetId: 'procurement.data', field: 'name', direction: 'desc' }, maxChars: 400 },
+    {
+      kind: 'call',
+      name: 'ui_state',
+      input: { minVersion: '$last.uiVersion', clientId: '$last.uiClientId' },
+      maxChars: 160,
+    },
+    { kind: 'text', text: 'Opisalem ekran po sortowaniu.' },
+  ],
+  /*
+   * An agent view grouped by currency, the agent views screen opened through
+   * the real `ui_navigate`, and the screen read with the version and tab of that
+   * acknowledgement.
+   */
+  'ui-state-agent-views': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'call', name: 'procurement_list_cases', maxChars: 200 },
+    {
+      kind: 'call',
+      name: 'agent_view_create',
+      input: (calls: CallRecord[]) => {
+        const listed = calls.find((c) => c.name === 'procurement_list_cases');
+        const found = listed?.result?.cases?.find((c: { code: string }) => c.code === 'PC-2026-01');
+        if (!found) throw new Error('scenariusz: brak sprawy PC-2026-01');
+        return {
+          title: 'Oferty wedlug waluty',
+          source: [
+            'root = Stack([tabela])',
+            // Ordered by delivery time the currencies interleave, so grouping reorders the page on screen.
+            `tabela = DataTable({operation: "procurement.comparison", input: {caseId: "${found.id}"}}, ["supplierName", "currency", "totalMinor", "deliveryDays"], "Oferty", null, null, {field: "deliveryDays", direction: "asc"}, "currency")`,
+          ].join('\n'),
+        };
+      },
+      maxChars: 300,
+    },
+    { kind: 'call', name: 'ui_navigate', input: { targetId: 'platform.agentViews' }, maxChars: 300 },
+    {
+      kind: 'call',
+      name: 'ui_state',
+      input: { minVersion: '$last.uiVersion', clientId: '$last.uiClientId' },
+      maxChars: 160,
+    },
+    { kind: 'text', text: 'Opisalem widoki agenta.' },
+  ],
+  /*
+   * An answer that is an OpenUI composition: the chat renders a data component
+   * that stays mounted on whatever screen the user moves to — including
+   * Settings, where the identity can be switched under it.
+   */
+  'chat-data-table': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'text', text: 'root = DataTable({operation: "procurement.suppliers"}, ["name", "country"])' },
   ],
   /*
    * The view's state through the agent's real tools: the run first reads its

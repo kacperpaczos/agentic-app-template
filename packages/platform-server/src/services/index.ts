@@ -8,6 +8,7 @@ import { ConversationService } from './conversations.ts';
 import { FileService } from './files.ts';
 import { IdempotencyStore } from './idempotency.ts';
 import { RunRegistry } from './runs.ts';
+import { UiSnapshotStore } from './ui-snapshots.ts';
 
 export { ArtifactService } from './artifacts.ts';
 export { CanvasService, assertOwnConversationViews } from './canvas.ts';
@@ -15,6 +16,12 @@ export { ConversationService, deriveTitle } from './conversations.ts';
 export { FileService, sanitizeFilename } from './files.ts';
 export { IdempotencyStore } from './idempotency.ts';
 export { RunRegistry } from './runs.ts';
+export {
+  UiSnapshotStore,
+  UI_SNAPSHOT_CLIENTS_PER_OWNER,
+  type UiStateQuery,
+  type UiVersionRef,
+} from './ui-snapshots.ts';
 
 /**
  * Every platform capability in one place. Modules receive this through their
@@ -33,6 +40,8 @@ export interface PlatformServices {
   artifacts: ArtifactService;
   files: FileService;
   runs: RunRegistry;
+  /** What each open tab last said it shows. In memory: see `ui-snapshots.ts`. */
+  uiSnapshots: UiSnapshotStore;
 }
 
 export function createPlatformServices(input: {
@@ -53,5 +62,6 @@ export function createPlatformServices(input: {
     artifacts: new ArtifactService(input.db),
     files: new FileService(input.db, input.config.filesDir, input.config.maxUploadBytes),
     runs: new RunRegistry(input.db),
+    uiSnapshots: new UiSnapshotStore(),
   };
 }

@@ -119,6 +119,10 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
           label: known.label,
           url: result.url,
           highlighted: result.highlighted ?? false,
+          // The screen's description after the move, and the tab it belongs to: pass both to ui_state.
+          uiVersion: result.uiVersion,
+          uiClientId: result.uiClientId,
+          uiPublication: result.uiPublication,
         };
       },
     },
@@ -240,6 +244,9 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
           filtered: result.filtered,
           // A narrowing returns to the first page; the view says how many there are.
           page: result.page,
+          uiVersion: result.uiVersion,
+          uiClientId: result.uiClientId,
+          uiPublication: result.uiPublication,
         };
       },
     },

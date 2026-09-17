@@ -10,6 +10,7 @@ const emptyContext: AppContext = {
   filters: {},
   viewport: null,
   drafts: [],
+  ui: null,
 };
 
 const toolCtx = (h: Harness, over: Partial<ToolCallContext> = {}): ToolCallContext => ({

@@ -17,3 +17,4 @@ export * from './ui.ts';
 export * from './views.ts';
 export * from './view-state.ts';
 export * from './records.ts';
+export * from './ui-snapshot.ts';

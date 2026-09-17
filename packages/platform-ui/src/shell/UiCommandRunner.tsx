@@ -11,6 +11,8 @@ import {
 import { apiGet, apiPost } from '../api/client.ts';
 import { useAppState, type ViewStateReport } from '../state/appState.ts';
 import { setUiCommandHandler } from '../chat/runEvents.ts';
+import { uiSnapshotSession } from '../state/uiSnapshot.ts';
+import { performAndAcknowledge, pollUntil, waitingDeadline } from './uiCommandAck.ts';
 import { cachedLoader, planViewCommand } from './uiCommandPlan.ts';
 
 /**
@@ -69,25 +71,31 @@ export function UiCommandRunner() {
   );
 
   /** Scrolls to the element and marks it, returning whether it was found. */
-  const reveal = useCallback(async (selector: string | undefined): Promise<boolean> => {
+  const reveal = useCallback(async (selector: string | undefined, waitUntil: number): Promise<boolean> => {
     if (!selector) return false;
     // One frame for the route change to paint before looking for the element.
-    for (let attempt = 0; attempt < 12; attempt += 1) {
-      const el = document.querySelector<HTMLElement>(selector);
-      if (el) {
-        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        el.setAttribute('data-ui-highlight', 'true');
-        window.setTimeout(() => el.removeAttribute('data-ui-highlight'), HIGHLIGHT_MS);
-        return true;
-      }
-      await new Promise((r) => window.setTimeout(r, 60));
-    }
-    return false;
+    const el = await pollUntil(() => document.querySelector<HTMLElement>(selector), {
+      attempts: 12,
+      intervalMs: 60,
+      until: waitUntil,
+    });
+    if (!el) return false;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.setAttribute('data-ui-highlight', 'true');
+    window.setTimeout(() => el.removeAttribute('data-ui-highlight'), HIGHLIGHT_MS);
+    return true;
   }, []);
 
   const perform = useCallback(
-    async (command: UiCommand): Promise<UiCommandResult> => {
+    async (command: UiCommand, budget: { deadline: number }): Promise<UiCommandResult> => {
       const base = { commandId: command.commandId, targetId: command.targetId };
+      /*
+       * Waiting for the view and for the element ends in time to describe the
+       * result and acknowledge it within the budget the server waits — see
+       * `performAndAcknowledge`. A view that has not reported by then is
+       * reported as not applied rather than letting the server call it `no_client`.
+       */
+      const waitUntil = waitingDeadline(budget.deadline);
 
       /*
        * A command from a conversation the user is not watching is refused, not
@@ -181,19 +189,20 @@ export function UiCommandRunner() {
       let filtered: { matched: number; total: number } | undefined;
       let viewReport: ViewStateReport | null = null;
       if (awaitsView) {
-        for (let attempt = 0; attempt < VIEW_REPORT_ATTEMPTS; attempt += 1) {
-          const state = useAppState.getState();
-          const report = state.viewStates[command.targetId];
-          if (report && report.address === expectedKey) {
-            viewReport = report;
-            break;
-          }
-          if (!reportingView && narrowing && state.filterOutcome?.targetId === command.targetId) {
-            filtered = { matched: state.filterOutcome.matched, total: state.filterOutcome.total };
-            break;
-          }
-          await new Promise((r) => window.setTimeout(r, VIEW_REPORT_INTERVAL_MS));
-        }
+        const answer = await pollUntil<{ report: ViewStateReport } | { counted: { matched: number; total: number } }>(
+          () => {
+            const state = useAppState.getState();
+            const report = state.viewStates[command.targetId];
+            if (report && report.address === expectedKey) return { report };
+            if (!reportingView && narrowing && state.filterOutcome?.targetId === command.targetId) {
+              return { counted: { matched: state.filterOutcome.matched, total: state.filterOutcome.total } };
+            }
+            return null;
+          },
+          { attempts: VIEW_REPORT_ATTEMPTS, intervalMs: VIEW_REPORT_INTERVAL_MS, until: waitUntil },
+        );
+        if (answer && 'report' in answer) viewReport = answer.report;
+        if (answer && 'counted' in answer) filtered = answer.counted;
         const orderApplied =
           !ordering ||
           (viewReport?.sort?.field === ordering.field && viewReport.sort.direction === ordering.direction);
@@ -209,7 +218,7 @@ export function UiCommandRunner() {
         if (viewReport && narrowing) filtered = { matched: viewReport.matched, total: viewReport.total };
       }
 
-      const highlighted = target.selector ? await reveal(target.selector) : false;
+      const highlighted = target.selector ? await reveal(target.selector, waitUntil) : false;
       if (target.selector && !highlighted) {
         /*
          * The screen may well have changed, but the element the agent was asked
@@ -244,23 +253,11 @@ export function UiCommandRunner() {
       if (handled.current.has(command.commandId)) return;
       handled.current.add(command.commandId);
 
-      let result: UiCommandResult;
-      try {
-        result = await perform(command);
-      } catch (e) {
-        result = {
-          commandId: command.commandId,
-          targetId: command.targetId,
-          executed: false,
-          reason: e instanceof Error ? e.message.slice(0, 120) : 'error',
-        };
-      }
-      try {
-        await apiPost(`/api/runs/${command.runId}/ui-ack`, result);
-      } catch {
-        // The server times the command out on its own; a failed acknowledgement
-        // becomes `no_client`, which is the truthful outcome.
-      }
+      await performAndAcknowledge(command, {
+        perform,
+        session: uiSnapshotSession,
+        post: (runId, result) => apiPost(`/api/runs/${runId}/ui-ack`, result),
+      });
     });
     return () => setUiCommandHandler(null);
   }, [perform]);

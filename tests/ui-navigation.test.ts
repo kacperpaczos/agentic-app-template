@@ -121,6 +121,7 @@ const EMPTY_CONTEXT = (conversationId: string) => ({
   filters: {},
   viewport: null,
   drafts: [],
+  ui: null,
 });
 
 describe('katalog celow interfejsu', () => {
@@ -289,10 +290,13 @@ describe('ui_navigate zwraca to, co potwierdzil klient', () => {
      * assertion below is therefore two things: the exact list, so a new verb
      * cannot appear unnoticed, and — the part that actually matters — that none
      * of them writes.
+     *
+     * `ui_state` only reads the description the user's tab published of its
+     * screen; it moves nothing.
      */
     const tools = platformTools(h.platform.services);
     const ui = tools.filter((t) => /^ui_/.test(t.name));
-    expect(ui.map((t) => t.name).sort()).toEqual(['ui_catalog', 'ui_filter', 'ui_navigate', 'ui_sort']);
+    expect(ui.map((t) => t.name).sort()).toEqual(['ui_catalog', 'ui_filter', 'ui_navigate', 'ui_sort', 'ui_state']);
     expect(ui.every((t) => t.effect === 'read')).toBe(true);
   });
 });

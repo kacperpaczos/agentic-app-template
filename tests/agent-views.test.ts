@@ -340,6 +340,7 @@ describe('narzedzia widokow agenta', () => {
         filters: {},
         viewport: null,
         drafts: [],
+        ui: null,
       },
     };
   }
@@ -796,7 +797,7 @@ describe('narzedzia widokow agenta', () => {
     const prompt = buildSystemPrompt({
       registry: h.platform.registry,
       catalog: h.platform.services.catalog,
-      appContext: { conversationId: null, spaceId: null, resource: null, selection: [], filters: {}, viewport: null, drafts: [] },
+      appContext: { conversationId: null, spaceId: null, resource: null, selection: [], filters: {}, viewport: null, drafts: [], ui: null },
       resourceSummary: null,
       workspaceDir: null,
       stagedFiles: [],

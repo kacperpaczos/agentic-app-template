@@ -9,6 +9,7 @@ import { useAppState } from '../state/appState.ts';
 import { SpaceSync } from './SpaceSync.tsx';
 import { BackgroundTasks } from './BackgroundTasks.tsx';
 import { UiCommandRunner } from './UiCommandRunner.tsx';
+import { UiSnapshotPublisher } from './UiSnapshotPublisher.tsx';
 import { ViewFilterBanner } from './ViewFilterBanner.tsx';
 
 const SECTION_LABELS: Record<MenuSection, string> = {
@@ -134,6 +135,8 @@ export function AppShell({ children }: { children?: ReactNode }) {
       <SpaceSync />
       {/* Performs the agent's interface commands and reports what really happened. */}
       <UiCommandRunner />
+      {/* Publishes what this tab shows, versioned, for the agent's `ui_state`. */}
+      <UiSnapshotPublisher />
       <Nav />
       <main className="pf-main">
         <StatusBar />
