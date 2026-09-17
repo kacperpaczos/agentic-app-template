@@ -245,8 +245,15 @@ test.describe('ekrany szczegolow modulu: sprawa i pochodzenie pozycji', () => {
     const { cases } = await (await request.get('/api/m/procurement/cases')).json();
     const caseId = cases[0].id as string;
     const overview = await readBackend(request, 'procurement.case_overview', { caseId });
-    const c = (overview.result as { procurementCase: { code: string; title: string; description: string } })
-      .procurementCase;
+    const c = (
+      overview.result as { procurementCase: { code: string; title: string; description: string; priceBasis: string } }
+    ).procurementCase;
+    // The label "netto"/"brutto" comes from the same registered descriptor
+    // `DataTable` would use for this field (procurement.cases), never a
+    // hand-typed ternary in the screen.
+    const casesRead = await readBackend(request, 'procurement.cases');
+    const priceBasisField = casesRead.descriptor!.fields.find((f) => f.field === 'priceBasis')!;
+    const priceBasisLabel = formatFieldValue({ priceBasis: c.priceBasis }, priceBasisField);
 
     await page.goto(`/cases/${caseId}`);
     const detailPage = page.getByTestId('case-detail-page');
@@ -261,6 +268,13 @@ test.describe('ekrany szczegolow modulu: sprawa i pochodzenie pozycji', () => {
     await expect(heading).toContainText(c.code);
     await expect(heading).toContainText(c.title);
     await expect(detailPage.locator('.pf-page__lead')).toContainText(c.description);
+    await expect(detailPage.locator('.pf-page__lead')).toContainText(`ceny ${priceBasisLabel}`);
+
+    // Real headings for the document outline (SectionHeading -> <h2>), not
+    // `TextContent`'s plain <div>: an assistive-technology user can jump to
+    // either section the same way they could on the pre-composition markup.
+    await expect(detailPage.getByRole('heading', { level: 2, name: 'Pozycje wymagane' })).toBeVisible();
+    await expect(detailPage.getByRole('heading', { level: 2, name: 'Oferty' })).toBeVisible();
 
     // Pozycje wymagane: DataTable on the existing procurement.case_overview read.
     const requirementsTable = view.locator(

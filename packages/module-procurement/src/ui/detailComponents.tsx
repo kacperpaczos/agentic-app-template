@@ -6,8 +6,9 @@ import {
   caseHeaderPropsSchema,
   caseOfferSourcesPropsSchema,
   itemProvenancePropsSchema,
+  sectionHeadingPropsSchema,
 } from '../shared/openui-components.ts';
-import { MODULE_ID } from '../shared/index.ts';
+import { MODULE_ID, PRICE_BASIS_LABELS } from '../shared/index.ts';
 
 /**
  * Non-tabular OpenUI components of the case detail and item provenance
@@ -25,7 +26,19 @@ import { MODULE_ID } from '../shared/index.ts';
  * registered read the case detail view's requirements table uses, so the
  * three components share one cached response instead of the case being
  * fetched three times.
+ *
+ * `SectionHeading` is the odd one out here — no fetch, no id — added because
+ * the catalog's own `TextContent` renders a plain `<div>` (checked in
+ * `@openuidev/react-ui`'s compiled source: no `h1`–`h6`, no `role="heading"`),
+ * so a composition that used it for a section title lost that title from the
+ * page's heading outline. A real `<h2>` for "Pozycje wymagane" and "Oferty" —
+ * the same level the pre-T5 markup used — needed one line of React the
+ * catalog does not otherwise offer.
  */
+
+function SectionHeadingView({ text }: { text: string }) {
+  return <h2>{text}</h2>;
+}
 
 interface CaseOverviewResult {
   procurementCase: {
@@ -48,6 +61,19 @@ function useCaseOverview(caseId: string) {
   return { ...query, result: query.data?.result as CaseOverviewResult | undefined };
 }
 
+/**
+ * Same shape as `caseRecords.fields`' `priceBasis` in `server/views.ts` — and
+ * the same `PRICE_BASIS_LABELS` the descriptor draws its `values` from — so
+ * "net" reads as "netto" here exactly because it does there, never because
+ * the two happen to agree.
+ */
+const priceBasisField: RecordField = {
+  field: 'priceBasis',
+  label: 'Ceny',
+  type: 'enum',
+  values: PRICE_BASIS_LABELS,
+};
+
 function CaseHeaderView({ caseId }: { caseId: string }) {
   const { isLoading, error, result } = useCaseOverview(caseId);
   if (isLoading) return <div className="pf-state">Wczytywanie sprawy…</div>;
@@ -60,7 +86,8 @@ function CaseHeaderView({ caseId }: { caseId: string }) {
         {c.code} — {c.title}
       </h1>
       <p className="pf-page__lead">
-        {c.description} Podstawa porownania: {c.currency}, ceny {c.priceBasis === 'net' ? 'netto' : 'brutto'}.
+        {c.description} Podstawa porownania: {c.currency}, ceny{' '}
+        {formatFieldValue({ priceBasis: c.priceBasis }, priceBasisField)}.
       </p>
     </div>
   );
@@ -162,6 +189,12 @@ function ItemProvenanceView({ itemId }: { itemId: string }) {
 }
 
 export const procurementDetailOpenuiComponents = [
+  defineComponent({
+    name: 'SectionHeading',
+    description: 'Naglowek sekcji ekranu (poziom h2) o podanej, stalej tresci — nie wartosc rekordu.',
+    props: sectionHeadingPropsSchema,
+    component: ({ props }) => <SectionHeadingView text={String(props.text)} />,
+  }),
   defineComponent({
     name: 'CaseHeader',
     description: 'Naglowek sprawy zakupowej: kod, tytul, opis i podstawa porownania. Podaj wylacznie identyfikator sprawy.',

@@ -7,10 +7,18 @@ import { z } from 'zod';
  * server, and the server needs these same schemas to validate a composition
  * that calls `CaseHeader`, `CaseOfferSources` or `ItemProvenance` before it is
  * ever rendered (`ServerModule.openuiComponents`, wired up alongside the
- * startup validator). Every prop is a reference — an id the component looks
- * up itself — never a business value, so a composition naming one of these
- * components can never carry a stale copy of a price or a quantity.
+ * startup validator). Every data-fetching component's prop is a reference —
+ * an id the component looks up itself — never a business value, so a
+ * composition naming one of these components can never carry a stale copy of
+ * a price or a quantity. `SectionHeading` is the one exception: it fetches
+ * nothing, and its `text` is fixed UI copy chosen by the composition — the
+ * same kind of literal the catalog's own `TextContent` already takes.
  */
+
+export const sectionHeadingPropsSchema = z.object({
+  text: z.string().min(1).max(200).describe('Tresc naglowka sekcji'),
+});
+export type SectionHeadingProps = z.infer<typeof sectionHeadingPropsSchema>;
 
 export const caseHeaderPropsSchema = z.object({
   caseId: z.string().min(1).max(128).describe('Identyfikator sprawy zakupowej'),

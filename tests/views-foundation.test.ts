@@ -177,13 +177,26 @@ describe('GET /api/ui/views', () => {
     const data = res.body.views[0];
     expect(data.primaryOperation).toBe('procurement.suppliers');
     expect(data.composition).toMatch(/DataTable\(\{operation: "procurement.suppliers"\}/);
-    // The two list screens are named UI targets the agent can navigate to
-    // directly. The two per-record screens below are reached through a
-    // record's own `route` instead (the case's title link, the item's
-    // "pochodzenie" link) — nothing to navigate to without already knowing
-    // which record — so they name no UI target of their own.
+    // A view without route params is a whole-screen view the agent can
+    // navigate to on its own, so it must be a named UI target. A view with
+    // route params (the two per-record screens below) is reached only
+    // through a record's own `route` — the case's title link, the item's
+    // "pochodzenie" link — never through `ui_navigate`, since there is
+    // nothing to navigate to without already knowing which record; it must
+    // therefore claim no static UI target of its own. Derived from every
+    // view actually registered, not a fixed list, so a future view that
+    // forgets its target (or wrongly claims one) fails this test on its own.
     const targets = (await api('/api/ui/targets')).body.targets.map((t: any) => t.id);
-    for (const id of ['procurement.data', 'procurement.cases']) expect(targets).toContain(id);
+    for (const v of res.body.views as Array<{ id: string; params?: string[] }>) {
+      if (!v.params || v.params.length === 0) {
+        expect(targets, `widok ${v.id} bez parametrow powinien miec UiTarget`).toContain(v.id);
+      } else {
+        expect(
+          targets,
+          `widok ${v.id} ma parametry trasy, nie powinien miec statycznego UiTarget`,
+        ).not.toContain(v.id);
+      }
+    }
   });
 
   it('widok szczegolow sprawy i pochodzenia pozycji nie zawezaja niczego — brak wlasnego celu UI', async () => {

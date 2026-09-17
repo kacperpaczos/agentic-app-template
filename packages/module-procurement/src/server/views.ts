@@ -1,5 +1,5 @@
 import type { ReadResultDescriptor, ViewDefinition } from '@platform/contracts';
-import { MODULE_ID } from '../shared/index.ts';
+import { MODULE_ID, PRICE_BASIS_LABELS } from '../shared/index.ts';
 
 /**
  * What this module's reads return and how its screens are composed from them.
@@ -44,10 +44,7 @@ export const caseRecords: ReadResultDescriptor = {
       field: 'priceBasis',
       label: 'Ceny',
       type: 'enum',
-      values: [
-        { value: 'net', label: 'netto' },
-        { value: 'gross', label: 'brutto' },
-      ],
+      values: PRICE_BASIS_LABELS,
     },
     { field: 'offerCount', label: 'Oferty', type: 'number', sortable: true },
     { field: 'requirementCount', label: 'Pozycje', type: 'number', sortable: true },
@@ -66,10 +63,7 @@ export const comparisonRecords: ReadResultDescriptor = {
       field: 'priceBasis',
       label: 'Ceny',
       type: 'enum',
-      values: [
-        { value: 'net', label: 'netto' },
-        { value: 'gross', label: 'brutto' },
-      ],
+      values: PRICE_BASIS_LABELS,
     },
     { field: 'totalMinor', label: 'Suma', type: 'money_minor', unitField: 'currency', sortable: true },
     { field: 'completenessPct', label: 'Kompletnosc', type: 'number', unit: '%', sortable: true },
@@ -159,9 +153,9 @@ export const procurementViews: ViewDefinition[] = [
     composition: [
       'root = Stack([header, reqHeading, requirements, offersHeading, offerItems, offerSources])',
       'header = CaseHeader($caseId)',
-      'reqHeading = TextContent("Pozycje wymagane")',
+      'reqHeading = SectionHeading("Pozycje wymagane")',
       `requirements = DataTable({operation: "${op('case_overview')}", input: {caseId: $caseId}}, ["position", "name", "quantityMilli", "spec"])`,
-      'offersHeading = TextContent("Oferty")',
+      'offersHeading = SectionHeading("Oferty")',
       `offerItems = DataTable({operation: "${op('case_offer_items')}", input: {caseId: $caseId}}, ["supplierName", "name", "unit", "quantityMilli", "unitPriceMinor", "currency"])`,
       'offerSources = CaseOfferSources($caseId)',
     ].join('\n'),
