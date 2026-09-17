@@ -1,59 +1,21 @@
 import { Link, useParams } from '@tanstack/react-router';
 import { useEffect } from 'react';
-import { apiPost, useAppState, useModuleData,
-  QueryErrorState,
-} from '@platform/ui';
+import { apiPost, ComposedView, useAppState, useModuleData, QueryErrorState } from '@platform/ui';
 import { formatMinor, formatQuantity, MODULE_ID } from '../shared/index.ts';
 
-interface CaseListItem {
-  id: string;
-  code: string;
-  title: string;
-  currency: string;
-  priceBasis: string;
-  status: string;
-  offerCount: number;
-  requirementCount: number;
-}
-
-/** Cases list — the module's "records" screen. */
+/**
+ * Cases list — the module's "records" screen.
+ *
+ * The list itself is the `procurement.cases` view: a composition over the
+ * platform's `DataTable`, reading the registered `procurement.cases` read. This
+ * wrapper only keeps the screen's frame; the rows, their links and the
+ * narrowing from the address bar all come from the composition.
+ */
 export function CasesPage() {
-  const { data, isLoading, error } = useModuleData<{ cases: CaseListItem[] }>(MODULE_ID, '/cases');
-
-  if (isLoading) return <div className="pf-state">Wczytywanie spraw…</div>;
-  if (error) {
-    return <QueryErrorState error={error} />;
-  }
-
   return (
     <div className="pf-page" data-testid="cases-page">
       <h1>Sprawy zakupowe</h1>
-      <p className="pf-page__lead">
-        Kazda sprawa ustala podstawe porownania: walute i to, czy ceny sa netto czy brutto.
-      </p>
-      {data?.cases.length ? (
-        <div className="pf-cards-grid">
-          {data.cases.map((c) => (
-            <Link
-              key={c.id}
-              to="/cases/$caseId"
-              params={{ caseId: c.id }}
-              className="pf-tile"
-              data-testid={`case-tile-${c.id}`}
-            >
-              <strong>
-                {c.code} — {c.title}
-              </strong>
-              <div className="pf-muted" style={{ marginTop: 6, fontSize: 12 }}>
-                {c.currency} · {c.priceBasis === 'net' ? 'netto' : 'brutto'} · {c.offerCount} ofert ·{' '}
-                {c.requirementCount} pozycji
-              </div>
-            </Link>
-          ))}
-        </div>
-      ) : (
-        <div className="pf-state pf-state--empty">Brak spraw. Uruchom `pnpm seed`.</div>
-      )}
+      <ComposedView viewId="procurement.cases" />
     </div>
   );
 }
@@ -193,38 +155,15 @@ export function CaseDetailPage() {
   );
 }
 
-/** Suppliers and offer lines — the module's "data" screen. */
+/**
+ * Suppliers — the module's "data" screen, rendered from the `procurement.data`
+ * view: a composition whose table reads `procurement.suppliers`.
+ */
 export function DataPage() {
-  const { data, isLoading } = useModuleData<{
-    suppliers: Array<{ id: string; name: string; taxId: string | null; country: string; contactEmail: string | null }>;
-  }>(MODULE_ID, '/suppliers');
-
-  if (isLoading) return <div className="pf-state">Wczytywanie…</div>;
-
   return (
     <div className="pf-page" data-testid="data-page">
       <h1>Dane</h1>
-      <p className="pf-page__lead">Dostawcy zarejestrowani w aplikacji.</p>
-      <table className="pf-table">
-        <thead>
-          <tr>
-            <th scope="col">Nazwa</th>
-            <th scope="col">NIP</th>
-            <th scope="col">Kraj</th>
-            <th scope="col">Kontakt</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(data?.suppliers ?? []).map((s) => (
-            <tr key={s.id}>
-              <td>{s.name}</td>
-              <td className="pf-muted">{s.taxId ?? '—'}</td>
-              <td>{s.country}</td>
-              <td className="pf-muted">{s.contactEmail ?? '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <ComposedView viewId="procurement.data" />
     </div>
   );
 }

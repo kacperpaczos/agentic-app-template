@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { dataSourceSchema } from './views.ts';
 
 /**
  * Artifacts are platform-owned. Identity is the `id`; the title is a label and
@@ -22,13 +23,11 @@ export type ArtifactMode = z.infer<typeof artifactModeSchema>;
  * Stored as the artifact's versioned content, so the descriptor is versioned
  * exactly like a snapshot's frozen payload: `currentVersion` identifies the
  * definition, and the result is whatever that definition returns *now*.
+ *
+ * The same contract as a data component's `source`: one registered read, named
+ * and validated one way, whether an artifact or a table re-runs it.
  */
-export const liveArtifactSourceSchema = z.object({
-  /** Qualified operation name, `<moduleId>.<operation>`. */
-  operation: z.string().min(1).max(200),
-  /** Input for the operation; validated against the operation's own schema. */
-  input: z.looseObject({}).optional(),
-});
+export const liveArtifactSourceSchema = dataSourceSchema;
 export type LiveArtifactSource = z.infer<typeof liveArtifactSourceSchema>;
 
 /**

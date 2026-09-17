@@ -150,6 +150,28 @@ export function rowMatchesFilter(row: unknown, predicates: ViewFilterPredicate[]
   return predicates.every((p) => rowMatchesPredicate(row, p));
 }
 
+/** What a narrowing did to one view, as the view counted it. */
+export interface ViewFilterOutcome {
+  targetId: string;
+  matched: number;
+  total: number;
+}
+
+/**
+ * Narrows a view's rows and counts the result.
+ *
+ * The one implementation behind every narrowed screen — a module screen
+ * reading its own route and a composed view's primary table alike — so "3 of
+ * 4" means the same thing whichever of them the user is looking at.
+ */
+export function applyViewFilter<T>(
+  rows: readonly T[],
+  filter: { targetId: string; predicates: ViewFilterPredicate[] },
+): { kept: T[]; outcome: ViewFilterOutcome } {
+  const kept = rows.filter((row) => rowMatchesFilter(row, filter.predicates));
+  return { kept, outcome: { targetId: filter.targetId, matched: kept.length, total: rows.length } };
+}
+
 /* -------------------------------------------------------------------------- */
 /*  Narrowing in the address bar                                              */
 /* -------------------------------------------------------------------------- */

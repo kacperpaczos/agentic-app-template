@@ -6,6 +6,7 @@ import type {
   MenuItemContribution,
   ModuleMeta,
 } from '@platform/contracts';
+import { platformDataComponents } from '../views/dataComponents.tsx';
 
 /**
  * `DefinedComponent` is invariant in its props schema, so a heterogeneous
@@ -80,7 +81,11 @@ export function buildRegistry(input: {
   };
   const menu = [...input.platformMenu];
   const starters: ConversationStarterContribution[] = [];
-  const extraComponents: AnyDefinedComponent[] = [];
+  /*
+   * The platform's data components are always in the catalog: module views are
+   * made of them, and an `openui` card or a chat answer may use them too.
+   */
+  const extraComponents: AnyDefinedComponent[] = [...platformDataComponents];
 
   for (const mod of input.modules) {
     for (const [id, renderer] of Object.entries(mod.cardRenderers)) {
@@ -102,13 +107,20 @@ export function buildRegistry(input: {
   // `Library.components` is a Record keyed by component name, while
   // `createLibrary` takes an array — hence the values() on the way back in.
   const base = openuiLibrary as unknown as AnyLibrary;
-  const library = extraComponents.length
-    ? createLibrary({
-        components: [...Object.values(base.components), ...extraComponents],
-        componentGroups: base.componentGroups,
-        id: 'app-catalog',
-      })
-    : base;
+  const names = new Set(Object.keys(base.components));
+  for (const c of extraComponents) {
+    // A second component under a taken name would silently replace the first.
+    if (names.has(c.name)) {
+      throw new Error(`Konflikt katalogu: komponent OpenUI "${c.name}" jest juz zarejestrowany.`);
+    }
+    names.add(c.name);
+  }
+  const library = createLibrary({
+    components: [...Object.values(base.components), ...extraComponents],
+    componentGroups: base.componentGroups,
+    root: base.root,
+    id: 'app-catalog',
+  });
 
   return { modules: input.modules, cardRenderers, artifactRenderers, menu, starters, library };
 }

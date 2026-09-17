@@ -1,6 +1,7 @@
-import { FILE_ANALYSIS, type AppContext } from '@platform/contracts';
+import { FILE_ANALYSIS, type AppContext, type ReadOperationSummary } from '@platform/contracts';
 import type { ComponentCatalog } from '../registry/catalog.ts';
 import type { ServerModuleRegistry } from '../registry/modules.ts';
+import { describeReadOperations } from '../registry/read-operations.ts';
 import { mcpToolName } from './mcp.ts';
 
 export interface PromptInput {
@@ -114,7 +115,7 @@ export function buildSystemPrompt(input: PromptInput): string {
    * what makes `mode="live"` usable at all: without it the model would have to
    * guess an operation name, and every guess would be rejected at creation.
    */
-  const readOperations = input.registry.readOperations;
+  const readOperations = describeReadOperations(input.registry);
   if (readOperations.length) {
     parts.push(
       '',
@@ -123,9 +124,17 @@ export function buildSystemPrompt(input: PromptInput): string {
       'Jako content podaj deskryptor {"operation":"<nazwa>","input":{...}} z ponizszej listy;',
       'przy kazdym otwarciu artefaktu aplikacja uruchomi te operacje ponownie i pokaze aktualny wynik.',
       'Uzywaj mode="live" dla zestawien, ktore maja pozostac aktualne, a mode="snapshot" dla raportu z konkretnej chwili.',
-      ...readOperations.map(
-        (op) => `- ${op.qualifiedName}: ${op.definition.description} (input: ${describeShape(op.definition.inputSchema)})`,
-      ),
+      /*
+       * The fields come from the operation's own result descriptor — the list
+       * data components are validated against. They describe the records of
+       * one collection, not the whole result: a result may carry more (a
+       * comparison's criteria, a case's offers), so the rule stated is where
+       * these names may be used, not that nothing else exists.
+       */
+      'Przy operacjach z deskryptorem wyniku podana jest kolekcja rekordow i pola tych rekordow',
+      '(nazwa: etykieta, typ). Wynik moze zawierac takze inne dane poza ta kolekcja, ale w komponentach',
+      'danych (kolumny, serie, pola, filtr, sortowanie) wskazujesz wylacznie wymienione pola rekordow.',
+      ...readOperations.map(describeReadOperationLine),
     );
   }
 
@@ -196,8 +205,18 @@ export function buildSystemPrompt(input: PromptInput): string {
   return parts.filter((p) => p !== '').join('\n');
 }
 
-/** One-line description of a Zod object's keys, for the prompt listing. */
-function describeShape(schema: { shape?: Record<string, unknown> }): string {
-  const keys = Object.keys(schema.shape ?? {});
-  return keys.length ? keys.join(', ') : 'brak';
+/** One read operation, with its record and fields when it declares them. */
+function describeReadOperationLine(op: ReadOperationSummary): string {
+  const input = op.inputKeys.length ? op.inputKeys.join(', ') : 'brak';
+  const line = `- ${op.name}: ${op.description} (input: ${input})`;
+  const d = op.descriptor;
+  if (!d) return line;
+  const fields = d.fields
+    .map((f) => `${f.field}: ${f.label}, ${f.type}${f.unit ? ` [${f.unit}]` : ''}`)
+    .join('; ');
+  const where = d.collection ? `rekordy kolekcji ${d.collection}` : 'rekordy wyniku';
+  return (
+    `${line}\n  ${where} (rodzaj ${d.record.kind}, id: ${d.record.idField}) maja pola: ${fields}` +
+    '; tylko te pola wskazujesz w komponentach danych'
+  );
 }

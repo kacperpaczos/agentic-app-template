@@ -7,6 +7,13 @@ import { PROCUREMENT_MIGRATIONS } from './schema.ts';
 import { seedProcurement } from './seed.ts';
 import { ProcurementService } from './services.ts';
 import { procurementTools } from './tools.ts';
+import {
+  caseRecords,
+  comparisonRecords,
+  procurementViews,
+  requirementRecords,
+  supplierRecords,
+} from './views.ts';
 
 export { ProcurementService } from './services.ts';
 export { ProcurementRepository } from './repository.ts';
@@ -113,7 +120,7 @@ export function createProcurementModule(platform: PlatformServices): ServerModul
         filter: {
           collection: 'cases',
           fields: [
-            { field: 'status', label: 'Status sprawy', values: ['collecting', 'comparing', 'closed'] },
+            { field: 'status', label: 'Status sprawy', values: ['draft', 'collecting', 'decided'] },
             { field: 'currency', label: 'Waluta', values: ['PLN', 'EUR'] },
             { field: 'title', label: 'Tytul sprawy' },
             { field: 'code', label: 'Kod sprawy' },
@@ -176,14 +183,42 @@ export function createProcurementModule(platform: PlatformServices): ServerModul
           'Aktualna tabela porownawcza ofert w sprawie: sumy, kompletnosc, ranking i wykluczenia z przyczyna.',
         inputSchema: caseRef,
         run: async (i: { caseId: string }, ctx) => service.compare(i.caseId, ctx.ownerId),
+        result: comparisonRecords,
       },
       {
         name: 'case_overview',
         description: 'Aktualne podsumowanie sprawy: podstawa porownania, liczba ofert i pozycji wymaganych.',
         inputSchema: caseRef,
         run: async (i: { caseId: string }, ctx) => service.getCaseDetail(i.caseId, ctx.ownerId),
+        result: requirementRecords,
+      },
+      /*
+       * The two lists behind the module's list screens. The same service calls
+       * as the `/suppliers` and `/cases` routes, so a view reading them and a
+       * client of the routes cannot see different rows.
+       */
+      {
+        name: 'suppliers',
+        description: 'Dostawcy wlasciciela: nazwa, NIP, kraj i kontakt.',
+        inputSchema: z.object({}),
+        run: async (_i: Record<string, never>, ctx) => ({ suppliers: service.listSuppliers(ctx.ownerId) }),
+        result: supplierRecords,
+      },
+      {
+        name: 'cases',
+        description: 'Sprawy zakupowe wlasciciela: kod, tytul, status, waluta, podstawa cen, liczba ofert i pozycji.',
+        inputSchema: z.object({}),
+        run: async (_i: Record<string, never>, ctx) => ({ cases: service.listCases(ctx.ownerId) }),
+        result: caseRecords,
       },
     ],
+
+    /*
+     * The list screens as compositions. Each view has the id of its UI target,
+     * and names the read its table narrows — which the platform checks against
+     * the target's `filter` at startup.
+     */
+    views: procurementViews,
 
     agentBriefing: [
       'Domena: porownywanie ofert zakupowych.',

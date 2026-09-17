@@ -10,6 +10,12 @@ import {
 } from '@platform/contracts';
 import type { Db } from '../db/client.ts';
 import type { ServerModuleRegistry } from '../registry/modules.ts';
+import {
+  prepareRead,
+  readRefusalOf,
+  runPreparedRead,
+  type PreparedRead,
+} from '../registry/read-operations.ts';
 import { newId, nowIso } from '../util/id.ts';
 
 interface ArtRow {
@@ -74,34 +80,12 @@ export class ArtifactService {
    *
    * A descriptor that names an operation nobody registered would be a report
    * that fails every time it is opened. Rejecting it at creation turns that into
-   * an immediate, explainable error for the agent instead.
+   * an immediate, explainable error for the agent instead. The check is the one
+   * every read goes through (`prepareRead`), so a descriptor accepted here is
+   * one `POST /api/read` would accept too.
    */
   assertLiveSourceIsResolvable(content: unknown): LiveArtifactSource {
-    const parsed = liveArtifactSourceSchema.safeParse(content);
-    if (!parsed.success) {
-      throw new AppError(
-        'validation_failed',
-        'Artefakt live wymaga deskryptora { operation, input } wskazujacego zarejestrowana operacje odczytu modulu.',
-      );
-    }
-    const op = this.modules?.readOperation(parsed.data.operation);
-    if (!op) {
-      const available = (this.modules?.readOperations ?? []).map((o) => o.qualifiedName);
-      throw new AppError(
-        'validation_failed',
-        `Nieznana operacja odczytu "${parsed.data.operation}". Dostepne: ${available.join(', ') || 'brak'}.`,
-      );
-    }
-    const input = op.definition.inputSchema.safeParse(parsed.data.input ?? {});
-    if (!input.success) {
-      throw new AppError(
-        'validation_failed',
-        `Wejscie operacji ${parsed.data.operation} nie przechodzi walidacji: ${input.error.issues
-          .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
-          .join('; ')}`,
-      );
-    }
-    return parsed.data;
+    return prepareRead(this.modules, content).source;
   }
 
   /**
@@ -126,51 +110,51 @@ export class ArtifactService {
       error: null,
     };
 
-    const parsed = liveArtifactSourceSchema.safeParse(stored.content);
-    if (!parsed.success) {
-      return {
-        content: null,
-        live: { ...base, state: 'failed', error: 'Deskryptor artefaktu jest nieczytelny.' },
-      };
-    }
-    const descriptor = parsed.data;
-    const op = this.modules?.readOperation(descriptor.operation);
-    if (!op) {
-      return {
-        content: null,
-        live: {
-          ...base,
-          operation: descriptor.operation,
-          state: 'unavailable',
-          error: `Operacja ${descriptor.operation} nie jest zarejestrowana w tej instalacji.`,
-        },
-      };
-    }
-
-    const input = op.definition.inputSchema.safeParse(descriptor.input ?? {});
-    if (!input.success) {
-      return {
-        content: null,
-        live: {
-          ...base,
-          operation: descriptor.operation,
-          state: 'failed',
-          error: 'Wejscie zapisane w artefakcie nie pasuje juz do schematu operacji.',
-        },
-      };
+    let prepared: PreparedRead;
+    try {
+      prepared = prepareRead(this.modules, stored.content);
+    } catch (err) {
+      const operation = liveArtifactSourceSchema.safeParse(stored.content).data?.operation ?? '';
+      switch (readRefusalOf(err)) {
+        case 'unknown_operation':
+          return {
+            content: null,
+            live: {
+              ...base,
+              operation,
+              state: 'unavailable',
+              error: `Operacja ${operation} nie jest zarejestrowana w tej instalacji.`,
+            },
+          };
+        case 'invalid_input':
+          return {
+            content: null,
+            live: {
+              ...base,
+              operation,
+              state: 'failed',
+              error: 'Wejscie zapisane w artefakcie nie pasuje juz do schematu operacji.',
+            },
+          };
+        default:
+          return {
+            content: null,
+            live: { ...base, state: 'failed', error: 'Deskryptor artefaktu jest nieczytelny.' },
+          };
+      }
     }
 
     try {
       // The owner comes from the authenticated session, never from the stored
       // descriptor: an artifact cannot be made to read someone else's data.
-      const content = await op.definition.run(input.data as never, { ownerId });
+      const read = await runPreparedRead(prepared, ownerId);
       return {
-        content,
+        content: read.result,
         live: {
           ...base,
-          operation: descriptor.operation,
+          operation: read.operation,
           state: 'fresh',
-          resolvedAt: nowIso(),
+          resolvedAt: read.resolvedAt,
         },
       };
     } catch (err) {
@@ -179,7 +163,7 @@ export class ArtifactService {
         content: null,
         live: {
           ...base,
-          operation: descriptor.operation,
+          operation: prepared.source.operation,
           state: e.code === 'forbidden' || e.code === 'not_found' ? 'forbidden' : 'failed',
           error: e.message,
         },

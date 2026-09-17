@@ -14,3 +14,5 @@ export * from './agent.ts';
 export * from './module.ts';
 export * from './agui.ts';
 export * from './ui.ts';
+export * from './views.ts';
+export * from './records.ts';

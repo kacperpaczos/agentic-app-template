@@ -24,6 +24,7 @@ import { AgentRuntime } from '../agent/runtime.ts';
 import { SESSION_COOKIE, SessionAuth, ensureUser, requireUser } from '../auth/session.ts';
 import type { PlatformServices } from '../services/index.ts';
 import { deriveTitle } from '../services/conversations.ts';
+import { describeReadOperations, runRead } from '../registry/read-operations.ts';
 
 export const DEFAULT_USER_ID = 'local-user';
 export const SECOND_USER_ID = 'other-user';
@@ -438,6 +439,42 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
   app.get('/api/ui/targets', (c) => {
     c.get('ownerId');
     return json(c, { targets: services.modules.uiTargets() });
+  });
+
+  /**
+   * Module screens as OpenUI Lang compositions.
+   *
+   * The list the registry checked at startup against the targets and the read
+   * descriptors; the browser renders each through `ComposedView`. Compositions
+   * carry no data, so the list is the same for every owner.
+   */
+  app.get('/api/ui/views', (c) => {
+    c.get('ownerId');
+    return json(c, { views: services.modules.views() });
+  });
+
+  /* -------------------------------- reads ------------------------------- */
+
+  /**
+   * Runs one registered read for the signed-in owner.
+   *
+   * What data components fetch through: the body names an operation and its
+   * input, the owner comes from the session, and the answer carries the result
+   * with the descriptor that says how to read it. An unknown operation, input
+   * its schema rejects, or a record the owner may not see are refused with
+   * `validation_failed` / `forbidden` / `not_found` — never answered with an
+   * empty result.
+   */
+  app.post('/api/read', async (c) => {
+    const ownerId = c.get('ownerId');
+    const body = await c.req.json().catch(() => undefined);
+    return json(c, await runRead(services.modules, body, ownerId));
+  });
+
+  /** Every registered read with its input keys and result descriptor. */
+  app.get('/api/read/operations', (c) => {
+    c.get('ownerId');
+    return json(c, { operations: describeReadOperations(services.modules) });
   });
 
   /**
