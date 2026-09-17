@@ -78,11 +78,11 @@ identyfikatory) bez importowania jej wnętrza w drugą stronę.
 |---|---|---|---|
 | `meta` | tak | `id` (przestrzeń nazw narzędzi, tras, celów UI), `title`, `version`, `description` | `id` jest trwałe — pojawia się w nazwach narzędzi i w zapisanych deskryptorach |
 | `migrations` | tak | lista `{ id, sql }` stosowana raz, każda w transakcji | konwencja `id`: `<modul>-0001-init`; tabele z własnym prefiksem (przykład: `pc_`); zmiana schematu = nowa migracja, nie edycja starej |
-| `tools` | tak (może być `[]`) | `ModuleToolDefinition`: `name`, `description`, `inputSchema` (`z.object`), `effect: 'read' \| 'write'`, `handler(input, ctx)` | nazwa MCP: `<moduleId>_<name>`; narzędzie to cienka nakładka na serwis; **bez `z.record()` i bez `.default()`** w schemacie wejścia (SDK cicho usuwa cały serwer MCP albo robi pole wymaganym) — `assertMcpCompatibleShape` przerywa start z nazwą pola; zamiast `.default()` użyj `.optional()` i wartości domyślnej w handlerze |
+| `tools` | tak (może być `[]`) | `ModuleToolDefinition`: `name`, `description`, `inputSchema` (`z.object`), `effect: 'read' \| 'write'`, `handler(input, ctx)` | nazwa MCP: `<moduleId>_<name>`; narzędzie to cienka nakładka na serwis; **bez `z.record()` i bez `.default()`** w schemacie wejścia (SDK cicho usuwa cały serwer MCP albo robi pole wymaganym) — `assertMcpCompatibleShape` przerywa start z nazwą pola; zamiast `.default()` użyj `.optional()` i wartości domyślnej w handlerze; `alwaysLoad: true` trzyma narzędzie w prompcie zamiast za `ToolSearch` SDK — tylko dla narzędzi, o których model musi wiedzieć, żeby zachować się poprawnie (platforma ustawia je dla `get_context`, `ui_catalog`, `ui_navigate`, `ui_filter`); każde takie narzędzie jest w każdym prompcie |
 | `routes` | nie | `(register: RouteRegistrar) => void`; trasy montowane pod `/api/m/<moduleId>/…` | handler dostaje `PlatformRequest` z `ownerId` z sesji — nigdy z ciała żądania; ta sama metoda serwisu co narzędzie („jedna implementacja, dwoje drzwi”) |
 | `cardComponents` | nie | serwerowa połowa katalogu: `id`, `description`, `propsSchema`, `usage` | backend waliduje każdą kompozycję agenta tym schematem; props niosą **referencje** (np. identyfikator rekordu), nie wartości biznesowe |
 | `readOperations` | nie | nazwane odczyty dla artefaktów live: `name`, `inputSchema`, `run(input, { ownerId })` | nazwa kwalifikowana `<moduleId>.<name>`; odczyt musi być czysty (bez zapisu) — platforma woła go przy otwarciu artefaktu |
-| `uiTargets` | nie | cele nawigacji agenta: `id` (z prefiksem modułu), `kind` (`view`/`section`/`setting`/`element`), `label`, `description`, `to` i/lub `selector` | selektor dotyczy markupu modułu; nieaktualny selektor ujawnia się dopiero w działaniu jako `not_present` — dodaj test |
+| `uiTargets` | nie | cele nawigacji agenta: `id` (z prefiksem modułu), `kind` (`view`/`section`/`setting`/`element`), `label`, `description`, `to` i/lub `selector`; opcjonalnie `filter: { collection, fields: [{ field, label, values? }] }` — co agent może zawęzić w widoku | selektor dotyczy markupu modułu; nieaktualny selektor ujawnia się dopiero w działaniu jako `not_present` — dodaj test. `collection` to klucz tablicy w odpowiedzi trasy modułu, którą widok czyta przez `useModuleData`; pola to właściwości jej wierszy. Pole `c` lub `s` (klucze sesji w adresie) jest odrzucane przy starcie. Pole spoza listy agent dostaje jako odmowę `unknown_field` |
 | `agentBriefing` | nie | tekst o słowniku domeny do promptu systemowego | słownik, **nie reguły** — reguły są w serwisach |
 | `describeResource` | nie | krótki opis zasobu z kontekstu UI (`{ kind, id }`) | pozwala agentowi zrozumieć „ten rekord” bez ładowania bazy |
 | `defaultComposition` | nie | karty nowej przestrzeni dla zakresu `{ kind, id }` | przechodzi przez tę samą walidację katalogu co zmiany agenta |
@@ -92,7 +92,7 @@ identyfikatory) bez importowania jej wnętrza w drugą stronę.
 Kontekst wywołania narzędzia (`ToolCallContext`): `ownerId` (z sesji), `appContext` (rozmowa,
 przestrzeń, zasób, zaznaczenie, filtry, szkice), `conversationId`, `runId`, `workspaceDir` (katalog
 sandboxu uruchomienia), `emit(event)` (`data_changed` z listą zasobów, `canvas_changed`,
-`artifact_created` — frontend unieważnia na tej podstawie zapytania) oraz `requestUi` (nawigacja z
+`artifact_created` — frontend unieważnia na tej podstawie zapytania) oraz `requestUi` (nawigacja i opcjonalne zawężenie `filter` z
 potwierdzeniem klienta).
 
 Wymagania specyfikacji, które spadają na moduł: walidacja w runtime i rozpoznawalne błędy
@@ -113,9 +113,12 @@ Definicja: `packages/platform-ui/src/catalog/registry.tsx`.
 | `menu` | pozycje nawigacji: `section` (`workspace`, `records`, `data`, `files`, `settings`), `label`, `to`, `order` |
 | `starters` | podpowiedzi poleceń w czacie — słownik domeny należy do modułu, nie do platformy |
 
+Ekrany modułu czytają dane swoich tras przez `useModuleData(moduleId, path)` z `@platform/ui`. To w tym hooku platforma stosuje zawężenie widoku z adresu (`?pole=wartość`) do tablicy `collection` zadeklarowanej w `uiTargets[].filter` i zgłasza liczby do paska nad powierzchnią roboczą oraz do potwierdzenia dla agenta. Ekran, który pobiera dane inaczej, nie zostanie zawężony, a agent dostanie `not_applied`. Zawężenie odsiewa wiersze **już pobrane** — nie jest filtrem po stronie serwera ani paginacją.
+
 Zasady: listy `cardComponents` (serwer) i `cardRenderers` (przeglądarka) muszą się zgadzać
 (konflikt identyfikatora przerywa budowę rejestru). Ekrany modułu montuje `apps/web/src/router.tsx`;
-router zachowuje parametry `c` (rozmowa) i `s` (przestrzeń) dla każdej trasy.
+router zachowuje parametry `c` (rozmowa) i `s` (przestrzeń) przy każdej nawigacji; pozostałe
+parametry (np. zawężenie `?country=PL`) walidator przepuszcza, ale nie przenoszą się na inny ekran.
 
 ## 5. Co zapewnia platforma bez pracy po stronie modułu
 
@@ -127,12 +130,15 @@ router zachowuje parametry `c` (rozmowa) i `s` (przestrzeń) dla każdej trasy.
   usunięcie karty), pliki i ich wersje, artefakty snapshot/live, nawigacja po celach UI;
 - pliki PNG/JPEG/XLSX/CSV/tekst z analizą w sandboxie (biblioteki z kuratorowanej listy
   `agent/toolkit.ts`), zgoda użytkownika na uruchomienie kodu;
+- zawężanie widoku przez agenta (`ui_filter`) dla widoków deklarujących `filter`: stan w adresie, pasek z liczbami i powrotem do pełnego widoku, potwierdzenie klienta;
 - trwałość (SQLite + WAL), migracje platformy, kopia i próba migracji (`docs/odzyskiwanie-stanu.md`),
   diagnostyka (`pnpm diag`), izolowane testy przeglądarkowe.
 
 Czego platforma dziś **nie** zapewnia (pełna lista: [`BACKLOG.md`](BACKLOG.md)): semantycznego
-opisu aktywnego ekranu z filtrami i sortowaniem dla agenta, sterowania filtrami przez rozmowę ani
-osobnej przestrzeni „Widoki agenta” (L2.16–17, L3.14–18, L6.15–17).
+opisu aktywnego ekranu (instancje komponentów, rekord–pole, wersja kompozycji) dla agenta, sortowania
+i paginacji sterowanych rozmową, wskazania wartości pola rekordu ani osobnej przestrzeni „Widoki
+agenta” (L2.16–17, L3.14–18, L6.15–17). Zawężanie filtrem działa tylko w widokach deklarujących pola
+i tylko na danych już pobranych przez widok.
 
 ## 6. Testy nowej aplikacji
 
@@ -157,10 +163,12 @@ instancji ani katalogu danych użytkownika; kontrola negatywna musi umieć obla�
 | `.default()` w schemacie narzędzia | pole staje się wymagane dla modelu | `.optional()` + wartość domyślna w handlerze |
 | `allowedTools` w SDK | nazwa na liście omija `canUseTool` (bramkę zgody) | narzędzia modułu są operacjami domenowymi za regułami backendu; powłoka idzie przez zgodę |
 | `@mastra/claude` 0.3.1 przekazuje tylko tekst | brak zdarzeń narzędzi i `session_id` w strumieniu Mastry | most hooków SDK w `platform-server/src/agent/runtime.ts`; przy aktualizacji adaptera sprawdzić, czy zdarzenia nie zaczną się dublować |
+| SDK odracza narzędzia, gdy jest ich dużo (`ToolSearch`) | model nie ma w kontekście narzędzia, które prompt każe mu wywołać (zaobserwowane: `ui_navigate` za `ToolSearch`, agent odpowiadał tekstem zamiast przenieść ekran) | `alwaysLoad: true` dla nielicznych narzędzi sterujących; gdy model „nie słucha instrukcji”, najpierw sprawdź w zdarzeniach uruchomienia, czy narzędzie było dostępne |
+| wyszukiwanie z `LIKE '%*%'` | „pokaż wszystko” zwracało pustą listę, a model mówił, że aplikacja jest pusta | w przykładzie `*` znaczy „wszystko”, a odpowiedź niesie `totals`; ta sama zasada dotyczy własnych narzędzi wyszukiwania |
 | gotowy czat ignoruje zdarzenia `CUSTOM` | kanał platformy (unieważnienia, zgody) niewidoczny | `platformAdapter.ts` obsługuje je równolegle |
 | dziecko `AgentInterface` bez roli slotu | renderuje się jako kolumna obok wątku | kontrolki kompozytora wstawiane portalem; test geometrii `e2e/chat-layout.spec.ts` |
 | selektor celu UI w module | zmiana markupu psuje nawigację dopiero w działaniu | test przeglądarkowy celu |
 | XLSX | formuły nie są przeliczane; wykresy i formatowanie warunkowe nie są zachowywane przy zapisie; `.xlsm`/`.xls` odrzucane | zakres jawny w `FILE_ANALYSIS` (kontrakty) |
 
 Historia tych ustaleń: [`archive/agenticapp-2026-09/FEEDBACK.md`](archive/agenticapp-2026-09/FEEDBACK.md)
-(wpisy #15, #17, #18, #23, #39 oraz sekcje 6–8).
+(wpisy #15, #17, #18, #23, #39, #40, #41 oraz sekcje 6–8).

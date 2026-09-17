@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# $1 = katalog czystej kopii; tworzy config i spec z bezwzględną ścieżką do repozytorium
+REPO="$1"; D="$(cd "$(dirname "$0")" && pwd)"
+sed "s#../REPO/#$REPO/#" "$D/model-filter.spec.ts" > "$D/run/model-filter.spec.ts"
+echo '{ "type": "module" }' > "$D/run/package.json"
+cat > "$D/run/playwright.probe.config.ts" <<CFG
+import base from '$REPO/playwright.config.ts';
+export default {
+  ...base,
+  testDir: '$D/run',
+  globalSetup: '$REPO/e2e/global-setup.ts',
+  reporter: [['list']],
+  outputDir: '$D/run/test-results',
+  webServer: { ...(base as any).webServer, cwd: '$REPO' },
+};
+CFG

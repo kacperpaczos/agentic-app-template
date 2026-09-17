@@ -1,0 +1,11 @@
+[WebServer] No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+[WebServer] No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+[WebServer] No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+[e2e] potwierdzono instancje testowa pod http://127.0.0.1:8799
+
+Running 1 test using 1 worker
+
+  ✓  1 [chromium] › <katalog-sondy>/model-filter.spec.ts:17:3 › sonda: zawężanie widoku przez prawdziwy model › polecenie w czacie zawęża /data do polskich dostawców i przywraca pełny widok (56.2s)
+
+  1 passed (1.1m)
+sonda exit=0

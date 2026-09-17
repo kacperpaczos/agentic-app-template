@@ -1,7 +1,7 @@
 {
   "meta": {
-    "codeState": "commit 7d6bd78 (kod aplikacji identyczny z importem 7340863 z AgenticApp poza narzędziami opisanymi w docs/CONSOLIDATION-REPORT.md §3); regresja w czystej kopii: pnpm verify 257/257, pnpm test:e2e 63/63, pnpm check:module-swap, start produkcyjny — docs/evidence/template-consolidation/",
-    "date": "2026-09-16",
+    "codeState": "commit d142b85 (kod z 7d6bd78 + przeniesione poprawki AgenticApp z 2026-09-17: ui_filter i zawężanie w adresie, alwaysLoad, wyszukiwanie \"*\" z totals; poza tym kod identyczny z AgenticApp, różnice wyłącznie narzędzi szablonu — docs/CONSOLIDATION-UPDATE-2026-09-17.md); regresja w czystej kopii d142b85: pnpm verify 278/278, pnpm test:e2e 72/72 (cztery tury na prawdziwym modelu), sonda ui_filter na prawdziwym modelu, pnpm check:module-swap, start produkcyjny — docs/evidence/template-update-2026-09-17/przebieg-d142b85/. Oceny z 2026-09-16 nieobjęte zmianą kodu pozostają bez zmian (regresja nie oblała żadnego testu, na którym się opierały).",
+    "date": "2026-09-17 (aktualizacja ocen z 2026-09-16)",
     "scope": "ocena różnic dla bazowej wersji szablonu (faza konsolidacji). Oceny: analiza kodu i testów szablonu wobec treści kryteriów, z historyczną oceną wykonawcy AgenticApp jako punktem wyjścia, skorygowana o wyniki regresji. To nie jest odbiór 200 kryteriów."
   },
   "criteria": {
@@ -153,7 +153,7 @@
       "status": "czesciowe",
       "evidence": "kod",
       "origin": "szablon",
-      "proof": "docs/evidence/template-consolidation/przebieg-2-7d6bd78/01-srodowisko.txt: system, Node 24.19.0, pnpm 9.15.9, zewnętrzne CLI claude 2.1.273, pełny hash commita i sha256 pnpm-lock.yaml; start-czysta-kopia.txt: wersje z /api/status (node, hono, drizzle, @mastra/core, @mastra/claude, claude-agent-sdk 0.3.270, zod). Nie obejmuje: rozwiązanych wersji React, TypeScript i OpenUI zapisanych przy dowodzie (są tylko w lockfile); wersji CLI wbudowanej w SDK; pliki pomiarów zapisywane przez testy (e2e/measurements.spec.ts, streaming.spec.ts, agent-ui.spec.ts) mają tylko znacznik czasu, bez commita i wersji.",
+      "proof": "docs/evidence/template-update-2026-09-17/przebieg-d142b85/01-srodowisko.txt (czysta kopia d142b85, 2026-09-17): system, Node 24.19.0, pnpm 9.15.9, zewnętrzne CLI claude, pełny hash commita, sha256 pnpm-lock.yaml; start-czysta-kopia.txt: wersje z /api/status (node, hono, drizzle, @mastra/core, @mastra/claude, claude-agent-sdk 0.3.270, zod). Wcześniejszy przebieg: docs/evidence/template-consolidation/przebieg-2-7d6bd78/. Nie obejmuje: rozwiązanych wersji React, TypeScript i OpenUI przy dowodzie; wersji CLI wbudowanej w SDK; pliki pomiarów zapisywane przez testy mają tylko znacznik czasu.",
       "gap": "Dowody generowane przez testy nie niosą commita ani wersji, a zapis wersji przy regresji nie obejmuje wszystkich rozwiązanych pakietów ani wersji CLI wbudowanej w SDK (może różnić się od globalnego claude). Wyniku testu nie da się więc samodzielnie powiązać z użytym runtime.",
       "backlog": "BL-12",
       "scenarios": [
@@ -164,7 +164,7 @@
       "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "Czysta kopia commita 7d6bd78 (git clone poza repozytorium, bez node_modules, dist i data): pnpm install --frozen-lockfile = 0, pnpm verify = 0 (257/257), pnpm test:e2e = 0 (63/63), pnpm start z własnym portem — dane startowe, restart, pnpm seed, APP_SKIP_BASE_DATA; docs/evidence/template-consolidation/przebieg-2-7d6bd78/. Poprzedni czysty klon bf83bb6 oblał verify i e2e (kolejność testów i buildu) — naprawione w 7d6bd78, zapis w przebieg-1-bf83bb6-nieudany/. Nie obejmuje: nowej maszyny — przeglądarki Playwright pochodziły z lokalnego cache (README podaje teraz pnpm exec playwright install chromium); pnpm dev; mapowania portu kontenera z hosta.",
+      "proof": "Czyste kopie (git clone poza repozytorium, bez node_modules, dist i data): 7d6bd78 — install 0, verify 0 (257/257), test:e2e 0 (63/63), start produkcyjny (docs/evidence/template-consolidation/przebieg-2-7d6bd78/); d142b85 — install 0, verify 0 (278/278), test:e2e 0 (72/72), start produkcyjny, check:module-swap 0 (docs/evidence/template-update-2026-09-17/przebieg-d142b85/); commit końcowy — install i verify w kopii sklonowanej z GitHuba (wynik w tagu i w docs/CONSOLIDATION-UPDATE-2026-09-17.md). Nieudany czysty klon bf83bb6 (kolejność testów i buildu) naprawiony w 7d6bd78. Nie obejmuje: nowej maszyny — przeglądarki Playwright z lokalnego cache; pnpm dev; mapowania portu kontenera.",
       "gap": "—",
       "scenarios": [
         "T01"
@@ -325,10 +325,10 @@
     },
     "L2.13": {
       "status": "czesciowe",
-      "evidence": "gui",
+      "evidence": "model",
       "origin": "szablon",
-      "proof": "e2e/ui-navigation.spec.ts (serwer skryptowany, bez modelu): „polecenie otwiera wskazany widok, a nie opisuje do niego drogi” (files-page widoczny, pathname /files, executed=true w odpowiedzi) i „otwarcie ustawienia podswietla kontrolke i niczego nie zmienia” (settings-auth z data-ui-highlight). Krok ui w e2e/support/scripted-server.ts wywołuje ctx.requestUi bezpośrednio, z pominięciem modelu i narzędzia MCP ui_navigate; handler ui_navigate sprawdza tests/ui-navigation.test.ts z symulowanym potwierdzeniem klienta. Kontekst: raport §4c Rezultat 3 (wada zaobserwowana na żywym modelu). Nie obejmuje: prawdziwego modelu i przełączenia przestrzeni.",
-      "gap": "Brak próby z prawdziwym modelem, że polecenie w rodzaju „przełącz na pliki” kończy się wywołaniem ui_navigate zamiast opisu drogi (pierwotna wada była zachowaniem modelu); przełączenie przestrzeni przez agenta (spaceId) nie ma testu GUI.",
+      "proof": "e2e/agent-ui.spec.ts „pytanie o dane przenosi na ich widok, a nie tylko je opisuje” (PRAWDZIWY model, czysta kopia d142b85, 25,6 s): start na /files, polecenie „Co jest w dostawcach?”, asercja na pasku adresu — pathname /data i widoczny data-page, niezależnie od treści odpowiedzi; sonda docs/evidence/template-update-2026-09-17/przebieg-d142b85/09-sonda-ui-filter-model.json: model otwiera /data z zawężeniem, potwierdzenia klienta executed=true. e2e/ui-navigation.spec.ts (serwer skryptowany): otwarcie /files i podświetlenie ustawienia settings-auth. Nie obejmuje: podświetlenia ustawienia i przełączenia przestrzeni przez prawdziwy model.",
+      "gap": "Otwarcie widoku przez prawdziwy model ma teraz dowód, ale pokazanie ustawienia lub elementu (podświetlenie) i przełączenie przestrzeni (spaceId) przez model nie mają próby; scenariusz skryptowany nadal woła requestUi z pominięciem handlera ui_navigate.",
       "backlog": "BL-03",
       "scenarios": [
         "T23"
@@ -349,7 +349,7 @@
       "status": "czesciowe",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/ui-navigation.spec.ts „Wstecz i Dalej dzialaja po nawigacji wykonanej przez agenta” (/cases → /files, Wstecz do /cases, Dalej do /files) i „zadanie w tle nie przejmuje widoku innej rozmowy”; tests/ui-navigation.test.ts „polecenie niesie rozmowe i stabilny identyfikator”. Idempotencja: UiCommandRunner pamięta obsłużone commandId w useRef (kod). Nie obejmuje: aktualizacji kontekstu po nawigacji i ponowionego zdarzenia.",
+      "proof": "e2e/ui-navigation.spec.ts „Wstecz i Dalej dzialaja po nawigacji wykonanej przez agenta” (/cases → /files, Wstecz do /cases, Dalej do /files) i „zadanie w tle nie przejmuje widoku innej rozmowy”; tests/ui-navigation.test.ts „polecenie niesie rozmowe i stabilny identyfikator”. Idempotencja: UiCommandRunner pamięta obsłużone commandId w useRef (kod). Nie obejmuje: aktualizacji kontekstu po nawigacji i ponowionego zdarzenia. Od d142b85: zawężenie widoku ustawione przez agenta trafia do adresu i wraca przyciskiem Wstecz oraz po odświeżeniu (e2e/view-filter.spec.ts „zawezony widok przezywa odswiezenie i wraca przyciskiem Wstecz”, serwer skryptowany).",
       "gap": "Kontekst agenta (toAppContext w packages/platform-ui/src/state/appState.ts) nie zawiera aktywnego widoku ani trasy, więc otwarcie widoku przez agenta nie zmienia kontekstu kolejnego polecenia i nie ma testu kontekstu po nawigacji; zbiór obsłużonych commandId jest tylko w pamięci komponentu i po przeładowaniu pusty, a kursor lastSeq startuje od 0 — ponowne wykonanie nawigacji po reload w trakcie wykonania nie jest wykluczone i nie ma testu.",
       "backlog": "BL-10",
       "scenarios": [
@@ -368,11 +368,11 @@
       ]
     },
     "L2.17": {
-      "status": "niespelnione",
-      "evidence": "brak",
-      "origin": "brak",
-      "proof": "Brak implementacji: setFilter w packages/platform-ui/src/state/appState.ts nie ma żadnego wywołania, więc filters w kontekście agenta jest zawsze pusty; wśród narzędzi platformy (agent/platform-tools.ts) nie ma akcji filtrów ani sortowania, UI nie ma kontrolek sortowania; jedyny filtr widoku to lokalny przełącznik showExcluded karty porównania (cardState). Brak testów.",
-      "gap": "Agent nie może ustawić ani usunąć filtra ani zmienić sortowania; stan filtrów nie trafia do kontekstu agenta, bo nie jest zasilany.",
+      "status": "czesciowe",
+      "evidence": "model",
+      "origin": "szablon",
+      "proof": "Od d142b85 narzędzie ui_filter (typowana akcja: targetId, predicates eq/neq/contains/in, label, clear) zawęża widok deklarujący UiTarget.filter; stan w adresie (?country=PL), pasek z liczbami i „Pokaż pełny widok”; zawężanie odsiewa tylko wiersze już pobrane, dane biznesowe nietknięte. e2e/view-filter.spec.ts (7 testów, serwer skryptowany): 3 z 4 wierszy, pasek, odświeżenie i Wstecz, wklejony link, przycisk przywraca pełny widok, nieznane pole = odmowa bez zmiany widoku, agent sam przywraca, zawężenie nie przechodzi na inny ekran; tests/view-filter.test.ts (21). Sonda na PRAWDZIWYM modelu (jednorazowa, poza regresją, docs/evidence/template-update-2026-09-17/przebieg-d142b85/09-sonda-ui-filter-model.json): „Pokaż tylko dostawców z Polski.” → /data?country=PL, 3 z 4, pasek; „Pokaż z powrotem wszystkich dostawców.” → 4 wiersze, bez parametru.",
+      "gap": "Brak sortowania i paginacji (nie istnieją w widokach ani w adresie). Stan zawężenia nie trafia do kontekstu agenta: AppContext.filters jest zawsze puste (setFilter bez wywołań), więc w kolejnej turze agent nie wie, że widok jest zawężony — zna tylko wynik z potwierdzenia w tej samej turze. Kontrolki to pasek i przycisk przywrócenia, bez edycji filtra przez użytkownika. Zawężanie działa tylko w widokach deklarujących pola i na danych już pobranych. W sondzie model dwa razy użył wartości spoza zadeklarowanych (country=Polska, country=Poland, po 0 z 4 widocznych chwilowo na ekranie), zanim użył kodu PL.",
       "backlog": "BL-01",
       "scenarios": [
         "T26"
@@ -1024,7 +1024,7 @@
       "evidence": "gui",
       "origin": "szablon",
       "proof": "packages/platform-contracts/src/agent.ts (appContextSchema: conversationId, spaceId, resource, selection, filters, viewport, drafts) budowany w state/appState.ts toAppContext; e2e/chat.spec.ts „czat pokazuje, do jakiego zasobu odnosi sie rozmowa” i „zaznaczenie karty trafia do kontekstu rozmowy” (pasek kontekstu po stronie klienta).",
-      "gap": "Filtry nigdy nie trafiają do kontekstu: setFilter nie jest wywoływany w żadnym widoku, a filtr karty (cardState.showExcluded) nie wchodzi do toAppContext; identyfikacja kompozycji to tylko spaceId, bez wersji kompozycji. Brak testu treści kontekstu odebranego przez backend.",
+      "gap": "Filtry nigdy nie trafiają do kontekstu: setFilter nie jest wywoływany; zawężenie widoku z 2026-09-17 żyje w adresie URL i w agentFilterKey, a nie w AppContext.filters, więc get_context zwraca filters={} także przy zawężonym ekranie. Identyfikacja kompozycji to tylko spaceId, bez wersji. Brak testu treści kontekstu odebranego przez backend.",
       "backlog": "BL-11",
       "scenarios": [
         "T08",
@@ -1163,7 +1163,7 @@
       "status": "czesciowe",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/access-context.spec.ts „po przelaczeniu zaden wiersz poprzedniej tozsamosci nie jest widoczny” (access-denied z kodem forbidden/not_found, odróżniony od pustej listy); tests/live-artifacts.test.ts „brak dostepu nie jest przedstawiany jako swieze dane”; e2e/app.spec.ts „brakujace dane sa oznaczone jako brakujace”; narzędzia zgłaszają AppError not_found/forbidden.",
+      "proof": "e2e/access-context.spec.ts „po przelaczeniu zaden wiersz poprzedniej tozsamosci nie jest widoczny” (access-denied z kodem forbidden/not_found, odróżniony od pustej listy); tests/live-artifacts.test.ts „brak dostepu nie jest przedstawiany jako swieze dane”; e2e/app.spec.ts „brakujace dane sa oznaczone jako brakujace”; narzędzia zgłaszają AppError not_found/forbidden. Od d142b85: procurement_search zwraca totals (liczby spraw, dostawców, pozycji niezależnie od zapytania), a \"*\" zwraca wszystko — „0 pasujących z N” jest odróżnione od pustej aplikacji (tests/view-filter.test.ts, test kontraktu).",
       "gap": "describeResource modułu (module-procurement/src/server/index.ts) zwraca null przy każdym błędzie, więc get_context i prompt nie odróżniają usuniętego, cudzego i nieopisanego zasobu. Zachowanie agenta (brak zmyślania przy braku danych) nie ma testu z modelem w szablonie.",
       "backlog": "BL-11",
       "scenarios": [
@@ -1184,12 +1184,11 @@
       ]
     },
     "L6.13": {
-      "status": "czesciowe",
-      "evidence": "gui",
+      "status": "potwierdzone",
+      "evidence": "model",
       "origin": "szablon",
-      "proof": "Katalog: registry/ui-targets.ts (PLATFORM_UI_TARGETS) i uiTargets modułów; narzędzia ui_catalog i ui_navigate ze schematem Zod (agent/platform-tools.ts). tests/ui-navigation.test.ts „zawiera ekrany platformy i ekrany modulu, bez duplikatow” oraz handler ui_navigate z bramką runtime (executed i reason); e2e/ui-navigation.spec.ts: otwarcie widoku, podświetlenie ustawienia, Wstecz/Dalej, nieznany cel (serwer skryptowany).",
-      "gap": "Handler ui_catalog nie jest wykonywany w żadnym teście (sprawdzana jest tylko nazwa); scenariusz skryptowany woła ctx.requestUi bezpośrednio, z pominięciem handlera ui_navigate i transportu MCP; w szablonie brak przebiegu, w którym prawdziwy model poznaje katalog i wybiera cel.",
-      "backlog": "BL-03",
+      "proof": "Katalog: registry/ui-targets.ts i uiTargets modułów; handler ui_catalog wykonywany w tests/view-filter.test.ts „ui_catalog podaje filterableFields tylko dla widokow, ktore je deklaruja”; handler ui_navigate z bramką runtime w tests/ui-navigation.test.ts (executed/reason, element nieobecny, cudza przestrzeń); nawigacja przez typowany kontrakt MCP wywołana przez PRAWDZIWY model w e2e/agent-ui.spec.ts „pytanie o dane przenosi na ich widok…” (czysta kopia d142b85) oraz ui_filter przez prawdziwy model w sondzie (docs/evidence/template-update-2026-09-17/przebieg-d142b85/09-sonda-ui-filter-model.json, potwierdzenia executed=true). Od d142b85 narzędzia ui_* mają alwaysLoad, więc są w kontekście modelu, a nie za ToolSearch. Zastrzeżenia: podświetlenie elementu przez prawdziwy model nie ma próby (dowód testem handlera i serwerem skryptowanym); nie sprawdzano, czy model wywołał ui_catalog przed wyborem celu (lista celów jest też w promptcie).",
+      "gap": "—",
       "scenarios": [
         "T23"
       ]
@@ -1210,8 +1209,8 @@
       "status": "niespelnione",
       "evidence": "kod",
       "origin": "szablon",
-      "proof": "Brak narzędzia lub kontraktu opisującego aktywny widok: get_context zwraca identyfikatory kontekstu, canvas_list_cards opisuje tylko karty bieżącej przestrzeni canvas (spec, specVersion), ui_catalog to statyczna lista celów, canvas_catalog to katalog komponentów. AppContext nie ma sortowania, a filtry nie są wypełniane (setFilter nieużywany).",
-      "gap": "Agent nie może odczytać widoku, wersji kompozycji, instancji komponentów z powiązaniami rekord–pole, aktualnych filtrów, sortowania ani dozwolonych akcji aktywnego UI (zakres Uzupełnień nieprzekazany wykonawcy).",
+      "proof": "Brak kontraktu opisującego aktywny widok: get_context zwraca identyfikatory kontekstu; canvas_list_cards opisuje karty bieżącej przestrzeni; ui_catalog od d142b85 podaje deklarowane filterableFields widoków (co wolno zawęzić), ale nie aktualny stan ekranu; AppContext nie ma sortowania, a filtry nie są wypełniane.",
+      "gap": "Agent nie może odczytać widoku, wersji kompozycji, instancji komponentów z powiązaniami rekord–pole, AKTUALNYCH filtrów (zawężenie jest w adresie, poza kontekstem), sortowania ani dozwolonych akcji aktywnego UI.",
       "backlog": "BL-01",
       "scenarios": [
         "T25",
@@ -1230,11 +1229,11 @@
       ]
     },
     "L6.17": {
-      "status": "niespelnione",
-      "evidence": "kod",
+      "status": "czesciowe",
+      "evidence": "model",
       "origin": "szablon",
-      "proof": "Jedyny potwierdzony stan po akcji to wynik ui_navigate (executed, url, highlighted) z potwierdzenia klienta; AppContext nie ma wersji ani znacznika świeżości, nie ma sterowania filtrem ani widokiem przez rozmowę ani odczytu stanu UI po zmianie.",
-      "gap": "Agent nie może odczytać potwierdzonego stanu UI po zmianie filtra lub widoku ani wykryć nieaktualności kontekstu (brak wersji); dalsza odpowiedź opiera się na stanie sprzed akcji.",
+      "proof": "Od d142b85 wynik ui_filter zawiera potwierdzenie klienta z liczbami zgłoszonymi przez widok (filtered.matched/total), url i executed, z odróżnieniem not_applied (tests/view-filter.test.ts). Sonda na PRAWDZIWYM modelu (docs/evidence/template-update-2026-09-17/przebieg-d142b85/09-sonda-ui-filter-model.json): po potwierdzeniach 0 z 4 dla country=Polska i country=Poland model poprawił wartość na PL (3 z 4) — dalsze działanie oparł na potwierdzonym stanie po akcji, nie na stanie sprzed niej.",
+      "gap": "Potwierdzony stan jest dostępny tylko jako wynik narzędzia w tej samej turze: AppContext nie zawiera zawężenia ani widoku, nie ma wersji lub znacznika świeżości kontekstu, więc w kolejnej turze agent nie odczyta nowego stanu UI ani nie wykryje nieaktualności.",
       "backlog": "BL-01",
       "scenarios": [
         "T26",
@@ -2521,7 +2520,7 @@
       "status": "potwierdzone",
       "evidence": "kod",
       "origin": "szablon",
-      "proof": "docs/CONSOLIDATION-REPORT.md §5.1 (czysty klon bf83bb6: pnpm verify = 1 i pnpm test:e2e = 1, przyczyna i poprawka w 7d6bd78, surowe logi w docs/evidence/template-consolidation/przebieg-1-bf83bb6-nieudany/), §5.3 (trzy nieudane próby wymiany modułu przed udaną: dwa błędy skryptu i rzeczywista wada typowanych tras), §5.2 (kontener: nieudany dostęp z hosta z kontrolą środowiska); FEEDBACK.md T1. playwright.config.ts ma retries 0, więc niestabilność nie jest maskowana ponowieniem; przebieg 2 nie miał ponowień.",
+      "proof": "docs/CONSOLIDATION-REPORT.md §5.1 (czysty klon bf83bb6: pnpm verify = 1 i pnpm test:e2e = 1, przyczyna i poprawka w 7d6bd78, surowe logi w docs/evidence/template-consolidation/przebieg-1-bf83bb6-nieudany/), §5.3 (trzy nieudane próby wymiany modułu przed udaną: dwa błędy skryptu i rzeczywista wada typowanych tras), §5.2 (kontener: nieudany dostęp z hosta z kontrolą środowiska); FEEDBACK.md T1. playwright.config.ts ma retries 0, więc niestabilność nie jest maskowana ponowieniem; przebieg 2 nie miał ponowień. Aktualizacja 2026-09-17 (docs/CONSOLIDATION-UPDATE-2026-09-17.md): pierwsze uruchomienie sondy ui_filter nie wystartowało (config sondy poza pakietem ESM — błąd narzędzia próby, log 09-sonda-ui-filter-model-proba1-blad-configu.txt), drugie przeszło; w regresji d142b85 brak oblań i ponowień.",
       "gap": "—",
       "scenarios": []
     },
@@ -2556,7 +2555,7 @@
   "scenarios": {
     "T01": {
       "status": "czesciowe",
-      "proof": "czysta kopia 7d6bd78: install z lockfile, pnpm verify (build), pnpm start — frontend serwowany przez backend, dane startowe (przebieg-2-7d6bd78/). Błędna konfiguracja instancji testowej daje czytelny błąd przed operacją (tests/isolation.test.ts).",
+      "proof": "czyste kopie 7d6bd78 i d142b85: install z lockfile, pnpm verify (build), pnpm start — frontend serwowany przez backend, dane startowe (template-consolidation/przebieg-2-7d6bd78/, template-update-2026-09-17/przebieg-d142b85/). Błędna konfiguracja instancji testowej daje czytelny błąd przed operacją (tests/isolation.test.ts).",
       "gap": "Brak zbudowanego pakietu przy pnpm test:e2e kończy się surowym ERR_MODULE_NOT_FOUND zamiast czytelnego komunikatu; brak logowania Claude i brak przeglądarek Playwright nie mają próby negatywnej."
     },
     "T02": {
@@ -2666,8 +2665,8 @@
     },
     "T23": {
       "status": "czesciowe",
-      "proof": "e2e/ui-navigation.spec.ts: widok otwarty, ustawienie podświetlone bez zmiany wartości, Wstecz/Dalej, nieznany cel z odmową, brak przejęcia widoku z tła; potwierdzenie klienta przez /api/runs/:id/ui-ack.",
-      "gap": "Próba wywołuje requestUi bezpośrednio, z pominięciem modelu i handlera ui_navigate; ochrona przed ponowieniem polecenia istnieje tylko w pamięci komponentu i nie przeżywa reload (L2.15, L6.13)."
+      "proof": "e2e/ui-navigation.spec.ts (serwer skryptowany): widok otwarty, ustawienie podświetlone bez zmiany wartości, Wstecz/Dalej, nieznany cel z odmową, brak przejęcia widoku z tła; potwierdzenie klienta przez /api/runs/:id/ui-ack. Od d142b85: e2e/agent-ui.spec.ts „pytanie o dane przenosi na ich widok…” — prawdziwy model wywołuje ui_navigate i ekran kończy na /data.",
+      "gap": "Polecenie pokazania USTAWIENIA z podświetleniem przez prawdziwy model nie ma próby (scenariusz skryptowany omija handler ui_navigate); ochrona przed ponowieniem polecenia istnieje tylko w pamięci komponentu i nie przeżywa reload (L2.15)."
     },
     "T24": {
       "status": "czesciowe",
@@ -2680,9 +2679,9 @@
       "gap": "Brak semantycznego opisu aktywnego UI, mapowania rekord–pole na cel prezentacyjny i wskazania wartości mimo filtra lub paginacji (BL-01)."
     },
     "T26": {
-      "status": "niespelnione",
-      "proof": "—",
-      "gap": "Filtry i sortowanie nie są sterowane przez agenta; filtry w kontekście są zawsze puste (BL-01)."
+      "status": "czesciowe",
+      "proof": "Od d142b85: e2e/view-filter.spec.ts (serwer skryptowany) — polecenie zawęża widok, wiersze i pasek zgodne (3 z 4), odświeżenie i Wstecz, link, przywrócenie pełnego zakresu przyciskiem i przez agenta, nieznane pole bez zmiany widoku, filtr nie przechodzi na inny ekran; sonda na prawdziwym modelu: zawężenie do PL i przywrócenie (docs/evidence/template-update-2026-09-17/przebieg-d142b85/09-sonda-ui-filter-model.json).",
+      "gap": "Brak sortowania; kolejne pytanie nie uwzględnia filtra, bo zawężenie nie trafia do kontekstu agenta (L6.1, L6.17); kontrola negatywna „zmiana danych zamiast filtra” i „pusty zbiór przedstawiony jako błąd” bez osobnej próby GUI; model użył najpierw wartości spoza deklaracji (0 z 4 widoczne chwilowo)."
     },
     "T27": {
       "status": "niespelnione",
@@ -2694,7 +2693,7 @@
     {
       "id": "BL-01",
       "title": "Semantyczny odczyt UI, wskazanie wartości, filtry i sortowanie przez rozmowę",
-      "summary": "Zakres „Uzupełnienia: semantyczne UI i własne widoki agenta” — dopisany do specyfikacji po przekazaniu zadania wykonawcy AgenticApp, więc niewdrożony. Agent ma odczytywać wersjonowany opis aktywnej kompozycji (instancje komponentów, rekord–pole, filtry, sortowanie, dozwolone akcje), pokazywać wartość konkretnego pola mimo filtra lub paginacji oraz ustawiać i usuwać filtry i sortowanie typowanymi akcjami bez mutacji danych.",
+      "summary": "Zakres „Uzupełnienia: semantyczne UI i własne widoki agenta”. Stan od 2026-09-17 (d142b85): zawężanie widoku filtrem przez rozmowę JEST zaimplementowane dla widoków deklarujących UiTarget.filter (ui_filter, stan w adresie, pasek, potwierdzenie z liczbami), ale pozycja pozostaje otwarta. Pozostaje: (R2 z przekazania) zawężenie nie trafia do kontekstu agenta — AppContext.filters jest puste, agent nie odczyta filtra w kolejnej turze ani nie wykryje nieaktualności; (R3) sortowanie i paginacja nie istnieją, a gdy powstaną, należą do adresu razem z filtrami; (R4) trwałe preferencje i zapisane widoki na koncie nie istnieją; wersjonowany opis aktywnej kompozycji (instancje komponentów, rekord–pole, dozwolone akcje) i wskazanie wartości konkretnego pola mimo filtra lub paginacji; zawężanie tylko po stronie klienta, na wierszach już pobranych; model potrafi najpierw użyć wartości spoza zadeklarowanych (sonda: Polska, Poland przed PL).",
       "done": "próby T25 i T26 przechodzą przez GUI na prawdziwym modelu z kontrolami negatywnymi (błędny rekord, niejednoznaczność, brak dostępu, odpowiedź tekstowa bez wskazania pola, zmiana danych zamiast filtra); potwierdzenie klienta identyfikuje rekord i pole; kontekst po akcji ma nową wersję."
     },
     {

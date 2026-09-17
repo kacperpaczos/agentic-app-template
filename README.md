@@ -99,7 +99,7 @@ pnpm verify              # granica platforma–domena, macierz 200 kryteriów, m
                          # typecheck (TypeScript 7), build frontendu i backendu, testy Vitest
                          # (tests/durability.test.ts skanuje zbudowane pakiety, dlatego build jest przed testami)
 pnpm test:e2e            # Playwright na ISTNIEJĄCYM buildzie produkcyjnym — najpierw pnpm build lub pnpm verify;
-                         # własne porty 8793–8799 i katalogi .e2e*; trzy testy zużywają tury subskrypcji Claude
+                         # własne porty 8792–8799 i katalogi .e2e*; cztery testy zużywają tury subskrypcji Claude
 pnpm check:module-swap   # próba wymiany modułu przykładowego na kontrolny, na kopii repozytorium
 pnpm diag                # prawdziwa sesja Claude: czy narzędzia MCP są widoczne
 ```
@@ -111,7 +111,8 @@ pnpm diag                # prawdziwa sesja Claude: czy narzędzia MCP są widocz
 > `APP_BASE=http://127.0.0.1:8790 pnpm acceptance` przy serwerze wystartowanym z `PORT=8790
 > APP_DATA_DIR=/ścieżka/do/kopii`.
 
-Wyniki ostatniej regresji i czystej instalacji: [`docs/CONSOLIDATION-REPORT.md`](docs/CONSOLIDATION-REPORT.md).
+Wyniki ostatniej regresji i czystej instalacji: [`docs/CONSOLIDATION-UPDATE-2026-09-17.md`](docs/CONSOLIDATION-UPDATE-2026-09-17.md)
+(wcześniejsza konsolidacja: [`docs/CONSOLIDATION-REPORT.md`](docs/CONSOLIDATION-REPORT.md)).
 
 ## Konfiguracja
 
@@ -145,13 +146,24 @@ Opis funkcji nie jest dowodem ich działania — stan i dowód każdego zachowan
 - zadania w tle: przełączenie rozmowy, zamknięcie panelu i przeładowanie nie anulują pracy; Stop
   jest jawny i dotyczy wskazanego wykonania;
 - nawigacja agenta: „przełącz na pliki”, „pokaż ustawienie logowania” otwiera widok i podświetla
-  element, z potwierdzeniem klienta; pokazanie ustawienia go nie zmienia.
+  element, z potwierdzeniem klienta; pokazanie ustawienia go nie zmienia; pytanie o dane, które mają
+  swój ekran („co jest w dostawcach?”), też przenosi na ten ekran;
+- zawężanie widoku przez agenta: „pokaż tylko dostawców z Polski” zawęża **widok**, nie rozmowę.
+  Zawężenie trafia do adresu (`/data?country=PL` — równe, `country=!FI` — różne od, `name=~av` —
+  zawiera, `country=PL,CZ` — którekolwiek z), więc przeżywa odświeżenie, działa jako link i cofa się
+  przyciskiem Wstecz; wyjście na inny ekran je zdejmuje. Nad zawężonym ekranem stoi pasek z opisem
+  wygenerowanym z faktycznie zastosowanych warunków, liczbą wierszy i przyciskiem „Pokaż pełny
+  widok”. Pola, po których wolno zawężać, deklaruje moduł (`UiTarget.filter`); pole spoza listy jest
+  odrzucane. Link nie omija uprawnień: parametry tylko odsiewają wiersze z odpowiedzi, którą backend
+  już ograniczył do właściciela. Sortowanie, paginacja i odczyt semantycznego stanu ekranu nie są
+  zaimplementowane (backlog BL-01).
 
 ## Najważniejsze ograniczenia
 
 - Specyfikacja nie jest w pełni spełniona — patrz [`docs/BACKLOG.md`](docs/BACKLOG.md). Brakuje m.in.
-  semantycznego odczytu aktywnego ekranu, sterowania filtrami i sortowaniem przez rozmowę oraz
-  przestrzeni „Widoki agenta”.
+  semantycznego odczytu aktywnego ekranu, sortowania przez rozmowę, wskazania wartości pola rekordu
+  oraz przestrzeni „Widoki agenta”; zawężanie widoku filtrem jest zaimplementowane tylko dla widoków,
+  które deklarują pola.
 - XLSX: formuły nie są przeliczane; wykresy, formatowanie warunkowe i tabele przestawne nie są
   zachowywane przy zapisie; `.xlsm` i `.xls` są odrzucane.
 - Zadanie w tle żyje tak długo jak proces backendu; restart oznacza je jako przerwane.
@@ -169,7 +181,8 @@ Opis funkcji nie jest dowodem ich działania — stan i dowód każdego zachowan
 | [`docs/NEW-APPLICATION.md`](docs/NEW-APPLICATION.md) | kontrakt modułu domenowego i kroki tworzenia nowej aplikacji |
 | [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md) | wyliczona macierz kryteriów z dowodami |
 | [`docs/BACKLOG.md`](docs/BACKLOG.md) | otwarte kryteria pogrupowane w pakiety prac |
-| [`docs/CONSOLIDATION-REPORT.md`](docs/CONSOLIDATION-REPORT.md) | raport utworzenia szablonu: zmiany, regresja, publikacja |
+| [`docs/CONSOLIDATION-REPORT.md`](docs/CONSOLIDATION-REPORT.md) | raport utworzenia szablonu: zmiany, regresja, publikacja (2026-09-16) |
+| [`docs/CONSOLIDATION-UPDATE-2026-09-17.md`](docs/CONSOLIDATION-UPDATE-2026-09-17.md) | aktualizacja o poprawki AgenticApp z 2026-09-17: mapa różnic, regresja, publikacja publiczna |
 | [`docs/DOCUMENTATION-MAP.md`](docs/DOCUMENTATION-MAP.md) | rozliczenie wcześniejszych dokumentów |
 | [`docs/observability.md`](docs/observability.md) | diagnostyka i opcjonalny eksport telemetrii |
 | [`docs/odzyskiwanie-stanu.md`](docs/odzyskiwanie-stanu.md) | kopia, próba migracji, odtworzenie |

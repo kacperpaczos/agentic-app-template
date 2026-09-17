@@ -158,3 +158,54 @@ duplikacie identyfikatora — `docs/evidence/template-consolidation/kontrole-neg
 Wszystko, co wymienia `docs/BACKLOG.md` (142 kryteria w 12 pakietach), oraz: mapowanie portu
 kontenera z hosta (niesprawdzone w tym środowisku), `pnpm dev` (nieuruchamiany — proxy na 8791),
 instalacja przeglądarek Playwright na nowej maszynie, licencja kodu (decyzja właściciela).
+
+---
+
+## T2 — 2026-09-17 — Aktualizacja o poprawki AgenticApp i publikacja publiczna
+
+**Zakres:** przenieść wszystkie poprawki wykonane w AgenticApp po bazowej wersji szablonu, zachować
+celowe zmiany szablonu, zweryfikować w czystej kopii, zaktualizować macierz i opublikować repozytorium
+jako publiczne. Bez nowej rozbudowy. Pełny raport: `docs/CONSOLIDATION-UPDATE-2026-09-17.md`.
+
+### Co przeniesiono
+
+Manifest AgenticApp porównany z manifestem zapisanym po konsolidacji z 2026-09-16: 21 zmienionych i
+4 nowe pliki kodu (zawężanie widoku `ui_filter` w adresie, `alwaysLoad`, reguła promptu „odpowiedź o
+danych przenosi na ich widok”, wyszukiwanie `*` z `totals`, testy). Żaden z nich nie był zmieniany w
+szablonie, więc kopiowanie nie nadpisało poprawek konsolidacji — sprawdzone przed kopiowaniem względem
+commitu importu. Po przeniesieniu kod szablonu jest identyczny z AgenticApp poza 12 celowymi różnicami
+(narzędzia i dokumentacja szablonu). Raport przekazania od wykonawcy odczytu potwierdził ten sam
+zakres (25 plików, zero pominiętych poprawek) i wskazał ryzyka R1–R8 — każde rozliczone w raporcie.
+
+### Regresja
+
+Czysta kopia `d142b85`: install 0, `verify` 0 (278/278), `test:e2e` 0 (72/72, 7,0 min, cztery tury
+na prawdziwym modelu, w tym nowy test „pytanie o dane przenosi na ich widok”), `check:module-swap` 0
+(zmiana walidatora adresu w routerze nie zepsuła próby wymiany), start produkcyjny z danymi.
+
+### Sonda `ui_filter` na prawdziwym modelu — pierwszy przebieg nie wystartował
+
+Suita przeglądarkowa sprawdza zawężanie tylko serwerem skryptowanym, więc zmieniony przepływ
+sprawdziłem jednorazową sondą na izolowanej instancji z konfiguracji repozytorium. Pierwsze
+uruchomienie padło przy wczytaniu configu sondy (plik poza pakietem z `"type": "module"`, Playwright
+wczytał go jako CJS) — błąd narzędzia próby, nie aplikacji. Drugie przeszło: „Pokaż tylko dostawców z
+Polski.” → `/data?country=PL`, 3 z 4, pasek; „Pokaż z powrotem wszystkich dostawców.” → 4 wiersze.
+
+**Obserwacja warta zapisania:** potwierdzenia klienta pokazują, że model najpierw użył
+`country=Polska`, potem `country=Poland` (po 0 z 4, widoczne chwilowo na ekranie), a dopiero potem
+`PL` — mimo że moduł deklaruje wartości `PL, FI, DE, CZ`. Mechanizm potwierdzenia z liczbami
+zadziałał jako korekta; kosztem były dwie zbędne akcje na ekranie użytkownika. Zapisane w BL-01.
+
+### Macierz
+
+Przejrzane kryteria wskazane w przekazaniu (L2.13, L2.17, L6.13) i powiązane (L2.15, L6.1, L6.11,
+L6.15, L6.17, T23, T26). Wynik: L6.13 potwierdzone (handler `ui_catalog` w teście, nawigacja przez
+prawdziwy model); L2.17 i L6.17 z niespełnionych na częściowe; T26 częściowe. **BL-01 i L2.17 nie są
+zamknięte:** zawężenie nie trafia do kontekstu agenta (`AppContext.filters` puste), nie ma sortowania,
+paginacji ani trwałych preferencji. Sumy: 59 / 118 / 15 / 8.
+
+### Publikacja
+
+Adres e-mail autora w metadanych commitów występuje w 540 publicznych commitach tego konta na GitHubie,
+więc zmiana widoczności nie ujawnia go po raz pierwszy — historii nie przepisywano. Wynik skanu i
+potwierdzenie widoczności: raport aktualizacji §6.

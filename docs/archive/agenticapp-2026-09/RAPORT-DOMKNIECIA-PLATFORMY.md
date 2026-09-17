@@ -1,6 +1,6 @@
 # Raport domknięcia platformy AgenticApp
 
-> **Dokument historyczny z aplikacji AgenticApp** (stan z 2026-09-16, przed konsolidacją szablonu; sha256 oryginału `b6c245b8ec369558…`).
+> **Dokument historyczny z aplikacji AgenticApp** (stan z 2026-09-17, po wpisach #40–#41 i §4e; sha256 oryginału `15f764c43dbfa54d…`; poprzednia kopia w tym archiwum pochodziła z 2026-09-16).
 > Opisuje próby wykonane w katalogu AgenticApp i ocenę wobec poprzedniej wersji specyfikacji (95 kryteriów).
 > Nie potwierdza stanu tego repozytorium — aktualna ocena: [`docs/ACCEPTANCE.md`](../../ACCEPTANCE.md).
 > Odnośniki do `docs/evidence/…` wskazują dowody, które pozostały lokalnie w AgenticApp i nie są publikowane; odnośniki do `docs/*.md` odpowiadają plikom w `docs/` tego repozytorium.
@@ -61,10 +61,10 @@ Wynik po drugiej turze prac:
 | Kontrola | Wynik |
 |---|---|
 | `pnpm typecheck` | 0 błędów |
-| `pnpm test` (vitest) | **257 testów, 22 pliki, wszystkie przeszły** |
+| `pnpm test` (vitest) | **278 testów, 23 pliki, wszystkie przeszły** |
 | `pnpm check:boundaries` | granica platforma–domena zachowana |
 | `pnpm build` | frontend + backend zbudowane |
-| `pnpm test:e2e` (Playwright) | **63 testy, 63 przeszły** (5,0 min; w tym trzy tury na prawdziwym modelu) |
+| `pnpm test:e2e` (Playwright) | **72 testy, 72 przeszły** (5,6 min; w tym cztery tury na prawdziwym modelu) |
 | `node scripts/closure-matrix.mjs --check` | 95 kryteriów, bez braków i duplikatów |
 | `pnpm verify` | kod wyjścia 0 |
 
@@ -843,6 +843,185 @@ jedyną drogą byłoby podmienianie treści w cudzym markupie.
 
 ---
 
+## 4e. Przeniesienie do danych i zawężanie w widoku
+
+**Data:** 2026-09-17. Zgłoszenie użytkownika wskazywało dwa błędy; przy
+dowodzeniu pierwszego wyszedł trzeci, który był przyczyną cytowanego zdania
+„aplikacja jest obecnie pusta".
+
+### Błąd 1 — pytanie o dane nie przenosiło do danych
+
+Zapis z działającej aplikacji: na „co jest w dostawcach?" agent odczytał dane,
+przepisał je do rozmowy i zostawił użytkownika na ekranie, na którym był.
+Dopiero po „a dlaczego mnie tam nie przeniosłeś?" wywołał `ui_navigate`.
+
+Pierwsza hipoteza — zbyt wąska reguła w prompcie („gdy użytkownik **prosi** o
+pokazanie") — była tylko połową prawdy. Poprawiłem regułę, uruchomiłem test na
+prawdziwym modelu i **test oblał**: 7 minut, koniec na `/files`. Dziennik
+uruchomienia pokazał dlaczego:
+
+```
+TOOL_CALL_START ToolSearch
+TOOL_CALL_ARGS  {"query":"select:mcp__app__procurement_search,mcp__app__get_context"}
+TOOL_CALL_RESULT {"total_deferred_tools":54}
+```
+
+**`ui_navigate` nie było w kontekście modelu.** Claude Agent SDK odracza
+narzędzia, gdy jest ich dużo — 54 z nich siedziały za `ToolSearch`. Model
+wyszukał dwa, których się spodziewał, i odpowiedział z nich. Prompt kazał mu
+nawigować i nazywał narzędzie, którego nie miał. Żadna ilość instrukcji tego nie
+naprawia.
+
+`ModuleToolDefinition` ma teraz `alwaysLoad`, przekazywane do `tool()` SDK jako
+`{ alwaysLoad: true }`. Ustawione na czterech narzędziach — `get_context`,
+`ui_catalog`, `ui_navigate`, `ui_filter` — czyli tych, o których model musi
+*wiedzieć, że istnieją*, żeby zachować się poprawnie, a nie tych, których szuka,
+gdy już wie, czego chce. Reszta zostaje odroczona; każde zawsze wczytane
+narzędzie jest w każdym prompcie.
+
+**Dowód:** `e2e/agent-ui.spec.ts`, test na prawdziwym modelu, asercja na pasku
+adresu (nie na tekście odpowiedzi — agent, który wypisuje dostawców *i*
+przenosi, jest w porządku; ten, który tylko wypisuje, jest wadą, a w prozie oba
+wyglądają tak samo).
+
+| | przed | po |
+|---|---|---|
+| narzędzia w turze | `ToolSearch, get_context, procurement_search` | `ToolSearch, **ui_navigate**, procurement_search` |
+| ekran po odpowiedzi | `/files` (bez zmian) | `/data` |
+| czas | timeout 7 min | **22,8 s** |
+
+### Błąd 2 — zawężanie działo się w czacie zamiast w widoku
+
+Na „pokaż mi tylko PL dostawców" agent przepisał pasujące wiersze do rozmowy.
+Ekran nadal pokazywał wszystkie cztery, więc użytkownik miał przed sobą pełną
+listę i ręcznie przepisaną kopię obok — kopię, której nie da się posortować,
+która się nie odświeży i jest dokładnie tak poprawna, jak dokładne było
+przepisywanie.
+
+**Zawężanie należy do rzeczy zawężanej.** Nowe narzędzie `ui_filter` idzie tym
+samym kanałem co `ui_navigate`: komenda → przeglądarka → potwierdzenie.
+
+- **Widok deklaruje, co wolno zawęzić.** `UiTarget.filter` podaje `collection`
+  (klucz tablicy w odpowiedzi widoku) i listę pól. Platforma nosi jedno i drugie
+  nie czytając: to moduł jest jedynym miejscem, które wie, że dostawca ma kraj.
+  Pole spoza listy jest **odrzucane po nazwie**, zanim cokolwiek pójdzie do
+  przeglądarki — agent zdolny filtrować po wymyślonym polu pokazałby pusty ekran
+  i nazwał to odpowiedzią.
+- **Zastosowanie jest w jednym miejscu.** `useModuleData` — hook, przez który
+  każdy widok modułu czyta swoje dane. Robienie tego per ekran znaczyłoby, że
+  każdy ekran, obecny i przyszły, musi o tym pamiętać, a ten, który zapomni,
+  pokaże pełną listę pod banerem twierdzącym, że jest zawężona.
+- **Informacja jest obowiązkowa.** `label` jest wymagany w kontrakcie, a baner
+  nad powierzchnią roboczą mówi, że **widok zawęził agent**, czym go zawęził i
+  ile wierszy zostało — plus przycisk „Pokaż pełny widok". Widok pokazujący po
+  cichu 3 z 4 wierszy jest gorszy niż pokazujący 4: użytkownik myśli, że patrzy
+  na wszystko.
+- **Liczby pochodzą z widoku, nie z serwera.** Runner czeka, aż jakiś widok
+  zgłosi, co zastosował — tak samo jak podświetlenie czeka na swój element.
+  Bez tego odpowiedź brzmiałaby „ustawiliśmy jakiś stan", a różnica, która ma
+  znaczenie — *zawężone do zera* kontra *nic tego nie zastosowało* — byłaby nie
+  do rozstrzygnięcia. Stąd osobny powód odmowy `not_applied`.
+
+### Błąd 3 — pusty wynik wyszukiwania czytany jako pusta aplikacja
+
+Znaleziony przy dowodzeniu błędu 1, i to on stoi za zdaniem z cytowanego
+przebiegu. Model poprosił o wszystko przez `query: "*"`. `LIKE '%*%'` nie pasuje
+do niczego, więc dostał `{"results":[]}` — i powiedział użytkownikowi, że baza
+jest pusta, przy czterech dostawcach i otwartej sprawie w bazie.
+
+Dwie naprawy, obie w module:
+
+1. `*` i `%` znaczą „wszystko". Wyszukiwanie, które na „pokaż wszystko"
+   odpowiada „nic", nie jest wąskie — jest błędne.
+2. **Każda odpowiedź niesie `totals`** — ile rekordów każdego rodzaju w ogóle
+   istnieje. „0 pasujących z 4 dostawców" to inne zdanie niż „nie ma
+   dostawców", i tylko jedno z nich było kiedykolwiek prawdziwe. Opis narzędzia
+   mówi to wprost.
+
+### Dowód odbioru
+
+| Zestaw | Testy | Co pokrywa |
+|---|---|---|
+| `tests/view-filter.test.ts` | 21 | znaczenie operatorów; katalog podaje pola; odmowa po nazwie **bez wysyłania czegokolwiek do przeglądarki**; wymagane `label`; `clear`; odmowa klienta nie jest nadpisywana; `*` zwraca wszystko; `totals` w każdej odpowiedzi; zapis i odczyt adresu w obie strony; parametr spoza deklaracji nie staje się filtrem; kolizja z kluczem sesji odrzucona przy starcie; warunki tylko odsiewają wiersze widoczne dla odbiorcy |
+| `e2e/view-filter.spec.ts` | 5 | zawężenie widać w tabeli (3 z 4), baner mówi kto i ile, przycisk przywraca 4 wiersze, nieznane pole = odmowa przy nietkniętym widoku, agent sam przywraca, zawężenie nie przenosi się na inny ekran |
+| `e2e/agent-ui.spec.ts` | +1 | **prawdziwy model**: pytanie o dane kończy się na ich widoku |
+
+**Kontrola siły testów.** Dwie mutacje, każda łapana osobno:
+
+| Cofnięcie | Wynik |
+|---|---|
+| zawężenie deklarowane, ale wiersze nieodsiewane | oblewa na `toHaveCount(3)` — dostaje 4 |
+| wiersze odsiewane, ale baner usunięty | oblewa na braku `view-filter-banner` |
+
+Pierwsza pilnuje, żeby baner nie kłamał; druga — żeby zawężenie nie było ciche.
+Żadna z nich nie jest wykrywana przez tę drugą.
+
+**Dowód wizualny:** [`docs/evidence/chat-ux-2026-09-16/05-zawezony-widok.png`](docs/evidence/chat-ux-2026-09-16/05-zawezony-widok.png).
+
+### Poprawka: zawężenie należy do adresu
+
+Pierwsza wersja trzymała zawężenie w stanie klienta. Uzasadniłem to tym, że
+zawężenie jest czymś, co **zrobiono** ekranowi, a nie miejscem, do którego się
+nawigowało. To pomyliło **pochodzenie zmiany** z **naturą stanu**: filtr
+rozstrzyga, *jaki zestaw rekordów użytkownik ogląda*, a to jest dokładnie ta
+rzecz, którą link, odświeżenie, Wstecz i zakładka mają zachować. Uwaga
+użytkownika była słuszna i wersja opisana wyżej została poprawiona.
+
+Podział, według którego jest to teraz ułożone:
+
+| Gdzie | Co tam trafia | W tej aplikacji |
+|---|---|---|
+| **Adres URL** | co użytkownik ogląda: wyszukiwanie, status, zakres, sortowanie, strona | zawężenie widoku — jeden parametr na pole |
+| **Stan lokalny** | chwilowe stany interfejsu: otwarte menu, modal, hover | to, **kto** zawęził widok (agent tej sesji czy nie) |
+| **Konto / backend** | trwałe preferencje, zapisane własne widoki | **niezaimplementowane** — patrz niżej |
+
+Zapis jest czytelny, bo te adresy trafiają do wklejanych linków:
+
+```
+/data?country=PL          równe
+/data?country=!FI         różne od
+/data?name=~av            zawiera
+/data?country=PL,CZ       którekolwiek z
+```
+
+Trzy konsekwencje warte zapisania:
+
+- **Filtry nie są przenoszone między ekranami.** `retainSearchParams` obejmuje
+  dalej tylko `c` i `s`. Zawężenie należy do widoku, dla którego powstało;
+  przeniesienie `country=PL` na następny ekran ukryłoby tam wiersze, o które
+  nikt nie prosił. Wyjście z widoku zdejmuje filtr, a Wstecz go przywraca.
+- **Tekst na pasku jest generowany z tego, co faktycznie zastosowane**, przez
+  etykiety pól zadeklarowane przez widok — a nie cytowany ze zdania agenta.
+  Zdanie agenta mogłoby opisywać co innego niż to, co jest na ekranie, a
+  wklejony link w ogóle by go nie niósł. Pasek nie może się pomylić co do tego,
+  co widać.
+- **Pole filtra nie może nazywać się `c` ani `s`.** Te klucze należą do sesji i
+  są przenoszone przez każdą nawigację. Kolizja jest odrzucana przy budowaniu
+  katalogu, czyli **przy starcie**, a nie po cichu w produkcji.
+
+### Link z filtrem a uprawnienia
+
+Filtr w adresie jest z założenia do wysłania komuś, więc pytanie brzmi, czy link
+niesie ze sobą dane. Nie niesie: **nic z adresu nie dociera do bazy**. Warunki
+tylko *usuwają* wiersze z odpowiedzi, którą backend już ograniczył do
+właściciela, więc ten sam link otwarty przez kogoś innego zawęża *jego* dane i
+nie może pokazać wiersza, którego ta osoba i tak by nie zobaczyła.
+
+Pokazane, nie założone — `e2e/access-context.spec.ts`: ten sam adres
+`/data?country=PL` po przełączeniu tożsamości jest nadal zawężony i pokazuje
+**zero** wierszy, a nazwa dostawcy z poprzedniej tożsamości nie występuje nigdzie
+na stronie.
+
+### Czego to nie obejmuje
+
+- **Sortowanie i paginacja** nie istnieją w tych widokach, więc nie ma ich też w
+  adresie. Gdy powstaną, należą tam razem z filtrami.
+- **Trzecia warstwa — trwałe preferencje na koncie** („domyślnie 50 rekordów",
+  zapisane własne widoki) — nie jest zaimplementowana. Nie było jej w wymaganiu
+  i nie udaję, że jest.
+
+---
+
 ## 5. Wyniki testów
 
 ### Jednostkowe i integracyjne (`pnpm test`)
@@ -870,7 +1049,7 @@ jedyną drogą byłoby podmienianie treści w cudzym markupie.
 
 ### Przeglądarkowe (`pnpm test:e2e`)
 
-63 testy w 13 plikach, wszystkie przechodzą w jednym przebiegu (5,0 min). Każdy
+72 testy w 14 plikach, wszystkie przechodzą w jednym przebiegu (5,6 min). Każdy
 plik importuje `test` z `e2e/support/fixtures.ts`, więc żaden nie może wysłać
 żądania do instancji, której przebieg sam nie uruchomił.
 
@@ -880,15 +1059,16 @@ plik importuje `test` z `e2e/support/fixtures.ts`, więc żaden nie może wysła
 | `chat.spec.ts` | 7 | tytuły, lista rozmów, przełączanie, usuwanie przez menu wiersza | bez modelu |
 | `chat-drawer.spec.ts` | 6 | szuflada na dwóch szerokościach, klawiatura, fokus | bez modelu |
 | `chat-layout.spec.ts` | 4 | geometria panelu: brak obcych dzieci w kontenerze, szerokość wątku, spinacz w kompozytorze, zakładka artefaktów | bez modelu |
+| `view-filter.spec.ts` | 7 | zawężenie widoku i jego adres, przeżycie odświeżenia, Wstecz, wklejony link, baner z liczbami, powrót do pełnego widoku, odmowa przy nieznanym polu, brak przecieku na inny ekran | scenariusz zamiast modelu |
 | `session-restore.spec.ts` | 6 | ta sama rozmowa i przestrzeń po przeładowaniu, kontynuacja sesji, Wstecz/Dalej, stany zastępcze | scenariusz zamiast modelu |
 | `tool-activity.spec.ts` | 5 | aktywność narzędzi, błąd narzędzia, błąd wykonania, restart backendu | scenariusz zamiast modelu |
 | `streaming.spec.ts` | 3 | przyrost tekstu **oraz dwie kontrole negatywne** detektora | scenariusz zamiast modelu |
-| `access-context.spec.ts` | 2 | zmiana tożsamości w jednej instancji, widoczny brak dostępu | bez modelu |
+| `access-context.spec.ts` | 3 | zmiana tożsamości w jednej instancji, widoczny brak dostępu, **zawężony link nie pokazuje odbiorcy cudzych danych** | bez modelu |
 | `measurements.spec.ts` | 2 | czas odświeżenia po mutacji, czas anulowania | mutacja przez UI + scenariusz |
 | `background-tasks.spec.ts` | 5 | zadanie przeżywa zmianę rozmowy i przeładowanie; brak mieszania; powrót bez ponownego uruchomienia; Stop | scenariusz zamiast modelu |
 | `ui-navigation.spec.ts` | 5 | otwarcie widoku i ustawienia, podświetlenie, Wstecz/Dalej, nieznany cel, brak przejęcia widoku | scenariusz zamiast modelu |
 | `files-agent.spec.ts` | 3 | obraz i XLSX wgrane przez GUI na **prawdziwym modelu** | dwie tury subskrypcji |
-| `agent-ui.spec.ts` | 1 | pełna ścieżka na **prawdziwym modelu** | jedna tura subskrypcji |
+| `agent-ui.spec.ts` | 2 | pełna ścieżka oraz „pytanie o dane przenosi na ich widok", obie na **prawdziwym modelu** | dwie tury subskrypcji |
 
 ### Kontrola siły testów
 
@@ -908,6 +1088,10 @@ napraw sprawdzono przez cofnięcie. Surowe wyniki drugiej tury:
 | Rozszerzenie: zadania w tle | przywrócenie mapowania abort→`/cancel` | `background-tasks.spec.ts` oblewa na pierwszym teście |
 | Panel rozmowy (układ) | `<div>` z jednym słowem jako dziecko `AgentInterface` | 3 z 4 testów oblewa; wątek spada do 87 % panelu |
 | Panel rozmowy (menu) | menu z powrotem wewnątrz kompozytora | obie asercje oblewają osobno: strukturalna i `elementFromPoint` |
+| Zawężanie widoku | zawężenie deklarowane, wiersze nieodsiewane | oblewa na `toHaveCount(3)` — dostaje 4 |
+| Zawężanie widoku (baner) | wiersze odsiewane, baner usunięty | oblewa na braku `view-filter-banner` |
+| Zawężanie widoku (adres) | parametr z adresu traktowany jako filtr **bez** deklaracji widoku | oblewa: `c=cnv_…` staje się filtrem na nieistniejące pole, widok pokazuje 0 z 4 |
+| Nawigacja do danych | `alwaysLoad` zdjęte z `ui_navigate` | test na prawdziwym modelu oblewa: 7 min, koniec na `/files`, `ui_navigate` nieużyte (przebieg sprzed naprawy) |
 
 Dwa wiersze są tu ważniejsze od pozostałych. Przy rezultacie 2 oslabiony detektor
 nadal zalicza przebieg strumieniowy — więc to **kontrola negatywna**, i tylko ona,
@@ -1229,9 +1413,26 @@ docker compose up -d                 # http://localhost:8791
 
 `.dockerignore` odcina `node_modules`, `dist`, `data`, `backups` i katalogi
 testowe, więc obraz powstaje ze źródeł i `pnpm-lock.yaml`, a nie ze stanu
-katalogu roboczego. W logu budowania widać `reused 0, downloaded 544` — żaden
-pakiet nie pochodzi z lokalnego magazynu. Stan aplikacji żyje w wolumenie
-`/data` i nigdy nie jest częścią obrazu.
+katalogu roboczego. Stan aplikacji żyje w wolumenie `/data` i nigdy nie jest
+częścią obrazu.
+
+**Przebudowa 2026-09-16** (po poprawkach panelu rozmowy, sekcja 4d):
+`agenticapp:czysty`, 2,83 GB, `9e1d83b90f58`. Dowody, że „bez cache" znaczy tu
+to, co mówi:
+
+- **0 warstw `CACHED`** w całym logu budowania;
+- `Progress: resolved 625, reused 0, downloaded 625, added 625, done` — żaden
+  pakiet nie pochodzi z lokalnego magazynu pnpm;
+- pakiet frontendu w obrazie to `index-Ne7AskTt.js` — **ta sama suma
+  zawartości** co w buildzie z poprawkami, więc obraz niesie aktualny kod, a nie
+  poprzedni;
+- obraz uruchomiony na porcie zapasowym z wyrzucanym wolumenem: wątek zajmuje
+  559 z 560 px, spinacz jest w pasku akcji kompozytora, obie zakładki działają —
+  te same pomiary co na instancji lokalnej (sonda `scripts/probe-chat-composer.mjs`).
+
+Kontener sprawdzający i jego wolumen zostały usunięte po weryfikacji; obraz nie
+został uruchomiony na porcie 8791, żeby nie wyprzeć działającej instancji
+lokalnej.
 
 **Ograniczenie, które trzeba znać:** Claude Agent SDK czyta poświadczenie
 subskrypcji z `~/.claude` na hoście. W kontenerze tego katalogu nie ma, więc

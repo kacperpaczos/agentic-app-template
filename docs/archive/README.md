@@ -7,7 +7,7 @@ Pełne rozliczenie: [`../DOCUMENTATION-MAP.md`](../DOCUMENTATION-MAP.md).
 
 | Katalog | Co zawiera | Jak czytać |
 |---|---|---|
-| [`agenticapp-2026-09/`](agenticapp-2026-09/) | dokumenty aplikacji AgenticApp, z której skopiowano kod szablonu: dziennik `FEEDBACK.md` (#1–#39), audyt `RAPORT-STANU-PLATFORMY.md`, `RAPORT-DOMKNIECIA-PLATFORMY.md`, dawne `README` oraz specyfikacja w wersji 95 kryteriów | wyniki dotyczą prób w AgenticApp i starej wersji wymagań. Specyfikacja 95 kryteriów jest identyczna bajt w bajt z oryginałem, bo czytają ją skrypty historycznej macierzy (`pnpm check:closure`); pozostałe pliki mają adnotację na początku. `pnpm check:matrix` sprawdza spójność macierzy w archiwalnym `FEEDBACK.md` |
+| [`agenticapp-2026-09/`](agenticapp-2026-09/) | dokumenty aplikacji AgenticApp, z której skopiowano kod szablonu: dziennik `FEEDBACK.md` (#1–#41, stan z 2026-09-17), audyt `RAPORT-STANU-PLATFORMY.md`, `RAPORT-DOMKNIECIA-PLATFORMY.md` (z §4e, stan z 2026-09-17), dawne `README` (z 2026-09-16) oraz specyfikacja w wersji 95 kryteriów | wyniki dotyczą prób w AgenticApp i starej wersji wymagań. Specyfikacja 95 kryteriów jest identyczna bajt w bajt z oryginałem, bo czytają ją skrypty historycznej macierzy (`pnpm check:closure`); pozostałe pliki mają adnotację na początku. `pnpm check:matrix` sprawdza spójność macierzy w archiwalnym `FEEDBACK.md` |
 | [`plan-2026-08/`](plan-2026-08/) | plan i arkusz decyzji z 2026-08-16 dla wcześniejszej koncepcji (Next.js, CopilotKit, BYOK/LiteLLM) | **nieaktualny stos, sprzeczny ze specyfikacją**; zachowany jako zapis rozważanych alternatyw |
 
 Dowody historyczne (`docs/evidence/…` przywoływane w raportach) pozostały lokalnie w AgenticApp:

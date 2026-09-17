@@ -1,0 +1,20 @@
+{
+  "at": "2026-09-17T13:03:20.199Z",
+  "mutationRefresh": {
+    "co": "zmiana ilosci pozycji oferty przez formularz na canvasie",
+    "od": "klikniecie „Zapisz” w formularzu",
+    "do": "zmiana widocznych sum w karcie zestawienia (bez przeladowania strony)",
+    "warunki": "build produkcyjny, instancja e2e na wlasnym katalogu danych, Chromium, jeden worker",
+    "czasMs": 212
+  },
+  "cancellation": {
+    "co": "zatrzymanie trwajacego wykonania przyciskiem kompozytora",
+    "od": "klikniecie przycisku zatrzymania w przegladarce",
+    "do": "status uruchomienia w backendzie osiaga stan koncowy",
+    "warunki": "scenariusz zamiast modelu (deterministyczna dlugosc odpowiedzi), instancja na wlasnym katalogu danych i porcie 8797",
+    "czasMs": 578,
+    "statusKoncowy": "cancelled",
+    "zdarzenPrzed": 4,
+    "zdarzenPo": 7
+  }
+}

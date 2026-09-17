@@ -1,0 +1,12 @@
+commit: d142b85
+zrodlo: <repozytorium-zrodlowe>
+katalog: <czysta kopia poza repozytorium>
+data: 2026-09-17T12:58:45Z
+os: Linux 7.2.5-200.fc44.x86_64 x86_64
+node: v24.19.0
+pnpm: 9.15.9
+claude CLI: 2.1.274 (Claude Code)
+zajete porty 8790-8799 przed startem: :8791 
+d142b85d4be88aa458875df8c13685a0c9c07987
+lockfile sha256: f2cfa663f6be5fe7f7cd7a619226a9e1f39b7aff4a0830ee74501cc4d3ceae52
+pliki śledzone: 234; pliki nieśledzone przed instalacją: 0

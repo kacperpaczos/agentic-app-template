@@ -1,6 +1,6 @@
 # FEEDBACK — raport techniczny realizacji
 
-> **Dokument historyczny z aplikacji AgenticApp** (stan z 2026-09-16, przed konsolidacją szablonu; sha256 oryginału `b20275ce71b8dc7d…`).
+> **Dokument historyczny z aplikacji AgenticApp** (stan z 2026-09-17, po wpisach #40–#41 i §4e; sha256 oryginału `7ede758288062e65…`; poprzednia kopia w tym archiwum pochodziła z 2026-09-16).
 > Opisuje próby wykonane w katalogu AgenticApp i ocenę wobec poprzedniej wersji specyfikacji (95 kryteriów).
 > Nie potwierdza stanu tego repozytorium — aktualna ocena: [`docs/ACCEPTANCE.md`](../../ACCEPTANCE.md).
 > Odnośniki do `docs/evidence/…` wskazują dowody, które pozostały lokalnie w AgenticApp i nie są publikowane; odnośniki do `docs/*.md` odpowiadają plikom w `docs/` tego repozytorium.
@@ -104,9 +104,9 @@ Weryfikacja:
 
 ```bash
 pnpm typecheck                          # 0 błędów (TypeScript 7.0.2)
-pnpm test                               # 257 testów w 22 plikach
+pnpm test                               # 278 testów w 23 plikach
 pnpm check:boundaries                   # granica platforma–domena
-pnpm test:e2e                           # 63 testy przeglądarkowe (trzy wydają tury subskrypcji)
+pnpm test:e2e                           # 72 testy przeglądarkowe (cztery wydają tury subskrypcji)
 pnpm check:matrix                       # podsumowanie macierzy zgodne z tabelami
 pnpm --filter @app/server diag          # prawdziwa sesja Claude: widoczność narzędzi MCP
 node scripts/acceptance-agent.mjs       # 6 scenariuszy z prawdziwym modelem (kosztuje tury)
@@ -1160,6 +1160,142 @@ Zostawiłem instancję dowodową na porcie 8798, w zakresie zarezerwowanym dla
 Playwrighta (8792–8799). Suita scenariuszowa próbowała tam wstać, zastała cudzy
 serwer i **odmówiła pracy** — `TestIsolationError`, zero operacji. Straż z
 rezultatu 3 zadziałała dokładnie tak, jak miała. Sonda przeniesiona na 8788.
+
+---
+
+### #40 — 2026-09-17 — Prompt nie naprawi narzędzia, którego model nie ma
+
+Użytkownik zgłosił dwa błędy z własnego przebiegu. Trzeci wyszedł przy
+dowodzeniu pierwszego i to on był przyczyną zdania, które w tym przebiegu
+najbardziej rzucało się w oczy.
+
+#### Naprawa, która nie zadziałała, i to, czego nauczyła
+
+Na „co jest w dostawcach?" agent odpowiadał tekstem i nie przenosił ekranu.
+Reguła w prompcie brzmiała „gdy użytkownik **prosi** o pokazanie", a pytanie tak
+nie brzmi — więc rozszerzyłem regułę, uruchomiłem test na prawdziwym modelu i
+**oblał**. Siedem minut, koniec na `/files`.
+
+Dziennik uruchomienia odpowiedział czym innym, niż zakładałem:
+
+```
+TOOL_CALL_START ToolSearch
+TOOL_CALL_RESULT {"total_deferred_tools":54}
+narzędzia w turze: ToolSearch, get_context, procurement_search
+```
+
+SDK odracza narzędzia, gdy jest ich dużo. `ui_navigate` **nie było w kontekście
+modelu** — siedziało za `ToolSearch`, a model wyszukał tylko te dwa, których się
+spodziewał. Prompt kazał mu nawigować i nazywał narzędzie, którego nie miał.
+
+Wniosek do zapisania: **kiedy model „nie słucha instrukcji", najpierw sprawdź,
+czy ma czym ją wykonać.** Pisałem trzeci akapit instrukcji do narzędzia, którego
+nie było w promptcie. Po dodaniu `alwaysLoad` na czterech narzędziach sterujących
+ten sam test przeszedł w 22,8 s, a w turze widać `mcp__app__ui_navigate`
+wywołane **przed** odczytem danych.
+
+Drugi wniosek, ogólniejszy: test na prawdziwym modelu zarobił tu na siebie.
+Wersja z samą poprawką promptu wyglądała na skończoną i przeszłaby każdy test
+scenariuszowy, bo scenariusz robi to, co w nim napisano.
+
+#### Zawężanie: kopia w czacie zamiast filtra w widoku
+
+Na „pokaż tylko PL dostawców" agent przepisywał wiersze do rozmowy. Ekran
+pokazywał dalej wszystkie cztery — użytkownik dostawał pełną listę i ręczną
+kopię obok, z poleceniem czytania kopii.
+
+Trzy decyzje warte zapisania:
+
+**Zastosowanie w jednym miejscu, nie w każdym widoku.** Wymaganie brzmiało
+„w każdym widoku". Gdyby każdy ekran implementował to sam, wymaganie byłoby
+obietnicą, którą każdy nowy ekran musi pamiętać — a ten, który zapomni, pokaże
+pełną listę pod banerem mówiącym, że jest zawężona. Filtr działa w
+`useModuleData`, baner nad powierzchnią roboczą. Jedno i drugie jest prawdziwe
+o ekranach, których jeszcze nie ma.
+
+**Zdanie dla użytkownika jest w kontrakcie wymagane.** `label` nie jest
+opcjonalny, bo widok pokazujący po cichu 3 z 4 wierszy jest gorszy niż
+pokazujący 4 — użytkownik myśli, że patrzy na wszystko.
+
+**Liczby przychodzą z widoku.** Runner czeka, aż jakiś widok zgłosi, co
+zastosował. Serwer policzyłby to samo, ale wtedy „executed" znaczyłoby „tak nam
+się wydaje", a różnica między *zawężone do zera* a *nic tego nie zastosowało*
+byłaby nie do rozstrzygnięcia. Stąd osobny powód odmowy `not_applied`.
+
+#### „Aplikacja jest pusta" przy pełnej bazie
+
+To zdanie było w przebiegu użytkownika i wyglądało na halucynację. Nie było.
+Model poprosił o wszystko przez `query: "*"`, a wyszukiwanie robi
+`LIKE '%*%'` — co nie pasuje do niczego. Dostał `{"results":[]}` i wyciągnął
+jedyny wniosek, jaki dawała ta odpowiedź.
+
+Naprawa nie polega na dopisaniu modelowi ostrożności. `*` znaczy teraz
+„wszystko", a **każda** odpowiedź wyszukiwania niesie `totals` — ile rekordów
+każdego rodzaju w ogóle jest. „0 pasujących z 4 dostawców" nie da się
+sparafrazować jako „nie ma dostawców" bez zaprzeczenia treści odpowiedzi.
+
+Ogólna zasada, którą zapisuję sobie na przyszłość: jeżeli agent mówi coś
+nieprawdziwego o danych, sprawdź najpierw, co naprawdę zwróciło narzędzie.
+Dwa razy w tej turze wyglądało to na błąd modelu i dwa razy był to kontrakt
+narzędzia.
+
+---
+
+### #41 — 2026-09-17 — Pomyliłem pochodzenie zmiany z naturą stanu
+
+Zawężenie widoku zbudowałem na stanie klienta i uzasadniłem to w raporcie tak:
+„to jest coś, co **zrobiono** ekranowi użytkownika, a nie miejsce, do którego
+nawigował; przeładowanie ma oddać dane, a nie przywrócić cudzy filtr".
+
+Użytkownik odpisał, że filtry należą do adresu, i miał rację. Moje zdanie było
+prawdziwe o **pochodzeniu** zmiany i nic nie mówiło o **naturze** stanu. Filtr
+rozstrzyga, jaki zestaw rekordów użytkownik ogląda — a to jest dokładnie ta
+rzecz, którą link, odświeżenie, Wstecz i zakładka mają zachować. Trzymając ją w
+pamięci odebrałem wszystkie cztery.
+
+#### Podział, który sobie zapisuję
+
+| Gdzie | Co tam trafia |
+|---|---|
+| **URL** | co użytkownik ogląda: wyszukiwanie, status, zakres dat, sortowanie, strona |
+| **stan lokalny** | chwilowe stany interfejsu: otwarte menu, modal, rozwinięty panel, hover |
+| **konto / backend** | trwałe preferencje, zapisane własne widoki |
+
+Ciekawe jest to, że po przeniesieniu filtra do URL **jedna rzecz została w
+pamięci i to była właśnie ta, o którą mi chodziło**: czy zawężenie zrobił agent
+tej sesji. Tego adres nieść nie powinien — ten sam URL otwarty z wklejonego
+linku albo przyciskiem Wstecz to ten sam widok, zawężony przez nikogo. Moja
+intuicja dotyczyła prawdziwej rzeczy, tylko przypisałem ją do złego kawałka
+stanu.
+
+#### Co wyszło przy okazji przenoszenia
+
+**Pasek przestał cytować agenta.** Skoro filtr jest w adresie, zdanie opisujące
+go trzeba wygenerować z tego, co w adresie stoi — przez etykiety pól
+zadeklarowane przez widok. Wyszło lepiej niż było: cytowane zdanie agenta mogło
+opisywać co innego niż to, co faktycznie zastosowano, a wklejony link w ogóle by
+go nie niósł. Wygenerowany pasek nie może się pomylić co do tego, co widać.
+
+**`validateSearch` po cichu zjadał wszystko, czego nie znał.** Walidator roota
+zwracał tylko `c` i `s`, więc `?country=PL` znikał, zanim jakikolwiek ekran mógł
+go przeczytać. Godzina na filtrze, który „nie działa", bo router go kasował.
+
+**Filtry celowo NIE są przenoszone między ekranami.** `retainSearchParams`
+obejmuje dalej tylko `c` i `s`. To wypadło dobrze samo z siebie: wyjście z
+widoku zdejmuje filtr, a Wstecz go przywraca.
+
+#### Zastrzeżenie o uprawnieniach, które trzeba było sprawdzić, nie odpowiedzieć
+
+Użytkownik dopisał, że link z filtrem nie może omijać uprawnień. Konstrukcyjnie
+nie może — parametry tylko *usuwają* wiersze z odpowiedzi, którą backend już
+ograniczył do właściciela, i nic z adresu nie dociera do bazy. Ale to jest
+argument, a nie dowód, więc jest test: ten sam adres `/data?country=PL` po
+przełączeniu tożsamości pokazuje zero wierszy, a nazwa z poprzedniej tożsamości
+nie występuje nigdzie na stronie.
+
+Mutacja, która to pilnuje: gdy parametry z adresu traktować jako filtry **bez**
+sprawdzania deklaracji widoku, `c=cnv_…` staje się filtrem na nieistniejące pole
+i widok pokazuje 0 z 4. Deklaracja pól jest więc nośna, a nie ozdobna.
 
 ---
 

@@ -1,0 +1,67 @@
+/**
+ * Jednorazowa sonda na PRAWDZIWYM modelu (nie część regresji szablonu):
+ * ui_filter wywołany przez agenta z polecenia w czacie zawęża widok /data i go przywraca.
+ * Uruchamiana przez playwright.probe.config.ts na izolowanej instancji z konfiguracji repozytorium
+ * (port 8799, katalog .e2e-data, etykieta instancji testowej). Asercje dotyczą ekranu i potwierdzenia
+ * klienta (POST /api/runs/:id/ui-ack), nie treści odpowiedzi modelu.
+ */
+import { writeFileSync } from 'node:fs';
+import { expect, test } from '../REPO/e2e/support/fixtures.ts';
+
+const AGENT_TIMEOUT = 420_000;
+const OUT = process.env.PROBE_OUT!;
+
+test.describe('sonda: zawężanie widoku przez prawdziwy model', () => {
+  test.describe.configure({ mode: 'serial', timeout: AGENT_TIMEOUT });
+
+  test('polecenie w czacie zawęża /data do polskich dostawców i przywraca pełny widok', async ({ page }) => {
+    const acks: unknown[] = [];
+    page.on('request', (req) => {
+      if (/\/api\/runs\/[^/]+\/ui-ack$/.test(req.url())) acks.push(req.postDataJSON());
+    });
+    const rows = page.locator('[data-testid="data-page"] tbody tr');
+    const banner = page.getByTestId('view-filter-banner');
+    const send = async (text: string) => {
+      const composer = page.locator('.openui-agent-thread-composer__input');
+      await expect(composer).toBeVisible();
+      await composer.fill(text);
+      await page.locator('.pf-chat [aria-label="Send message"]').first().click();
+    };
+    const t0 = Date.now();
+
+    await page.goto('/data');
+    await expect(page.getByTestId('data-page')).toBeVisible();
+    await expect(rows).toHaveCount(4, { timeout: 30_000 });
+    await expect(banner).toHaveCount(0);
+
+    await send('Pokaż tylko dostawców z Polski.');
+    await expect(rows).toHaveCount(3, { timeout: AGENT_TIMEOUT });
+    await expect(page.locator('[data-testid="data-page"]')).not.toContainText('NordAV');
+    await expect(banner).toBeVisible();
+    const narrowedUrl = page.url();
+    expect(new URL(narrowedUrl).searchParams.get('country')).toMatch(/PL/);
+    const bannerText = (await banner.textContent()) ?? '';
+    await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', /succeeded|failed/, { timeout: AGENT_TIMEOUT });
+    const phase1 = await page.getByTestId('run-state').getAttribute('data-phase');
+    const t1 = Date.now();
+
+    await send('Pokaż z powrotem wszystkich dostawców.');
+    await expect(rows).toHaveCount(4, { timeout: AGENT_TIMEOUT });
+    await expect(banner).toHaveCount(0, { timeout: AGENT_TIMEOUT });
+    await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', /succeeded|failed/, { timeout: AGENT_TIMEOUT });
+    const phase2 = await page.getByTestId('run-state').getAttribute('data-phase');
+    const restoredUrl = page.url();
+    expect(new URL(restoredUrl).searchParams.get('country')).toBeNull();
+    const t2 = Date.now();
+
+    const filterAcks = (acks as Array<Record<string, unknown>>).filter((a) => a && 'filtered' in a || (a as any)?.targetId === 'procurement.data');
+    writeFileSync(OUT, JSON.stringify({
+      zrodlo: 'prawdziwy model subskrypcyjny, dwie tury',
+      tura1: { polecenie: 'Pokaż tylko dostawców z Polski.', faza: phase1, wiersze: 3, adres: new URL(narrowedUrl).pathname + new URL(narrowedUrl).search, pasek: bannerText.replace(/\s+/g, ' ').trim(), czasMs: t1 - t0 },
+      tura2: { polecenie: 'Pokaż z powrotem wszystkich dostawców.', faza: phase2, wiersze: 4, adres: new URL(restoredUrl).pathname + new URL(restoredUrl).search, czasMs: t2 - t1 },
+      potwierdzeniaKlienta: acks,
+    }, null, 2) + '\n');
+    expect(filterAcks.length).toBeGreaterThan(0);
+    expect(acks.some((a: any) => a?.executed === true && a?.filtered?.matched === 3 && a?.filtered?.total === 4)).toBe(true);
+  });
+});

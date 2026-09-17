@@ -1,0 +1,31 @@
+(node:2373113) Warning: Failed to load the ES module: <czysta-kopia>/playwright.config.ts. Make sure to set "type": "module" in the nearest package.json file or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+<czysta-kopia>/playwright.config.ts:23
+  repoRoot: import.meta.dirname,
+                   ^^^^
+
+SyntaxError: Cannot use 'import.meta' outside a module
+    at wrapSafe (node:internal/modules/cjs/loader:1804:18)
+    at Module._compile (node:internal/modules/cjs/loader:1846:20)
+    at Object.<anonymous> (node:internal/modules/cjs/loader:2003:10)
+    at Module.load (node:internal/modules/cjs/loader:1594:32)
+    at Module._load (node:internal/modules/cjs/loader:1396:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.require (node:internal/modules/cjs/loader:1617:12)
+    at require (node:internal/modules/helpers:153:16)
+    at Object.<anonymous> (/<katalog-sondy>/playwright.probe.config.ts:1:1)
+    at Module._compile (node:internal/modules/cjs/loader:1872:14)
+    at Object.<anonymous> (node:internal/modules/cjs/loader:2003:10)
+    at Module.load (node:internal/modules/cjs/loader:1594:32)
+    at Module._load (node:internal/modules/cjs/loader:1396:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.require (node:internal/modules/cjs/loader:1617:12)
+    at require (node:internal/modules/helpers:153:16)
+    at requireOrImport (<czysta-kopia>/node_modules/.pnpm/playwright@1.63.0/node_modules/playwright/lib/common/index.js:1083:18)
+    at loadUserConfig (<czysta-kopia>/node_modules/.pnpm/playwright@1.63.0/node_modules/playwright/lib/common/index.js:1268:52)
+    at loadConfig (<czysta-kopia>/node_modules/.pnpm/playwright@1.63.0/node_modules/playwright/lib/common/index.js:1275:28)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at Object.loadConfigFromFile (<czysta-kopia>/node_modules/.pnpm/playwright@1.63.0/node_modules/playwright/lib/common/index.js:1490:10)
+    at runTests (<czysta-kopia>/node_modules/.pnpm/playwright@1.63.0/node_modules/playwright/lib/cli/testActions.js:46:18)
+    at _Command.<anonymous> (<czysta-kopia>/node_modules/.pnpm/playwright@1.63.0/node_modules/playwright/lib/program.js:55:7)
+sonda exit=1

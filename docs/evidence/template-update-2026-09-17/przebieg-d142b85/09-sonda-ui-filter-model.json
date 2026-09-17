@@ -1,0 +1,67 @@
+{
+  "zrodlo": "prawdziwy model subskrypcyjny, dwie tury",
+  "tura1": {
+    "polecenie": "Pokaż tylko dostawców z Polski.",
+    "faza": "succeeded",
+    "wiersze": 3,
+    "adres": "/data?c=cnv_7c04ff50d08f46e4863c&country=PL",
+    "pasek": "Widok zawezony przez agenta. Kraj (kod ISO): PL — pokazane 3 z 4Pokaz pelny widok",
+    "czasMs": 45851
+  },
+  "tura2": {
+    "polecenie": "Pokaż z powrotem wszystkich dostawców.",
+    "faza": "succeeded",
+    "wiersze": 4,
+    "adres": "/data?c=cnv_7c04ff50d08f46e4863c",
+    "czasMs": 10245
+  },
+  "potwierdzeniaKlienta": [
+    {
+      "commandId": "uic_42ef63c7d40d447180d7",
+      "targetId": "procurement.data",
+      "executed": true,
+      "highlighted": false,
+      "url": "/data?c=cnv_7c04ff50d08f46e4863c"
+    },
+    {
+      "commandId": "uic_fc4b6cdaaa2143bcbbba",
+      "targetId": "procurement.data",
+      "executed": true,
+      "highlighted": false,
+      "filtered": {
+        "matched": 0,
+        "total": 4
+      },
+      "url": "/data?c=cnv_7c04ff50d08f46e4863c&country=Polska"
+    },
+    {
+      "commandId": "uic_68cad3fbd1d84db6ab92",
+      "targetId": "procurement.data",
+      "executed": true,
+      "highlighted": false,
+      "filtered": {
+        "matched": 0,
+        "total": 4
+      },
+      "url": "/data?c=cnv_7c04ff50d08f46e4863c&country=Poland"
+    },
+    {
+      "commandId": "uic_c8f41d03798849a9a9ce",
+      "targetId": "procurement.data",
+      "executed": true,
+      "highlighted": false,
+      "filtered": {
+        "matched": 3,
+        "total": 4
+      },
+      "url": "/data?c=cnv_7c04ff50d08f46e4863c&country=PL"
+    },
+    {
+      "commandId": "uic_00dcb8358fab4ffba3fa",
+      "targetId": "procurement.data",
+      "executed": true,
+      "highlighted": false,
+      "url": "/data?c=cnv_7c04ff50d08f46e4863c"
+    }
+  ]
+}

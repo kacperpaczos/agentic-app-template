@@ -63,3 +63,16 @@ Lokalna kopia wszystkich dokumentów sprzed zmian leży poza repozytorium, w kat
 | `docs/BACKLOG.md` | otwarte kryteria pogrupowane w pakiety, generowany | jw. |
 | `docs/CONSOLIDATION-REPORT.md` | raport z konsolidacji | nowy |
 | `docs/archive/README.md` | spis archiwum i zasady czytania dokumentów historycznych | nowy |
+
+## 5. Aktualizacja 2026-09-17 — poprawki AgenticApp po konsolidacji
+
+Pełna mapa różnic kodu i decyzji: [`CONSOLIDATION-UPDATE-2026-09-17.md`](CONSOLIDATION-UPDATE-2026-09-17.md).
+
+| Stara ścieżka | Rola | Decyzja | Docelowa ścieżka | Uzasadnienie |
+|---|---|---|---|---|
+| `AgenticApp/FEEDBACK.md` (wpisy #40–#41) | dziennik: `alwaysLoad`, zawężanie widoku, wyszukiwanie `*`, przeniesienie filtra do adresu | **archiwum** (kopia zaktualizowana do stanu z 2026-09-17) + **scalenie** wniosków | `szablon/docs/archive/agenticapp-2026-09/FEEDBACK.md`; pułapki → `szablon/docs/NEW-APPLICATION.md` §7 | nowe wpisy opisują próby w AgenticApp; wnioski (sprawdź dostępność narzędzia, zanim poprawisz prompt; `totals` w wyszukiwaniu) są trwałe dla autorów modułów. `pnpm check:matrix` przechodzi na nowej kopii |
+| `AgenticApp/RAPORT-DOMKNIECIA-PLATFORMY.md` (§4e) | opis i dowody poprawek z 2026-09-17 | **archiwum** (kopia zaktualizowana) | `szablon/docs/archive/agenticapp-2026-09/RAPORT-DOMKNIECIA-PLATFORMY.md` | liczby w §4e dotyczą przebiegów w AgenticApp; szablon ma własną regresję |
+| `AgenticApp/README.md` (sekcja „Zawężanie widoku przez agenta”) | opis funkcji | **scalenie** | `szablon/README.md` („Co pokazuje aplikacja przykładowa”), `szablon/docs/NEW-APPLICATION.md` §3–§5 (kontrakt `UiTarget.filter`, `useModuleData`, `alwaysLoad`) | README szablonu opisuje też ograniczenia (brak sortowania, filtr poza kontekstem agenta) |
+| `AgenticApp/docs/evidence/chat-ux-2026-09-16/05-zawezony-widok.png`, zmienione `docs/evidence/closure-2026-09-15/2*.json` | dowody lokalne | **pozostają lokalnie** | — | jak wszystkie dowody AgenticApp; szablon ma własne: `szablon/docs/evidence/template-update-2026-09-17/` |
+| `materiały/handoff-poprawki-agenticapp-2026-09-17.md` | przekazanie od wykonawcy odczytu: zakres 25 plików, celowe różnice szablonu, ryzyka R1–R8 | **nie przenoszone**, **rozliczone** | `szablon/docs/CONSOLIDATION-UPDATE-2026-09-17.md` §3 | dokument roboczy z lokalnymi ścieżkami; każdy punkt i ryzyko ma decyzję w raporcie aktualizacji |
+| `AgenticApp/docs/ARCHITECTURE.md`, `docs/DOCUMENTATION-MAP.md`, `stack-agentowy-ustalenia-i-materialy.md` | bez zmian od 2026-09-16 | **bez działania** | — | treść zgodna z odpowiednikami szablonu (różnią się tylko nagłówkiem lokalnym) |
