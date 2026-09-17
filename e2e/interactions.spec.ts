@@ -326,6 +326,14 @@ test.describe('interakcje widokow agenta', () => {
     const expected = formatFieldValue({ ...target, unitPriceMinor: MCP_PRICE * 100 }, priceField(backend));
     await expect(priceCell(card, String(target.id))).not.toHaveText(expected);
 
+    // A form the user has open in this view while the run changes data: the
+    // refresh must not take it, nor what they have typed into it, with it.
+    const table = card.locator('[data-component="DataTable"]');
+    const editedRow = projectorOf(backend, 'AV Technika');
+    await actionButton(table, String(editedRow.id)).click();
+    const openForm = table.getByTestId('record-action-form');
+    await openForm.getByLabel('Nowa cena jednostkowa').fill('111');
+
     await send(page, '[mcp] Zmien cene projektora MediaPro na 14 250 PLN');
     const strip = page.getByTestId('run-state');
     await expect(strip).toHaveAttribute('data-phase', 'running');
@@ -334,6 +342,10 @@ test.describe('interakcje widokow agenta', () => {
     // run's `data_changed`, not the refresh every run gets when it ends.
     await expect(priceCell(card, String(target.id))).toHaveText(expected, { timeout: 5_000 });
     await expect(strip).toHaveAttribute('data-phase', 'running');
+    await expect(openForm).toHaveCount(1);
+    await expect(openForm.getByLabel('Nowa cena jednostkowa')).toHaveValue('111');
+    await openForm.getByRole('button', { name: 'Anuluj' }).click();
+    await expect(openForm).toHaveCount(0);
     backend = await readItems(page, caseId);
     expect(recordOf(backend, String(target.id)).unitPriceMinor).toBe(MCP_PRICE * 100);
     await expectViewMatchesBackend(card, backend);

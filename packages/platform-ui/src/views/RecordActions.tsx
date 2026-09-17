@@ -13,7 +13,7 @@ import {
   type RecordActionResponse,
 } from '@platform/contracts';
 import { apiPost } from '../api/client.ts';
-import { invalidateAfterDataChange, invalidateBusinessData } from '../api/queries.ts';
+import { invalidateBusinessData, invalidateChangedData } from '../api/queries.ts';
 
 /**
  * Record actions in a data table: a button per action on each row, a small
@@ -27,9 +27,8 @@ import { invalidateAfterDataChange, invalidateBusinessData } from '../api/querie
  * through the execution the MCP server uses; the browser only asks.
  *
  * **What the screen may claim afterwards.** A saved change refreshes what a
- * tool's `data_changed` refreshes (`invalidateAfterDataChange`), so this
- * table, a chart over the same data and the same read in any other view
- * refetch; while they do, the frame says it is refreshing rather than
+ * tool's `data_changed` refreshes (`invalidateChangedData`), so this table, a
+ * chart over the same data and the same read in any other view refetch; while they do, the frame says it is refreshing rather than
  * presenting the previous numbers as current. A refusal says why, in words and
  * with its code. A refusal that can mean the rows on screen are no longer what
  * the backend has — no access, no such record, a conflicting change —
@@ -117,7 +116,7 @@ export function useRecordActions(
             message: `${action.label}: zapisano. Dane sa ponownie wczytywane z backendu.`,
           });
           // A saved change is a data change like a tool's `data_changed`.
-          invalidateAfterDataChange(qc);
+          invalidateChangedData(qc);
         },
         onError: (error) => {
           failed(error);
