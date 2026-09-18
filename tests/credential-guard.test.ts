@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -40,6 +40,8 @@ let runtime: AgentRuntime;
 let plans: Map<string, Plan>;
 let configDir: string;
 let realConfigDir: string | undefined;
+/** Where the login really lives, captured before any test redirects anything. */
+const realConfigDirAtImport = process.env.CLAUDE_CONFIG_DIR;
 const pending: Array<Promise<unknown>> = [];
 let promptSeq = 0;
 
@@ -119,6 +121,44 @@ afterEach(async () => {
   if (realConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
   else process.env.CLAUDE_CONFIG_DIR = realConfigDir;
   rmSync(configDir, { recursive: true, force: true });
+});
+
+/* ---------------------- the user's own login is untouched ------------------ */
+
+/**
+ * The clause of L8.14 that is easy to state and was never checked: *negative
+ * tests must not destroy the user's login*.
+ *
+ * It was true here by construction — every test in this file redirects
+ * `CLAUDE_CONFIG_DIR` — and "true by construction" is exactly the kind of
+ * property that stops being true when somebody adds a test that forgets to.
+ * So it is measured: the real credential file's size and modification time are
+ * taken before the suite and compared after it. A test that wrote to the real
+ * login, or deleted it, changes both.
+ */
+describe('testy negatywne nie dotykaja logowania uzytkownika', () => {
+  const realFile = claudeConfigDir({
+    ...process.env,
+    /* The real location, whatever this suite later redirects. */
+    CLAUDE_CONFIG_DIR: realConfigDirAtImport,
+  } as NodeJS.ProcessEnv);
+  const fingerprint = () => {
+    const file = join(realFile, '.credentials.json');
+    if (!existsSync(file)) return 'brak';
+    const st = statSync(file);
+    return `${st.size}:${st.mtimeMs}`;
+  };
+  const before = fingerprint();
+
+  it('katalog poswiadczen uzyty przez testy nie jest katalogiem uzytkownika', () => {
+    expect(configDir).not.toBe(realFile);
+    expect(configDir.startsWith(tmpdir())).toBe(true);
+  });
+
+  it('prawdziwy plik poswiadczen ma po testach ten sam rozmiar i czas modyfikacji', () => {
+    // `brak` on a machine with no login is a legitimate answer and compares equal.
+    expect(fingerprint(), 'plik logowania uzytkownika zmienil sie w trakcie testow').toBe(before);
+  });
 });
 
 /* ---------------------------------- rule ---------------------------------- */
