@@ -126,7 +126,9 @@ export function SettingsPage() {
         <dt>Plan</dt>
         <dd>{a.credential.subscriptionType ?? '—'}</dd>
         <dt>Poswiadczenie lokalne</dt>
-        <dd data-testid="auth-credential-state">
+        {/* The state as an attribute as well as a label: a test asserting the
+            wording would be asserting the wording. */}
+        <dd data-testid="auth-credential-state" data-state={a.credential.state}>
           <span className={`pf-badge ${CREDENTIAL_BADGE[a.credential.state]}`}>
             {CREDENTIAL_LABEL[a.credential.state]}
           </span>
@@ -139,7 +141,7 @@ export function SettingsPage() {
           )}
         </dd>
         <dt>Ostatni potwierdzony dostep</dt>
-        <dd data-testid="auth-access-state">
+        <dd data-testid="auth-access-state" data-state={a.access.state}>
           <span className={`pf-badge ${ACCESS_BADGE[a.access.state]}`}>
             {ACCESS_LABEL[a.access.state]}
           </span>
@@ -162,7 +164,15 @@ export function SettingsPage() {
           )}
         </dd>
         <dt>Co teraz zrobic</dt>
-        <dd data-testid="auth-remedy">{ACCESS_REMEDY[a.access.state]}</dd>
+        {/*
+          The remedies differ by state and that difference is the point: a
+          usage limit says wait, a revoked login says sign in again. Keyed by
+          state so a test can assert that the advice *changed*, not that a
+          sentence matched.
+        */}
+        <dd data-testid="auth-remedy" data-state={a.access.state}>
+          {ACCESS_REMEDY[a.access.state]}
+        </dd>
         <dt>Klucz API Anthropic</dt>
         <dd>
           {a.apiKeyDetected

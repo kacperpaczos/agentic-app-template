@@ -15,6 +15,7 @@ import { resolve } from 'node:path';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { collectToolEntries, platformTools, type PlatformInstance } from '@platform/server';
+import type { SdkSession } from '@platform/contracts';
 import { composeApp } from '../../apps/server/src/compose.ts';
 import { agentViewsScript } from './agent-views-scenario.ts';
 import { compositionScript, messageKindsScript } from './bl10-scenarios.ts';
@@ -27,6 +28,15 @@ import {
   neverEndingScript,
 } from './bl09-scenarios.ts';
 import { chatHistoryScript } from './chat-history-scenario.ts';
+import {
+  credentialReadScript,
+  expiredButWorkingScript,
+  limitScript,
+  mutationThenLimitScript,
+  networkScript,
+  refreshRefusedScript,
+  revokedScript,
+} from './auth-scenarios.ts';
 import { interactionsScript } from './interactions-scenario.ts';
 import { showValueScript } from './show-value-scenario.ts';
 import { scriptedAgent, type CallRecord, type Step } from './scripted-agent.ts';
@@ -486,6 +496,13 @@ const SCENARIOS: Record<string, Step[]> = {
     { kind: 'text', text: 'Zaczynam...' },
     { kind: 'fail', message: 'Claude usage limit reached' },
   ],
+  /* BL-04: controlled authentication and limit failures, simulated at the boundary. */
+  'auth-limit': limitScript,
+  'auth-revoked': revokedScript,
+  'auth-refresh-refused': refreshRefusedScript,
+  'auth-network': networkScript,
+  'auth-expired-ok': expiredButWorkingScript,
+  'auth-credential-read': credentialReadScript(),
 };
 
 /**
@@ -547,6 +564,47 @@ const CONVERSATION_SCENARIOS: Record<string, (prompt: string) => Step[]> = {
   'bl09-timeout': neverEndingScript,
   'bl09-child': childProcessScript,
   'bl09-files': filesScript,
+  /* BL-04: a mutation, then the limit, then a retry the user asks for. */
+  'auth-mutation-then-limit': mutationThenLimitScript,
+};
+
+/**
+ * The SDK session report the scripted instance answers with.
+ *
+ * The real probe starts the Claude CLI: useful once, in a recorded run
+ * (`scripts/probe-sdk-session.mjs`), and wrong inside a browser suite, which
+ * would then be testing whether the machine is logged in rather than what the
+ * interface does with each answer. `SDK_SESSION` chooses the answer; unset
+ * leaves the real probe in place.
+ */
+const SDK_SESSION_ANSWERS: Record<string, SdkSession> = {
+  subscription: {
+    state: 'subscription',
+    apiKeySource: null,
+    apiProvider: 'firstParty',
+    subscriptionType: 'Claude Max',
+    planLimits: { available: true, fiveHourPercent: 2, sevenDayPercent: 64 },
+    checkedAt: new Date().toISOString(),
+    error: null,
+  },
+  'api-key': {
+    state: 'api_key',
+    apiKeySource: 'ANTHROPIC_API_KEY',
+    apiProvider: 'firstParty',
+    subscriptionType: null,
+    planLimits: { available: false, fiveHourPercent: null, sevenDayPercent: null },
+    checkedAt: new Date().toISOString(),
+    error: null,
+  },
+  unavailable: {
+    state: 'unavailable',
+    apiKeySource: null,
+    apiProvider: null,
+    subscriptionType: null,
+    planLimits: null,
+    checkedAt: new Date().toISOString(),
+    error: 'sesja SDK nie odpowiedziala na zadanie sterujace w wyznaczonym czasie',
+  },
 };
 
 const scenario = process.env.SCRIPT ?? 'tool-then-text';
@@ -564,11 +622,19 @@ if (!steps) {
  * plays.
  */
 let platform: PlatformInstance;
+const sessionAnswer = process.env.SDK_SESSION ? SDK_SESSION_ANSWERS[process.env.SDK_SESSION] : undefined;
+if (process.env.SDK_SESSION && !sessionAnswer) {
+  console.error(
+    `[scripted] nieznana odpowiedz sesji SDK "${process.env.SDK_SESSION}". Dostepne: ${Object.keys(SDK_SESSION_ANSWERS).join(', ')}`,
+  );
+  process.exit(2);
+}
 platform = composeApp({
   modelAgent: scriptedAgent(steps, {
     tools: () =>
       collectToolEntries({ registry: platform.registry, platformTools: platformTools(platform.services) }),
   }),
+  sessionProbe: sessionAnswer ? async () => sessionAnswer : null,
 });
 const { app, config } = platform;
 
