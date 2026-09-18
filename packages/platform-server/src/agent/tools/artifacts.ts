@@ -9,7 +9,7 @@ import {
 } from '@platform/contracts';
 import type { PlatformServices } from '../../services/index.ts';
 import { resolveInWorkspace, listWorkspaceOutputs } from '../sandbox.ts';
-import { MEDIA_BY_EXT } from './files.ts';
+import { MEDIA_BY_EXT, sha256 } from './files.ts';
 
 const OPERATION_ID = z.string().min(8).max(200);
 
@@ -97,6 +97,11 @@ export function artifactTools(services: PlatformServices): Array<ModuleToolDefin
             available: listWorkspaceOutputs(ctx.workspaceDir),
           });
         }
+        // Read once, and hashed into the fingerprint: the same reasoning as in
+        // `files_publish_version`, because it is the same operation — what is
+        // published is the content of a workspace file, and two calls naming one
+        // path can carry different bytes.
+        const bytes = readFileSync(abs);
         const { result } = await services.idempotency.once(
           input.operationId,
           ctx.ownerId,
@@ -108,7 +113,7 @@ export function artifactTools(services: PlatformServices): Array<ModuleToolDefin
               ownerId: ctx.ownerId,
               filename,
               mediaType,
-              bytes: readFileSync(abs),
+              bytes,
               scopeKind: 'artifact',
               scopeId: ctx.runId,
             });
@@ -164,7 +169,7 @@ export function artifactTools(services: PlatformServices): Array<ModuleToolDefin
               downloadUrl: `/api/files/${stored.id}/content`,
             };
           },
-          { fingerprint: operationFingerprint(input) },
+          { fingerprint: operationFingerprint({ ...input, contentSha256: sha256(bytes) }) },
         );
         ctx.emit({ type: 'artifact_created', artifactId: result.artifactId });
         return result;

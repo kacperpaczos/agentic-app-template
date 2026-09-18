@@ -301,6 +301,8 @@ describe('L9.3 — kazde wejscie walidowane w runtime, z rozpoznawalna przyczyna
     ['watek z cialem, ktore nie jest JSON-em', '/api/threads/create', { method: 'POST', body: 'to nie jest json' }],
     ['watek z tytulem liczba', '/api/threads/create', { method: 'POST', body: JSON.stringify({ title: 7 }) }],
     ['zmiana watku z cialem, ktore nie jest JSON-em', '/api/threads/update/PLACEHOLDER_CONV', { method: 'PATCH', body: '{' }],
+    ['sesja z cialem, ktore nie jest JSON-em', '/api/auth/session', { method: 'POST', body: 'userId=inny' }],
+    ['sesja z userId liczba', '/api/auth/session', { method: 'POST', body: JSON.stringify({ userId: 7 }) }],
   ];
 
   /*
@@ -750,7 +752,7 @@ describe('L9.7, L9.14 — powtorzenie i jednoczesne ponowienia daja jeden skutek
     ).toBe(filesBefore + 2);
   });
 
-  it('publikacja wersji pliku: ten sam klucz z innym plikiem jest odrzucany, a nie kwitowany', async () => {
+  it('publikacja z workspace: ten sam klucz z inna sciezka LUB inna trescia jest odrzucany', async () => {
     /*
      * The write path that was missed when the guard was rebuilt. Without a
      * fingerprint the second call — a *different* source file under the same
@@ -794,6 +796,39 @@ describe('L9.7, L9.14 — powtorzenie i jednoczesne ponowienia daja jeden skutek
     )) as { fileId: string };
     expect(replay.fileId).toBe(first.fileId);
     expect(h.platform.services.files.list(h.ownerId)).toHaveLength(afterFirst);
+
+    /*
+     * The same path, different bytes — the case the fields of the call cannot
+     * see. A run that regenerates `output/pierwszy.csv` and republishes it is
+     * the ordinary case, and a fingerprint over `path` and `originalFileId`
+     * alone would answer it with the first version and call it a success.
+     */
+    writeFileSync(join(workspaceDir, 'output', 'pierwszy.csv'), 'a,b\n7,7\n');
+    await expect(
+      callPlatformTool(
+        'files_publish_version',
+        { path: 'pierwszy.csv', originalFileId: original.id, operationId },
+        { workspaceDir },
+      ),
+    ).rejects.toMatchObject({ code: 'conflict', details: { reason: 'operation_id_reused' } });
+    expect(h.platform.services.files.list(h.ownerId)).toHaveLength(afterFirst);
+
+    // And the same, for the twin tool that publishes a workspace file as an artifact.
+    const artifactOp = 'op-artefakt-z-pliku-1';
+    writeFileSync(join(workspaceDir, 'output', 'zalacznik.csv'), 'x\n1\n');
+    await callPlatformTool(
+      'artifact_publish_file',
+      { path: 'zalacznik.csv', title: 'Zalacznik', operationId: artifactOp },
+      { workspaceDir },
+    );
+    writeFileSync(join(workspaceDir, 'output', 'zalacznik.csv'), 'x\n2\n');
+    await expect(
+      callPlatformTool(
+        'artifact_publish_file',
+        { path: 'zalacznik.csv', title: 'Zalacznik', operationId: artifactOp },
+        { workspaceDir },
+      ),
+    ).rejects.toMatchObject({ code: 'conflict', details: { reason: 'operation_id_reused' } });
   });
 
   it('klucz jest zarezerwowany, zanim operacja cokolwiek zapisze', async () => {

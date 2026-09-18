@@ -189,7 +189,19 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
    * user back to the first identity.
    */
   app.post('/api/auth/session', async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as { userId?: string };
+    /*
+     * The third route that swallowed a broken body, and the last one.
+     *
+     * A session request with no body is the frontend's "make sure I have a
+     * session" and must keep working — so the distinction is the same one the
+     * thread routes make: nothing said is allowed, something unparseable is a
+     * client error. Left as `.catch(() => ({}))` this route would silently sign
+     * a caller in as the default identity after failing to read what they
+     * asked for, which is the one place where guessing is least acceptable.
+     */
+    const body = z
+      .object({ userId: z.string().max(128).nullish() })
+      .parse(await optionalJsonBody(c));
     const current = auth.verify(getCookie(c, SESSION_COOKIE));
     const requested = body.userId;
     const userId =
