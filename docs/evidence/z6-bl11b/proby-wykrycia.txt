@@ -156,3 +156,21 @@ P10b [L9.14] packages/platform-server/src/services/idempotency.ts
          ❯ ProcurementService.updateOfferItem packages/module-procurement/src/server/services.ts:179:66
          ❯ tests/domain-guarantees.test.ts:550:19
     drzewo po przywroceniu: czyste
+
+P10c [L9.14] packages/platform-server/src/services/idempotency.ts
+    wycofano       : rezerwacja klucza zastapiona odczytem (stan sprzed poprawki)
+    test           : tests/domain-guarantees.test.ts -t "osiem jednoczesnych zapisow zestawienia"
+    oczekiwano     : oblewa — rownoczesne ponowienia tworza wiele artefaktow
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/domain-guarantees.test.ts > L9.7, L9.14 — powtorzenie i jednoczesne ponowienia daja jeden skutek > osiem jednoczesnych zapisow zestawienia tworzy jeden artefakt
+        AssertionError: expected 8 to be 1 // Object.is equality
+        
+        - Expected
+        + Received
+        
+        - 1
+        + 8
+    drzewo po przywroceniu: czyste
