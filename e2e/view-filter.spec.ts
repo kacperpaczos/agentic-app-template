@@ -1,5 +1,8 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { expect, test } from './support/fixtures.ts';
 import { ScriptedInstance } from './support/scripted.ts';
+import { evidenceWritingRequested } from '../tests/support/measurement-evidence.ts';
 import { type Page } from '@playwright/test';
 
 /**
@@ -20,6 +23,12 @@ import { type Page } from '@playwright/test';
  */
 
 const scripted = new ScriptedInstance({ port: 8792, dataDirName: '.e2e-scripted-filter' });
+/**
+ * Committed record of the chat-UX phase. Rewritten only on request:
+ * `pnpm evidence:e2e`, or `APP_WRITE_EVIDENCE=1 pnpm exec playwright test
+ * e2e/view-filter.spec.ts` for this file alone.
+ */
+const EVIDENCE_SCREENSHOT = 'docs/evidence/chat-ux-2026-09-16/05-zawezony-widok.png';
 const BASE = scripted.baseUrl;
 
 async function openApp(page: Page, path = '/') {
@@ -97,11 +106,25 @@ test.describe('agent zawęza widok, a nie rozmowe', () => {
     await expect(answer(page)).toContainText('executed=true');
     await expect(answer(page)).toContainText('pokazane=3/4');
 
-    // Kept as evidence: the report describes a banner, and this is the banner.
-    await page.screenshot({
-      path: 'docs/evidence/chat-ux-2026-09-16/05-zawezony-widok.png',
-      clip: { x: 0, y: 0, width: 1120, height: 420 },
-    });
+    /*
+     * Kept as evidence: the report describes a banner, and this is the banner.
+     *
+     * The picture is **taken** every run and only **written** on request (G18).
+     * Taking it is part of the test — an empty capture would mean the region
+     * the report points at is not on screen — and it is asserted below. Writing
+     * it used to happen unconditionally, which left the repository dirty after
+     * every browser run and, once the file was committed, replaced a record of
+     * the chat-UX phase with a picture from whoever ran the suite last.
+     */
+    const shot = await page.screenshot({ clip: { x: 0, y: 0, width: 1120, height: 420 } });
+    // A PNG, and not an empty one: `89 50 4E 47` is the signature.
+    expect(shot.subarray(0, 4).toString('hex')).toBe('89504e47');
+    expect(shot.byteLength).toBeGreaterThan(1000);
+    if (evidenceWritingRequested()) {
+      const target = resolve(process.cwd(), EVIDENCE_SCREENSHOT);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, shot);
+    }
   });
 
   test('zawezony widok przezywa odswiezenie i wraca przyciskiem Wstecz', async ({ page }) => {
