@@ -1,10 +1,10 @@
 {
   "opis": "Punkty pomiaru uruchomienia agenta rozdzielone: kolejka, start wykonania, pierwszy tekst, zakonczenie. Brak tekstu daje brak metryki, nie zero.",
   "zrodlo": "pnpm test → tests/measurements.test.ts (regresja szablonu)",
-  "zapisano": "2026-09-18T10:14:45.770Z",
+  "zapisano": "2026-09-18T10:15:53.952Z",
   "wersjaKodu": {
-    "commit": "9965cf0969bac7213413babff6fc5901e7f47fc3",
-    "brudneDrzewo": true,
+    "commit": "0a6ac5f57cdfe5d2b4e093a05d1fb2e5b69aaabd",
+    "brudneDrzewo": false,
     "node": "24.19.0",
     "pakiety": {
       "node": "24.19.0",
@@ -24,19 +24,19 @@
       "do": "start wykonania (agent_runs.started_at)",
       "warunki": "stand-in modelu na granicy adaptera; 5 uruchomien, kazde we wlasnej rozmowie; baza tymczasowa",
       "probkiMs": [
-        3,
+        1,
         0,
-        7,
-        2,
-        1
+        0,
+        1,
+        0
       ],
       "podsumowanie": {
         "probek": 5,
         "zMetryka": 5,
         "brakMetryki": 0,
         "minMs": 0,
-        "medianaMs": 2,
-        "maxMs": 7
+        "medianaMs": 0,
+        "maxMs": 1
       }
     },
     "czasKolejkiZaInnymUruchomieniem": {
@@ -46,16 +46,16 @@
       "warunki": "stand-in modelu; 3 pary uruchomien w jednej rozmowie, pierwsze zajmuje ok. 120 ms; czas wykonania drugiego nie zawiera tego oczekiwania",
       "probkiMs": [
         122,
-        127,
-        127
+        123,
+        123
       ],
       "podsumowanie": {
         "probek": 3,
         "zMetryka": 3,
         "brakMetryki": 0,
         "minMs": 122,
-        "medianaMs": 127,
-        "maxMs": 127
+        "medianaMs": 123,
+        "maxMs": 123
       }
     },
     "czasDoPierwszegoTekstu": {
@@ -64,11 +64,11 @@
       "do": "pierwszy niepusty przyrost tekstu ze strumienia modelu",
       "warunki": "stand-in modelu; 5 uruchomien z tekstem i 1 uruchomienie bez tekstu (wywolanie narzedzia, zadnego slowa). Skrypt odpowiedzi czeka 15 ms przed pierwszym przyrostem i opoznia sam przyrost o 10 ms, wiec ok. 25 z mierzonych milisekund to wymuszony sen stand-ina, nie czas modelu — ta liczba mowi o rozdzieleniu punktu pomiaru, nie o szybkosci odpowiadania.",
       "probkiMs": [
-        38,
-        32,
-        34,
-        37,
-        39,
+        29,
+        28,
+        27,
+        28,
+        29,
         null
       ],
       "uwagi": "Ostatnia probka to null: uruchomienie bez tekstu nie ma czasu pierwszego tekstu. Null jest wynikiem, nie brakiem danych, i nie jest zerem — zero znaczyloby „natychmiast”.",
@@ -76,9 +76,9 @@
         "probek": 6,
         "zMetryka": 5,
         "brakMetryki": 1,
-        "minMs": 32,
-        "medianaMs": 37,
-        "maxMs": 39
+        "minMs": 27,
+        "medianaMs": 28,
+        "maxMs": 29
       }
     },
     "czasWykonania": {
@@ -87,20 +87,20 @@
       "do": "zapisany status koncowy uruchomienia",
       "warunki": "stand-in modelu; 5 uruchomien z tekstem i 1 bez tekstu; skrypt odpowiedzi ma ok. 45 ms wymuszonych opoznien",
       "probkiMs": [
-        62,
-        56,
-        58,
-        62,
-        62,
-        32
+        50,
+        49,
+        49,
+        49,
+        50,
+        24
       ],
       "podsumowanie": {
         "probek": 6,
         "zMetryka": 6,
         "brakMetryki": 0,
-        "minMs": 32,
-        "medianaMs": 58,
-        "maxMs": 62
+        "minMs": 24,
+        "medianaMs": 49,
+        "maxMs": 50
       }
     }
   }
