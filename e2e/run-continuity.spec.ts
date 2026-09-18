@@ -314,13 +314,24 @@ test.describe('zadanie w tle przezywa odejscie obserwatora', () => {
       });
 
       /*
-       * The cursor is a real one: the client asked for what it missed, not for
-       * the whole run from the beginning. (`from=0` would mean the send path
-       * never recorded how far it got.)
+       * The outcome first: the screen the user chose is the screen they still
+       * have. Asserted **before** the cursor below on purpose — a detection
+       * trial that breaks the cursor must still be able to show whether the
+       * screen held, and an assertion that never runs shows nothing.
+       */
+      expect(new URL(page.url()).pathname, 'nawigacja agenta powtorzyla sie po powrocie').toBe(parked);
+      await expect(page.getByTestId('settings-page')).toBeVisible();
+      await expect(page.getByTestId('files-page')).toHaveCount(0);
+
+      /*
+       * And the mechanism: the cursor is a real one, so the client asked for
+       * what it missed rather than for the whole run. (`from=0` would mean the
+       * send path never recorded how far it got.)
        */
       const from = Number(new URL((await reattach).url()).searchParams.get('from'));
       expect(from, 'klient poprosil o odtworzenie od poczatku').toBeGreaterThan(0);
-      // And it did not ask for more than the run ever produced.
+      // And it did not ask for more than the run ever produced — a cursor that
+      // overshot would skip events, which is the dangerous direction.
       const produced = await page.evaluate(async (id) => {
         const { runs } = await (
           await fetch(`/api/conversations/${id}/runs`, { credentials: 'include' })
@@ -331,11 +342,6 @@ test.describe('zadanie w tle przezywa odejscie obserwatora', () => {
         return events.length as number;
       }, conversation);
       expect(from).toBeLessThanOrEqual(produced);
-
-      // The screen the user chose is the screen they still have.
-      expect(new URL(page.url()).pathname, 'nawigacja agenta powtorzyla sie po powrocie').toBe(parked);
-      await expect(page.getByTestId('settings-page')).toBeVisible();
-      await expect(page.getByTestId('files-page')).toHaveCount(0);
     } finally {
       await proxy.stop();
     }
