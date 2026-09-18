@@ -110,11 +110,21 @@ export function listWorkspaceOutputs(workspaceDir: string): Array<{ path: string
  * denied outright (`allowedDomains: []` + `strictAllowlist`), and reads of the
  * application's own data directory are denied so a sandboxed command cannot
  * reach the SQLite file and bypass the domain services.
+ *
+ * **And of the login.** `credentialDirs` is the Claude configuration directory
+ * — `~/.claude`, or wherever `CLAUDE_CONFIG_DIR` points. It was missing, and
+ * its absence was not theoretical: `Read` is pre-approved, so a run could open
+ * `.credentials.json` and put the access token into an answer or an artifact.
+ * Denying it here covers sandboxed shell commands; the `PreToolUse` deny in
+ * `runtime.ts` covers the SDK's own file tools, which do not run in the shell
+ * sandbox at all. Two mechanisms, because either one alone has a gap.
  */
 export function sandboxSettings(input: {
   workspaceDir: string;
   dataDir: string;
+  credentialDirs?: string[];
 }): Record<string, unknown> {
+  const denied = [input.dataDir, ...(input.credentialDirs ?? [])];
   return {
     enabled: true,
     // A missing sandbox dependency must fail loudly rather than silently
@@ -133,8 +143,8 @@ export function sandboxSettings(input: {
     },
     filesystem: {
       allowWrite: [input.workspaceDir],
-      denyWrite: [input.dataDir],
-      denyRead: [input.dataDir],
+      denyWrite: denied,
+      denyRead: denied,
     },
   };
 }

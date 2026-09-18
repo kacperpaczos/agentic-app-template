@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { Mastra } from '@mastra/core';
 import { ClaudeSDKAgent } from '@mastra/claude';
 import {
@@ -13,7 +14,13 @@ import {
   type UiCommandResult,
 } from '@platform/contracts';
 import type { PlatformServices } from '../services/index.ts';
-import { classifyAccessFailure, recordVerification, subscriptionOnlyEnv } from './auth.ts';
+import {
+  claudeConfigDir,
+  classifyAccessFailure,
+  isAccessRelevantFailure,
+  recordVerification,
+  subscriptionOnlyEnv,
+} from './auth.ts';
 import { RunEventStream } from './events.ts';
 import { newId } from '../util/id.ts';
 import { ConversationProjection, type ProjectedMessage } from './projection.ts';
@@ -27,6 +34,7 @@ import {
   FORBIDDEN_TOOLS,
   decideTool,
   forbiddenToolMessage,
+  protectedPathRefusal,
 } from './permissions.ts';
 
 export interface StartRunInput {
@@ -649,6 +657,19 @@ export class AgentRuntime {
      */
     const scopeToolId = (raw: unknown): string => `${runId}~${String(raw)}`;
 
+    /**
+     * Directories no tool of a run may open, whatever the model asks for.
+     *
+     * Built per run because one of them is configuration (`CLAUDE_CONFIG_DIR`)
+     * and reading it once at import time would guard the wrong directory in a
+     * test that redirects it — which is exactly the shape of the defect in the
+     * secret scan this package also repairs.
+     */
+    const protectedDirs = [
+      { dir: this.services.config.dataDir, what: 'danych aplikacji' },
+      { dir: claudeConfigDir(), what: 'poswiadczen Claude' },
+    ];
+
     /* -------------------- SDK hook bridge (see class doc) ------------------ */
     const hookCallback = async (raw: unknown) => {
       const input = raw as Record<string, any>;
@@ -660,6 +681,39 @@ export class AgentRuntime {
 
       if (input.hook_event_name === 'PreToolUse') {
         const id = scopeToolId(input.tool_use_id ?? `tu_${Date.now()}`);
+        /*
+         * The one decision taken *before* the step is announced.
+         *
+         * `Read` and its siblings are pre-approved, which means `canUseTool` is
+         * never consulted for them — the SDK's own documentation says a bare
+         * name in `allowedTools` shadows the gate. So the protection for the
+         * login and the database cannot live in the gate; it lives here, in a
+         * hook, which fires for every call whatever the allow list says.
+         *
+         * Announced as a failed step rather than silently dropped: the user is
+         * told the agent reached for the credential file and was refused, which
+         * is the visible half of L8.7.
+         */
+        const refusal = protectedPathRefusal(
+          String(input.tool_name ?? ''),
+          input.tool_input,
+          protectedDirs,
+          (p) => resolve(args.workspace.dir, p),
+        );
+        if (refusal) {
+          stream.toolStart(id, String(input.tool_name ?? 'tool'), messageId);
+          stream.toolArgs(id, JSON.stringify(input.tool_input ?? {}));
+          stream.toolEnd(id);
+          stream.toolResult(id, refusal, true);
+          return {
+            continue: true,
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse',
+              permissionDecision: 'deny',
+              permissionDecisionReason: refusal,
+            },
+          };
+        }
         /*
          * Deliberately does *not* open a text message.
          *
@@ -712,6 +766,7 @@ export class AgentRuntime {
       sandbox: sandboxSettings({
         workspaceDir: args.workspace.dir,
         dataDir: this.services.config.dataDir,
+        credentialDirs: [claudeConfigDir()],
       }),
       maxTurns: 40,
       canUseTool: this.#makeCanUseTool(stream, { runId, ownerId: args.ownerId }),
@@ -839,8 +894,16 @@ export class AgentRuntime {
        * subscription and the login are fine, the SDK simply no longer has the
        * conversation. Reporting it as an access failure would put "połączenie z
        * modelem nie działa" in Settings for a problem that is not there.
+       *
+       * It turned out not to be the only one. A sandbox refusal and a timeout
+       * this application imposed on itself are equally silent about the
+       * subscription, and the record is process-global, so one of them painted
+       * every conversation's status bar with a broken login. The whole class
+       * now lives in `isAccessRelevantFailure`, next to the classifier.
        */
-      if (!cancelled && code !== 'session_transcript_lost') recordVerification(false, message);
+      if (!cancelled && isAccessRelevantFailure(code, message)) {
+        recordVerification(false, message);
+      }
       if (cancelled) stream.custom(PLATFORM_CUSTOM_EVENTS.runCancelled, { runId });
       // Exactly one resolving terminal event, so the UI never hangs on loading.
       stream.runError(message, code);
@@ -945,6 +1008,23 @@ export class AgentRuntime {
       | { behavior: 'allow'; updatedInput: Record<string, unknown> }
       | { behavior: 'deny'; message: string }
     > => {
+      /*
+       * Same rule as the `PreToolUse` deny, applied again at the gate.
+       *
+       * Not redundant: the hook is the mechanism that works for pre-approved
+       * tools, and the gate is the mechanism that works if a future SDK version
+       * stopped calling hooks before a tool, or if `allowedTools` changes and
+       * `Read` starts arriving here. Either one alone leaves the credential
+       * directory reachable through the other path. Defence in depth, the way
+       * `FORBIDDEN_TOOLS` is refused here as well as removed from the model's
+       * context.
+       */
+      const guarded = protectedPathRefusal(toolName, input, [
+        { dir: this.services.config.dataDir, what: 'danych aplikacji' },
+        { dir: claudeConfigDir(), what: 'poswiadczen Claude' },
+      ]);
+      if (guarded) return { behavior: 'deny', message: guarded };
+
       const decision = decideTool(toolName, this.#toolNames);
       if (decision === 'auto') return { behavior: 'allow', updatedInput: input };
       if (decision === 'forbidden') {

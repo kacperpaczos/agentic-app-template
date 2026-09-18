@@ -100,3 +100,79 @@ export function decideTool(toolName: string, mcpToolNames: readonly string[]): T
 export const forbiddenToolMessage = (toolName: string): string =>
   `Narzedzie ${toolName} jest zabronione w tej aplikacji (dostep do sieci poza sandboxem). ` +
   'Uzytkownik nie jest o nie pytany.';
+
+/* ------------------------- protected directories --------------------------- */
+
+/**
+ * File tools whose arguments name a path, by the argument that does.
+ *
+ * Listed rather than guessed: a rule that scanned *every* string of the input
+ * for a directory name would refuse a call that merely mentioned the path in a
+ * search pattern, and would still miss a tool whose path argument is spelled
+ * differently. `Grep` and `Glob` search a directory, so `path` is where they
+ * are pointed; the editors take `file_path`.
+ */
+const PATH_ARGUMENTS: Record<string, readonly string[]> = {
+  Read: ['file_path', 'path'],
+  Write: ['file_path', 'path'],
+  Edit: ['file_path', 'path'],
+  NotebookEdit: ['notebook_path', 'file_path'],
+  Glob: ['path'],
+  Grep: ['path'],
+};
+
+/** True when `candidate` is `dir` itself or sits inside it. */
+function isInside(candidate: string, dir: string): boolean {
+  const c = normalizeSlashes(candidate);
+  const d = normalizeSlashes(dir).replace(/\/+$/, '');
+  return c === d || c.startsWith(`${d}/`);
+}
+
+const normalizeSlashes = (p: string): string => p.replace(/\\/g, '/');
+
+/**
+ * Refuses a file tool aimed at a directory the application protects.
+ *
+ * Two directories qualify and for the same reason: reaching either one would
+ * let a run go around the platform instead of through it. The application's
+ * data directory holds the SQLite file, so reading it bypasses the domain
+ * services and every owner check in them. The Claude configuration directory
+ * holds `.credentials.json`, so reading it hands the run the subscription's
+ * access token — which it could then write into an answer, a file in its
+ * workspace or a published artifact. L8.7 says credentials stay out of
+ * artifacts and logs; this is the rule that makes that true of the agent as
+ * well as of the application's own code.
+ *
+ * Returns the refusal reason, or `null` when the call is not aimed at one of
+ * them. Deliberately not a boolean: the reason is shown to the user and given
+ * to the model, so it belongs with the decision.
+ *
+ * Paths are compared after resolution by the caller, so `../../../.claude` is
+ * the same string as an absolute one. A relative path that stays inside the
+ * run workspace can never resolve into either directory.
+ */
+export function protectedPathRefusal(
+  toolName: string,
+  toolInput: unknown,
+  protectedDirs: ReadonlyArray<{ dir: string; what: string }>,
+  resolvePath: (p: string) => string = (p) => p,
+): string | null {
+  const args = PATH_ARGUMENTS[toolName];
+  if (!args) return null;
+  const input = (toolInput ?? {}) as Record<string, unknown>;
+  for (const key of args) {
+    const raw = input[key];
+    if (typeof raw !== 'string' || raw.length === 0) continue;
+    const abs = resolvePath(raw);
+    for (const guard of protectedDirs) {
+      if (!guard.dir) continue;
+      if (isInside(abs, guard.dir)) {
+        return (
+          `Narzedzie ${toolName} nie ma dostepu do katalogu ${guard.what}. ` +
+          'Ta sciezka jest zablokowana przez aplikacje, niezaleznie od zgody uzytkownika.'
+        );
+      }
+    }
+  }
+  return null;
+}

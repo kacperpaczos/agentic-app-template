@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AuthStatus } from '@platform/contracts';
 import { accessOwner, accessScope } from '../api/accessContext.ts';
-import { switchAccessContext, useStatus } from '../api/queries.ts';
+import { runSdkSessionProbe, switchAccessContext, useStatus } from '../api/queries.ts';
 
 /* Labels for the three authentication dimensions. Kept next to the view because
    they are presentation, not policy. */
@@ -34,6 +34,31 @@ const ACCESS_BADGE: Record<AuthStatus['access']['state'], string> = {
   revoked: 'pf-badge--err',
   failed: 'pf-badge--warn',
 };
+/*
+ * The SDK session: what the runtime's own library says about how it signs in.
+ *
+ * A fourth row rather than a nicer badge on the first one. "Sposob logowania"
+ * above is this build's *policy* — a constant in the source — and the two are
+ * different claims: the policy can say subscription while the session runs on
+ * an API key someone exported into the environment. Showing them apart is the
+ * whole point; merging them is how the old screen could not tell the user which
+ * of the two it was describing.
+ */
+const SDK_SESSION_LABEL: Record<AuthStatus['sdkSession']['state'], string> = {
+  unknown: 'nie sprawdzono',
+  subscription: 'subskrypcja (OAuth claude.ai)',
+  api_key: 'klucz API — niezgodne z polityka',
+  other: 'inny sposob',
+  unavailable: 'nie udalo sie sprawdzic',
+};
+const SDK_SESSION_BADGE: Record<AuthStatus['sdkSession']['state'], string> = {
+  unknown: 'pf-badge',
+  subscription: 'pf-badge--ok',
+  api_key: 'pf-badge--err',
+  other: 'pf-badge--warn',
+  unavailable: 'pf-badge--warn',
+};
+
 const ACCESS_REMEDY: Record<AuthStatus['access']['state'], string> = {
   unverified: 'Wyslij dowolne polecenie do agenta, zeby sprawdzic dostep.',
   verified: 'Nic nie trzeba robic.',
@@ -60,6 +85,7 @@ export function SettingsPage() {
   const qc = useQueryClient();
   const [owner, setOwner] = useState<string | null>(accessOwner());
   const [switching, setSwitching] = useState(false);
+  const [probing, setProbing] = useState(false);
   const scope = accessScope();
 
   if (isLoading) return <div className="pf-state">Wczytywanie ustawien…</div>;
@@ -152,6 +178,66 @@ export function SettingsPage() {
         <dt>Claude CLI</dt>
         <dd>{a.cliVersion ?? 'nie wykryto'}</dd>
       </dl>
+
+      {/*
+        The session check, and what it answered.
+
+        Separate from the table above because it is a *check*, with a moment and
+        a result, not a property of the configuration. Nothing here is fetched
+        by itself: the probe starts the Claude CLI, and a diagnostic that ran on
+        every status poll would be both slow and dishonest about what it means.
+      */}
+      <h3 data-testid="settings-sdk-session">Sesja SDK</h3>
+      <dl className="pf-kv" data-testid="sdk-session">
+        <dt>Sposob uwierzytelnienia sesji</dt>
+        <dd>
+          <span
+            className={`pf-badge ${SDK_SESSION_BADGE[a.sdkSession.state]}`}
+            data-testid="sdk-session-state"
+            data-state={a.sdkSession.state}
+          >
+            {SDK_SESSION_LABEL[a.sdkSession.state]}
+          </span>
+        </dd>
+        <dt>Zrodlo klucza wg SDK</dt>
+        <dd data-testid="sdk-session-key-source">{a.sdkSession.apiKeySource ?? 'brak (bez klucza API)'}</dd>
+        <dt>Backend</dt>
+        <dd data-testid="sdk-session-provider">{a.sdkSession.apiProvider ?? '—'}</dd>
+        <dt>Plan wg sesji</dt>
+        <dd data-testid="sdk-session-plan">{a.sdkSession.subscriptionType ?? '—'}</dd>
+        <dt>Wykorzystanie limitu planu</dt>
+        <dd data-testid="sdk-session-limits">
+          {a.sdkSession.planLimits === null
+            ? '—'
+            : a.sdkSession.planLimits.available
+              ? `okno 5 h: ${a.sdkSession.planLimits.fiveHourPercent ?? '—'}%, 7 dni: ${
+                  a.sdkSession.planLimits.sevenDayPercent ?? '—'
+                }%`
+              : 'sesja bez limitow planu (klucz API, Bedrock lub Vertex)'}
+        </dd>
+        <dt>Sprawdzono</dt>
+        <dd>{a.sdkSession.checkedAt ? new Date(a.sdkSession.checkedAt).toLocaleString('pl-PL') : 'nigdy'}</dd>
+        {a.sdkSession.error && (
+          <>
+            <dt>Powod niepowodzenia</dt>
+            <dd data-testid="sdk-session-error">{a.sdkSession.error}</dd>
+          </>
+        )}
+      </dl>
+      <p>
+        <button
+          type="button"
+          className="pf-btn"
+          data-testid="sdk-session-check"
+          disabled={probing}
+          onClick={() => {
+            setProbing(true);
+            void runSdkSessionProbe(qc).finally(() => setProbing(false));
+          }}
+        >
+          {probing ? 'Sprawdzanie sesji…' : 'Sprawdz sesje SDK'}
+        </button>
+      </p>
 
       <h2>Kontekst dostepu</h2>
       {/*

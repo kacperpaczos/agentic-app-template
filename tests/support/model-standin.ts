@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { invokeTool, resolveInWorkspace, type ModelAgentLike, type ToolEntry } from '@platform/server';
 import type { ToolCallContext } from '@platform/contracts';
 
@@ -58,6 +58,17 @@ export type Step =
   | { kind: 'permission'; toolName: string; input?: Record<string, unknown> }
   /** Starts a real OS child process bound to this run's abort signal. */
   | { kind: 'spawnChild' }
+  /**
+   * One of the SDK's **built-in** file tools, played the way the SDK plays it.
+   *
+   * Unlike `ask`, this does not go through `canUseTool`: `Read`, `Write`,
+   * `Glob` and `Grep` are pre-approved, so the SDK never consults the gate for
+   * them and the only thing that can stop one is a `PreToolUse` hook. The step
+   * fires that hook, honours a `deny` decision, and otherwise **really reads
+   * the file** — which is what makes the refusal a testable property rather
+   * than a returned object: without the deny, the bytes end up in the answer.
+   */
+  | { kind: 'fileTool'; name: string; input: Record<string, unknown> }
   /** The model's stream reports a failure — a stream existed and then failed. */
   | { kind: 'streamError'; message: string }
   /**
@@ -85,6 +96,8 @@ export interface StandInHandle {
   results: Array<{ name: string; text: string; isError: boolean }>;
   /** Outcome of each `permission` step: whether the gate allowed the tool. */
   consents: Array<{ toolName: string; allowed: boolean }>;
+  /** Every `fileTool` step: whether a hook refused it, and with what reason. */
+  fileTools: Array<{ name: string; denied: boolean; reason: string | null }>;
   /**
    * The Claude session this run asked the adapter to continue, or null for a
    * fresh one.
@@ -106,6 +119,7 @@ export const newStandInHandle = (): StandInHandle => ({
   gate: [],
   results: [],
   consents: [],
+  fileTools: [],
   resumedFrom: null,
   dispose: () => {},
 });
@@ -151,6 +165,29 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
       for (const group of hooks[event] ?? []) {
         for (const hook of group.hooks ?? []) await hook({ hook_event_name: event, ...payload });
       }
+    };
+    /**
+     * Fires `PreToolUse` and reports the strongest decision any hook returned.
+     *
+     * The SDK's contract is that a hook may refuse a call before it happens;
+     * a stand-in that fired the hook and then acted anyway would make every
+     * such refusal untestable — the hook would be called, the assertion on its
+     * return value would pass, and the tool would still have run.
+     */
+    const firePreToolUse = async (payload: Record<string, unknown>): Promise<string | null> => {
+      let refusal: string | null = null;
+      for (const group of hooks.PreToolUse ?? []) {
+        for (const hook of group.hooks ?? []) {
+          const answer = (await hook({ hook_event_name: 'PreToolUse', ...payload })) as
+            | { hookSpecificOutput?: { permissionDecision?: string; permissionDecisionReason?: string } }
+            | undefined;
+          const specific = answer?.hookSpecificOutput;
+          if (specific?.permissionDecision === 'deny') {
+            refusal = specific.permissionDecisionReason ?? 'odmowa hooka PreToolUse';
+          }
+        }
+      }
+      return refusal;
     };
     const failFast = script.find((s): s is Extract<Step, { kind: 'startFailure' }> => s.kind === 'startFailure');
     if (failFast) throw new Error(failFast.message);
@@ -215,6 +252,33 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
             handle.dispose = kill;
             if (signal?.aborted) kill();
             else signal?.addEventListener('abort', kill, { once: true });
+            continue;
+          }
+          if (step.kind === 'fileTool') {
+            callSeq += 1;
+            const refusal = await firePreToolUse({
+              tool_use_id: `tu_file_${callSeq}`,
+              tool_name: step.name,
+              tool_input: step.input,
+            });
+            handle.fileTools.push({ name: step.name, denied: refusal !== null, reason: refusal });
+            if (refusal !== null) {
+              yield { type: 'text-delta', payload: { text: `[plik:${step.name}] odmowa ` } };
+              continue;
+            }
+            /*
+             * Not refused, so the tool runs — and the bytes reach the answer,
+             * exactly as they would have if the application had no protection.
+             * That is the negative control built into the step itself.
+             */
+            const target = String(step.input.file_path ?? step.input.path ?? '');
+            let contents: string;
+            try {
+              contents = readFileSync(target, 'utf8');
+            } catch (err) {
+              contents = `blad odczytu: ${(err as Error).message}`;
+            }
+            yield { type: 'text-delta', payload: { text: `[plik:${step.name}] ${contents} ` } };
             continue;
           }
           if (step.kind === 'streamError') {

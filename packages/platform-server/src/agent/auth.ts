@@ -2,7 +2,13 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
-import type { AccessState, AuthStatus, CredentialState } from '@platform/contracts';
+import {
+  UNPROBED_SDK_SESSION,
+  type AccessState,
+  type AuthStatus,
+  type CredentialState,
+  type SdkSession,
+} from '@platform/contracts';
 
 /**
  * Reports how the Claude runtime is authenticated.
@@ -107,9 +113,63 @@ export function recordVerification(ok: boolean, error?: string): void {
   };
 }
 
+/**
+ * Whether a run failure says anything about **access** at all.
+ *
+ * Recording every non-cancelled failure as an access failure was wrong in both
+ * directions, and the second direction is the one L8.9 names: a sandbox refusal
+ * and a timeout this application imposed on itself are facts about this
+ * application, not about the subscription. Reporting them as "ostatni
+ * potwierdzony dostep: blad wywolania" puts a broken login on the screen for a
+ * problem the login has nothing to do with — and, because the record is
+ * process-global, it stays there for every conversation.
+ *
+ * Narrowing by code rather than by wording, because the code is a decision the
+ * layer that raised the failure already made.
+ */
+const NON_ACCESS_FAILURE_CODES = new Set([
+  /* The SDK no longer has the transcript. The login is fine. */
+  'session_transcript_lost',
+  /* The isolation refused. The login is fine. */
+  'sandbox_denied',
+  /* A tool or a domain rule refused. The login is fine. */
+  'forbidden',
+  'not_found',
+  'validation_failed',
+  'conflict',
+]);
+
+export function isAccessRelevantFailure(code: string, message = ''): boolean {
+  if (NON_ACCESS_FAILURE_CODES.has(code)) return false;
+  // A run this application stopped on its own clock never reached a verdict
+  // about access either.
+  if (message.includes('run_timeout')) return false;
+  return true;
+}
+
 /** Test seam: resets the process-local access record. */
 export function resetVerification(): void {
   access = { state: 'unverified', lastVerifiedAt: null, lastError: null, lastErrorAt: null };
+  sdkSession = { ...UNPROBED_SDK_SESSION };
+}
+
+/* ---------------------------- SDK session report --------------------------- */
+
+/**
+ * What the SDK last said about how it authenticates.
+ *
+ * Process-local and explicitly probed, like `access` above and for the same
+ * reason: it is a record of something that happened, so it starts empty and
+ * says `unknown` rather than guessing. See `session-probe.ts`.
+ */
+let sdkSession: SdkSession = { ...UNPROBED_SDK_SESSION };
+
+export function recordSdkSession(report: SdkSession): void {
+  sdkSession = report;
+}
+
+export function currentSdkSession(): SdkSession {
+  return { ...sdkSession };
 }
 
 /* ------------------------------ local metadata ----------------------------- */
@@ -176,8 +236,21 @@ export function readCredentialMetadata(
   };
 }
 
+/**
+ * Where the Claude CLI and SDK keep their configuration, including the login.
+ *
+ * Exported because two other places need the *directory*, not the file: the
+ * sandbox, which denies reads of it, and the tool gate, which refuses a file
+ * tool pointed at it. Honouring `CLAUDE_CONFIG_DIR` is not a detail — a test
+ * that redirects it and a protection that does not would guard the wrong
+ * directory and pass while the real one stayed open.
+ */
+export function claudeConfigDir(env: NodeJS.ProcessEnv = process.env): string {
+  return env.CLAUDE_CONFIG_DIR ?? resolve(homedir(), '.claude');
+}
+
 export function credentialFilePath(env: NodeJS.ProcessEnv = process.env): string {
-  return resolve(env.CLAUDE_CONFIG_DIR ?? resolve(homedir(), '.claude'), '.credentials.json');
+  return resolve(claudeConfigDir(env), '.credentials.json');
 }
 
 export function probeAuth(env: NodeJS.ProcessEnv = process.env, now = Date.now()): AuthStatus {
@@ -191,6 +264,7 @@ export function probeAuth(env: NodeJS.ProcessEnv = process.env, now = Date.now()
     apiKeyDetected: Boolean(env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN),
     apiKeyPolicy: 'refused',
     cliVersion: cliVersion(),
+    sdkSession: { ...sdkSession },
   };
 }
 

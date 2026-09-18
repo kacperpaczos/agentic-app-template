@@ -107,6 +107,18 @@ export interface PlatformStatus {
 export const useStatus = () =>
   useQuery({ queryKey: qk.status(), queryFn: () => apiGet<PlatformStatus>('/api/status') });
 
+/**
+ * Asks the backend to check how the Claude Agent SDK is authenticated.
+ *
+ * Deliberately a user action rather than a poll: the check spawns the CLI, and
+ * what it reports is the answer to a question that was asked at a moment in
+ * time — which is exactly how Settings presents it.
+ */
+export async function runSdkSessionProbe(qc: QueryClient): Promise<void> {
+  await apiPost<{ sdkSession: unknown }>('/api/sdk-session', {});
+  await qc.invalidateQueries({ queryKey: ['status'] });
+}
+
 export const useCanvasState = (spaceId: string | null) =>
   useQuery({
     queryKey: spaceId ? qk.space(spaceId) : ['canvas', 'space', 'none'],
