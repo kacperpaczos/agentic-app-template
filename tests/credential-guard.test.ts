@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   AgentRuntime,
   claudeConfigDir,
@@ -155,8 +155,14 @@ describe('testy negatywne nie dotykaja logowania uzytkownika', () => {
     expect(configDir.startsWith(tmpdir())).toBe(true);
   });
 
-  it('prawdziwy plik poswiadczen ma po testach ten sam rozmiar i czas modyfikacji', () => {
-    // `brak` on a machine with no login is a legitimate answer and compares equal.
+  /*
+   * In `afterAll`, not in an `it`: a test placed here would run before the rest
+   * of the file and could only report on what had happened up to that point.
+   * The hook runs once every test in this suite has finished, which is the
+   * moment the claim is about. `brak` on a machine with no login is a
+   * legitimate answer and compares equal to itself.
+   */
+  afterAll(() => {
     expect(fingerprint(), 'plik logowania uzytkownika zmienil sie w trakcie testow').toBe(before);
   });
 });
