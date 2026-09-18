@@ -65,7 +65,9 @@ describe('dowod pakietu BL-11c', () => {
     )!;
     const item = offer.items.find((i) => i.unitPriceMinor !== null && i.quantityMilli !== null)!;
     await h.service.updateOfferItem(
-      { itemId: item.id, quantity: (item.quantityMilli ?? 1000) / 1000 + 7 },
+      // The version is named because every caller of this write names it: the
+      // service refuses a change that does not say what it is replacing (L9.6).
+      { itemId: item.id, quantity: (item.quantityMilli ?? 1000) / 1000 + 7, expectedVersion: item.version },
       h.ownerId,
     );
     const afterChange = await api(`/api/artifacts/${meta.id}`);
