@@ -111,8 +111,20 @@ test.describe('zmiana wlasciciela w jednej karcie przegladarki', () => {
     // identity's, and the interface must not claim it.
     await expect(page.getByTestId('run-state')).toHaveCount(0);
     await expect(page.getByTestId('streaming-answer')).toHaveCount(0);
-    // The command context went with it.
-    await expect(page.getByTestId('chat-context')).toContainText('brak wybranej sprawy');
+    /*
+     * The command context went with it.
+     *
+     * Asserted as the negation of what was checked before the switch
+     * (`toContainText('case:')`) and not only as the empty-state wording: the
+     * wording is the shell's and has already changed once ("brak wybranej
+     * sprawy" became "brak wybranego rekordu" when the platform stopped naming
+     * a business noun). What must be true is that the strip no longer names the
+     * previous owner's record; the empty state is checked too, because "names
+     * nothing" and "is empty" are not the same claim.
+     */
+    const context = page.getByTestId('chat-context');
+    await expect(context).not.toContainText('case:');
+    await expect(context).toContainText('brak wybranego rekordu');
     await expect(page.getByTestId('chat-selection')).toHaveCount(0);
     // And the address no longer points at the previous identity's conversation
     // or workspace.
