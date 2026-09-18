@@ -611,12 +611,11 @@
       }
     },
     "L4.3": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "tests/runtime.test.ts „skraca pierwsza wiadomosc do sensownego tytulu” (deriveTitle); e2e/chat.spec.ts „rozmowa dostaje sensowny tytul z pierwszej wiadomosci” (przez /api/threads/create, bez przeglądarki); e2e/tool-activity.spec.ts sprawdza tytuł rozmowy założonej poleceniem z GUI. Brak API Anthropic: packages/platform-server/src/services/conversations.ts (deriveTitle) to wyłącznie operacje na napisach (analiza kodu). Zmiana tytułu: PATCH /api/threads/update/:id w packages/platform-server/src/http/app.ts istnieje, bez testu.",
-      "gap": "Zmiana tytułu nie jest dostępna użytkownikowi: menu wiersza gotowego ThreadList (@openuidev/react-ui 0.13.10) ma tylko Delete, aplikacja nie dodaje własnej kontrolki, a endpoint PATCH nie ma testu. Skutek: możliwość zmiany tytułu istnieje tylko w API i nie ma dowodu.",
-      "backlog": "BL-08",
+      "proof": "e2e/chat-history.spec.ts „L4.3: tytul z pierwszej wiadomosci, a uzytkownik moze go zmienic”: tytul wyprowadzony z pierwszej wiadomosci widoczny w pasku panelu, zmiana tytulu wykonana w interfejsie nowa kontrolka (packages/platform-ui/src/chat/ConversationTitle.tsx → useThreadList.updateThread → PATCH /api/threads/update/:id), nowy tytul w szufladzie, w backendzie i po przeladowaniu, a „Anuluj” niczego nie zmienia. tests/chat-history.test.ts „tytul pierwszej rozmowy powstaje bez ani jednej tury modelu”: licznik wejsc do adaptera modelu = 0 przy zalozeniu rozmowy i = 1 (sama odpowiedz) przy pelnym wykonaniu — brak API Anthropic dla tytulu jest pomiarem, nie analiza kodu; PATCH ma tez proby przyciecia do 120 znakow, pustego tytulu i cudzej rozmowy (403). tests/runtime.test.ts „skraca pierwsza wiadomosc do sensownego tytulu” (deriveTitle). Nie obejmuje zgodnosci z przyszlymi wersjami @openuidev/react-ui: menu wiersza gotowego ThreadList nadal ma tylko Delete, a kontrolka zmiany tytulu jest nasza, poza kontenerem czatu.",
+      "gap": "",
       "scenarios": [
         "T03"
       ],
@@ -641,12 +640,11 @@
       }
     },
     "L4.5": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/session-restore.spec.ts „Wstecz i Dalej przelaczaja rozmowy bez mieszania historii” (wątek jednej rozmowy nie zawiera treści drugiej); e2e/background-tasks.spec.ts „przelaczenie rozmowy i przeladowanie nie anuluja zadania” (pasek stanu nowej rozmowy nie pokazuje wykonania A); tests/agui-stream.test.ts „strumien rozmowy B nie dotyka stanu rozmowy A”, „prosba o zgode trafia do rozmowy zadania, nie do ogladanej”; tests/background-runs.test.ts „zadanie w A trwa, gdy uzytkownik pracuje w B, i wyniki sie nie mieszaja” (symulacja).",
-      "gap": "e2e/background-tasks.spec.ts „praca w rozmowie B nie miesza sie z zadaniem w A” nie ma trwającego zadania A (instancja skryptowana jest zatrzymywana po poprzednim teście, co przerywa wykonanie), więc równoległa praca A i B w GUI nie jest wykazana. Kontekst następnego polecenia po przełączeniu nie jest sprawdzany; analiza kodu: selection w useAppState nie jest czyszczone przy zmianie rozmowy ani przestrzeni i trafia do kolejnego polecenia.",
-      "backlog": "BL-08",
+      "proof": "e2e/chat-history.spec.ts „L4.5: praca w drugiej rozmowie w trakcie zadania pierwszej nie miesza niczego”: zadanie rozmowy A trwa (GET /api/runs/active je wymienia) w chwili przejscia do rozmowy B; watek B nie zawiera ani tekstu A, ani jego fragmentow, pasek stanu w B nie nalezy do uruchomienia A, kolejne polecenie wyslane w B ma w wyniku get_context conversationId rowny B i nie zawiera identyfikatora A, a powrot do A pokazuje jej wlasny wynik. Historie obu rozmow na serwerze pozostaja rozlaczne. Uzupelniajaco: tests/agui-stream.test.ts „strumien rozmowy B nie dotyka stanu rozmowy A”, tests/background-runs.test.ts (symulacja).",
+      "gap": "",
       "scenarios": [
         "T03",
         "T22"
@@ -657,12 +655,11 @@
       }
     },
     "L4.6": {
-      "status": "czesciowe",
-      "evidence": "model",
+      "status": "potwierdzone",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "tests/contracts.test.ts „powtorzona wiadomosc o tym samym id nie tworzy drugiego wpisu”; tests/runtime.test.ts „odtwarza od podanego numeru — reconnect nie powiela zdarzen”; tests/background-runs.test.ts „ponowne podlaczenie od numeru sekwencyjnego nie powtarza zdarzen”; tests/agui-stream.test.ts „strumien z wyslania zajmuje przebieg, wiec podlaczenie w tle go pomija”; e2e/agent-ui.spec.ts (model) i e2e/tool-activity.spec.ts: identyfikatory historii identyczne po reload i restarcie; e2e/background-tasks.spec.ts „powrot do rozmowy pokazuje wynik bez ponownego uruchamiania”.",
-      "gap": "Powtórzone żądanie POST /api/agui/run nie jest idempotentne: wiadomość użytkownika jest deduplikowana po id, ale każde wywołanie startuje nowe wykonanie (runId od klienta jest ignorowany w packages/platform-server/src/http/app.ts), więc powstaje druga odpowiedź asystenta i ewentualne powtórne skutki narzędzi; bez threadId powstaje druga rozmowa. Brak testu powtórzonego POST.",
-      "backlog": "BL-08",
+      "proof": "POST /api/agui/run jest idempotentny po runId klienta: uruchomienie zapisuje sie w IdempotencyStore (scope agui.run) w packages/platform-server/src/http/app.ts, a powtorzone zadanie odpowiada naglowkiem X-Run-Replayed i odtwarza zdarzenia tego samego uruchomienia zamiast startowac nowe. tests/chat-history.test.ts „ten sam runId: jedno uruchomienie, jedna odpowiedz, jedna rozmowa”: jedna tura modelu, jedno uruchomienie, jedna rozmowa, jedna wiadomosc uzytkownika i jedna odpowiedz asystenta, a odtworzony strumien niesie te same zdarzenia; „inny runId to inne polecenie” i „powtorzenie nalezy do wlasciciela, ktory je wyslal” pilnuja, ze gwarancja nie zjada drugiego polecenia ani nie przecieka miedzy wlascicielami. Reconnect: tests/runtime.test.ts „odtwarza od podanego numeru”, tests/background-runs.test.ts, tests/contracts.test.ts „powtorzona wiadomosc o tym samym id nie tworzy drugiego wpisu”. Zakres: klient generuje nowy runId przy kazdym wyslaniu (chat/chatWiring.ts), wiec gwarancja dotyczy powtorzenia tego samego zadania (retry, ponowione ciało), a nie dwoch osobnych polecen uzytkownika — te sa dwoma poleceniami i maja nimi pozostac.",
+      "gap": "",
       "scenarios": [
         "T06",
         "T22"
@@ -673,12 +670,11 @@
       }
     },
     "L4.7": {
-      "status": "niespelnione",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "packages/platform-server/src/services/conversations.ts (delete) i db/migrations.ts: messages i agent_runs ON DELETE CASCADE, artifacts.conversation_id ON DELETE SET NULL, claude_session_id znika z wierszem. e2e/chat.spec.ts „lista rozmow, przelaczanie i usuwanie” potwierdza usunięcie przez GUI. e2e/chat.spec.ts „usuniecie rozmowy odlacza artefakty zamiast je kasowac” usuwa rozmowę bez żadnego artefaktu, więc liczba artefaktów nie może się zmienić i test nie potrafi oblać.",
-      "gap": "Brak określonego skutku dla aktywnego zadania: usunięcie nie anuluje wykonania (runtime działa dalej w pamięci), a wiersz agent_runs znika kaskadowo; przy foreign_keys=ON dalsze appendEvent, upsertMessage i publikacja artefaktu trafiają w nieistniejące powiązania (błędy FK, niespójny stan). Odłączenie artefaktu nie ma testu z rzeczywistym artefaktem.",
-      "backlog": "BL-08",
+      "proof": "Skutek usuniecia jest okreslony i zwracany: ConversationService.delete anuluje uruchomienia queued/running tej rozmowy PRZED skasowaniem wiersza i raportuje cancelledRuns, detachedArtifacts, removedViewSpaces; RunEventStream i AgentRuntime znosza znikniecie wiersza uruchomienia bez bledu klucza obcego (zdarzenie, ktorego nie ma gdzie zapisac, konczy dziennik zamiast wywracac przebieg). e2e/chat-history.spec.ts „L4.7: usuniecie rozmowy z trwajacym zadaniem zatrzymuje to zadanie”: usuniecie z menu wiersza w interfejsie w trakcie trwajacego zadania — rozmowa znika z listy, /api/runs/active przestaje ja wymieniac, liczba artefaktow bez zmian, brak komunikatu o bledzie, kompozytor gotowy. tests/chat-history.test.ts: cancelledRuns=1, strumien konczy sie RUN_ERROR i nie dopisuje dalszego tekstu; artefakt Z TRESCIA zostaje, jest odlaczony (threadId pusty, conversationId null) i nadal czytelny; wiadomosci, uruchomienia i run_events znikaja, przestrzen Widokow agenta rowniez. Sesja Claude znika z wierszem; transkrypt SDK nie jest kasowany, bo nie nalezy do aplikacji.",
+      "gap": "",
       "scenarios": [
         "T03"
       ],
@@ -688,12 +684,11 @@
       }
     },
     "L4.8": {
-      "status": "czesciowe",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "packages/platform-contracts/src/conversation.ts (CHAT_CAPABILITIES: editMessage, branchConversation, restoreDeletedConversation = false) wystawione w /api/status i pokazane w packages/platform-ui/src/shell/SettingsPage.tsx (settings-chat-capabilities). Analiza zainstalowanego @openuidev/react-ui 0.13.10: gotowy interfejs nie ma kontrolek edycji, rozgałęziania ani przywracania (jedyna akcja wiersza: Delete). Brak testu odczytującego deklarację.",
-      "gap": "renameConversation jest deklarowane i pokazywane w Ustawieniach jako dostępne, a UI nie ma kontrolki zmiany tytułu (tylko PATCH w API) — ekran sugeruje funkcję niedostępną dla użytkownika. Deklaracja nie jest pilnowana testem, więc może rozjechać się z UI.",
-      "backlog": "BL-08",
+      "proof": "e2e/chat-history.spec.ts „L4.8: zadeklarowany zakres obslugi rozmow zgadza sie z tym, co interfejs oferuje”: deklaracja czytana z ekranu jako dane (data-available w shell/SettingsPage.tsx), porownana z /api/status — zbiory identyczne, wiec nowa mozliwosc nie da sie zadeklarowac po cichu; editMessage, branchConversation i restoreDeletedConversation sa zadeklarowane jako niedostepne i w panelu rozmowy nie ma dla nich zadnej kontrolki, a menu wiersza ma dokladnie jedna pozycje. Rozjazd deklaracji z interfejsem zostal usuniety zamiast opisany: renameConversation bylo deklarowane jako dostepne bez kontrolki — kontrolka powstala (ConversationTitle.tsx) i jej dzialanie pokazuje test L4.3. Asercje strukturalne (atrybuty, liczba pozycji menu), nie brzmienie etykiet.",
+      "gap": "",
       "scenarios": [],
       "historical": {
         "status": "potwierdzone",
@@ -701,12 +696,11 @@
       }
     },
     "L4.9": {
-      "status": "czesciowe",
-      "evidence": "model",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "Proza: e2e/streaming.spec.ts „tekst dociera fragmentami i jest widoczny przed koncem wykonania” i e2e/session-restore.spec.ts sprawdzają treść assistant-message; odpowiedź po narzędziu: e2e/tool-activity.spec.ts „wywolanie, jego wynik i odpowiedz sa widoczne w czacie” (treść „Widac na niej podsumowanie sprawy.”), e2e/agent-ui.spec.ts (model, znacznik w odpowiedzi po narzędziu, także po reload). Wybór renderera: packages/platform-ui/src/chat/AssistantMessage.tsx (isOpenUiLang → Renderer, inaczej MarkDownRenderer).",
-      "gap": "Żaden test nie sprawdza formatowania markdown (np. pogrubienie, lista) ani odpowiedzi w OpenUI Lang renderowanej w wiadomości czatu; scenariusze skryptowane zawierają zwykły tekst. Skutek: regresja gałęzi Renderer lub utrata formatowania przejdzie niezauważona.",
-      "backlog": "BL-08",
+      "proof": "e2e/chat-history.spec.ts „L4.9: proza z formatowaniem, kompozycja OpenUI i odpowiedz po narzedziu sa widoczne”: pogrubienie jest elementem strong, lista dwoma li, a na ekranie nie ma znakow ** (markdown przychodzi podzielony na fragmenty w srodku tokenu); w jednej odpowiedzi widoczna jest proza przed kompozycja i po niej oraz sama kompozycja — assistant-openui z data-empty=false i DataTable w stanie ready z nazwami dostawcow zgodnymi z /api/read; odpowiedz po wywolaniu narzedzia jest widoczna w wiadomosci. „L4.9: tekst wypowiedziany PRZED wywolaniem narzedzia nie ginie — jest krokiem osi”: taki tekst jest w historii (assistant[0].content) i na ekranie, jako krok tekstowy osi gotowego komponentu (.openui-tool-call-timeline__text-step) po otwarciu „Behind the scenes”. Ograniczenie @openuidev/react-ui 0.13.10, przypiete tym testem: proza wypowiedziana przed wywolaniem narzedzia nie trafia do banki odpowiedzi, tylko do zwijanej osi krokow tury, ktora po zakonczeniu tury jest zamknieta — tekst nie ginie, ale wymaga jednego klikniecia; test oblewa, gdyby biblioteka przestala go rysowac.",
+      "gap": "",
       "scenarios": [
         "T04"
       ]
@@ -722,12 +716,11 @@
       ]
     },
     "L4.11": {
-      "status": "czesciowe",
-      "evidence": "model",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/tool-activity.spec.ts „wywolanie, jego wynik i odpowiedz sa widoczne w czacie” (oś i nazwa canvas_add_card), „aktywnosc przezywa przeladowanie, przelaczenie rozmowy i restart backendu”, „blad narzedzia jest pokazany jako blad, nie jako wynik” (failed i powód po rozwinięciu); e2e/agent-ui.spec.ts (model): oś widoczna i po reload. Zapis argumentów: tests/run-lifecycle.test.ts „wywolanie, argumenty i wynik sa zapisane w wiadomosciach”.",
-      "gap": "Argumenty narzędzia nie są sprawdzane w GUI (ani w trakcie, ani po reload); błąd narzędzia sprawdzany tylko w trakcie, nie po reload i restarcie; widoczność osi nie jest skorelowana z fazą running (asercja czeka na widoczność bez odczytu data-phase); treść udanego wyniku nie jest sprawdzana.",
-      "backlog": "BL-08",
+      "proof": "e2e/chat-history.spec.ts „L4.11: wywolanie, argumenty i wynik widoczne w trakcie, po przeladowaniu i po restarcie”: widocznosc osi jest skorelowana z faza wykonania (data-phase running/queued odczytywana w tym samym takcie co widocznosc, a nie samo czekanie na element); argumenty wywolania sa czytelne w panelu zadania (limit: 3) i demonstracyjnie uzyte — wynik ma dokladnie trzy cele i targetsWindow.truncated=true; tresc UDANEGO wyniku jest sprawdzana (platform.canvas), a nie sam fakt powodzenia; to samo powtarza sie po przeladowaniu i po restarcie backendu, bez zmiany liczby wiadomosci narzedzia. „L4.11: blad narzedzia pozostaje bledem po przeladowaniu i po restarcie”: na zwinietej osi widac liczbe niepowodzen, po rozwinieciu przyczyne, i tak samo w trakcie, po reload i po restarcie; uruchomienie pozostaje succeeded, a historia pamieta isError. Zapis argumentow po stronie bazy: tests/run-lifecycle.test.ts.",
+      "gap": "",
       "scenarios": [
         "T06"
       ]
@@ -743,12 +736,11 @@
       ]
     },
     "L4.13": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "tests/projection.test.ts „identyfikator wiadomosci narzedzia jest zwiazany z uruchomieniem, nie tylko z wywolaniem”, „identyfikatory sa wyprowadzone, wiec powtorzenie zdarzen nie duplikuje tury”, „projekcja przyrostowa daje ten sam wynik co jednorazowa” oraz sześć scenariuszy porównania kolejności z processStreamedMessage; services/conversations.ts upsertMessage nadaje seq tylko przy pierwszym zapisie; tests/migration.test.ts „powtorne uruchomienie nie dubluje danych”.",
-      "gap": "toolCallId jest zapisywany bez przestrzeni nazw wykonania (agent/projection.ts), a gotowy czat paruje wywołania z wynikami po toolCallId w całej historii; unikalność zależy od SDK (fallback runtime: tu_<Date.now()>). Brak testu dwóch wykonań w jednej rozmowie z tym samym toolCallId i próby, że błędny toolCallId nie wiąże cudzych wyników.",
-      "backlog": "BL-08",
+      "proof": "Identyfikator narzedzia ma przestrzen nazw wykonania: most hookow w packages/platform-server/src/agent/runtime.ts nadaje `${runId}~${tool_use_id}` w jednym miejscu, wiec zywy strumien i zapisana historia nios ten sam identyfikator i nie zaleza od unikalnosci dostawcy ani od zapasowego `tu_<Date.now()>`. tests/chat-history.test.ts „dwa wykonania z tym samym tool_use_id: kazdy wynik zostaje przy swoim wywolaniu”: dwa wykonania w jednej rozmowie uzywajace `tu_1` daja dwie wiadomosci narzedzia i dwa rozne toolCallId, a uruchomione w tescie pairToolActivity z zainstalowanej biblioteki wiaze kazdy wynik z wlasnym wywolaniem (ui_catalog→PIERWSZY, ui_targets→DRUGI); „projekcja zachowuje kolejnosc i jest idempotentna po ponownym odczycie” pilnuje kolejnosci tekst→narzedzie→tekst i powtarzalnosci odczytu. Uzupelniajaco tests/projection.test.ts (porownanie z reduktorem biblioteki) i tests/migration.test.ts.",
+      "gap": "",
       "scenarios": [
         "T06"
       ]
@@ -764,12 +756,11 @@
       ]
     },
     "L4.15": {
-      "status": "czesciowe",
-      "evidence": "model",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "packages/platform-ui/src/chat/AssistantMessage.tsx zastępuje tylko treść wiadomości; oś narzędzi biblioteki pozostaje — widoczna z zainstalowanym nadpisaniem w e2e/tool-activity.spec.ts i e2e/agent-ui.spec.ts (model). Publiczne adaptery (restStorage z własnym kanałem artefaktów w chatWiring.ts, platformAguiAdapter, ConversationSync na hookach useThreadList/useThread) działają w testach GUI; e2e/chat-layout.spec.ts „artefakty sa osobna zakladka panelu” otwiera przeglądarkę artefaktów.",
-      "gap": "Prezentacja artefaktu w czacie (TimelineEntry dla artifactRenderers, widok artefaktu z treścią przez ArtifactContent) nie jest sprawdzana żadnym testem — test zakładki otwiera pustą przeglądarkę; nagłówek AssistantMessage.tsx tylko deklaruje, że wpisy artefaktów rysuje InterleavedTurn.",
-      "backlog": "BL-08",
+      "proof": "e2e/chat-history.spec.ts „L4.15: artefakt ma podglad w wiadomosci i pelny widok, a os narzedzi i odpowiedz zostaja”: w jednej turze jednoczesnie widac os narzedzi biblioteki, artefakt wyrenderowany pod wywolaniem, ktore go utworzylo (artifact-preview z data-artifact-id i wierszami renderera modulu) oraz odpowiedz zlozona przez nasze nadpisanie tresci wiadomosci (assistant-prose); ten sam artefakt otwarty w zakladce Artefakty ma ten sam identyfikator i te same wiersze, a powrot do rozmowy nie gubi ani osi, ani podgladu. Publiczne adaptery potrzebne do integracji dzialaja w tym samym przebiegu: restStorage z wlasnym kanalem artefaktow (chat/chatWiring.ts), platformAguiAdapter, ConversationSync i ConversationTitle na hookach useThreadList. Uzupelniajaco e2e/artifact-views.spec.ts (podglad i pelny widok tej samej wersji).",
+      "gap": "",
       "scenarios": [
         "T04",
         "T06"

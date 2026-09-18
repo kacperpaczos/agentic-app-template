@@ -19,10 +19,23 @@ import { createContext, useContext } from 'react';
 export interface ChatSlots {
   /** Above the chat, in the panel's own column. */
   notice: HTMLElement | null;
+  /**
+   * The strip naming the conversation on screen, in the panel's own column.
+   *
+   * Separate from `notice` because the two are not the same thing: a notice
+   * appears when something went wrong and takes the space it needs, while this
+   * is a permanent row of the panel's header. Sharing one host would have made
+   * a failed conversation load and the title fight over one box.
+   */
+  title: HTMLElement | null;
   /** Outside every clipping box, for floating things positioned themselves. */
   overlay: HTMLElement | null;
 }
 
-export const ChatSlotsContext = createContext<ChatSlots>({ notice: null, overlay: null });
+export const ChatSlotsContext = createContext<ChatSlots>({
+  notice: null,
+  title: null,
+  overlay: null,
+});
 
 export const useChatSlots = (): ChatSlots => useContext(ChatSlotsContext);

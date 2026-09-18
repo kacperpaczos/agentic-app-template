@@ -13,6 +13,7 @@ import { makeAssistantMessage } from './AssistantMessage.tsx';
 import { ChatSlotsContext } from './chatSlots.ts';
 import { ComposerAttachments } from './ComposerAttachments.tsx';
 import { ConversationSync } from './ConversationSync.tsx';
+import { ConversationTitle } from './ConversationTitle.tsx';
 import {
   artifactReferenceOf,
   createChatLlm,
@@ -271,10 +272,11 @@ export function ChatPanel() {
    * `overflow: clip` wrapper. See `chatSlots.ts`.
    */
   const [noticeHost, setNoticeHost] = useState<HTMLElement | null>(null);
+  const [titleHost, setTitleHost] = useState<HTMLElement | null>(null);
   const [overlayHost, setOverlayHost] = useState<HTMLElement | null>(null);
   const slots = useMemo(
-    () => ({ notice: noticeHost, overlay: overlayHost }),
-    [noticeHost, overlayHost],
+    () => ({ notice: noticeHost, title: titleHost, overlay: overlayHost }),
+    [noticeHost, titleHost, overlayHost],
   );
   /*
    * The ready-made composer's stop button ends the stream locally; this is what
@@ -395,6 +397,12 @@ export function ChatPanel() {
       <RunState />
       {!onArtifacts && <ContextStrip />}
       {!onArtifacts && <PermissionPrompt />}
+      {/*
+        The conversation's name and the control that changes it. Filled by
+        `ConversationTitle` from inside the provider; empty on the artifacts tab,
+        where there is no conversation being read.
+      */}
+      {!onArtifacts && <div className="pf-chat__title" ref={setTitleHost} />}
       <div className="pf-chat__notice" ref={setNoticeHost} />
       {/*
         No layout prop here on purpose.
@@ -451,6 +459,12 @@ export function ChatPanel() {
               URL names is gone.
             */}
             <ConversationSync />
+            {/*
+              Renders nothing here either: it portals the conversation's name
+              and its rename control into the strip above. The ready-made thread
+              list has no rename action and no slot for one — see the file.
+            */}
+            <ConversationTitle />
             {/*
               Renders nothing here. It portals a paperclip into the ready-made
               composer's own action bar and the attached-file chips above its
