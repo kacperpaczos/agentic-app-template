@@ -149,6 +149,22 @@ może trzymać stan gdzie indziej.
 odmawia, gdy ten katalog istnieje, nie jest pusty i nie wygląda na katalog danych aplikacji (nie ma
 `app.db`, `session.secret`, `files`, `workspaces` ani znacznika).
 
+### Która flaga jest chroniona, a która nie
+
+Każdy z czterech skryptów deklaruje przy sobie (`export const FLAGS`) wszystkie swoje flagi
+przyjmujące ścieżkę i to, co z nimi robi: `zapis-chroniony` (odmawia katalogu danych),
+`odczyt-chroniony` (tylko czyta, ale i tak odmawia — bo próba migracji uruchomiłaby na tym katalogu
+aplikację), `zapis-docelowy` (pisze do katalogu danych celowo — `--data` w odtworzeniu) i `odczyt`
+(wolno wskazać katalog danych; `--data` w `backup-state.mjs` to jedyny taki przypadek, bo
+kopiowanie żywego katalogu jest sensem tego skryptu).
+
+`tests/script-path-flags.test.ts` czyta listę flag **ze źródła** każdego skryptu, porównuje ją z tą
+deklaracją i dla każdej flagi zapisującej uruchamia skrypt wycelowany w katalog wyglądający na żywe
+dane, wymagając odmowy i niezmienionego odcisku katalogu. Nowa flaga ścieżkowa dodana bez wpisu —
+albo z wpisem, ale bez ochrony w kodzie — oblewa ten test. **Ten pakiet trzy razy miał tę samą
+wadę: strażnika pilnującego niewłaściwego argumentu**, i za każdym razem znajdował ją człowiek, a
+nie test; ten test jest odpowiedzią na ten wzorzec, nie na pojedynczy defekt.
+
 Kody wyjścia wszystkich czterech skryptów: **0** zrobione, **1** werdykt negatywny (kopia się nie
 weryfikuje, próba znalazła problemy, odtworzony stan nie zgadza się z manifestem), **2** odmowa,
 **3** kopia nowsza niż build (tylko odtworzenie), **4** awaria skryptu.
