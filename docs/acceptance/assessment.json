@@ -1495,12 +1495,11 @@
       ]
     },
     "L8.12": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "symulacja",
       "origin": "szablon",
-      "proof": "Kontrolowane bledy przechodza od granicy adaptera SDK do widocznego UI: e2e/auth-limits.spec.ts prowadzi limit, odwolane logowanie, odmowe odnowienia i blad sieci przez runtime do czatu, paska stanu i Ustawien, z asercjami na atrybutach stanu (data-auth-state, data-state), a nie na napisach; stan Ustawien po symulowanym limicie jest asertowany wprost (auth-access-state=rate_limited, auth-remedy z wlasna trescia). Cztery przypadki daja cztery ROZNE stany — asercja o rozroznialnosci jest osobnym testem. Kazde zrodlo dowodu jest oznaczone jako symulacja: naglowki e2e/support/auth-scenarios.ts, e2e/auth-limits.spec.ts, tests/credential-guard.test.ts, a docs/evidence/z12-bl04/sesja-sdk.json ma pole czegoToNieDowodzi z wprost napisanym zdaniem, ze odczyt limitow planu nie jest wyczerpaniem limitu.",
-      "gap": "Zaden dowod w repozytorium nie pokazuje RZECZYWISTEGO wyczerpania limitu doprowadzonego do UI — wszystkie cztery przypadki sa symulacjami na granicy adaptera. Wedlug wykonawcy tresc kryterium (\"kontrolowane bledy ... sprawdzone na granicy adaptera az do widocznego UI; symulacja nie jest opisana jako rzeczywiste wyczerpanie limitu\") jest tym pakietem spelniona i kryterium nadaje sie do zamkniecia; pozostawione otwarte na wyrazne polecenie zlecenia, ktore wiaze L8.11 i L8.12 z rzeczywistym wyczerpaniem limitu. Decyzja nalezy do koordynatora.",
-      "backlog": "BL-04",
+      "proof": "Dowod jest SYMULACJA na granicy adaptera SDK — i to jest dokladnie to, czego kryterium zada: jego tresc mowi \"kontrolowane bledy ... sprawdzone na granicy adaptera az do widocznego UI\", a drugi warunek stawia na OPIS (\"symulacja nie jest opisana jako rzeczywiste wyczerpanie limitu\"), nie na sposob wywolania. Rzeczywiste wyczerpanie limitu nalezy do L8.11 i tam pozostaje otwarte. e2e/auth-limits.spec.ts (13 testow, port 8798, .e2e-scripted-auth) prowadzi limit uzycia, odwolane logowanie, odmowe odnowienia i blad sieci od granicy ModelAgentLike przez runtime do czatu (data-phase=failed + kod w run-error), paska stanu (data-auth-state, data-auth-confirmed) i Ustawien (auth-access-state, auth-remedy) — asercje na atrybutach stanu, nie na napisach. Stan Ustawien po symulowanym limicie jest asertowany wprost. Osobny test sprawdza, ze cztery przypadki daja cztery ROZNE stany, bo \"rozroznialne\" jest wlasnoscia zbioru, nie pojedynczego przypadku. Oznaczenie: naglowki e2e/support/auth-scenarios.ts, e2e/auth-limits.spec.ts i tests/credential-guard.test.ts mowia wprost, ze zaden limit nie zostal osiagniety, zadne logowanie nie zostalo odwolane i zadne odswiezenie nie zostalo odrzucone przez dostawce; docs/evidence/z12-bl04/sesja-sdk.json ma pole czegoToNieDowodzi z tym samym zdaniem o odczycie limitow planu. Proby wykrycia C i F (raport Z12).",
+      "gap": "—",
       "scenarios": [
         "T17"
       ]

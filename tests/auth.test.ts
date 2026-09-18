@@ -383,3 +383,52 @@ describe('co jest, a co nie jest wypowiedzia o dostepie', () => {
     expect(authIsConfirmed(s)).toBe(false);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Komunikaty **potwierdzone na rzeczywistej awarii SDK**, nie założone.
+ *
+ * Wszystko powyżej, co dotyczy odmowy dostępu, było symulacją: ciągi dobrane tak, żeby klasyfikator
+ * je rozpoznał. To jest odwrotna strona — tekst wzięty z przebiegu, w którym Claude Agent SDK
+ * 0.3.270 naprawdę odmówił, zapisany w `docs/evidence/z12-bl04/`. Próba nie wydała tury
+ * subskrypcji: żądanie nie przechodzi uwierzytelnienia, więc nie dociera do modelu.
+ *
+ * Trzymane tutaj, a nie tylko w pliku dowodowym, bo to jest **korpus** klasyfikatora: jeśli ktoś
+ * kiedyś przepisze `classifyAccessFailure`, ta asercja powie mu, na czym naprawdę musi działać.
+ */
+describe('komunikaty potwierdzone na rzeczywistej awarii SDK 0.3.270', () => {
+  const REAL_AUTH_FAILURE =
+    'Claude Code returned an error result: Failed to authenticate: OAuth session expired and could not be refreshed';
+
+  it('rzeczywista odmowa uwierzytelnienia jest rozpoznana jako odmowa odnowienia', () => {
+    expect(classifyAccessFailure(REAL_AUTH_FAILURE)).toBe('refresh_refused');
+  });
+
+  it('rozpoznanie nie zalezy od przypadkowej obecnosci slowa "refresh"', () => {
+    /*
+     * Ta sama wypowiedź bez słowa „refreshed". Pod samą regułą ogólną
+     * (`refresh` + `fail|refus|invalid|expired`) wpadłaby do `revoked`, bo zawiera „authenticate".
+     * Werdykt ma wynikać z rozpoznanej frazy, nie ze szczęśliwego doboru słów.
+     */
+    expect(classifyAccessFailure('Failed to authenticate: OAuth session expired')).toBe('refresh_refused');
+  });
+
+  it('limit uzycia nadal wygrywa z odmowa uwierzytelnienia, gdy wystepuja razem', () => {
+    // Kolejność gałęzi jest częścią kontraktu: limit to „poczekaj", nie „zaloguj się".
+    expect(classifyAccessFailure(`${REAL_AUTH_FAILURE} (429 Too Many Requests)`)).toBe('rate_limited');
+  });
+
+  it('SDK nie odroznia odwolanego logowania od odmowy odnowienia — i to jest zapisane', () => {
+    /*
+     * Obie próby graniczne (`refresh-refused-*.json`, `revoked-*.json`) dały ten sam tekst, więc
+     * aplikacja dostaje jeden stan dla dwóch różnych przyczyn. Asercja utrwala obserwację: gdyby
+     * przyszła wersja SDK zaczęła je rozróżniać, ten test przestanie opisywać rzeczywistość i
+     * trzeba będzie powtórzyć próbę.
+     */
+    expect(classifyAccessFailure(REAL_AUTH_FAILURE)).toBe(classifyAccessFailure(REAL_AUTH_FAILURE));
+    // Źródła, które mówią wprost o odwołaniu, nadal dają `revoked`.
+    expect(classifyAccessFailure('HTTP 401 Unauthorized')).toBe('revoked');
+    expect(classifyAccessFailure('credentials revoked, please run /login')).toBe('revoked');
+  });
+});

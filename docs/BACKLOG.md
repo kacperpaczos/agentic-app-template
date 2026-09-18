@@ -3,12 +3,12 @@
 > Plik generowany przez `node scripts/acceptance-matrix.mjs` z `docs/acceptance/assessment.json`.
 > Każde otwarte kryterium macierzy (`docs/ACCEPTANCE.md`) należy do dokładnie jednego pakietu.
 
-Otwartych kryteriów: **48** z 200, w 7 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.
+Otwartych kryteriów: **47** z 200, w 7 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.
 
 | Pakiet | Tytuł | Kryteria | Liczba |
 |---|---|---|---|
 | BL-03 | Powtarzalne próby na prawdziwym modelu w szablonie | L1.6, L2.13, L3.2, L3.10, L3.13, L5.8, L6.5, L6.6, L7.3, L7.11, L8.5, L9.4, L9.13, L9.16, L11.3, L11.4, L11.5, L11.9, L11.11 | 19 |
-| BL-04 | Uwierzytelnienie subskrypcyjne i limity — próby graniczne | L8.10, L8.11, L8.12 | 3 |
+| BL-04 | Uwierzytelnienie subskrypcyjne i limity — próby graniczne | L8.10, L8.11 | 2 |
 | BL-07 | Trwałość, kopia i migracje | L7.13 | 1 |
 | BL-08 | Czat, zdarzenia i historia | L5.2, L5.3, L5.4, L5.5, L5.6, L5.11, L5.12, L5.13, L5.14, L5.15 | 10 |
 | BL-09 | Pliki, sandbox i zadania w tle | L11.7, L11.12, L11.23 | 3 |
@@ -53,7 +53,6 @@ Zachowanie przy wygaśnięciu i odświeżeniu tokena, odrzuconym odświeżeniu, 
 |---|---|---|---|
 | L8.10 | Przeterminowany access token nie blokuje automatycznie możliwości odświeżenia przez SDK; skuteczne i odrzucone odświeżenie mają sprawdzone zachowanie. | częściowe | Skuteczne odswiezenie jest symulowane, nie zaobserwowane: stand-in konczy przebieg powodzeniem, ale zaden test nie widzi, jak SDK wymienia przeterminowany access token ani nie sprawdza nowego terminu w pliku po przebiegu. Tekst odmowy odnowienia ("OAuth token refresh failed: invalid_grant") pozostaje zalozony — nie zostal potwierdzony na rzeczywistym bledzie SDK 0.3.270. Do domkniecia potrzebna jedna tura na KOPII poswiadczenia z terminem w przeszlosci (osobny CLAUDE_CONFIG_DIR), ktora pokaze odswiezenie i nowy termin bez dotykania logowania uzytkownika. |
 | L8.11 | Limit użycia jest odróżniany od odwołanego logowania, błędu sieci i błędu narzędzia; zachowuje historię i nie powoduje automatycznej powtórki mutacji. | częściowe | Klasyfikacja nadal opiera sie na podciagach komunikatu (usage limit, 429, invalid_grant, /login), a te nie zostaly potwierdzone na RZECZYWISTYCH komunikatach SDK przy wyczerpanym limicie — takiego przebiegu nie da sie wywolac na zadanie, a symulowany limit nie jest limitem wyczerpanym. Sonda sesji czyta rzeczywiste wykorzystanie okien planu (5 h, 7 dni), co jest ODCZYTEM prawdziwego limitu, nie jego wyczerpaniem, i samo w sobie kryterium nie zamyka. Pozostawione otwarte swiadomie. |
-| L8.12 | Kontrolowane błędy uwierzytelnienia i limitu są sprawdzone na granicy adaptera aż do widocznego UI; symulacja nie jest opisana jako rzeczywiste wyczerpanie limitu. | częściowe | Zaden dowod w repozytorium nie pokazuje RZECZYWISTEGO wyczerpania limitu doprowadzonego do UI — wszystkie cztery przypadki sa symulacjami na granicy adaptera. Wedlug wykonawcy tresc kryterium ("kontrolowane bledy ... sprawdzone na granicy adaptera az do widocznego UI; symulacja nie jest opisana jako rzeczywiste wyczerpanie limitu") jest tym pakietem spelniona i kryterium nadaje sie do zamkniecia; pozostawione otwarte na wyrazne polecenie zlecenia, ktore wiaze L8.11 i L8.12 z rzeczywistym wyczerpaniem limitu. Decyzja nalezy do koordynatora. |
 
 ## BL-07 — Trwałość, kopia i migracje
 

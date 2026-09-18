@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -139,4 +139,85 @@ describe('zapisany dowod sposobu logowania sesji SDK', () => {
     }
     expect(record.wersje?.claudeCli, `dowod z innej wersji Claude CLI. Wykonaj: ${REGENERATE}`).toBe(cli);
   });
+});
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Zapisane próby graniczne uwierzytelnienia — i to, żeby nie przeżyły swojego SDK.
+ *
+ * Ta sama zasada, co wyżej: przebieg jest w pliku, a regresja pilnuje, żeby plik dotyczył
+ * zainstalowanej wersji i żeby nie zaczął opowiadać czegoś, czego nie zaobserwowano. Dodatkowo
+ * sprawdza dwie rzeczy, które są warunkiem odbioru tego pakietu: że próba **nie wydała tury**
+ * i że **nie tknęła logowania użytkownika**.
+ */
+describe('zapisane proby graniczne uwierzytelnienia', () => {
+  const dir = resolve(process.cwd(), 'docs/evidence/z12-bl04');
+  const newest = (prefix: string): { name: string; body: any } | null => {
+    if (!existsSync(dir)) return null;
+    const files = readdirSync(dir)
+      .filter((f) => f.startsWith(`${prefix}-2`) && f.endsWith('.json'))
+      .sort();
+    const name = files.at(-1);
+    if (!name) return null;
+    return { name, body: JSON.parse(readFileSync(resolve(dir, name), 'utf8')) };
+  };
+
+  for (const [prefix, opis] of [
+    ['refresh-refused', 'termin w przeszlosci, martwy refresh token'],
+    ['revoked', 'termin w przyszlosci, martwy access token'],
+  ] as const) {
+    describe(`${prefix} (${opis})`, () => {
+      const found = newest(prefix);
+
+      it('przebieg jest zapisany i oznaczony jako rzeczywisty, nie jako proba generalna', () => {
+        expect(found, `brak zapisu proby "${prefix}" w docs/evidence/z12-bl04`).not.toBeNull();
+        expect(found!.body.rodzajDowodu).toContain('rzeczywisty przebieg');
+      });
+
+      it('nie wydal tury subskrypcji', () => {
+        expect(found!.body.turySubskrypcji).toBe(0);
+      });
+
+      it('logowanie uzytkownika pozostalo nietkniete', () => {
+        // Odciski obu tokenów przed i po; różnica znaczyłaby, że próba dotknęła pliku użytkownika.
+        expect(found!.body.logowanieUzytkownika?.nietkniete).toBe(true);
+        expect(found!.body.logowanieUzytkownika?.przed?.accessTokenSha).toBe(
+          found!.body.logowanieUzytkownika?.po?.accessTokenSha,
+        );
+        expect(found!.body.logowanieUzytkownika?.przed?.refreshTokenSha).toBe(
+          found!.body.logowanieUzytkownika?.po?.refreshTokenSha,
+        );
+      });
+
+      it('aplikacja sklasyfikowala rzeczywisty komunikat jako odmowe odnowienia', () => {
+        expect(found!.body.wynik?.kodBledu).toBe('unauthenticated');
+        expect(found!.body.wynik?.klasyfikacjaAplikacji).toBe('refresh_refused');
+        expect(found!.body.wynik?.stanDostepuPoPrzebiegu).toBe('refresh_refused');
+        expect(found!.body.wynik?.komunikatSdk).toContain('OAuth session expired');
+      });
+
+      it('CLI skasowalo poswiadczenie proby na dysku — obserwacja, nie zalozenie', () => {
+        /*
+         * To jest powód, dla którego każda próba uwierzytelnienia MUSI iść na kopii: przy odmowie
+         * CLI czyści plik, na który je skierowano. Gdyby ktoś wycelował tę próbę w ~/.claude,
+         * użytkownik zostałby wylogowany natychmiast.
+         */
+        expect(found!.body.poswiadczenieProbyPoPrzebiegu?.skasowanePrzezCli).toBe(true);
+      });
+
+      it('zapis pochodzi z zainstalowanej wersji CLI', () => {
+        const cli = cliVersion();
+        if (cli === null) {
+          expect(found!.body.wersje?.claudeCli).toBeTruthy();
+          return;
+        }
+        expect(
+          found!.body.wersje?.claudeCli,
+          `zapis proby "${prefix}" z innej wersji CLI. Powtorz: node --experimental-transform-types ` +
+            `scripts/probe-refresh-refused.ts${prefix === 'revoked' ? ' --revoked' : ''}`,
+        ).toBe(cli);
+      });
+    });
+  }
 });
