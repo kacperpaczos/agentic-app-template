@@ -1,12 +1,33 @@
 import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
 import { createLibrary, type DefinedComponent, type Library } from '@openuidev/react-lang';
 import { openuiLibrary } from '@openuidev/react-ui';
-import type {
-  ConversationStarterContribution,
-  MenuItemContribution,
-  ModuleMeta,
+import {
+  MENU_SECTIONS,
+  type ConversationStarterContribution,
+  type MenuItemContribution,
+  type MenuSection,
+  type MenuSectionLabels,
+  type ModuleMeta,
+  type ModuleScreenContribution,
 } from '@platform/contracts';
 import { platformDataComponents } from '../views/dataComponents.tsx';
+
+/**
+ * Headings for navigation sections nobody named.
+ *
+ * Deliberately words about *the application's own furniture* — a record, a
+ * file, a setting — and not about anyone's business. A module that has a better
+ * word for one of its sections says so in `UiModule.menuSections`; this is what
+ * is left when it does not, and it has to read sensibly for any domain,
+ * because the platform will never know which one it is serving.
+ */
+export const NEUTRAL_MENU_SECTION_LABELS: Record<MenuSection, string> = {
+  workspace: 'Przestrzen pracy',
+  records: 'Rekordy',
+  data: 'Dane',
+  files: 'Pliki i raporty',
+  settings: 'Ustawienia',
+};
 
 /**
  * `DefinedComponent` is invariant in its props schema, so a heterogeneous
@@ -32,6 +53,16 @@ export interface ArtifactRendererProps {
 }
 
 /**
+ * A screen component. Deliberately a plain function of no props: the router
+ * mounts it on a path, and everything it needs — its route parameters, the
+ * session — it reads through the platform's hooks.
+ */
+export type ScreenComponent = () => ReactNode;
+
+/** A module screen the composition root mounts as a route. */
+export type ModuleScreen = ModuleScreenContribution<ScreenComponent>;
+
+/**
  * Browser half of a business module.
  *
  * Mirrors `ServerModule`: the server validates a composition against its
@@ -47,6 +78,17 @@ export interface UiModule {
   /** Artifact renderers keyed by `rendererType`. */
   artifactRenderers?: Record<string, ComponentType<ArtifactRendererProps>>;
   menu: MenuItemContribution[];
+  /**
+   * What this module calls the navigation sections it puts items in. A section
+   * nobody names keeps the neutral heading — the platform has no business
+   * vocabulary of its own. See {@link MenuSectionLabels}.
+   */
+  menuSections?: MenuSectionLabels;
+  /**
+   * Screens this module contributes to the router. Mounted generically by the
+   * composition root, which therefore names no page of any module.
+   */
+  screens?: ModuleScreen[];
   /** Suggested opening commands shown in the chat composer. */
   starters?: ConversationStarterContribution[];
 }
@@ -56,6 +98,10 @@ export interface ClientRegistry {
   cardRenderers: Record<string, CardComponent>;
   artifactRenderers: Record<string, ComponentType<ArtifactRendererProps>>;
   menu: MenuItemContribution[];
+  /** Heading of every navigation section: the module's word, or the neutral one. */
+  menuSections: Record<MenuSection, string>;
+  /** Every module screen, in registration order, ready to be mounted as routes. */
+  screens: ModuleScreen[];
   starters: ConversationStarterContribution[];
   /** Merged OpenUI catalog: the ready-made one plus every module's additions. */
   library: AnyLibrary;
@@ -74,12 +120,23 @@ export function buildRegistry(input: {
   platformCardRenderers: Record<string, CardComponent>;
   platformArtifactRenderers?: Record<string, ComponentType<ArtifactRendererProps>>;
   platformMenu: MenuItemContribution[];
+  /**
+   * Paths the platform's own screens occupy. A module screen claiming one of
+   * them is refused: the router would mount two routes on one path and the
+   * winner would depend on registration order.
+   */
+  platformScreenPaths?: string[];
 }): ClientRegistry {
   const cardRenderers: Record<string, CardComponent> = { ...input.platformCardRenderers };
   const artifactRenderers: Record<string, ComponentType<ArtifactRendererProps>> = {
     ...(input.platformArtifactRenderers ?? {}),
   };
   const menu = [...input.platformMenu];
+  const menuSections: Record<MenuSection, string> = { ...NEUTRAL_MENU_SECTION_LABELS };
+  const sectionNamedBy = new Map<MenuSection, string>();
+  const screens: ModuleScreen[] = [];
+  const takenPaths = new Set(input.platformScreenPaths ?? []);
+  const takenScreenIds = new Set<string>();
   const starters: ConversationStarterContribution[] = [];
   /*
    * The platform's data components are always in the catalog: module views are
@@ -96,6 +153,31 @@ export function buildRegistry(input: {
     }
     for (const [type, renderer] of Object.entries(mod.artifactRenderers ?? {})) {
       artifactRenderers[type] = renderer;
+    }
+    for (const screen of mod.screens ?? []) {
+      if (takenScreenIds.has(screen.id)) {
+        throw new Error(`Konflikt ekranow: ekran "${screen.id}" jest juz zarejestrowany.`);
+      }
+      if (takenPaths.has(screen.path)) {
+        throw new Error(`Konflikt ekranow: sciezka "${screen.path}" jest juz zajeta (ekran ${screen.id}).`);
+      }
+      takenScreenIds.add(screen.id);
+      takenPaths.add(screen.path);
+      screens.push(screen);
+    }
+    for (const section of MENU_SECTIONS) {
+      const label = mod.menuSections?.[section];
+      if (label === undefined) continue;
+      const named = sectionNamedBy.get(section);
+      if (named !== undefined && menuSections[section] !== label) {
+        // Two modules disagree about what this part of the workspace is called.
+        // Left to the composition root rather than to the order of `modules`.
+        throw new Error(
+          `Konflikt nazw sekcji: "${section}" nazywa juz modul ${named} („${menuSections[section]}”), a modul ${mod.meta.id} nazywa ja „${label}”.`,
+        );
+      }
+      menuSections[section] = label;
+      sectionNamedBy.set(section, mod.meta.id);
     }
     menu.push(...mod.menu);
     starters.push(...(mod.starters ?? []));
@@ -122,7 +204,7 @@ export function buildRegistry(input: {
     id: 'app-catalog',
   });
 
-  return { modules: input.modules, cardRenderers, artifactRenderers, menu, starters, library };
+  return { modules: input.modules, cardRenderers, artifactRenderers, menu, menuSections, screens, starters, library };
 }
 
 const RegistryContext = createContext<ClientRegistry | null>(null);

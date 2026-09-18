@@ -3,13 +3,12 @@
 > Plik generowany przez `node scripts/acceptance-matrix.mjs` z `docs/acceptance/assessment.json`.
 > Każde otwarte kryterium macierzy (`docs/ACCEPTANCE.md`) należy do dokładnie jednego pakietu.
 
-Otwartych kryteriów: **118** z 200, w 9 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.
+Otwartych kryteriów: **116** z 200, w 8 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.
 
 | Pakiet | Tytuł | Kryteria | Liczba |
 |---|---|---|---|
 | BL-03 | Powtarzalne próby na prawdziwym modelu w szablonie | L1.6, L2.13, L3.2, L3.10, L3.13, L5.8, L6.5, L6.6, L7.3, L7.11, L8.5, L9.4, L9.13, L9.16, L11.3, L11.4, L11.5, L11.9, L11.11 | 19 |
 | BL-04 | Uwierzytelnienie subskrypcyjne i limity — próby graniczne | L8.2, L8.3, L8.6, L8.7, L8.8, L8.9, L8.10, L8.11, L8.12, L8.13, L8.14 | 11 |
-| BL-06 | Wymienialność modułu domenowego | L9.11, L9.12 | 2 |
 | BL-07 | Trwałość, kopia i migracje | L7.13, L10.2, L10.16, L10.17, L10.18, L10.19 | 6 |
 | BL-08 | Czat, zdarzenia i historia | L4.3, L4.5, L4.6, L4.7, L4.8, L4.9, L4.11, L4.13, L4.15, L5.2, L5.3, L5.4, L5.5, L5.6, L5.11, L5.12, L5.13, L5.14, L5.15 | 19 |
 | BL-09 | Pliki, sandbox i zadania w tle | L11.7, L11.10, L11.12, L11.13, L11.15, L11.16, L11.18, L11.19, L11.20, L11.22, L11.23, L11.24 | 12 |
@@ -64,17 +63,6 @@ Zachowanie przy wygaśnięciu i odświeżeniu tokena, odrzuconym odświeżeniu, 
 | L8.12 | Kontrolowane błędy uwierzytelnienia i limitu są sprawdzone na granicy adaptera aż do widocznego UI; symulacja nie jest opisana jako rzeczywiste wyczerpanie limitu. | częściowe | Odwołane logowanie, odmowa odświeżenia i wygaśnięcie nie są przeprowadzone od granicy adaptera do widocznego UI (czat, pasek stanu, Ustawienia); stan Ustawień po symulowanym limicie też nie jest asercjonowany. |
 | L8.13 | Brak sekretów jest sprawdzony w adekwatnych logach, odpowiedziach HTTP, trwałych danych, artefaktach i buildzie frontendu; dwa endpointy nie stanowią dowodu dla wszystkich powierzchni. | częściowe | Nie sprawdzono logów serwera podczas rzeczywistego przebiegu, bazy po przebiegu z modelem (run_events, messages), magazynu plików i artefaktów, katalogów workspace, innych odpowiedzi HTTP (np. /api/runs/:id/events) ani raportów i śladów Playwright; durability.test.ts szuka tokenów tylko w ~/.claude (ignoruje CLAUDE_CONFIG_DIR) i bez pliku przechodzi pusto. |
 | L8.14 | Opis odczytu poświadczeń jest zgodny z kodem; tokeny nie są kopiowane do raportu lub śladów testów, a testy negatywne nie niszczą logowania użytkownika. | częściowe | README.md (Konfiguracja) podaje, że aplikacja czyta z pliku poświadczeń wyłącznie subscriptionType i expiresAt, pomijając przejściowy odczyt tokenów przy parsowaniu całego pliku; tests/runtime.test.ts używa expect(serialized).not.toContain(token), więc przy oblaniu komunikat Vitest wypisałby wartość tokena do logu regresji. |
-
-## BL-06 — Wymienialność modułu domenowego
-
-Testy platformy korzystają z modułu przykładowego jako danych testowych (tests/helpers.ts); moduł kontrolny nie ma połówki przeglądarkowej; typowane linki ekranów modułu zależą od globalnej rejestracji routera aplikacji, więc niezłożony moduł z UI nie przechodzi typecheck.
-
-**Warunek zamknięcia:** testy platformy działają na module kontrolnym lub fixture platformy; moduł kontrolny ma połówkę UI z rendererem karty sprawdzanym w przeglądarce przez pnpm check:module-swap; moduł z ekranami przechodzi typecheck niezależnie od tego, czy aplikacja go składa.
-
-| ID | Wymaganie | Stan | Brak |
-|---|---|---|---|
-| L9.11 | Moduł rejestruje schematy, narzędzia, odczyty live, komponenty, nawigację i migracje przez jawne kontrakty; brak modułu nie powoduje odwołań do jego tabel. | częściowe | Ekrany modułu nie są rejestrowane kontraktem: trasy tworzy ręcznie apps/web/src/router.tsx, a typowane Link w module-procurement/src/ui/pages.tsx zależą od globalnej rejestracji routera aplikacji, przez co próba wymiany musiała usunąć połówkę UI modułu; moduł kontrolny nie ma połówki UI, odczytów live ani celów UI, więc te kontrakty nie są sprawdzone na drugim module. |
-| L9.12 | Minimalny drugi moduł o innej nazwie działa bez zmian w platformie; test zależności obejmuje kod i konfigurację, nie tylko nazwy pakietów. | częściowe | Moduł kontrolny ma tylko połówkę serwerową, więc UI drugiego modułu (renderer karty, menu, ekrany) nie działa w próbie, a połówka UI przykładu nie kompiluje się bez tras aplikacji; kontrola zależności nie skanuje konfiguracji poza package.json (CSS, JSON, konfiguracja Vite i TS) i bierze słownik tylko z modułów, które go deklarują (module-devkit-probe nie deklaruje); testy platformy w tests/ zależą od modułu przykładowego. |
 
 ## BL-07 — Trwałość, kopia i migracje
 

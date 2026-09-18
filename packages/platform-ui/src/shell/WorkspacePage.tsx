@@ -49,7 +49,7 @@ export function WorkspacePage() {
         </div>
       ) : (
         <div className="pf-state pf-state--empty">
-          Brak zapisanych przestrzeni. Otworz sprawe, zeby utworzyc jej przestrzen pracy.
+          Brak zapisanych przestrzeni. Otworz rekord, zeby utworzyc jego przestrzen pracy.
         </div>
       )}
     </div>

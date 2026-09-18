@@ -17,9 +17,13 @@ const platformMenu: MenuItemContribution[] = [
   { id: 'platform.settings', section: 'settings', label: 'Ustawienia', to: '/settings', order: 1 },
 ];
 
+/** Paths `router.tsx` mounts for the platform's own screens. */
+export const platformScreenPaths = ['/', '/spaces', '/agent-views', '/files', '/settings'];
+
 export const registry = buildRegistry({
   modules: [procurementUiModule],
   platformCardRenderers,
   platformArtifactRenderers: platformArtifactRenderers as never,
   platformMenu,
+  platformScreenPaths,
 });

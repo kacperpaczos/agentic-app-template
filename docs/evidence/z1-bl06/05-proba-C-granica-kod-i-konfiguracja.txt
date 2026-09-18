@@ -1,0 +1,42 @@
+# Proba zdolnosci wykrycia C — odwolanie platformy do tabeli modulu (kod i konfiguracja)
+# HEAD f43ac88; drzewo przed proba (pomijajac nowe dowody):
+(pusto = czyste)
+
+## (C1) tabela nieobecnego modulu w kodzie platformy
++++ b/packages/platform-server/src/registry/modules.ts
+@@ -51,0 +52,2 @@ export interface RegisteredTool {
++const LEGACY_TABLE = 'pc_offers';
++
+GRANICA PLATFORMA-DOMENA NARUSZONA:
+
+  - [slownik] packages/platform-server/src/registry/modules.ts:52 zawiera pojecie domenowe "pc_offers": const LEGACY_TABLE = 'pc_offers';
+  - [tabele] packages/platform-server/src/registry/modules.ts:52 odwoluje sie do tabeli modulu module-procurement: pc_offers
+
+2 naruszen.
+EXIT=1
+
+## (C2) to samo w konfiguracji platformy, nie w kodzie
++    "legacyTable": "probe_notes"
+@@ -28 +31 @@
+-}
+\ No newline at end of file
++}
+GRANICA PLATFORMA-DOMENA NARUSZONA:
+
+  - [konfiguracja] packages/platform-ui/package.json:29 zawiera pojecie domenowe "probe_notes": "legacyTable": "probe_notes"
+  - [tabele] packages/platform-ui/package.json:29 odwoluje sie do tabeli modulu module-devkit-probe: probe_notes
+
+2 naruszen.
+EXIT=1
+
+## (C3) odwolanie do modulu w konfiguracji platformy (alias tsconfig)
+GRANICA PLATFORMA-DOMENA NARUSZONA:
+
+  - [konfiguracja] packages/platform-ui/tsconfig.json:3 odwoluje sie do modulu biznesowego: "compilerOptions": { "paths": { "@module/procurement/*": ["../module-procurement/src/*"] }
+  - [konfiguracja] packages/platform-ui/tsconfig.json:3 zawiera pojecie domenowe "procurement": "compilerOptions": { "paths": { "@module/procurement/*": ["../module-procurement/src/*"] }
+
+2 naruszen.
+EXIT=1
+
+## przywrocenie
+(pusto = drzewo znow czyste)

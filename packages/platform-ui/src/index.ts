@@ -12,6 +12,7 @@ export * from './chat/runEvents.ts';
 export * from './chat/runStreams.ts';
 export * from './chat/sessionRestore.ts';
 export * from './shell/AppShell.tsx';
+export * from './shell/navigation.tsx';
 export * from './shell/UiCommandRunner.tsx';
 export * from './shell/BackgroundTasks.tsx';
 export * from './components/platformCards.tsx';

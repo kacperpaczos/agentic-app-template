@@ -1,0 +1,41 @@
+# Proba zdolnosci wykrycia E — pojecie domenowe w etykiecie powloki platformy
+# HEAD 2247e34; drzewo przed proba:
+(pusto = czyste)
+
+## (E1) naglowek sekcji menu znow na stale w powloce (dokladnie stan sprzed poprawki)
+@@ -49 +49 @@ function Nav() {
+-                <h2 className="pf-nav__heading">{registry.menuSections[section]}</h2>
++                <h2 className="pf-nav__heading">{section === 'records' ? 'Sprawy zakupowe' : registry.menuSections[section]}</h2>
+GRANICA PLATFORMA-DOMENA NARUSZONA:
+
+  - [etykieta] packages/platform-ui/src/shell/AppShell.tsx:49 zawiera pojecie domenowe modulu module-procurement "sprawy": <h2 className="pf-nav__heading">{section === 'records' ? 'Sprawy zakupowe' : registry.menu
+
+1 naruszen.
+EXIT=1
+
+## (E2) stan pusty powloki znow mowi o rekordzie modulu przykladowego
+@@ -290 +290 @@ export function CanvasHost() {
+-        Brak przestrzeni pracy. Otworz rekord z menu po lewej, zeby ja utworzyc.
++        Brak przestrzeni pracy. Otworz sprawe z menu po lewej, zeby ja utworzyc.
+GRANICA PLATFORMA-DOMENA NARUSZONA:
+
+  - [etykieta] packages/platform-ui/src/canvas/CanvasHost.tsx:290 zawiera pojecie domenowe modulu module-procurement "sprawe": Brak przestrzeni pracy. Otworz sprawe z menu po lewej, zeby ja utworzyc.
+
+1 naruszen.
+EXIT=1
+
+## (E3) etykieta domenowa w konfiguracji platformy, nie w kodzie
+GRANICA PLATFORMA-DOMENA NARUSZONA:
+
+  - [konfiguracja/etykieta] packages/platform-ui/package.json:28 zawiera pojecie domenowe modulu module-procurement "sprawy": "description": "Powloka aplikacji: canvas, czat i sprawy zakupowe"
+
+1 naruszen.
+EXIT=1
+
+## (E4) modul kontrolny przestaje nazywac swoja sekcje -> naglowek neutralny, nie cudzy
+     × naglowki sekcji nawigacji pochodza od modulu, a nieponazwane sa neutralne 3ms
+      Tests  1 failed | 9 passed (10)
+EXIT=1
+
+## przywrocenie
+(pusto = drzewo znow czyste)

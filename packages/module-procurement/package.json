@@ -17,6 +17,19 @@
       "faktur",
       "pc_cases",
       "pc_offers"
+    ],
+    "domainLabels": [
+      "sprawa",
+      "sprawy",
+      "sprawe",
+      "sprawie",
+      "sprawami",
+      "spraw",
+      "cena jednostkowa",
+      "podstawa cenowa"
+    ],
+    "scopeKinds": [
+      "case"
     ]
   },
   "exports": {
@@ -31,7 +44,6 @@
     "@platform/server": "workspace:*",
     "@platform/ui": "workspace:*",
     "@tanstack/react-query": "5.102.8",
-    "@tanstack/react-router": "1.170.36",
     "drizzle-orm": "0.45.2",
     "react": "19.3.0",
     "zod": "4.6.5"

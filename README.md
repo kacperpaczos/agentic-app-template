@@ -197,7 +197,8 @@ pnpm check:module-swap   # próba podmiany modułu przykładowego na kontrolny, 
 
 `pnpm test:e2e` działa na istniejącym buildzie, więc uruchamiaj go po `pnpm verify` albo `pnpm build`.
 Testy startują własne serwery na portach 8792–8799 z własnymi katalogami danych.
-`pnpm typecheck` (w `pnpm verify`) sprawdza pakiety i osobno katalog `e2e/` (`tsconfig.e2e.json`).
+`pnpm typecheck` (w `pnpm verify`) sprawdza pakiety, każdy moduł osobno bez warstwy składania
+(`pnpm typecheck:modules`) i katalog `e2e/` (`tsconfig.e2e.json`).
 
 Trzy spece odpowiadają **prawdziwym modelem** i wydają tury subskrypcji: `e2e/bl01-bl02-model.spec.ts`
 (7 tur), `e2e/agent-ui.spec.ts` (2) i `e2e/files-agent.spec.ts` (2). Domyślny przebieg ich nie zawiera —
@@ -223,8 +224,9 @@ osobnym katalogiem danych, np. przez `APP_BASE=http://127.0.0.1:8790`.
    ```
 2. Dodaj pakiet swojego modułu w `packages/module-<nazwa>`: tabele i migracje, serwisy z regułami,
    narzędzia dla agenta, komponenty kart, ekrany, cele nawigacji i dane przykładowe.
-3. Zarejestruj moduł w warstwie składania: `apps/server/src/compose.ts`, `apps/web/src/compose.tsx` i
-   `apps/web/src/router.tsx`. Pakietów platformy nie trzeba zmieniać.
+3. Zarejestruj moduł w warstwie składania: `apps/server/src/compose.ts` i `apps/web/src/compose.tsx`.
+   Ekrany deklaruje sam moduł (`UiModule.screens`), więc router aplikacji ani pakiety platformy nie
+   wymagają zmian.
 4. Odłącz moduł przykładowy — dokładną procedurę (w tym to, której części nie usuwać od razu, bo
    korzystają z niej testy) opisuje przewodnik.
 5. Sprawdź całość: `pnpm verify`, potem `pnpm test:e2e`.

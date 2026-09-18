@@ -287,7 +287,7 @@ export function CanvasHost() {
     if (isLoading) return <div className="pf-state">Wczytywanie przestrzeni…</div>;
     return (
       <div className="pf-state pf-state--empty">
-        Brak przestrzeni pracy. Otworz sprawe z menu po lewej, zeby ja utworzyc.
+        Brak przestrzeni pracy. Otworz rekord z menu po lewej, zeby ja utworzyc.
       </div>
     );
   }

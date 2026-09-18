@@ -14,7 +14,7 @@ Przykładem wzorcowym jest `packages/module-procurement` (porównywanie ofert). 
 |---|---|---|---|
 | **Platforma** | `packages/platform-contracts`, `packages/platform-server`, `packages/platform-ui` | powłoka UI (nawigacja, canvas, gotowy czat OpenUI), rozmowy i mapowanie sesji Claude, rejestr uruchomień i strumień AG-UI, host MCP ze strażnikiem schematów, magazyn plików i artefaktów, sandbox, idempotencja, sesja aplikacji, nawigacja agenta po celach UI, diagnostyka | żadnych nazw, tabel ani reguł konkretnej działalności — pilnuje tego `pnpm check:boundaries` |
 | **Moduł domenowy** | `packages/module-<nazwa>` | encje i migracje, serwisy z regułami, narzędzia MCP, trasy HTTP, komponenty kart i OpenUI, ekrany, cele nawigacji, odczyty live, dane startowe, opis domeny dla agenta | kodu czatu, transportu, sesji, plików, uruchomień agenta |
-| **Składanie aplikacji** | `apps/server`, `apps/web` | wybór modułów, trasy ekranów modułu, menu platformy | logiki domenowej i platformowej |
+| **Składanie aplikacji** | `apps/server`, `apps/web` | wybór modułów i menu platformy; trasy ekranów modułu montuje z `registry.screens`, nie wypisuje | logiki domenowej i platformowej, nazw ekranów modułu |
 
 Kierunek zależności: `apps/*` → `module-*` → `platform-*` → `platform-contracts`. Pakiet
 `@platform/*` nie może deklarować ani importować `@module/*`.
@@ -45,28 +45,33 @@ Nie kopiuje się ani nie przepisuje pakietów `platform-*`. Kroki:
    modules: (services) => [createMyModule(services)],
    ```
    i dodaj `"@module/<nazwa>": "workspace:*"` do `apps/server/package.json`.
-3. **Przeglądarka — zarejestruj moduł** w `apps/web/src/compose.tsx` (`modules: [myUiModule]`),
-   dodaj ekrany modułu jako trasy w `apps/web/src/router.tsx` i zależność w `apps/web/package.json`.
-4. **Moduł przykładowy** odłącza się, usuwając go z tych trzech plików składania **oraz usuwając
-   jego połówkę przeglądarkową** (`packages/module-procurement/src/ui` i eksport `./ui` w jego
-   `package.json`). To drugie jest konieczne: ekrany przykładu używają typowanych linków TanStack
-   Router (`to="/cases/$caseId"`), a typy tras pochodzą z globalnej rejestracji routera w
-   `apps/web/src/router.tsx`. Bez tras przykładu w routerze `pnpm typecheck` oblewa w
-   `module-procurement/src/ui/pages.tsx` — ustalone próbą `pnpm check:module-swap`. Własny moduł
-   z typowanymi linkami ma tę samą zależność od routera aplikacji.
+3. **Przeglądarka — zarejestruj moduł** w `apps/web/src/compose.tsx` (`modules: [myUiModule]`) i
+   dodaj zależność w `apps/web/package.json`. `apps/web/src/router.tsx` zostaje bez zmian: ekrany
+   modułu deklaruje sam moduł w `UiModule.screens`, a router montuje je z `registry.screens`.
+4. **Moduł przykładowy** odłącza się, usuwając go z dwóch plików składania (`apps/server/src/compose.ts`,
+   `apps/web/src/compose.tsx`). Jego pakiet może zostać na miejscu i dalej się kompiluje — moduł ze
+   swoimi ekranami przechodzi typecheck niezależnie od tego, czy aplikacja go składa, bo jego strony
+   czytają parametry trasy przez `useScreenParams()` i linkują przez `AppLink`, a nie przez typy tras
+   zarejestrowanych przez aplikację. Sprawdza to `pnpm typecheck:modules` (każdy moduł we własnym
+   programie, bez `apps/`) i `pnpm check:module-swap`.
    **Połówki serwerowej nie usuwaj od razu**: testy platformy używają jej jako danych testowych
    (patrz §6).
 5. **Obraz Docker** kopiuje manifesty pakietów osobno (warstwa instalacji). Dodaj linię
    `COPY packages/module-<nazwa>/package.json packages/module-<nazwa>/` w `Dockerfile`.
 6. Uruchom `pnpm verify`, a następnie `pnpm test:e2e`.
 
-Próbę dokładnie tej wymiany wykonuje `pnpm check:module-swap`: na kopii repozytorium zastępuje
-moduł przykładowy modułem kontrolnym w `apps/` i usuwa połówkę UI przykładu (krok 4), sprawdza
-sumami, że `packages/platform-*` się nie zmieniły, instaluje zależności z lockfile, uruchamia
-kontrolę granicy, typecheck i build, startuje aplikację na wolnym porcie i sprawdza rejestr,
-narzędzia, trasę modułu, walidację kompozycji, bazę i powłokę w przeglądarce. Moduł kontrolny nie
-ma połówki przeglądarkowej, więc rejestracja renderera karty drugiego modułu nie jest tą próbą
-objęta (pozycja w backlogu).
+Próbę dokładnie tej wymiany wykonuje `pnpm check:module-swap`: na kopii repozytorium zmienia
+wyłącznie te dwa pliki składania, sprawdza sumami SHA-256, że `packages/platform-*` **i**
+`packages/module-procurement` są bez zmian, instaluje zależności z lockfile, uruchamia kontrolę
+granicy, typecheck, build i regresję jednostkową (test dymny: testy w `tests/` budują platformę same
+i nie przechodzą przez warstwę składania, więc mówią tylko, że podmiana niczego nie zepsuła — tym,
+co naprawdę biegnie na module kontrolnym, jest `tests/module-contract.test.ts`), startuje aplikację
+na wolnym porcie i sprawdza rejestr, narzędzia, operację odczytu, cel UI, widok, trasy modułu,
+walidację kompozycji i bazę, a w przeglądarce — pozycję menu i nagłówek sekcji od modułu
+kontrolnego, jego kartę na canvasie (treść z jego własnej trasy backendu), jego ekran wypełniony
+kompozycją OpenUI i jego ekran z parametrem trasy. Kontrole negatywne (czego po wymianie nie wolno
+zobaczyć) biorą słownik i nazwy tabel z manifestów oraz migracji modułów, których kopia nie składa —
+wymiana modułu przykładowego nie czyni ich bezgłośnymi.
 
 ## 3. Serwer: `ServerModule`
 
@@ -180,6 +185,8 @@ Definicja: `packages/platform-ui/src/catalog/registry.tsx`.
 | `openuiComponents` | komponenty OpenUI Lang (`defineComponent`), które agent może złożyć w wiadomości lub w karcie `openui`; dołączane do katalogu `@openuidev/react-ui` |
 | `artifactRenderers` | renderery artefaktów po `rendererType` |
 | `menu` | pozycje nawigacji: `section` (`workspace`, `records`, `data`, `files`, `settings`), `label`, `to`, `order` |
+| `menuSections` | jak moduł nazywa sekcje, w których ma pozycje, np. `{ records: 'Sprawy zakupowe' }`. Zbiór sekcji należy do platformy, ich **nazwy** do modułu; sekcja, której nikt nie nazwał, dostaje neutralny nagłówek (`NEUTRAL_MENU_SECTION_LABELS`). Dwa moduły nazywające tę samą sekcję inaczej przerywają budowę rejestru |
+| `screens` | ekrany modułu: `{ id, path, component }`; `path` może mieć segmenty `$param`. Montuje je warstwa składania, więc żaden plik poza modułem nie nazywa jego ekranu. Konflikt `id` albo `path` (także ze ścieżką ekranu platformy) przerywa budowę rejestru |
 | `starters` | podpowiedzi poleceń w czacie — słownik domeny należy do modułu, nie do platformy |
 
 Ekran złożony z kompozycji (`ViewDefinition`) renderuje `<ComposedView viewId=… params={…} />`, a dane
@@ -193,10 +200,47 @@ działa i nadal dostaje zawężenie z adresu dla kolekcji zadeklarowanej w `uiTa
 sortowania, stron ani opisu semantycznego dla agenta — agent zobaczy taki ekran jako widok bez instancji
 danych, a `ui_sort` odpowie `not_sortable`.
 
+Nawigacja w module idzie przez dwa pomocniki z `@platform/ui` i tylko przez nie: `useScreenParams()`
+zwraca parametry trasy ekranu, na którym jesteśmy (`Record<string, string>`), a `AppLink` prowadzi pod
+ścieżkę (`to`, opcjonalnie `params` dla segmentów `$…`). Moduł **nie** importuje `@tanstack/react-router`
+— jego rejestracja jest globalna, więc moduł, który po nią sięga, typuje swoje ekrany względem tablicy
+tras akurat złożonej aplikacji i przestaje się kompilować dla innej. Pilnuje tego `pnpm check:boundaries`
+(manifest i importy) oraz `pnpm typecheck:modules`.
+
 Zasady: listy `cardComponents` (serwer) i `cardRenderers` (przeglądarka) muszą się zgadzać
-(konflikt identyfikatora przerywa budowę rejestru). Ekrany modułu montuje `apps/web/src/router.tsx`;
-router zachowuje parametry `c` (rozmowa) i `s` (przestrzeń) przy każdej nawigacji; pozostałe
-parametry (np. zawężenie `?country=PL`) walidator przepuszcza, ale nie przenoszą się na inny ekran.
+(konflikt identyfikatora przerywa budowę rejestru). Router zachowuje parametry `c` (rozmowa) i `s`
+(przestrzeń) przy każdej nawigacji — także dla `AppLink`; pozostałe parametry (np. zawężenie
+`?country=PL`) walidator przepuszcza, ale nie przenoszą się na inny ekran.
+
+### Słownik domeny w manifeście modułu
+
+`pnpm check:boundaries` odmawia, gdy pakiet platformy zawiera pojęcie domenowe — w kodzie **albo** w
+konfiguracji. Skąd bierze pojęcia: z manifestu każdego modułu, w dwóch listach o różnym dopasowaniu.
+
+```jsonc
+"agenticApp": {
+  // przedrostki przy granicy słowa — identyfikatory, prefiksy tabel
+  "domainVocabulary": ["supplier", "dostawc", "unitPrice", "pc_cases"],
+  // całe słowa i frazy — to, co użytkownik widzi na ekranie
+  "domainLabels": ["sprawa", "sprawy", "sprawe", "cena jednostkowa"],
+  // zakresy canvasu, na które odpowiada `defaultComposition` tego modułu
+  "scopeKinds": ["case"]
+}
+```
+
+Dwie listy, bo jedna nie umiałaby obu rzeczy naraz: `dostawc` musi łapać `dostawcy` i `supplierName`,
+a `spraw` jako przedrostek skazałby w powłoce każde „sprawdza”, „sprawne” i „Sprawdz”. Etykieta
+dopasowuje się jako całe słowo lub fraza. Obie listy muszą być niepuste u co najmniej jednego modułu —
+inaczej kontrola przechodziłaby, nie mając czego sprawdzać.
+
+`scopeKinds` jest tam z innego powodu niż dwie listy słownika: `pnpm check:module-swap` bierze stamtąd
+zakres modułu, który składa (musi **wytworzyć** jego kompozycję domyślną), i zakresy modułów, których
+nie składa (nie mają wytworzyć niczego). Deklaracja rozjechana z `defaultComposition` oblewa w
+`tests/module-contract.test.ts`, a nie dopiero w próbie wymiany.
+
+Etykiety widoczne w interfejsie **należą do modułu**: nagłówek sekcji menu podaje się przez
+`UiModule.menuSections`, a nie wpisuje w powłokę. Teksty stanów pustych platformy mówią o „rekordzie”,
+bo platforma nie wie, czym jest rekord w twojej domenie.
 
 ## 5. Co zapewnia platforma bez pracy po stronie modułu
 
@@ -223,7 +267,8 @@ i tylko na danych już pobranych przez widok.
 | Zestaw | Zależność od modułu przykładowego | Co zrobić w nowej aplikacji |
 |---|---|---|
 | `tests/platform-boundary.test.ts` | używa modułu kontrolnego | zostawić — dowodzi niezależności platformy |
-| `tests/helpers.ts` (`createHarness`) i większość `tests/*.test.ts` | **tak** — harness domyślnie rejestruje `module-procurement` i jego dane jako fixture testów platformy | zostawić pakiet przykładu jako fixture albo przepisać harness na własny moduł; oddzielenie testów platformy od przykładu jest w backlogu |
+| `tests/module-contract.test.ts` | używa modułu kontrolnego (obie połówki) | zostawić — sprawdza wszystkie kontrakty rejestracji modułu i brak odwołań do tabel nieobecnego modułu |
+| `tests/helpers.ts` (`createHarness`) i większość `tests/*.test.ts` | **tak** — harness rejestruje `module-procurement` i jego dane jako fixture; to testy zachowań platformy *na przykładowej aplikacji*, nie testy wymienialności | zostawić pakiet przykładu jako fixture albo przepisać harness na własny moduł. Cała ta regresja przechodzi także wtedy, gdy aplikacja składa inny moduł — sprawdza to `pnpm check:module-swap`, który uruchamia `pnpm test` na kopii z modułem kontrolnym |
 | `tests/domain-comparison.test.ts` | testy reguł przykładu | zastąpić testami reguł własnej domeny (bez modelu i UI) |
 | `e2e/*.spec.ts` | część scenariuszy (`app`, `chat`, `agent-ui`, `measurements`, `files-agent`) klika w ekrany i dane przykładu | dostosować do ekranów nowej domeny; zachować zasady izolacji z `e2e/support/isolation.ts` |
 | `scripts/acceptance-agent.mjs`, `scripts/run-agent.mjs` | scenariusze z prawdziwym modelem na danych przykładu | przepisać scenariusze na własną domenę |
