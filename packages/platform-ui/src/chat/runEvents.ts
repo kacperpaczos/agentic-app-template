@@ -183,6 +183,24 @@ export function applyRunEvent(
         unseenResult: !ctx.isActive(),
       });
       break;
+    case PLATFORM_CUSTOM_EVENTS.permissionResolved: {
+      /*
+       * The question this run was parked on has been settled. Clearing it is
+       * what makes a replay end where the run actually is: without this event a
+       * client re-attaching from zero — a reload, a tab opened later — put an
+       * already-decided prompt back on screen, and pressing its buttons did
+       * nothing, because the gate had resolved long before.
+       *
+       * Only the request that is actually on screen is cleared: two runs of one
+       * conversation can each have asked, and an answer to the earlier one must
+       * not remove the later one's question.
+       */
+      const onScreen = current().pendingPermission;
+      if (onScreen && onScreen.requestId === String(value.requestId)) {
+        patch({ pendingPermission: null, phase: 'running' });
+      }
+      break;
+    }
     case PLATFORM_CUSTOM_EVENTS.uiCommand: {
       /*
        * Handed on exactly as received, including the conversation it came

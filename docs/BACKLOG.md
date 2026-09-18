@@ -3,14 +3,13 @@
 > Plik generowany przez `node scripts/acceptance-matrix.mjs` z `docs/acceptance/assessment.json`.
 > Każde otwarte kryterium macierzy (`docs/ACCEPTANCE.md`) należy do dokładnie jednego pakietu.
 
-Otwartych kryteriów: **47** z 200, w 7 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.
+Otwartych kryteriów: **37** z 200, w 6 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.
 
 | Pakiet | Tytuł | Kryteria | Liczba |
 |---|---|---|---|
 | BL-03 | Powtarzalne próby na prawdziwym modelu w szablonie | L1.6, L2.13, L3.2, L3.10, L3.13, L5.8, L6.5, L6.6, L7.3, L7.11, L8.5, L9.4, L9.13, L9.16, L11.3, L11.4, L11.5, L11.9, L11.11 | 19 |
 | BL-04 | Uwierzytelnienie subskrypcyjne i limity — próby graniczne | L8.10, L8.11 | 2 |
 | BL-07 | Trwałość, kopia i migracje | L7.13 | 1 |
-| BL-08 | Czat, zdarzenia i historia | L5.2, L5.3, L5.4, L5.5, L5.6, L5.11, L5.12, L5.13, L5.14, L5.15 | 10 |
 | BL-09 | Pliki, sandbox i zadania w tle | L11.7, L11.12, L11.23 | 3 |
 | BL-11 | Domena, backend i cache | L6.11, L9.7 | 2 |
 | BL-12 | Odbiór i jakość dowodów | L1.2, L1.8, L1.9, L1.11, L1.12, L12.5, L12.7, L12.10, L12.12, L12.15 | 10 |
@@ -63,25 +62,6 @@ Pozostaje jedno pytanie, na które nie da się odpowiedzieć bez tury modelu: kt
 | ID | Wymaganie | Stan | Brak |
 |---|---|---|---|
 | L7.13 | Brak transkryptu SDK dla zachowanej rozmowy daje jawny wynik odzyskiwania lub błąd; aplikacja nie deklaruje zachowania pamięci, której nie odtworzyła. | częściowe | Nie sprawdzono na prawdziwym SDK, którą z dwóch reakcji daje faktycznie brak transkryptu (odmowa wznowienia czy cicha nowa sesja) — zadanie nie miało budżetu tur, a przypadku nie da się wywołać bez usunięcia transkryptu prawdziwej sesji; rozpoznanie opiera się na wzorcach komunikatów, więc nieznane brzmienie z nowszej wersji SDK wpadnie w integration_failed zamiast we własny kod. Dla ścieżki „cicha nowa sesja” jawny wynik to zdarzenie, wpis w run_events i ostrzeżenie serwera — uruchomienie celowo nie jest przerywane (przerwanie przy hipotetycznym rozwidlaniu sesji przez SDK zepsułoby każdą kontynuację), więc użytkownik nie widzi wtedy komunikatu w wątku. |
-
-## BL-08 — Czat, zdarzenia i historia
-
-Braki w dowodzie lub implementacji po stronie gotowego czatu, AG-UI i projekcji historii, które nie należą do innych pakietów.
-
-**Warunek zamknięcia:** każde kryterium pakietu ma test GUI lub test kontraktu w regresji szablonu, a ograniczenia biblioteki są potwierdzone dla użytej wersji i obsłużone albo jawnie niespełnione.
-
-| ID | Wymaganie | Stan | Brak |
-|---|---|---|---|
-| L5.2 | UI rozpoznaje rozpoczęcie i zakończenie wykonania, błąd oraz anulowanie. | częściowe | Anulowanie nie jest sprawdzane w GUI: e2e/background-tasks.spec.ts „jawne Stop konczy wskazane wykonanie” i e2e/measurements.spec.ts „zatrzymanie z interfejsu konczy wykonanie i nie zostawia zapisow” sprawdzają tylko status w backendzie. Analiza kodu: stop w kompozytorze (chat/useComposerStop.ts) wywołuje stopRun, ale biblioteka w tym samym kliknięciu przerywa fetch (cancelMessage → abort), więc platform.run_cancelled nie dociera tym strumieniem i pasek może pozostać w fazie running. |
-| L5.3 | Wywołania narzędzi i ich wyniki są powiązane i rzeczywiście widoczne w czacie podczas wykonania oraz po odtworzeniu historii. | częściowe | Asercje nie wiążą widoczności osi z trwającym wykonaniem (czekają na widoczność bez odczytu data-phase), więc oś pokazana dopiero po zakończeniu też przejdzie; treść udanego wyniku narzędzia nie jest sprawdzana w GUI (tylko komunikat błędu po rozwinięciu). Skutek: „podczas wykonania” i „wyniki widoczne” nie mają ostrego dowodu. |
-| L5.4 | Dane artefaktów i zmian UI docierają do właściwych rendererów. | częściowe | Brak testu, w którym dane artefaktu trafiają do renderera artefaktu w czacie lub widoku artefaktu (artifactRenderers w ChatPanel.tsx, components/LiveArtifact.tsx); sprawdzane jest tylko unieważnianie kluczy cache. Skutek: błędne przypisanie typu artefaktu do renderera nie zostanie wykryte. |
-| L5.5 | Pytanie lub prośba o decyzję dociera do interfejsu, a odpowiedź wraca do właściwego wykonania. | częściowe | Brak testu odmowy (brak skutku), braku odpowiedzi (timeout 120 s jako odmowa) oraz ponowionej i spóźnionej odpowiedzi; runtime.answerPermission dopasowuje tylko requestId, a /api/runs/:id/permission nie sprawdza, że requestId należy do wskazanego wykonania. Dowód pozytywny zależy od tego, czy model poprosi o Bash. |
-| L5.6 | Rozłączenie i ponowne połączenie nie powielają zdarzeń ani skutków operacji. | częściowe | Po reload klient traci lastSeq i zbiór obsłużonych commandId (useRef w shell/UiCommandRunner.tsx), więc ponowne podłączenie do trwającego wykonania odtwarza zdarzenia od 0: ui_command może zostać wykonane drugi raz (zależnie od kolejności efektów), a platform.permission_request ponownie pokazuje prośbę już rozstrzygniętą, bo żadne zdarzenie nie oznacza odpowiedzi. Brak testu GUI reconnectu w trakcie wykonania z poleceniem UI lub zgodą. |
-| L5.11 | Zgodność AG-UI jest sprawdzana dla schematów i zachowania potrzebnych zdarzeń, nie tylko ich nazw lub obecności pakietu. | częściowe | Zgodność jest sprawdzana wobec parsera OpenUI, nie wobec schematów protokołu AG-UI: @ag-ui/core 0.0.53 jest tylko zależnością tranzytywną, żaden test nie waliduje RUN_STARTED, RUN_FINISHED (z dodatkowym durationMs), RUN_ERROR ani CUSTOM, które parser OpenUI ignoruje; ładunki CUSTOM poza platform.ui_command nie mają schematu ani wersji (packages/platform-contracts/src/agui.ts). |
-| L5.12 | Most między tekstem, hookami SDK i zdarzeniami domeny zachowuje korelację; równoległe przebiegi nie korzystają ze wspólnego zmiennego kontekstu. | częściowe | Test równoległych wykonań używa dwóch osobnych instancji AgentRuntime i samego tekstu, więc współdzielony stan jednej instancji (#pendingPermissions, #pendingUiCommands, #conversationQueue) oraz korelacja hooków narzędzi i zdarzeń domeny przy równoległych przebiegach nie są sprawdzone. |
-| L5.13 | Kolejność tekst–narzędzie, narzędzie–tekst, wiele narzędzi i brak tekstu prowadzą do poprawnego statusu i prezentacji. | częściowe | Kolejności tekst→narzędzie i wielu narzędzi nie renderuje żaden test GUI: e2e/support/scripted-server.ts wywołuje wszystkie hooki narzędzi przed pierwszym fragmentem tekstu, więc nie potrafi odtworzyć tekstu przed narzędziem; scenariusz bez tekstu akceptuje fazę succeeded lub failed. Prezentacja tych kolejności jest dowiedziona tylko na poziomie reduktora. |
-| L5.14 | Reconnect, zamknięcie strumienia, anulowanie i restart nie tworzą sprzecznych stanów końcowych ani zakleszczenia odczytu. | częściowe | Nie sprawdzono stanu UI po stopie z kompozytora (analiza: lokalny abort przerywa strumień przed platform.run_cancelled, pasek może zostać w running), reconnectu do wykonania przerwanego restartem (gałąź /api/runs/:id/stream syntetyzująca zdarzenie końcowe ze statusu nie ma testu) ani ponownie pokazanej prośby o zgodę po reload, dla której brak zdarzenia rozstrzygnięcia. |
-| L5.15 | Ograniczenie parsera biblioteki jest potwierdzone dla użytej wersji i obsłużone adapterem lub jawnym niespełnionym wymaganiem; nie ukrywa braku funkcji. | częściowe | Ograniczenia nie są przypięte testem do wersji: aktualizacja biblioteki renderująca prozę w trakcie tury da podwójną odpowiedź niewykrytą przez sondę (czyta podgląd, gdy istnieje). Wstrzymanie prozy i brak prozy w GenUI nie są w bieżącej dokumentacji (NEW-APPLICATION §7 wymienia tylko CUSTOM). W turze z narzędziem biblioteka wstawia prozę trwającej tury do kroków osi (Thread.js steps) równolegle z podglądem — możliwe podwójne wyświetlenie w trakcie, nieopisane i niesprawdzone. |
 
 ## BL-09 — Pliki, sandbox i zadania w tle
 

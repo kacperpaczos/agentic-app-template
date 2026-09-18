@@ -14,6 +14,8 @@ export * from './agent.ts';
 export * from './module.ts';
 export * from './agui.ts';
 export * from './ui.ts';
+/* After `ui.ts`: the CUSTOM payload schemas reuse `uiCommandSchema`. */
+export * from './agui-payloads.ts';
 export * from './views.ts';
 export * from './view-state.ts';
 export * from './records.ts';

@@ -1,0 +1,210 @@
+
+================================================================
+T3 — usuniecie stempla wersji w RunEventStream.custom -> tests/agui-conformance.test.ts
+================================================================
+    205|     expect(describeViolations(aguiViolations(events))).toBe('brak naru…
+       |                                                        ^
+    206|
+    207|     const cancelled = customs(events, PLATFORM_CUSTOM_EVENTS.runCancel…
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+ FAIL  tests/agui-conformance.test.ts > L5.11 — zgodnosc AG-UI: schematy i zachowanie > prosba o zgode: ladunek ma schemat, wersje i wlasne uruchomienie
+AssertionError: expected '#1 custom_payload: platform.session_b…' to be 'brak naruszen' // Object.is equality
+- Expected
++ Received
+- brak naruszen
++ #1 custom_payload: platform.session_bound: version Invalid input: expected 1
++ #4 custom_payload: platform.permission_request: version Invalid input: expected 1
++ #5 custom_payload: platform.permission_resolved: version Invalid input: expected 1
+ ❯ tests/agui-conformance.test.ts:232:56
+    230|
+    231|     const events = overTheWire(run.events);
+    232|     expect(describeViolations(aguiViolations(events))).toBe('brak naru…
+       |                                                        ^
+    233|
+    234|     const asked = customs(events, PLATFORM_CUSTOM_EVENTS.permissionReq…
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+ Test Files  1 failed (1)
+      Tests  3 failed | 2 passed (5)
+   Start at  00:12:48
+   Duration  1.36s (import 53%, transform 28%, tests 18%)
+git status po przywroceniu: [?? docs/evidence/z9-bl08b/;]
+
+================================================================
+T2u — usuniecie platform.permission_resolved -> tests/run-reconnect.test.ts
+================================================================
+    173|     const events = (await replay(run.runId, 0)).map((e) => e.event);
+    174|     const settled = customsIn(events, PLATFORM_CUSTOM_EVENTS.permissio…
+    175|     expect(settled).toHaveLength(1);
+       |                     ^
+    176|     expect(settled[0].allowed).toBe(false);
+    177|     // The operation the approval would have unlocked did not run.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+ FAIL  tests/run-reconnect.test.ts > L5.6 / L5.14 — ponowne podlaczenie do uruchomienia > zatrzymanie w trakcie oczekiwania na zgode tez zapisuje rozstrzygniecie
+AssertionError: expected [] to have a length of 1 but got +0
+- Expected
++ Received
+- 1
++ 0
+ ❯ tests/run-reconnect.test.ts:201:21
+    199|     const events = (await replay(run.runId, 0)).map((e) => e.event);
+    200|     const settled = customsIn(events, PLATFORM_CUSTOM_EVENTS.permissio…
+    201|     expect(settled).toHaveLength(1);
+       |                     ^
+    202|     expect(settled[0].allowed).toBe(false);
+    203|     expect(h.platform.services.runs.get(run.runId, h.ownerId).status).…
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+ Test Files  1 failed (1)
+      Tests  3 failed | 2 passed (5)
+   Start at  00:12:50
+   Duration  1.67s (import 42%, tests 36%, transform 22%)
+git status po przywroceniu: [?? docs/evidence/z9-bl08b/;]
+
+================================================================
+T7 — usuniecie przestrzeni nazw runId w scopeToolId -> tests/run-correlation.test.ts
+================================================================
+stderr | tests/run-correlation.test.ts > L5.12 — most tekst / hooki / zdarzenia domeny przy dwoch przebiegach naraz > zgoda jednego uruchomienia nie zwalnia bramki drugiego
+ ❯ tests/run-correlation.test.ts (3 tests | 1 failed) 437ms
+   ❯ L5.12 — most tekst / hooki / zdarzenia domeny przy dwoch przebiegach naraz (3)
+     × hooki narzedzi i zdarzenia domeny trafiaja do strumienia swojego uruchomienia 355ms
+     ✓ polecenie interfejsu jednego uruchomienia rozstrzyga sie potwierdzeniem tego uruchomienia 43ms
+     ✓ zgoda jednego uruchomienia nie zwalnia bramki drugiego 38ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/run-correlation.test.ts > L5.12 — most tekst / hooki / zdarzenia domeny przy dwoch przebiegach naraz > hooki narzedzi i zdarzenia domeny trafiaja do strumienia swojego uruchomienia
+AssertionError: expected false to be true // Object.is equality
+- Expected
++ Received
+- true
++ false
+ ❯ tests/run-correlation.test.ts:192:78
+    190|      * bridge adds is the only thing keeping them apart.
+    191|      */
+    192|     expect(toolCallIds(runA).every((id) => id.startsWith(`${runA.runId…
+       |                                                                              ^
+    193|     expect(toolCallIds(runB).every((id) => id.startsWith(`${runB.runId…
+    194|     expect(toolCallIds(runA).some((id) => toolCallIds(runB).includes(i…
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  00:12:52
+   Duration  1.58s (import 46%, tests 29%, transform 25%)
+git status po przywroceniu: [?? docs/evidence/z9-bl08b/;]
+
+================================================================
+T9 — usuniecie zwiazania zgody z uruchomieniem -> run-correlation + consent
+================================================================
+    297|     expect(
+    298|       runtime.answerPermission({ runId: a.runId, ownerId: h.ownerId, r…
+    299|     ).toBe(false);
+       |       ^
+    300|     // B is still waiting, so nothing was decided in its name.
+    301|     expect(runtime.pendingPermissionIds()).toContain(requestB.requestI…
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+ FAIL  tests/run-correlation.test.ts > L5.12 — most tekst / hooki / zdarzenia domeny przy dwoch przebiegach naraz > zgoda jednego uruchomienia nie zwalnia bramki drugiego
+AssertionError: zgoda pod cudzym adresem rozstrzygnela prosbe: expected true to be false // Object.is equality
+- Expected
++ Received
+- false
++ true
+ ❯ tests/run-correlation.test.ts:341:7
+    339|       }),
+    340|       'zgoda pod cudzym adresem rozstrzygnela prosbe',
+    341|     ).toBe(false);
+       |       ^
+    342|     expect(runtime.pendingPermissionIds()).toEqual(
+    343|       expect.arrayContaining([requestA.requestId, requestB.requestId]),
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+ Test Files  2 failed (2)
+      Tests  2 failed | 11 passed (13)
+   Start at  00:12:54
+   Duration  1.83s (import 47%, tests 31%, transform 22%)
+git status po przywroceniu: [?? docs/evidence/z9-bl08b/;]
+
+================================================================
+T2b — usuniecie platform.permission_resolved -> e2e/reconnect-live.spec.ts (zgoda po przeladowaniu)
+================================================================
+  ✘  1 [chromium] › e2e/reconnect-live.spec.ts:262:3 › powrot do trwajacego wykonania › L5.14: prosba o zgode rozstrzygnieta przed przeladowaniem nie wraca na ekran (36.1s)
+    Error: expect(locator).toHaveAttribute(expected) failed
+           - unexpected value "awaiting_consent"
+           - unexpected value "succeeded"
+    > 295 |     await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'running', {
+        at /home/paczos/Documents/agentic-app-template-wt/z9-bl08b/e2e/reconnect-live.spec.ts:295:49
+    test-results/reconnect-live-powrot-do-t-98393-dowaniem-nie-wraca-na-ekran-chromium/test-failed-1.png
+    Error Context: test-results/reconnect-live-powrot-do-t-98393-dowaniem-nie-wraca-na-ekran-chromium/error-context.md
+  1 failed
+git status po przywroceniu: [?? docs/evidence/z9-bl08b/;]
+
+================================================================
+T5 — wyciszenie TOOL_CALL_RESULT w haku PostToolUse -> e2e/run-events.spec.ts (tresc udanego wyniku)
+================================================================
+  ✘  1 [chromium] › e2e/run-events.spec.ts:171:3 › zdarzenia uruchomienia w czacie › L5.3: wywolanie, argumenty i tresc udanego wyniku sa widoczne w trakcie wykonania i po odtworzeniu (10.7s)
+    Error: fazy: running,succeeded; probki z trescia: 0
+    expect(received).toBeGreaterThan(expected)
+      202 |         `probki z trescia: ${samples.filter((s) => s.seen[RESULT]! > 0).length}`,
+      205 |     await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'succeeded', {
+        at /home/paczos/Documents/agentic-app-template-wt/z9-bl08b/e2e/run-events.spec.ts:203:7
+    test-results/run-events-zdarzenia-uruch-0d0f5--wykonania-i-po-odtworzeniu-chromium/test-failed-1.png
+    Error Context: test-results/run-events-zdarzenia-uruch-0d0f5--wykonania-i-po-odtworzeniu-chromium/error-context.md
+  1 failed
+git status po przywroceniu: [?? docs/evidence/z9-bl08b/;]
+
+================================================================
+T4 — krok inline traktowany jak zwykly -> e2e/run-events.spec.ts (tekst przed narzedziem)
+================================================================
+  ✘  1 [chromium] › e2e/run-events.spec.ts:229:3 › zdarzenia uruchomienia w czacie › L5.13: tekst przed narzedziem — kolejnosc w strumieniu i na ekranie (7.3s)
+    Error: probki: null/-1/-1 running/-1/56 running/-1/56 running/-1/56 running/-1/56 running/-1/56 running/-1/56 running/-1/56 running/35/87 running/35/87 running/35/87 running/35/87 running/35/87 running/35/87 running/35/87 running/35/87 succeeded/98/56
+    expect(received).toBe(expected) // Object.is equality
+    > 276 |     expect(samples.some((s) => s.prose >= 0 && s.tool === -1), `probki: ${trace}`).toBe(true);
+      279 |     expect(samples.some((s) => s.tool >= 0), `probki: ${trace}`).toBe(true);
+        at /home/paczos/Documents/agentic-app-template-wt/z9-bl08b/e2e/run-events.spec.ts:276:84
+    test-results/run-events-zdarzenia-uruch-fb2c4-c-w-strumieniu-i-na-ekranie-chromium/test-failed-1.png
+    Error Context: test-results/run-events-zdarzenia-uruch-fb2c4-c-w-strumieniu-i-na-ekranie-chromium/error-context.md
+  1 failed
+git status po przywroceniu: [?? docs/evidence/z9-bl08b/;]
+
+================================================================
+T1 — bez ponownego podlaczenia po lokalnym przerwaniu -> e2e/run-events.spec.ts (stop z kompozytora)
+================================================================
+  ✘  1 [chromium] › e2e/run-events.spec.ts:125:3 › zdarzenia uruchomienia w czacie › L5.2: zatrzymanie z kompozytora konczy wykonanie i zakladka to pokazuje (30.8s)
+    Error: zakladka nie pokazala anulowania
+    expect(locator).toHaveAttribute(expected) failed
+           - unexpected value "running"
+    > 149 |     await expect(runState, 'zakladka nie pokazala anulowania').toHaveAttribute(
+        at /home/paczos/Documents/agentic-app-template-wt/z9-bl08b/e2e/run-events.spec.ts:149:64
+    test-results/run-events-zdarzenia-uruch-8877d-anie-i-zakladka-to-pokazuje-chromium/test-failed-1.png
+    Error Context: test-results/run-events-zdarzenia-uruch-8877d-anie-i-zakladka-to-pokazuje-chromium/error-context.md
+  1 failed
+git status po przywroceniu: [?? docs/evidence/z9-bl08b/;]
+
+================================================================
+T6 — renderer artefaktu na sztywno zamiast po typie -> e2e/artifact-renderers.spec.ts
+================================================================
+  ✘  1 [chromium] › e2e/artifact-renderers.spec.ts:92:3 › artefakty trafiaja do wlasciwych rendererow › trzy typy artefaktu, trzy rozne renderery — w czacie i w widoku artefaktu (1.5s)
+    Error: artefakt typu platform.nie-ma-takiego-renderera narysowany jako []: Artefakt bez zarejestrowanego rendererawersja 1/1snapshotOtworz
+    expect(received).toEqual(expected) // deep equality
+    > 130 |       ).toEqual([expected[type!]]);
+        at /home/paczos/Documents/agentic-app-template-wt/z9-bl08b/e2e/artifact-renderers.spec.ts:130:9
+    test-results/artifact-renderers-artefak-890a2-czacie-i-w-widoku-artefaktu-chromium/test-failed-1.png
+    Error Context: test-results/artifact-renderers-artefak-890a2-czacie-i-w-widoku-artefaktu-chromium/error-context.md
+    Error Context: test-results/artifact-renderers-artefak-890a2-czacie-i-w-widoku-artefaktu-chromium/error-context.md
+  1 failed
+git status po przywroceniu: [?? docs/evidence/z9-bl08b/;]
+
+================================================================
+T8 — bez podgladu streaming-answer -> e2e/run-events.spec.ts (proza w turze z narzedziem)
+================================================================
+  ✘  1 [chromium] › e2e/run-events.spec.ts:405:3 › zdarzenia uruchomienia w czacie › L5.15: proza w turze z narzedziem jest w trakcie pokazana dwukrotnie, a po turze wcale (7.4s)
+    Error: probki: null:0/0 running:0/0 running:0/0 running:0/0 running:0/0 running:0/0 running:0/2 running:0/2 running:0/2 running:0/2 running:0/2 running:0/2 running:0/1 running:0/1 running:0/1 running:0/1 running:0/1 succeeded:0/0
+    expect(received).toBeGreaterThan(expected)
+      442 |       `probki: ${samples.map((s) => `${s.phase}:${s.strip}/${s.thread}`).join(' ')}`,
+        at /home/paczos/Documents/agentic-app-template-wt/z9-bl08b/e2e/run-events.spec.ts:443:7
+    test-results/run-events-zdarzenia-uruch-1b029-dwukrotnie-a-po-turze-wcale-chromium/test-failed-1.png
+    Error Context: test-results/run-events-zdarzenia-uruch-1b029-dwukrotnie-a-po-turze-wcale-chromium/error-context.md
+  1 failed
+git status po przywroceniu: [?? docs/evidence/z9-bl08b/;]
+
+================================================================
+Odbudowa po probach i stan koncowy
+================================================================
+pnpm build: OK
+git status po przywroceniu: [?? docs/evidence/z9-bl08b/;]
+TRIALS_DONE=0

@@ -1,4 +1,8 @@
-import { AGUI_EVENTS, PLATFORM_CUSTOM_EVENTS } from '@platform/contracts';
+import {
+  AGUI_EVENTS,
+  PLATFORM_CUSTOM_EVENTS,
+  PLATFORM_CUSTOM_PAYLOAD_VERSION,
+} from '@platform/contracts';
 import type { RunRegistry } from '../services/runs.ts';
 
 export interface AguiEvent {
@@ -200,8 +204,28 @@ export class RunEventStream {
     });
   }
 
+  /**
+   * A platform concern the protocol does not model.
+   *
+   * The shape version is stamped here and nowhere else. `CUSTOM` is AG-UI's
+   * escape hatch — the protocol says nothing about what is inside one — so a
+   * consumer that is not this build's own client (an older tab, an event log
+   * replayed long afterwards) has no way to tell a payload it understands from
+   * one it does not. One producer means the number cannot drift between two
+   * emit sites, and `platformCustomPayloadSchemas` says what each name carries.
+   *
+   * An object payload only: every platform custom event is one, and stamping a
+   * version onto a string or an array would change its type rather than extend
+   * it. A non-object is passed through untouched and fails the conformance
+   * check, which is the honest outcome — it is not a payload this platform
+   * describes.
+   */
   custom(name: string, value: unknown): void {
-    this.emit({ type: AGUI_EVENTS.CUSTOM, name, value });
+    const stamped =
+      value && typeof value === 'object' && !Array.isArray(value)
+        ? { version: PLATFORM_CUSTOM_PAYLOAD_VERSION, ...(value as Record<string, unknown>) }
+        : value;
+    this.emit({ type: AGUI_EVENTS.CUSTOM, name, value: stamped });
   }
 
   canvasChanged(spaceId: string): void {

@@ -290,10 +290,41 @@ instancji ani katalogu danych użytkownika; kontrola negatywna musi umieć obla�
 | `@mastra/claude` 0.3.1 przekazuje tylko tekst | brak zdarzeń narzędzi i `session_id` w strumieniu Mastry | most hooków SDK w `platform-server/src/agent/runtime.ts`; przy aktualizacji adaptera sprawdzić, czy zdarzenia nie zaczną się dublować |
 | SDK odracza narzędzia, gdy jest ich dużo (`ToolSearch`) | model nie ma w kontekście narzędzia, które prompt każe mu wywołać (zaobserwowane: `ui_navigate` za `ToolSearch`, agent odpowiadał tekstem zamiast przenieść ekran) | `alwaysLoad: true` dla nielicznych narzędzi sterujących; gdy model „nie słucha instrukcji”, najpierw sprawdź w zdarzeniach uruchomienia, czy narzędzie było dostępne |
 | wyszukiwanie z `LIKE '%*%'` | „pokaż wszystko” zwracało pustą listę, a model mówił, że aplikacja jest pusta | w przykładzie `*` znaczy „wszystko”, a odpowiedź niesie `totals`; ta sama zasada dotyczy własnych narzędzi wyszukiwania |
-| gotowy czat ignoruje zdarzenia `CUSTOM` | kanał platformy (unieważnienia, zgody) niewidoczny | `platformAdapter.ts` obsługuje je równolegle |
+| gotowy czat ignoruje zdarzenia `CUSTOM`, `RUN_STARTED` i `RUN_FINISHED` | kanał platformy (unieważnienia, zgody, polecenia UI) niewidoczny; faza wykonania nie może pochodzić z reduktora biblioteki | `platformAdapter.ts` podsłuchuje ten sam strumień równolegle; ograniczenie **przypięte do wersji** w `tests/library-limits.test.ts` (wykonuje `processStreamedMessage` 0.9.13, nie opisuje go) |
+| `InterleavedTurn` (0.13.10) wstrzymuje prozę do końca tury | bez własnego podglądu odpowiedź pojawia się dopiero na końcu, więc „tekst przyrasta” byłoby nieprawdą | pasek `RunState` pokazuje `streamingText` w trakcie tury i znika, gdy gotowy wątek zatwierdzi wiadomość (`e2e/streaming.spec.ts`) |
+| w turze **z narzędziem** biblioteka renderuje prozę trwającej tury w osi „Behind the scenes” | to samo zdanie jest w trakcie tury na ekranie **dwa razy**: w osi biblioteki i w pasku podglądu (zmierzone; przez moment nawet trzy — sama biblioteka rysuje je chwilowo podwójnie). Po zakończeniu tury nie ma go w żadnym z tych miejsc: proza sprzed narzędzia zostaje tylko w zwiniętej osi i w historii | **niespełnione świadomie, nie obejściem.** Usunięcie paska podglądu w turach z narzędziem: (a) **nie usuwa dubli** — w próbie T8 sama oś biblioteki nadal pokazywała zdanie dwa razy przez część tury (`0/2`); (b) zabiera jedyny podgląd strumienia dla tych tur; (c) unieważnia **płatne** dowody L5.1 i L5.9 — `e2e/agent-ui.spec.ts` (prawdziwy model) czyta ten sam pasek w turze z wywołaniem narzędzia, więc naprawa kosztowałaby ponowny przebieg modelowy. Podmiana `Messages` jest wykluczona przez `AGENTS.md`. Zachowanie przypięte dwukierunkowo w `e2e/run-events.spec.ts` („proza w turze z narzedziem…”) i opisane tutaj |
+| gotowy wątek stawia narysowane wywołanie **nad** prozą, która je poprzedzała | kolejność przestrzenna w panelu nie odpowiada kolejności zdarzeń | kolejność dowodzona czasem pojawienia się i dziennikiem zdarzeń (`e2e/run-events.spec.ts`, L5.13), nigdy pozycją w DOM |
 | dziecko `AgentInterface` bez roli slotu | renderuje się jako kolumna obok wątku | kontrolki kompozytora wstawiane portalem; test geometrii `e2e/chat-layout.spec.ts` |
 | selektor celu UI w module | zmiana markupu psuje nawigację dopiero w działaniu | test przeglądarkowy celu |
 | XLSX | formuły nie są przeliczane (formuła zapisana przez agenta nie niesie żadnej wartości); części, których parser nie modeluje — wykresy, tabele przestawne — znikają przy zapisie, bo skoroszyt powstaje z modelu parsera; obrazy i formatowanie komórek **przetrwają**; `.xlsm`/`.xls` odrzucane | zakres jawny w `FILE_ANALYSIS` (kontrakty), sprawdzany w `tests/file-analysis.test.ts` (część wstrzykiwana do archiwum i szukana po zapisie) |
+
+### 7.1 Kontrakt zdarzeń `CUSTOM`
+
+`CUSTOM` to furtka protokołu AG-UI: nic w protokole nie opisuje, co jest w środku. Dlatego ładunki
+platformy mają **własne schematy i wersję kształtu** w
+[`packages/platform-contracts/src/agui-payloads.ts`](../packages/platform-contracts/src/agui-payloads.ts):
+
+- `platformCustomPayloadSchemas` jest mapą **totalną** względem `PLATFORM_CUSTOM_EVENTS` — nowe
+  zdarzenie bez schematu nie skompiluje się;
+- `PLATFORM_CUSTOM_PAYLOAD_VERSION` stempluje `RunEventStream.custom` w jednym miejscu, więc numer nie
+  rozjedzie się między producentami. Czyta go konsument, który nie jest klientem tej wersji: starsza
+  karta, dziennik zdarzeń odtwarzany po miesiącach;
+- zgodność sprawdza `tests/agui-conformance.test.ts` — na bajtach prawdziwego przebiegu, wobec
+  schematów `@ag-ui/core` **rozwiązanych przez samą bibliotekę czatu** (wersja, którą ona parsuje) oraz
+  wobec schematów platformy; osobno sprawdzane jest zachowanie strumienia (jeden `RUN_STARTED` na
+  początku, dokładnie jeden status końcowy na końcu, brak tekstu poza otwartą wiadomością, brak wyniku
+  narzędzia bez jego wywołania).
+
+Zdarzenie **`platform.permission_resolved`** istnieje z jednego powodu: prośba o zgodę zostaje w
+dzienniku na zawsze, więc klient, który odtwarza dziennik (przeładowanie, nowa karta), pokazywał
+zamkniętą już prośbę jako otwartą — a jej przyciski nic nie robiły, bo bramka rozstrzyga raz.
+Rozstrzygnięcie emituje **każde** wyjście z bramki: decyzja użytkownika, wygaśnięcie i odmowa wydana
+przy zatrzymaniu uruchomienia.
+
+> **Dzienniki sprzed tej zmiany go nie mają.** `run_events` to zapis tego, co wtedy zaszło, i nie jest
+> migrowany. Odtworzenie **starego** przebiegu, w którym padła prośba o zgodę, pokaże ją więc nadal jako
+> otwartą — aż do `RUN_FINISHED` albo `RUN_ERROR`, które ją czyszczą. Dotyczy wyłącznie danych zapisanych
+> przed wprowadzeniem zdarzenia; każde nowe uruchomienie zamyka swoją prośbę w dzienniku.
 
 Historia tych ustaleń: [`archive/agenticapp-2026-09/FEEDBACK.md`](archive/agenticapp-2026-09/FEEDBACK.md)
 (wpisy #15, #17, #18, #23, #39, #40, #41 oraz sekcje 6–8).

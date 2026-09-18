@@ -25,8 +25,24 @@ export type Step =
   /**
    * A tool call that is *announced only*: hooks fire with the given result, and
    * no handler runs. For exercising how the interface shows tool activity.
+   *
+   * `inline` decides **when** the hooks fire, and it is the difference between
+   * two orderings the acceptance criteria name separately:
+   *
+   *  - omitted (the long-standing behaviour): they fire while the script is
+   *    being expanded, before the stream opens. Every tool call of the run
+   *    therefore reaches the runtime *before* its first word, which is the
+   *    common "tool, then answer" case the existing scenarios were written
+   *    against — and the reason none of them could reproduce the other one.
+   *  - `true`: they fire at this step's position in the stream, so text emitted
+   *    before it really does arrive first. That is what makes "text, then tool"
+   *    and "several tools, with text between them" scenarios possible at all.
+   *
+   * Left as a flag rather than changed outright: the announced-before-the-stream
+   * behaviour is what the existing measurements were taken against, and
+   * silently moving it would alter other packages' green tests.
    */
-  | { kind: 'tool'; name: string; input: unknown; result?: string; error?: string }
+  | { kind: 'tool'; name: string; input: unknown; result?: string; error?: string; inline?: boolean }
   /**
    * A tool call that is *performed*: the real handler of a platform or module
    * tool runs with the run's context, through the same validation and error
@@ -205,6 +221,8 @@ export function scriptedAgent(
    * successful call was shown as failed once a later turn's call failed.
    */
   let callSeq = 0;
+  /** The same guarantee for `inline` tool announcements, in their own space. */
+  let inlineSeq = 0;
   const play = async (prompt: string, options: any) => {
     const steps = typeof script === 'function' ? script(prompt) : script;
     const hooks = options?.sdkOptions?.hooks ?? {};
@@ -243,7 +261,11 @@ export function scriptedAgent(
     const expand = async (list: Step[]): Promise<Array<Record<string, unknown>>> => {
       const out: Array<Record<string, unknown>> = [];
       for (const step of list) {
-        if (step.kind === 'tool') {
+        if (step.kind === 'tool' && step.inline) {
+          // Fired where it stands, inside the stream — see the `inline` note on
+          // the step type.
+          out.push({ type: 'tool', step });
+        } else if (step.kind === 'tool') {
           seq += 1;
           const id = `tu_${seq}`;
           await fire('PreToolUse', { tool_use_id: id, tool_name: step.name, tool_input: step.input });
@@ -293,6 +315,18 @@ export function scriptedAgent(
           if (signal?.aborted) throw signal.reason ?? new Error('run cancelled');
           // A `wait` is elapsed time and nothing else — never an event.
           if (e.type === 'wait') continue;
+          if (e.type === 'tool') {
+            const step = e.step as Extract<Step, { kind: 'tool' }>;
+            inlineSeq += 1;
+            const id = `tu_inline_${inlineSeq}`;
+            await fire('PreToolUse', { tool_use_id: id, tool_name: step.name, tool_input: step.input });
+            if (step.error !== undefined) {
+              await fire('PostToolUseFailure', { tool_use_id: id, error: step.error });
+            } else {
+              await fire('PostToolUse', { tool_use_id: id, tool_response: step.result ?? 'ok' });
+            }
+            continue;
+          }
           if (e.type === 'call') {
             const step = e.step as Extract<Step, { kind: 'call' }>;
             const localName = step.name.replace(/^mcp__app__/, '');
