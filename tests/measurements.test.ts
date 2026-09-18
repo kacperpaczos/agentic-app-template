@@ -5,7 +5,13 @@ import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AgentRuntime, collectToolEntries, platformTools } from '@platform/server';
 import { createHarness, login, type Harness } from './helpers.ts';
-import { dispatchingAgent, type Plan, type StandInHandle, type Step } from './support/model-standin.ts';
+import {
+  dispatchingAgent,
+  newStandInHandle,
+  type Plan,
+  type StandInHandle,
+  type Step,
+} from './support/model-standin.ts';
 import {
   CODE_COMMIT_ENV,
   CODE_TREE_DIRTY_ENV,
@@ -63,12 +69,7 @@ const EMPTY_CONTEXT = {
 async function startRun(conversationId: string, script: Step[]) {
   promptSeq += 1;
   const prompt = `polecenie pomiarowe ${promptSeq}`;
-  const handle: StandInHandle = {
-    childExitedAt: null,
-    childPid: null,
-    performed: [],
-    dispose: () => {},
-  };
+  const handle: StandInHandle = newStandInHandle();
   plans.set(prompt, { script, handle });
   openHandles.push(handle);
 

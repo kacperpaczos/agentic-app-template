@@ -1,7 +1,13 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createPlatform, DEFAULT_USER_ID, SECOND_USER_ID, type PlatformInstance } from '@platform/server';
+import {
+  createPlatform,
+  DEFAULT_USER_ID,
+  SECOND_USER_ID,
+  type ModelAgentLike,
+  type PlatformInstance,
+} from '@platform/server';
 import { createProcurementModule, type ProcurementService } from '@module/procurement/server';
 import { ProcurementService as Service } from '@module/procurement/server';
 
@@ -16,7 +22,20 @@ export interface Harness {
 
 /** Fresh platform + module on a throw-away database. No network, no model. */
 export async function createHarness(
-  options: { withModule?: boolean; seed?: boolean } = {},
+  options: {
+    withModule?: boolean;
+    seed?: boolean;
+    /**
+     * Installs a stand-in model in the platform's **own** runtime.
+     *
+     * Necessary whenever a test drives runs *and* calls the HTTP API about
+     * them: `platform.app` is wired to `platform.runtime`, so a runtime built
+     * beside it has different pending consents, different live streams and a
+     * different conversation queue — and an endpoint asked about a run of that
+     * other runtime answers about nothing.
+     */
+    modelAgent?: ModelAgentLike;
+  } = {},
 ): Promise<Harness> {
   const dataDir = mkdtempSync(join(tmpdir(), 'agentic-test-'));
   const env = { ...process.env, APP_DATA_DIR: dataDir };
@@ -25,6 +44,7 @@ export async function createHarness(
   const platform = createPlatform({
     modules: withModule ? (services) => [createProcurementModule(services)] : [],
     env,
+    ...(options.modelAgent ? { modelAgent: options.modelAgent } : {}),
   });
 
   const service = new Service(platform.services);

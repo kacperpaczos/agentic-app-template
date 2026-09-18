@@ -11,7 +11,13 @@ import {
 } from '@platform/server';
 import { AppError } from '@platform/contracts';
 import { createHarness, login, type Harness } from './helpers.ts';
-import { dispatchingAgent, type Plan, type StandInHandle, type Step } from './support/model-standin.ts';
+import {
+  dispatchingAgent,
+  newStandInHandle,
+  type Plan,
+  type StandInHandle,
+  type Step,
+} from './support/model-standin.ts';
 import {
   EVIDENCE_DIR,
   codeVersion,
@@ -57,7 +63,7 @@ const EMPTY_CONTEXT = {
 async function runScript(conversationId: string, script: Step[]) {
   promptSeq += 1;
   const prompt = `polecenie diagnostyczne ${promptSeq}`;
-  const handle: StandInHandle = { childExitedAt: null, childPid: null, performed: [], dispose: () => {} };
+  const handle: StandInHandle = newStandInHandle();
   plans.set(prompt, { script, handle });
   const started = await runtime.start({
     ownerId: h.ownerId,
