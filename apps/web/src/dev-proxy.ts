@@ -110,18 +110,33 @@ export async function checkDevInstance(api: DevApiTarget): Promise<string | null
 }
 
 /**
- * The check, remembered once it succeeds.
+ * The check, remembered once it succeeds — and asked only once at a time.
  *
  * A failure is not remembered on purpose: the usual failure is "the backend is
  * still starting", and a developer should not have to restart Vite because it
  * won the race.
+ *
+ * Two details that only show up under load. The first page load fires many
+ * `/api` requests at once, and without sharing the in-flight check each of them
+ * would probe `/api/health` separately — so the probe is shared and the answer
+ * is given to everyone waiting on it. And a rejection here would leave every
+ * one of those requests hanging with no response at all, so it is turned into
+ * the same kind of refusal as any other: `readInstanceLabel` already catches
+ * everything it can, which makes this a guard against somebody else's contract
+ * changing, not against a path we know of.
  */
 export function devInstanceGate(api: DevApiTarget): () => Promise<string | null> {
   let verified = false;
-  return async () => {
-    if (verified) return null;
-    const problem = await checkDevInstance(api);
-    if (!problem) verified = true;
-    return problem;
+  let asking: Promise<string | null> | null = null;
+  return () => {
+    if (verified) return Promise.resolve(null);
+    asking ??= checkDevInstance(api)
+      .catch((e: unknown) => `Sprawdzenie instancji deweloperskiej nie powiodlo sie: ${String(e)}`)
+      .then((problem) => {
+        if (!problem) verified = true;
+        asking = null;
+        return problem;
+      });
+    return asking;
   };
 }

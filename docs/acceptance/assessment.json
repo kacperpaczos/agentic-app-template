@@ -228,7 +228,7 @@
       "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "Nawigacja jest punktem orientacyjnym z nazwa (role=navigation), jej kontrolka niesie aria-expanded zgodne z ekranem, zakladki panelu aria-selected, przycisk zaznaczenia karty aria-pressed, a zwinieta sekcja Ustawien to <details> ze sterowaniem z klawiatury. Widocznosc fokusu jest mierzona obliczonym stylem (outline/box-shadow) dla kolejnych kontrolek osiaganych tabulatorem — nie toBeFocused. Formularz karty procurement.offerItemForm ma etykiety (getByLabel) i daje sie wypelnic oraz zapisac wylacznie z klawiatury, z wynikiem potwierdzonym odczytem backendu (quantityMilli = 7250). Dowod: e2e/bl10-shell-canvas.spec.ts (3 przypadki).",
+      "proof": "Nawigacja jest punktem orientacyjnym z nazwa (role=navigation), jej kontrolka niesie aria-expanded zgodne z ekranem, zakladki panelu aria-selected, przycisk zaznaczenia karty aria-pressed, a zwinieta sekcja Ustawien to <details> ze sterowaniem z klawiatury. Widocznosc fokusu jest mierzona obliczonym stylem — obrysem (outline) o niezerowej szerokosci na kontrolce albo na opakowaniu, ktore ja zastepuje (kompozytor czatu) — dla kolejnych kontrolek osiaganych tabulatorem, a nie przez toBeFocused. Cien (box-shadow) nie jest przyjmowany: ma go kazda karta i panel niezaleznie od fokusu, wiec przepuscilby kontrolke z outline: none. Formularz karty procurement.offerItemForm ma etykiety (getByLabel) i daje sie wypelnic oraz zapisac wylacznie z klawiatury, z wynikiem potwierdzonym odczytem backendu (quantityMilli = 7250). Dowod: e2e/bl10-shell-canvas.spec.ts (3 przypadki).",
       "gap": "—",
       "scenarios": [
         "T02"

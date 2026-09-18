@@ -6,6 +6,7 @@ import {
   checkDevInstance,
   devInstanceGate,
   resolveDevApi,
+  type DevApiTarget,
 } from '../apps/web/src/dev-proxy.ts';
 
 /**
@@ -101,6 +102,24 @@ describe('proxy trybu deweloperskiego', () => {
     expect(problem).toContain('nie odpowiada na /api/health');
   });
 
+  it('odrzucona obietnica sprawdzenia konczy sie odmowa, nie zawieszonym zadaniem', async () => {
+    /*
+     * `readInstanceLabel` catches what it can reach, so this guards against its
+     * contract changing rather than against a path we know of — and the cost of
+     * being wrong is the worst kind: every `/api` request waiting for ever with
+     * no answer.
+     */
+    const exploding = {
+      port: 0,
+      get target(): string {
+        throw new Error('sprawdzenie wybuchlo');
+      },
+      expectedLabel: DEV_INSTANCE_LABEL,
+    } as unknown as DevApiTarget;
+    const gate = devInstanceGate(exploding);
+    await expect(gate()).resolves.toContain('nie powiodlo sie');
+  });
+
   it('cel z wlasciwa etykieta przechodzi, a sprawdzenie zapamietuje tylko sukces', async () => {
     const target = await instanceAnswering(DEV_INSTANCE_LABEL);
     const api = { port: 0, target, expectedLabel: DEV_INSTANCE_LABEL };
@@ -116,7 +135,9 @@ describe('proxy trybu deweloperskiego', () => {
     expect(await cold()).toContain('nie odpowiada');
 
     const warm = devInstanceGate(api);
-    expect(await warm()).toBeNull();
+    // Concurrent first requests share one probe rather than each sending their
+    // own: the first page load opens several `/api` requests at once.
+    expect(await Promise.all([warm(), warm(), warm()])).toEqual([null, null, null]);
     const closing = running;
     running = null;
     await new Promise<void>((done) => closing!.close(() => done()));
