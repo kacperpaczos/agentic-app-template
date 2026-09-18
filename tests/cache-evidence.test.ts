@@ -60,6 +60,9 @@ describe('dowod pakietu BL-11c', () => {
     });
 
     const first = await api(`/api/artifacts/${meta.id}`);
+    // Separated in time on purpose: every timestamp in the answer must differ,
+    // so that an equal fingerprint can only mean an equal source state.
+    await new Promise((r) => setTimeout(r, 25));
     const repeated = await api(`/api/artifacts/${meta.id}`);
 
     // Change the source through the domain service, exactly as a user edit does.

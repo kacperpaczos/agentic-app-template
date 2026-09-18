@@ -173,12 +173,20 @@ describe('artefakt live odczytuje zarejestrowana operacje modulu', () => {
     });
 
     const first = await api(`/api/artifacts/${meta.id}`);
+    // Far enough apart that every timestamp in the answer differs. Without the
+    // wait the two reads can land in one millisecond, and a fingerprint taken
+    // over the whole envelope — timestamps included — would pass by accident.
+    await new Promise((r) => setTimeout(r, 25));
     const again = await api(`/api/artifacts/${meta.id}`);
     // Two reads a moment apart, with nothing changed behind them: two different
     // moments, one state of the source. Without the fingerprint the second read
     // is indistinguishable from a view that never refreshed.
     expect(again.body.live.resolvedAt).not.toBe(first.body.live.resolvedAt);
     expect(again.body.live.sourceFingerprint).toBe(first.body.live.sourceFingerprint);
+    // The answers themselves are *not* identical — the module stamps each one
+    // with the moment it was computed — so the equality above is a statement
+    // about the source, not about the bytes.
+    expect(again.body.content.evaluatedAt).not.toBe(first.body.content.evaluatedAt);
     expect(first.body.live.sourceFingerprint).toMatch(/^[0-9a-f]{16}$/);
 
     const changedOffer = await changeSourceData();
