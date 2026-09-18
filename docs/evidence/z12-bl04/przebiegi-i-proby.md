@@ -50,7 +50,8 @@ sprawdza.
 | `pnpm verify` (drzewo scalone z `domkniecie/integracja`, commit `b4332fd`) | 0 | 51 plików / 834 testy; `git status --porcelain` po przebiegu: pusto |
 | `pnpm typecheck` (pakiety + moduły osobno + `e2e/`) | 0 | bez błędów |
 | `pnpm build && pnpm exec playwright test e2e/auth-limits.spec.ts` (pod blokadą) | 0 | 13 testów |
-| `pnpm exec playwright test` (cały domyślny przebieg, pod blokadą) | 0 | 198 testów |
+| `pnpm exec playwright test` (cały domyślny przebieg, pod blokadą) — **pierwszy przebieg** | 1 | 196 zielonych, 1 oblany: `e2e/bl10-agent-navigation.spec.ts` „cel w zwinietej sekcji…”. **Nie flake — regresja tej zmiany**, opis niżej |
+| `pnpm exec playwright test` (cały domyślny przebieg, po poprawce) | 0 | 198 testów |
 | `pnpm probe:sdk-session` | 0 | trzy przebiegi sondy, wniosek rozstrzygający |
 | `APP_WRITE_EVIDENCE=1 pnpm exec playwright test e2e/auth-limits.spec.ts` | 0 | zapisany `skan-sekretow.json` |
 
@@ -89,6 +90,31 @@ przywróceniu). To jest dokładnie ta klasa zdarzeń, przed którą chroni kontr
 którego kontrola została dopisana: własność „testy negatywne nie niszczą logowania użytkownika” była
 prawdziwa **z konstrukcji**, a takie własności przestają być prawdziwe, gdy ktoś dopisze test, który
 o konstrukcji zapomni. Teraz jest mierzona.
+
+## Regresja, którą ten pakiet wywołał i naprawił
+
+Pierwszy pełny przebieg przeglądarkowy oblał na cudzym teście:
+`e2e/bl10-agent-navigation.spec.ts` → „cel w zwinietej sekcji zostaje odslonniety, podswietlony i
+zgloszony” (L2.14), asercja „element nie zostal przewiniety do widoku”. Powtórzył się na spokojnej
+maszynie, więc **nie był flakiem**.
+
+Pomiar (`window.innerHeight` 720, cel `settings-tools`):
+
+```
+targetHeight = 1244, top po scrollIntoView({block:'center'}) = -235.25,
+surfaceScrollHeight = 4131, surfaceClientHeight = 667, surfaceScrollTop = 1470
+```
+
+Przyczyna: `UiCommandRunner.reveal` przewijał cel z `block: 'center'`. Dla celu **wyższego niż okno**
+wyśrodkowanie kładzie jego początek nad krawędzią ekranu. Test asertował właściwą rzecz („góra
+elementu, do którego wysłano użytkownika, jest w widoku”) i przechodził dotąd **przypadkiem**:
+tabela narzędzi siedziała na tyle nisko, że kontener nie miał się gdzie przewinąć, żeby ją naprawdę
+wyśrodkować. Dołożenie sekcji „Sesja SDK” w Ustawieniach wydłużyło stronę o tyle, że mógł.
+
+Poprawka (commit `7d1c18d`): `block: 'start'` dla celu wyższego od okna, `'center'` w pozostałych
+przypadkach. Po niej `e2e/bl10-agent-navigation.spec.ts` i `e2e/auth-limits.spec.ts` przechodzą razem
+(17 testów). To jest defekt cudzego pakietu (BL-10), ale ujawniony przez tę zmianę, więc naprawiony
+tutaj, a nie zgłoszony do naprawy komuś innemu.
 
 ## Co ten pakiet dowodzi, a czego nie
 
