@@ -438,3 +438,29 @@ pokazuje, że historia ma oba człony tury w dobrej kolejności. Test
   więc taki krok zawsze poprzedza każdy token. Kolejność „tekst, potem narzędzie” da się odtworzyć
   tylko krokiem `kind: 'call'` (wykonywanym w strumieniu) — wykorzystane w scenariuszu tego pakietu.
   Dotyczy kryterium L5.13, spoza tego pakietu.
+
+### Runda poprawek 1 (po recenzji)
+
+- **`RunEventStream.emit` znosił każdą awarię zapisu zdarzenia jako ostrzeżenie.** Zawężone do
+  `SQLITE_CONSTRAINT_FOREIGNKEY`, czyli do jedynego przypadku, który jest oczekiwany (wiersz
+  uruchomienia zniknął razem z rozmową). Każda inna awaria zapisu w jedynym źródle prawdy jest
+  `console.error` z przyczyną i mówi wprost, że dziennik jest od tego miejsca niepełny i taki zostanie
+  odtworzony — ten sam wzorzec, co catch projekcji piętnaście linii niżej.
+- **Klucz idempotencji rezerwowany na czas startu.** Zapis do `idempotency_keys` następuje po
+  `await runtime.start(...)`, więc dwa *równoczesne* kopie jednego żądania mogły obie nie znaleźć
+  klucza i obie wystartować. Rejestr `startingRuns` (w pamięci, ustawiany w tym samym takcie, w którym
+  start jest wywoływany) zamyka to okno; powtórzenie czeka na pierwszy start i dostaje odtworzenie.
+  Test: „dwa rownoczesne zadania z tym samym runId”.
+- **Test usunięcia rozmowy dostał artefakt.** Usuwana rozmowa najpierw publikuje własny artefakt
+  prawdziwym narzędziem, więc asercja o odłączeniu ma czego dotyczyć: artefakt zostaje na liście, jest
+  otwieralny z treścią i nie wskazuje już rozmowy. Wcześniej liczba artefaktów nie mogła się zmienić.
+- **Asercja paska stanu w teście przełączania rozmów** była owinięta w `if (count > 0)` i przechodziła
+  przez nieobecność elementu. Teraz to brak *konkretnego* elementu: paska z identyfikatorem
+  uruchomienia rozmowy A.
+- **Nowy test objawu** dla zgłoszonego defektu „polecenie w kolejce po zmianie tożsamości”: przełącz
+  właściciela, wyślij polecenie natychmiast, doczekaj `succeeded`. Dotąd dowodziliśmy, że przyczyny
+  nie ma; ten test oblewa, gdy objaw wróci **dowolną** drogą. Próba P13 (wyłączone czyszczenie `c`/`s`
+  z adresu) odtwarza go dokładnie — faza zostaje `queued`.
+- Komentarz przy teście prozy sprzed narzędzia mówi teraz, że przypięcie jest **dwukierunkowe**:
+  wersja biblioteki, która to naprawi, obleje te same linie, i wtedy należy asercję rozluźnić, a nie
+  obchodzić.

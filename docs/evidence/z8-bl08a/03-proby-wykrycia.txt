@@ -301,3 +301,82 @@ wycofano linie w packages/platform-server/src/agent/runtime.ts
 przywrocono; git status --porcelain:
 
 DONE
+
+Runda 5 — proby po rundzie poprawek 1
+=====================================
+
+Zmienione asercje (pasek stanu w L4.5, artefakt w L4.7) i nowy test objawu po
+zmianie tozsamosci maja wlasne proby. P13 odtwarza dokladnie zgloszony objaw:
+polecenie zostaje w fazie `queued`.
+
+=================================================================
+PROBA P3-2 (L4.5) — pasek stanu czyta uruchomienie globalnie (po zmianie asercji na brak elementu)
+plik: packages/platform-ui/src/chat/ChatPanel.tsx
+wycofana/zmieniona linia: const run = useAppState((s) => (conversationId ? s.runs[conversationId] : undefined));
+zamieniona na           : const run = useAppState((s) => Object.values(s.runs)[0]);
+wycofano linie w packages/platform-ui/src/chat/ChatPanel.tsx
+  ✘  1 [chromium] › e2e/chat-history.spec.ts:544:3 › czat i historia rozmowy › L4.5: praca w drugiej rozmowie w trakcie zadania pierwszej nie miesza niczego (32.9s)
+    Error: expect(locator).toHaveAttribute(expected) failed
+           - unexpected value "succeeded"
+    > 562 |     await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'running', {
+        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:562:49
+    test-results/chat-history-czat-i-histor-03e43-ierwszej-nie-miesza-niczego-chromium/test-failed-1.png
+    Error Context: test-results/chat-history-czat-i-histor-03e43-ierwszej-nie-miesza-niczego-chromium/error-context.md
+    Error Context: test-results/chat-history-czat-i-histor-03e43-ierwszej-nie-miesza-niczego-chromium/error-context.md
+  1 failed
+przywrocono; git status --porcelain:
+
+=================================================================
+PROBA P5g-3 (L4.7) — usuniecie nie anuluje trwajacego zadania (po dodaniu artefaktu do rozmowy)
+plik: packages/platform-server/src/services/conversations.ts
+wycofana/zmieniona linia: .filter((r) => r.status === 'queued' || r.status === 'running');
+zamieniona na           : .filter(() => false);
+wycofano linie w packages/platform-server/src/services/conversations.ts
+  ✘  1 [chromium] › e2e/chat-history.spec.ts:672:3 › czat i historia rozmowy › L4.7: usuniecie rozmowy z trwajacym zadaniem zatrzymuje to zadanie (11.7s)
+    Error: expect(received).toBe(expected) // Object.is equality
+      745 |     await expect
+    > 747 |       .toBe(0);
+      748 |     expect((await getJson(page, `/api/threads/get/${conversationId}`)).error?.code).toBe('not_found');
+        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:747:8
+    test-results/chat-history-czat-i-histor-d0450-aniem-zatrzymuje-to-zadanie-chromium/test-failed-1.png
+    Error Context: test-results/chat-history-czat-i-histor-d0450-aniem-zatrzymuje-to-zadanie-chromium/error-context.md
+    Error Context: test-results/chat-history-czat-i-histor-d0450-aniem-zatrzymuje-to-zadanie-chromium/error-context.md
+  1 failed
+przywrocono; git status --porcelain:
+
+=================================================================
+PROBA P12 (L4.7) — usuniecie kasuje artefakty rozmowy zamiast je odlaczac
+plik: packages/platform-server/src/services/conversations.ts
+wycofana/zmieniona linia: this.db.$client.prepare('DELETE FROM conversations WHERE id = ?').run(id);
+zamieniona na           : this.db.$client.prepare('DELETE FROM artifacts WHERE conversation_id = ?').run(id); this.db.$client.prepare('DELETE FROM conversations WHERE id = ?').run(id);
+wycofano linie w packages/platform-server/src/services/conversations.ts
+  ✘  1 [chromium] › e2e/chat-history.spec.ts:672:3 › czat i historia rozmowy › L4.7: usuniecie rozmowy z trwajacym zadaniem zatrzymuje to zadanie (8.6s)
+    Error: expect(received).toBe(expected) // Object.is equality
+    > 756 |     expect(artifactsAfter.length).toBe(artifactsBefore.length);
+      757 |     expect(artifactsAfter.map((a) => a.id)).toContain(ownedId);
+      758 |     expect(artifactsAfter.filter((a) => a.threadId === conversationId)).toEqual([]);
+        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:756:35
+    test-results/chat-history-czat-i-histor-d0450-aniem-zatrzymuje-to-zadanie-chromium/test-failed-1.png
+    Error Context: test-results/chat-history-czat-i-histor-d0450-aniem-zatrzymuje-to-zadanie-chromium/error-context.md
+    Error Context: test-results/chat-history-czat-i-histor-d0450-aniem-zatrzymuje-to-zadanie-chromium/error-context.md
+  1 failed
+przywrocono; git status --porcelain:
+
+=================================================================
+PROBA P13 (objaw L4.5) — zmiana tozsamosci przestaje czyscic parametry sesji z adresu
+plik: packages/platform-ui/src/state/accessReset.ts
+wycofana/zmieniona linia: deps.clearSessionLocation?.();
+zamieniona na           : void deps.clearSessionLocation;
+wycofano linie w packages/platform-ui/src/state/accessReset.ts
+  ✘  1 [chromium] › e2e/chat-history.spec.ts:629:3 › czat i historia rozmowy › L4.5: polecenie wyslane zaraz po zmianie tozsamosci wykonuje sie, nie zostaje w kolejce (1.6m)
+    Error: expect(locator).toHaveAttribute(expected) failed
+            - unexpected value "queued"
+    > 46 |   expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'succeeded', { timeout: 90_000 });
+        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:659:11
+    test-results/chat-history-czat-i-histor-e5cbe-e-sie-nie-zostaje-w-kolejce-chromium/test-failed-1.png
+    Error Context: test-results/chat-history-czat-i-histor-e5cbe-e-sie-nie-zostaje-w-kolejce-chromium/error-context.md
+    Error Context: test-results/chat-history-czat-i-histor-e5cbe-e-sie-nie-zostaje-w-kolejce-chromium/error-context.md
+  1 failed
+przywrocono; git status --porcelain:
+
+DONE
