@@ -351,3 +351,21 @@ HTTP tego samego endpointu — czyli z rzeczy, które nie rozstrzygają ani jedn
 `refetchOnWindowFocus` zostaje wyłączony. Odświeżanie otwartego widoku live jest związane ze zmianą
 danych (unieważnienie klucza `artifact`), a nie z powrotem do okna — okno wraca też wtedy, gdy nic się
 nie zmieniło, a artefakt live przy każdym otwarciu uruchamia zapytanie na serwerze.
+
+### Zmiana w cudzym specu
+
+`e2e/ui-state.spec.ts` („przelaczenie tozsamosci na Ustawieniach…”) miał **założenie**, że po zmianie
+tożsamości tabela poprzedniego właściciela zostaje w czacie, a adres nadal niesie jego przestrzeń —
+czyli dokładnie te braki, które ten pakiet zamyka (L10.7, L10.11). Zmienione zostały dwa założenia
+(tabela ma zniknąć; adres nie ma nieść poprzedniej przestrzeni); wszystkie asercje o opisie ekranu
+zostały bez zmian i nadal przechodzą, tylko spełniane są mocniej.
+
+### Zaobserwowane, nienaprawione
+
+- `e2e/streaming.spec.ts` i `e2e/view-filter.spec.ts` zapisują pliki dowodowe przy **każdym**
+  domyślnym przebiegu (`docs/evidence/closure-2026-09-15/`, `docs/evidence/chat-ux-2026-09-16/`) —
+  ta sama klasa problemu, którą G18 zamknął po stronie `pnpm verify`.
+- Komponent nagłówka sprawy wysyła jeden odczyt `case_overview` z literałem `"undefined"` jako
+  `caseId`, zanim parametr `$caseId` zostanie związany. Żądanie może się tylko nie powieść.
+- Asercja `not.toContainText(<treść polecenia>)` na panelu czatu jest zawsze prawdziwa: gotowy czat
+  nazywa wątek bez końcowej kropki. Warto przejrzeć pozostałe spece pod tym kątem.
