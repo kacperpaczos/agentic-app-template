@@ -9,11 +9,12 @@ a trzy kontrole negatywne pokazują, co się dzieje, gdy ktoś spróbuje.
 
 | plik | co zawiera |
 |---|---|
-| `01-przebieg.txt` | Nagrany przebieg odbiorowy: 22 kroki z poleceniami, kodami wyjścia i sumami SHA-256. Kopia z zapisem leżącym wyłącznie w WAL → weryfikacja → próba migracji na kopii → trzecie uruchomienie bez skutku → kontrole negatywne → **osiem odmów** (w tym ścieżka wewnątrz i nad katalogiem danych) → odtworzenie → start aplikacji na odtworzonym stanie → odmowa kopii nowszej niż build → odmowa cudzego `--data` → osobny kod wyjścia awarii. |
-| `02-testy.txt` | Regresja: `tests/backup-migration.test.ts` (33) i `tests/session-transcript.test.ts` (19), kod wyjścia 0. |
+| `01-przebieg.txt` | Nagrany przebieg odbiorowy: 24 kroki z poleceniami, kodami wyjścia i sumami SHA-256. Kopia z zapisem leżącym wyłącznie w WAL → weryfikacja → próba migracji na kopii → trzecie uruchomienie bez skutku → kontrole negatywne → **osiem odmów** (w tym ścieżka wewnątrz i nad katalogiem danych) → odtworzenie → start aplikacji na odtworzonym stanie → odmowa kopii nowszej niż build → odmowa cudzego `--data` → osobny kod wyjścia awarii. |
+| `02-testy.txt` | Regresja: `tests/backup-migration.test.ts` (40) i `tests/session-transcript.test.ts` (19), kod wyjścia 0. |
 | `03-proby-wykrycia.txt` | Siedem prób zdolności wykrycia (G16) z pierwszego przebiegu zadania. Próba 7 przy pierwszym podejściu ujawniła wadę testu, nie kodu; test poprawiono i próbę powtórzono. |
 | `04-raport-proby.json` | Raport `migration-rehearsal --json` z przebiegu z `01-przebieg.txt`. |
 | `05-proby-wykrycia-runda1.txt` | Pięć prób zdolności wykrycia dla poprawek z rundy 1 (trzy ochrony ścieżek, odmowa cudzego `--data`, osobny kod awarii). |
+| `06-proby-wykrycia-runda2.txt` | Odtworzenie defektu A (kopia nadpisująca żywy katalog danych z kodem 0) i pięć prób zdolności wykrycia dla rundy 2. |
 
 ## Co rozstrzyga który krok
 
@@ -33,6 +34,12 @@ a trzy kontrole negatywne pokazują, co się dzieje, gdy ktoś spróbuje.
   odcisk bazy jest bajt w bajt ten sam, a plik użytkownika i cudzy katalog są na miejscu. Wśród nich
   przypadek zgłoszony w przeglądzie: `--out <katalog-danych>/files` dla generatora i dla próby
   migracji, katalog nadrzędny wobec katalogu danych oraz cudzy niepusty katalog bez znacznika.
+  Krok 22 to osobny defekt z rerecenzji: **kopia zapisywana do** żywego katalogu danych
+  (`--data <cokolwiek> --out <katalog danych>`) nadpisywała bazę użytkownika i kończyła się kodem 0;
+  dziś odmowa, suma `app.db` identyczna przed i po, a kontrola odwrotna pokazuje, że kopia do
+  katalogu pustego i jej powtórzenie do tego samego katalogu nadal działają. Krok 23: próba
+  migracji powtórzona trzykrotnie do tego samego `--out`, w tym po symulowanym przerwanym
+  przebiegu.
 - **L7.13** — `02-testy.txt`, `tests/session-transcript.test.ts`. To **symulacja** na granicy
   adaptera modelu; kryterium pozostaje otwarte, bo nie sprawdzono, którą z dwóch reakcji daje
   prawdziwy SDK. Szczegóły w `docs/ACCEPTANCE.md` i w raporcie zadania.
