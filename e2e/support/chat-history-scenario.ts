@@ -102,6 +102,21 @@ export const chatHistoryScript = (rawPrompt: string): Step[] => {
             mode: 'live',
             rendererType: 'procurement.comparison',
             content: { operation: 'procurement.comparison', input: { caseId: found.id } },
+            /*
+             * `operationId` is required: a tool that creates a durable record
+             * demands a key, so a retry after a reconnect replays instead of
+             * making a second artifact. A scripted agent names it the way a
+             * real one has to.
+             *
+             * Minted per invocation, and deliberately not a fixed literal: this
+             * branch plays more than once in one browser run (the artifact test
+             * and the deletion test each ask for one), and the instance is also
+             * restarted on the same data directory. Each of those is a new
+             * operation, not a retry of the first — a constant key would replay
+             * the earlier artifact and the test would be watching the harness
+             * tell a story about idempotency that it is not about.
+             */
+            operationId: `e2e-chat-history-artefakt-${crypto.randomUUID()}`,
           };
         },
         maxChars: 200,
