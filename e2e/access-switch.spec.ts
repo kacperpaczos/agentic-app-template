@@ -106,7 +106,8 @@ test.describe('zmiana wlasciciela w jednej karcie przegladarki', () => {
     await expect(page.getByTestId('chat-selection')).toHaveCount(0);
     // And the address no longer points at the previous identity's conversation
     // or workspace.
-    expect(new URL(page.url()).search).not.toMatch(/[?&][cs]=/);
+    // Polled: clearing them is a router navigation, so it lands a tick later.
+    await expect.poll(() => new URL(page.url()).search).not.toMatch(/[?&][cs]=/);
     // The conversation itself is not in the ready-made chat's list any more.
     await expect(page.locator('.pf-chat')).not.toContainText(command);
 
