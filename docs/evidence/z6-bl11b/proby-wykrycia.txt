@@ -1,0 +1,96 @@
+Proby zdolnosci wykrycia (G16) — pakiet BL-11b
+commit: 66001b1
+
+P1 [L7.8] packages/platform-server/src/agent/runtime.ts
+    wycofana linia : this.services.runs.markExecutionStart(runId);
+    test           : tests/orchestration.test.ts -t "okna wykonania sa rozlaczne"
+    oczekiwano     : oblewa na — runB.queuedMs > runA.queuedMs
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: B ruszylo o 2026-09-18T16:33:04.583Z, gdy A konczylo o 2026-09-18T16:33:04.807Z: expected false to be true // Object.is equality
+    drzewo po przywroceniu: czyste
+P2 [L7.4] packages/platform-server/src/agent/runtime.ts
+    wycofana linia : const previous = this.#conversationQueue.get(conversation.id) ?? Promise.resolve();
+    test           : tests/orchestration.test.ts -t "okna wykonania sa rozlaczne"
+    oczekiwano     : oblewa na — drugie polecenie ruszylo, zanim pierwsze skonczylo
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: drugie polecenie ruszylo, zanim pierwsze skonczylo: expected 'running' to be 'queued' // Object.is equality
+    drzewo po przywroceniu: czyste
+P3 [L7.9] packages/platform-server/src/agent/runtime.ts
+    wycofana linia : if (runId !== undefined && pending.runId !== runId) return false;
+    test           : tests/orchestration.test.ts -t "zgoda udzielona pod adresem jednego uruchomienia"
+    oczekiwano     : oblewa na — zgoda cudzego uruchomienia zostala rozstrzygnieta
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: zgoda cudzego uruchomienia zostala rozstrzygnieta: expected true to be false // Object.is equality
+    drzewo po przywroceniu: czyste
+P4 [L7.10] packages/platform-server/src/agent/runtime.ts
+    wycofana linia : if (abort.signal.aborted) {
+    test           : tests/orchestration.test.ts -t "polecenie zatrzymane w kolejce nie rusza wcale"
+    oczekiwano     : oblewa na — anulowane w kolejce mimo to oznaczylo start wykonania / RUN_STARTED
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: anulowane w kolejce mimo to oznaczylo start wykonania: expected '2026-09-18T16:33:39.605Z' to be '2026-09-18T16:33:39.399Z' // Object.is equality
+    drzewo po przywroceniu: czyste
+P5 [L9.2] packages/module-procurement/src/server/index.ts
+    wycofana linia : const input = parseOrThrow(criteriaWeightsInput, {
+    test           : tests/domain-guarantees.test.ts -t "waga kryterium poza 0-100"
+    oczekiwano     : oblewa na — endpoint przyjal: waga kryterium poza 0-100
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: endpoint przyjal: waga kryterium poza 0-100: expected null to be 'validation_failed' // Object.is equality
+    drzewo po przywroceniu: czyste
+P6 [L9.3] packages/platform-contracts/src/errors.ts
+    wycofana linia : if (zod) {
+    test           : tests/domain-guarantees.test.ts -t "przestrzen canvas bez tytulu"
+    oczekiwano     : oblewa na — status 500 / kod internal
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: /api/canvas/spaces → 500: expected 500 not to be 500 // Object.is equality
+    drzewo po przywroceniu: czyste
+P7 [L9.5] packages/platform-server/src/http/app.ts
+    wycofana linia : ownerId: c.get('ownerId'),
+    test           : tests/domain-guarantees.test.ts -t "ownerId w ciele zadania jest ignorowany"
+    oczekiwano     : oblewa na — zapis wykonany jako podstawiony wlasciciel
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: expected 403 to be 200 // Object.is equality
+    drzewo po przywroceniu: czyste
+P8 [L9.6] packages/module-procurement/src/server/services.ts
+    wycofana linia : const expected = input.expectedVersion;
+    test           : tests/domain-guarantees.test.ts -t "zapis pozycji bez wersji jest odrzucany takze w serwisie"
+    oczekiwano     : oblewa na — brak odmowy validation_failed
+    wynik          : PRZESZEDL — TEST NIE WYKRYWA
+    asercja        : (brak)
+    drzewo po przywroceniu: czyste
+P9 [L9.7] packages/module-procurement/src/server/services.ts
+    wycofana linia : input.operationId,
+    test           : tests/domain-guarantees.test.ts -t "osiem jednoczesnych zapisow zestawienia"
+    oczekiwano     : oblewa na — liczba artefaktow > before + 1
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: expected 8 to be 1 // Object.is equality
+    drzewo po przywroceniu: czyste
+P10 [L9.14] packages/platform-server/src/services/idempotency.ts
+    wycofana linia : if (this.#reserve(operationId, ownerId, scope, fingerprint)) {
+    test           : tests/domain-guarantees.test.ts -t "osiem jednoczesnych ponowien zmiany pozycji"
+    oczekiwano     : oblewa na — ponowienia zdublowaly skutek
+    wynik          : OBLAL (poprawnie)
+    asercja        : 233|             expectedVersion: expected,
+    drzewo po przywroceniu: czyste
+P11 [L9.14] packages/platform-server/src/services/idempotency.ts
+    wycofana linia : if (fingerprint !== null && row.fingerprint !== null && row.fingerprint !== fingerprint) {
+    test           : tests/domain-guarantees.test.ts -t "ten sam klucz z inna trescia"
+    oczekiwano     : oblewa na — brak conflict operation_id_reused
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: promise resolved "{ item: { …(10) }, changed: true, …(1) }" instead of rejecting
+    drzewo po przywroceniu: czyste
+P12 [L9.8] packages/module-procurement/src/server/services.ts
+    wycofana linia : this.repo.transaction(() => {
+    test           : tests/domain-guarantees.test.ts -t "awaria w polowie ustawiania wag"
+    oczekiwano     : oblewa na — czesc wag zostala zmieniona mimo przerwanej operacji
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: czesc wag zostala zmieniona mimo przerwanej operacji: expected [ [ 'delivery_days', 6 ], …(2) ] to deeply equal [ [ 'delivery_days', 25 ], …(2) ]
+    drzewo po przywroceniu: czyste
+P13 [L9.15] packages/platform-server/src/agent/tools/artifacts.ts
+    wycofana linia : try {
+    test           : tests/domain-guarantees.test.ts -t "nieudane utworzenie artefaktu z pliku"
+    oczekiwano     : oblewa na — plik zostal na liscie mimo nieudanej publikacji
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: plik zostal na liscie mimo nieudanej publikacji: expected 6 to be 5 // Object.is equality
+    drzewo po przywroceniu: czyste
+
+Wynik zbiorczy: UWAGA — co najmniej jedna proba nie wykryla
