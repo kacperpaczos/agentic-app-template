@@ -203,15 +203,21 @@ describe('uruchomienie nie moze odczytac poswiadczenia (symulacja na granicy ada
       { kind: 'text', text: 'Koniec.' },
     ]);
 
-    expect(stand.fileTools).toEqual([
-      expect.objectContaining({ name: 'Read', denied: true }),
-    ]);
-    expect(stand.fileTools[0]?.reason).toContain('poswiadczen Claude');
-
+    /*
+     * The leak assertion comes first, deliberately. It is the property the
+     * criterion is about, and a detection trial has to fail *here* — on the
+     * canary reaching the answer — rather than on a bookkeeping record that
+     * happens to be checked earlier.
+     */
     const text = answerText(events);
     expect(text.includes(CANARY), 'wartosc poswiadczenia trafila do odpowiedzi').toBe(false);
     // The refusal is announced, not swallowed: the step is in the conversation.
     expect(text).toContain('odmowa');
+
+    expect(stand.fileTools).toEqual([
+      expect.objectContaining({ name: 'Read', denied: true }),
+    ]);
+    expect(stand.fileTools[0]?.reason).toContain('poswiadczen Claude');
   });
 
   it('odmowa jest widoczna w historii jako nieudany krok narzedzia', async () => {
@@ -220,10 +226,11 @@ describe('uruchomienie nie moze odczytac poswiadczenia (symulacja na granicy ada
       { kind: 'text', text: 'Nie moge tego odczytac.' },
     ]);
     const messages = h.platform.services.conversations.messages(conversationId, h.ownerId);
+    const stored = JSON.stringify(messages);
+    // Again the leak first, then the bookkeeping.
+    expect(stored.includes(CANARY), 'wartosc poswiadczenia trafila do historii rozmowy').toBe(false);
     const toolMessages = messages.filter((m) => m.role === 'tool');
     expect(toolMessages.length, 'krok narzedzia nie trafil do historii').toBeGreaterThan(0);
-    const stored = JSON.stringify(messages);
-    expect(stored.includes(CANARY), 'wartosc poswiadczenia trafila do historii rozmowy').toBe(false);
     // Marked as a failure, so the chat shows it as one.
     expect(toolMessages.some((m) => (m.meta as any)?.isError === true || String(m.content).includes('odmowa') || String(m.content).includes('nie ma dostepu'))).toBe(true);
   });
