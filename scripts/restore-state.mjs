@@ -38,25 +38,23 @@
  * `lib/state-tools.mjs`.
  */
 import { execFileSync } from 'node:child_process';
-import {
-  copyFileSync,
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-} from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verify } from './backup-state.mjs';
 import {
   REPO,
-  assertLooksLikeDataDir,
+  approveOwnTemp,
+  approveRestoreTarget,
+  approveTarget,
   assertNobodyHoldsIt,
   census,
+  kopiujDrzewo,
+  kopiujPlik,
+  przenies,
+  usun,
+  utworzKatalog,
   makeArgs,
   realResolve,
   refuse,
@@ -118,7 +116,7 @@ export const FLAGS = {
  * keeps the platform/domain boundary intact.
  */
 function knownMigrations() {
-  const probe = mkdtempSync(resolve(tmpdir(), 'agentic-migration-probe-'));
+  const probe = approveOwnTemp(mkdtempSync(resolve(tmpdir(), 'agentic-migration-probe-')));
   try {
     const script = `
       import { composeApp } from ${JSON.stringify(resolve(REPO, 'apps/server/src/compose.ts'))};
@@ -136,7 +134,7 @@ function knownMigrations() {
     if (!line) throw new Error(`nie udalo sie odczytac listy migracji tego builda:\n${out}`);
     return JSON.parse(line.slice('MIGRATIONS '.length));
   } finally {
-    rmSync(probe, { recursive: true, force: true });
+    usun(probe, { recursive: true, force: true });
   }
 }
 
@@ -245,25 +243,32 @@ function main() {
    * point is read-only, and `--check` must be able to answer questions about a
    * backup without an opinion about where it might one day be restored.
    */
-  assertLooksLikeDataDir(dataDir, { what: 'Katalog docelowy' });
+  /*
+   * The restore target is the one directory these scripts may write into on
+   * purpose, so it is approved through its own door — the check that a
+   * non-empty target looks like a data directory — and everything below then
+   * goes through the same guarded operations as everywhere else.
+   */
+  approveRestoreTarget(dataDir, { what: 'Katalog docelowy' });
   assertNobodyHoldsIt(dataDir, { label: 'odtworzenie' });
 
   let setAside = null;
   if (existsSync(dataDir)) {
     setAside = `${dataDir}.przed-odtworzeniem-${new Date().toISOString().replace(/[:.]/g, '-')}`;
-    renameSync(dataDir, setAside);
+    approveTarget(setAside, { what: 'Katalog na stan sprzed proby' });
+    przenies(dataDir, setAside);
     console.log(`[odtworzenie] stan sprzed proby odlozony: ${setAside} (nic nie zostalo usuniete)`);
   }
-  mkdirSync(dataDir, { recursive: true });
+  utworzKatalog(dataDir, { recursive: true });
 
-  copyFileSync(resolve(backupDir, 'app.db'), resolve(dataDir, 'app.db'));
+  kopiujPlik(resolve(backupDir, 'app.db'), resolve(dataDir, 'app.db'));
   for (const tree of ['files', 'workspaces']) {
     if (existsSync(resolve(backupDir, tree))) {
-      cpSync(resolve(backupDir, tree), resolve(dataDir, tree), { recursive: true });
+      kopiujDrzewo(resolve(backupDir, tree), resolve(dataDir, tree), { recursive: true });
     }
   }
   if (setAside && existsSync(resolve(setAside, 'session.secret'))) {
-    copyFileSync(resolve(setAside, 'session.secret'), resolve(dataDir, 'session.secret'));
+    kopiujPlik(resolve(setAside, 'session.secret'), resolve(dataDir, 'session.secret'));
     console.log('[odtworzenie] przeniesiono session.secret — otwarte sesje przegladarki pozostaja wazne');
   } else {
     console.log('[odtworzenie] brak session.secret do przeniesienia — zostanie wygenerowany, trzeba zalogowac sie ponownie');

@@ -62,7 +62,16 @@ interface FlagDecl {
 function stateScripts(): string[] {
   return readdirSync(SCRIPTS_DIR)
     .filter((f) => f.endsWith('.mjs'))
-    .filter((f) => readFileSync(resolve(SCRIPTS_DIR, f), 'utf8').includes("from './lib/state-tools.mjs'"))
+    /*
+     * Any mention of the module, not one spelling of one import statement. The
+     * first version matched `from './lib/state-tools.mjs'` with single quotes,
+     * and a reviewer added a script importing it with double quotes: invisible
+     * to the test, and therefore outside every check in this file. Matching the
+     * module name covers single quotes, double quotes, backticks and a dynamic
+     * import with a literal path. A module path assembled at runtime would
+     * still escape — see the scope note at the top.
+     */
+    .filter((f) => /state-tools/.test(readFileSync(resolve(SCRIPTS_DIR, f), 'utf8')))
     .sort();
 }
 
@@ -91,8 +100,21 @@ function odcisk(dir: string): Record<string, string> {
     }
   };
   walk(dir);
-  // Rebuilt by SQLite on any connection, read-only included; holds no data.
+  /*
+   * SQLite's side files are left out, and it is worth being exact about what
+   * that costs. Any connection — read-only included — can create `app.db-shm`
+   * and an empty `app.db-wal`, so a script that merely *reads* a database makes
+   * them appear; comparing them would flag reading as a modification.
+   *
+   * What the comparison still covers: every other file, including `app.db`
+   * itself, and the *disappearance* of a log. `delete` removes the key whether
+   * or not it was there, so a `-wal` that existed before and is gone afterwards
+   * does not show up here — that case is covered instead by `tidy` refusing to
+   * remove a log outside a directory this run approved, and by the backup tests
+   * that read the WAL-only row back.
+   */
   delete out['app.db-shm'];
+  delete out['app.db-wal'];
   return out;
 }
 
@@ -153,14 +175,20 @@ const PRZEPISY: Record<string, (cel: string) => string[]> = {
   'migration-rehearsal.mjs:out': (cel) => ['--backup', kopia, '--out', cel],
   'migration-rehearsal.mjs:json': (cel) => ['--backup', kopia, '--out', swiezy('proba'), '--json', join(cel, 'raport.json')],
   'restore-state.mjs:backup': (cel) => ['--backup', cel, '--data', swiezy('cel'), '--check'],
-  'restore-state.mjs:check': (cel) => ['--backup', kopia, '--data', cel, '--check'],
   'restore-state.mjs:data': (cel) => ['--backup', kopia, '--data', cel],
   'synthetic-state.mjs:out': (cel) => ['--out', cel, '--stage', 'empty'],
   'synthetic-state.mjs:stage': (cel) => ['--stage', cel, '--out', swiezy('sy')],
-  'synthetic-state.mjs:list': () => ['--list'],
-  // A switch takes no path, so the recipe must not hand it one: `--out` goes
-  // somewhere harmless and the target is only there to be left alone.
-  'synthetic-state.mjs:leave-wal': () => ['--leave-wal', '--out', swiezy('sy-wal'), '--stage', 'current'],
+  /*
+   * Switches get the target handed to them too, deliberately. A flag that takes
+   * no value must *ignore* what follows it; one that secretly treats it as a
+   * path is precisely the escape this rule closes, and the invariant below then
+   * catches it.
+   */
+  'restore-state.mjs:check': (cel) => ['--check', cel, '--backup', kopia, '--data', swiezy('cel')],
+  'synthetic-state.mjs:list': (cel) => ['--list', cel],
+  'synthetic-state.mjs:leave-wal': (cel) => [
+    '--leave-wal', cel, '--out', swiezy('sy-wal'), '--stage', 'current',
+  ],
 };
 
 /** Reading flags need a target they can actually process (see `kopiaZSekretem`). */
@@ -210,11 +238,27 @@ describe('kazda flaga skryptow stanu ma rozstrzygniecie sprawdzone zachowaniem',
         `${script} --${flag}: nieznany rodzaj ${decl.kind}`,
       ).toContain(decl.kind);
       expect(decl.why.length, `${script} --${flag}: brak uzasadnienia`).toBeGreaterThan(40);
+      const przepis = PRZEPISY[`${script}:${flag}`];
       expect(
-        PRZEPISY[`${script}:${flag}`],
+        przepis,
         `${script} --${flag}: brak przepisu na wywolanie — dopisz go i rozstrzygnij, ` +
           'jak ta flaga ma sie zachowac wobec katalogu danych',
       ).toBeDefined();
+
+      /*
+       * The recipe has to actually exercise the flag, with the target right
+       * behind it. Without this the whole file could be satisfied by a recipe
+       * that omits the flag under test: a reviewer declared a deleting flag as
+       * `przelacznik`, wrote a recipe that never passed it, and everything
+       * stayed green while `--raport <ofiara>` destroyed a directory.
+       */
+      const argv = przepis!('/CEL');
+      const i = argv.indexOf(`--${flag}`);
+      expect(i, `${script} --${flag}: przepis nie podaje tej flagi`).toBeGreaterThanOrEqual(0);
+      expect(
+        argv[i + 1],
+        `${script} --${flag}: po fladze musi stac katalog-cel, zeby bylo co sprawdzac`,
+      ).toContain('/CEL');
     }
   });
 
@@ -241,9 +285,13 @@ describe('kazda flaga skryptow stanu ma rozstrzygniecie sprawdzone zachowaniem',
         const obcy = swiezy('obcy-cel');
         mkdirSync(obcy, { recursive: true });
         writeFileSync(resolve(obcy, 'notatki.md'), 'tresc\n');
+        const przedObcym = odcisk(obcy);
         const odmowa = run(script, przepis(obcy));
         expect(odmowa.status, `${opis} przyjelo katalog, ktory nie jest katalogiem danych: ${odmowa.out}`).toBe(2);
         expect(odmowa.out).toMatch(/nie wyglada na katalog danych aplikacji/);
+        // Fingerprinted like every other branch — the claim that every run is
+        // measured has to be true of this one too.
+        expect(odcisk(obcy), `${opis} zmienilo katalog, ktory odrzucilo`).toEqual(przedObcym);
         expect(readFileSync(resolve(obcy, 'notatki.md'), 'utf8')).toBe('tresc\n');
         continue;
       }
@@ -291,6 +339,85 @@ describe('kazda flaga skryptow stanu ma rozstrzygniecie sprawdzone zachowaniem',
     expect(odtworzenie.status, odtworzenie.out).toBe(0);
     expect(odtworzenie.out).toMatch(/migracje w kopii/);
   }, 180_000);
+
+  /* ------------------------------------------------------------------ */
+  /* The chokepoint: the check sits at the operation, not at the argument */
+  /* ------------------------------------------------------------------ */
+
+  it.each(SCRIPTS)('%s: nie wola sam operacji kasujacych, przenoszacych i nadpisujacych', (script) => {
+    /*
+     * Five rounds of guarding the *argument* were walked around five times: by
+     * a double-quoted literal, by a kind exempt from the checks, by a
+     * positional argument the parser skipped. The shapes an argument can take
+     * are unbounded.
+     *
+     * So the check moved to the operation. `rmSync`, `renameSync`,
+     * `writeFileSync`, `copyFileSync`, `cpSync` and `mkdirSync` are called in
+     * exactly one module — `lib/state-tools.mjs` — where each one verifies, at
+     * the moment of the call, that the path lies inside a directory this run
+     * approved. How the path arrived stops mattering: flag, positional,
+     * environment variable, configuration file, constant.
+     *
+     * This test keeps it that way. It is a source check, and therefore about
+     * omission rather than adversaries: `await import('node:fs')` inside a
+     * function would slip past it. It is here because the next person adding a
+     * script will reach for `rmSync` out of habit, not to defeat anything.
+     */
+    const zakazane = ['rmSync', 'renameSync', 'writeFileSync', 'copyFileSync', 'cpSync', 'mkdirSync'];
+    const zrodlo = readFileSync(resolve(SCRIPTS_DIR, script), 'utf8');
+    const linie = zrodlo.split('\n');
+
+    for (const fn of zakazane) {
+      const trafienia = linie
+        .map((line, i) => ({ line, nr: i + 1 }))
+        .filter(({ line }) => new RegExp(`(^|[^.\\w])${fn}\\s*\\(`).test(line))
+        .filter(({ line }) => !/^\s*\*/.test(line) && !/^\s*\/\//.test(line));
+
+      expect(
+        trafienia.map((t) => `${script}:${t.nr}`),
+        `${script} wola ${fn} bezposrednio — ma przejsc przez guarded operacje z lib/state-tools.mjs ` +
+          `(usun, przenies, zapisz, kopiujPlik, kopiujDrzewo, utworzKatalog)`,
+      ).toEqual([]);
+    }
+  });
+
+  it('operacja kasujaca poza zatwierdzonym katalogiem jest odrzucana w chwili wykonania', async () => {
+    /*
+     * The chokepoint itself, exercised directly rather than through a script:
+     * a path that no step approved is refused **at the call**, which is what
+     * makes the route it arrived by irrelevant.
+     */
+    const lib = await import(resolve(SCRIPTS_DIR, 'lib/state-tools.mjs'));
+    const ofiara = swiezy('ofiara-bez-zatwierdzenia');
+    mkdirSync(ofiara, { recursive: true });
+    writeFileSync(resolve(ofiara, 'plik.txt'), 'tresc\n');
+
+    expect(() => lib.usun(ofiara, { recursive: true, force: true })).toThrow(/poza katalogami zatwierdzonymi/);
+    expect(() => lib.zapisz(resolve(ofiara, 'plik.txt'), 'nadpisane')).toThrow(/poza katalogami zatwierdzonymi/);
+    expect(() => lib.przenies(ofiara, `${ofiara}-gdzie-indziej`)).toThrow(/poza katalogami zatwierdzonymi/);
+    expect(readFileSync(resolve(ofiara, 'plik.txt'), 'utf8')).toBe('tresc\n');
+
+    // ...and the same call works once the directory has been approved.
+    lib.approveTarget(ofiara, { what: 'Katalog testowy' });
+    expect(() => lib.zapisz(resolve(ofiara, 'plik.txt'), 'nadpisane')).not.toThrow();
+    expect(readFileSync(resolve(ofiara, 'plik.txt'), 'utf8')).toBe('nadpisane');
+  }, 60_000);
+
+  it('argument pozycyjny jest odrzucany, a nie ignorowany', () => {
+    /*
+     * The third escape: `backup-state.mjs <ofiara> --data X --out Y` used to
+     * sail past a parser that inspected only `--tokens`. These scripts take no
+     * positional arguments, so one on the command line is a mistake — and the
+     * one thing never to do with an unexpected path is to ignore it.
+     */
+    for (const script of SCRIPTS) {
+      const przed = odcisk(zyweDane);
+      const r = run(script, [zyweDane, '--out', swiezy('poz'), '--stage', 'empty']);
+      expect(r.status, `${script} przyjelo argument pozycyjny: ${r.out}`).toBe(2);
+      expect(r.out).toMatch(/argument pozycyjny/);
+      expect(odcisk(zyweDane), `${script} zmienilo katalog podany pozycyjnie`).toEqual(przed);
+    }
+  }, 120_000);
 
   it('backup-state --data faktycznie kopiuje zywy katalog danych', () => {
     /*

@@ -27,23 +27,19 @@
  * database: a byte copy of a database being written to can be torn, and the
  * check is what makes the copy trustworthy rather than merely likely.
  */
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { basename, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   Database,
   SCRATCH_MARKER,
+  approveTarget,
   assertAwayFromLiveData,
   assertNobodyHoldsIt,
   assertOwnOrEmptyDir,
+  kopiujPlik,
+  utworzKatalog,
+  zapisz,
   census as censusOf,
   isWithin,
   makeArgs,
@@ -190,7 +186,13 @@ export function backup({ dataDir, outDir }) {
   assertSafeOutDir(dataDir, outDir);
   assertNobodyHoldsIt(dataDir, { label: 'backup' });
 
-  mkdirSync(outDir, { recursive: true });
+  /*
+   * From here on every write goes through the guarded operations, and they only
+   * work inside a directory this run approved. `--out` is that directory; the
+   * source is read and never written.
+   */
+  approveTarget(outDir, { what: 'Katalog kopii' });
+  utworzKatalog(outDir, { recursive: true });
 
   /* ---- 1. the database, as bytes, all parts together ---- */
   const parts = [];
@@ -198,7 +200,7 @@ export function backup({ dataDir, outDir }) {
     const src = resolve(dataDir, part);
     if (!existsSync(src)) continue;
     const dst = resolve(outDir, part);
-    copyFileSync(src, dst);
+    kopiujPlik(src, dst);
     parts.push({ part, bytes: statSync(src).size, sha256: sha256(src) });
   }
   if (!parts.some((p) => p.part === 'app.db-wal')) {
@@ -228,8 +230,8 @@ export function backup({ dataDir, outDir }) {
     trees[tree] = files;
     for (const f of files) {
       const dst = resolve(outDir, tree, f.path);
-      mkdirSync(resolve(dst, '..'), { recursive: true });
-      copyFileSync(resolve(src, f.path), dst);
+      utworzKatalog(resolve(dst, '..'), { recursive: true });
+      kopiujPlik(resolve(src, f.path), dst);
     }
   }
 
@@ -253,7 +255,7 @@ export function backup({ dataDir, outDir }) {
     census: census(resolve(outDir, 'app.db')),
     trees,
   };
-  writeFileSync(resolve(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+  zapisz(resolve(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
   return manifest;
 }
 

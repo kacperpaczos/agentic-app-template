@@ -20,11 +20,14 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
+  copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
   readdirSync,
   realpathSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -142,6 +145,29 @@ export function makeArgs(argv, declared) {
       throw new Error(`flaga --${name}: nieznany rodzaj ${decl?.kind}`);
     }
   }
+
+  /*
+   * Positional arguments are refused rather than skipped.
+   *
+   * They used to be skipped, and that was a way in: `backup-state.mjs <ofiara>
+   * --data X --out Y` sailed past a parser that only inspected `--tokens`. These
+   * scripts take no positional arguments at all, so one on the command line is a
+   * mistake in the invocation — and the one thing never to do with a path
+   * nobody expected is to ignore it.
+   */
+  const wartosciFlag = new Set();
+  args.forEach((token, i) => {
+    if (!token.startsWith('--')) return;
+    const next = args[i + 1];
+    if (next !== undefined && !next.startsWith('--')) wartosciFlag.add(i + 1);
+  });
+  args.forEach((token, i) => {
+    if (token.startsWith('--') || wartosciFlag.has(i)) return;
+    refuse(
+      `argument pozycyjny „${token}" — te skrypty przyjmuja wylacznie flagi.\n` +
+        'Jesli mial to byc katalog, podaj go przy wlasciwej fladze.',
+    );
+  });
 
   for (const token of args) {
     if (!token.startsWith('--')) continue;
@@ -328,7 +354,15 @@ export function dataDirBelow(path, depth = 3) {
  * checked: a target inside the data directory deletes part of the user's state,
  * a target containing it deletes all of it.
  */
-export function assertAwayFromLiveData(path, { what = 'Katalog', repo = REPO } = {}) {
+/**
+ * @param sprawdzPonizej also refuse a path that *contains* a data directory.
+ *   True for anything that deletes or fills a directory — that is the case
+ *   where the data below it goes too. False for writing a single file: a report
+ *   dropped into a directory that happens to have a data directory two levels
+ *   below harms nothing, and refusing it would make `--json ~/raport.json`
+ *   fail on most home directories.
+ */
+export function assertAwayFromLiveData(path, { what = 'Katalog', repo = REPO, sprawdzPonizej = true } = {}) {
   const target = realResolve(path);
 
   for (const live of liveDataDirs(repo)) {
@@ -348,7 +382,7 @@ export function assertAwayFromLiveData(path, { what = 'Katalog', repo = REPO } =
     );
   }
 
-  const below = dataDirBelow(target);
+  const below = sprawdzPonizej ? dataDirBelow(target) : null;
   if (below) {
     refuse(
       `${what} ${target} zawiera katalog danych aplikacji ${below} ` +
@@ -413,7 +447,7 @@ const markerText = (dir) =>
  * with contents must carry the marker.
  */
 export function prepareScratchDir(path, { what = 'Katalog roboczy', repo = REPO } = {}) {
-  const target = assertAwayFromLiveData(path, { what, repo });
+  const target = approveTarget(path, { what, repo });
 
   if (existsSync(target)) {
     if (!statSync(target).isDirectory()) {
@@ -430,17 +464,21 @@ export function prepareScratchDir(path, { what = 'Katalog roboczy', repo = REPO 
      * path written inside it.
      */
     if (entries.length > 0 && !isOurs(target)) {
+      const znacznik = join(target, SCRATCH_MARKER);
       refuse(
-        `${what} ${target} istnieje, nie jest pusty i nie zostal utworzony przez te skrypty ` +
-          `(brak znacznika ${SCRATCH_MARKER}).\n` +
-          'Nie kasuje cudzego katalogu. Wskaz katalog nieistniejacy albo pusty.',
+        `${what} ${target} istnieje, nie jest pusty i nie zostal utworzony przez te skrypty.\n` +
+          (existsSync(znacznik)
+            ? `Znacznik ${SCRATCH_MARKER} jest na miejscu, ale zapisano w nim inna sciezke ` +
+              '(katalog zostal skopiowany albo przeniesiony), wiec nic nie mowi o TYM katalogu.'
+            : `Brak znacznika ${SCRATCH_MARKER}.`) +
+          '\nNie kasuje cudzego katalogu. Wskaz katalog nieistniejacy albo pusty.',
       );
     }
-    rmSync(target, { recursive: true, force: true });
+    usun(target, { recursive: true, force: true });
   }
 
-  mkdirSync(target, { recursive: true });
-  writeFileSync(join(target, SCRATCH_MARKER), markerText(target));
+  utworzKatalog(target, { recursive: true });
+  zapisz(join(target, SCRATCH_MARKER), markerText(target));
   return target;
 }
 
@@ -458,8 +496,14 @@ export function assertLooksLikeDataDir(path, { what = 'Katalog docelowy' } = {})
   if (!statSync(target).isDirectory()) refuse(`${what} ${target} istnieje i nie jest katalogiem.`);
   if (readdirSync(target).length === 0) return target;
 
-  const marks = ['app.db', 'session.secret', 'files', 'workspaces', SCRATCH_MARKER];
-  if (!marks.some((m) => existsSync(join(target, m)))) {
+  /*
+   * The third place that reads the marker, and the third that had to learn the
+   * same rule: a marker counts only for the path recorded inside it. Here it is
+   * one of several signs that a directory is a data directory, but a copied
+   * marker is no sign of anything at all.
+   */
+  const marks = ['app.db', 'session.secret', 'files', 'workspaces'];
+  if (!marks.some((m) => existsSync(join(target, m))) && !isOurs(target)) {
     refuse(
       `${what} ${target} istnieje, nie jest pusty i nie wyglada na katalog danych aplikacji ` +
         `(nie ma zadnego z: ${marks.join(', ')}).\n` +
@@ -468,6 +512,93 @@ export function assertLooksLikeDataDir(path, { what = 'Katalog docelowy' } = {})
   }
   return target;
 }
+
+/* ------------------------- the destructive operations ---------------------- */
+
+/**
+ * Directories this process has approved, and the only places under which these
+ * scripts are allowed to delete, move, overwrite or create anything.
+ *
+ * **Why the check moved here.** For five rounds the guard stood next to the
+ * *argument*: first comparing `--out` with `--data`, then comparing paths for
+ * equality, then scanning the source for `flag('...')`, then validating the
+ * command line against a declaration. Every round a reviewer found another way
+ * to reach the operation from the side — a double-quoted literal, a flag
+ * declared under an exempt kind, a **positional** argument that the parser
+ * skipped. The shapes an argument can take are unbounded, so a guard on the
+ * argument can always be walked around.
+ *
+ * The operation is not unbounded. `rmSync` deletes whatever path it is given,
+ * whether that path arrived as a flag, positionally, from the environment, from
+ * a configuration file or from a constant — and if the check happens *at the
+ * call*, none of those routes matter. That is the whole idea: a path is not
+ * trusted because of how it was read, but because some earlier step looked at
+ * it and said so.
+ */
+const zatwierdzone = new Set();
+
+/**
+ * Approves a directory these scripts may work inside — after checking it is not
+ * application data.
+ */
+export function approveTarget(path, { what = 'Katalog', repo = REPO, sprawdzPonizej = true } = {}) {
+  const target = assertAwayFromLiveData(path, { what, repo, sprawdzPonizej });
+  zatwierdzone.add(target);
+  return target;
+}
+
+/**
+ * Approves the target of a **restore**, which is a data directory on purpose.
+ *
+ * The one case where writing into application data is the point, so it gets the
+ * opposite check — a non-empty target has to look like a data directory — and
+ * then the same approval as everything else.
+ */
+export function approveRestoreTarget(path, { what = 'Katalog docelowy' } = {}) {
+  const target = assertLooksLikeDataDir(path, { what });
+  zatwierdzone.add(target);
+  return target;
+}
+
+/** For directories these scripts create themselves and immediately own. */
+export function approveOwnTemp(path) {
+  const target = realResolve(path);
+  zatwierdzone.add(target);
+  return target;
+}
+
+/** Is this path inside something approved in this run? */
+function jestZatwierdzona(path) {
+  const target = realResolve(path);
+  for (const root of zatwierdzone) if (isWithin(target, root)) return true;
+  return false;
+}
+
+function assertApproved(path, operacja) {
+  if (jestZatwierdzona(path)) return realResolve(path);
+  const target = realResolve(path);
+  refuse(
+    `${operacja}: ${target} lezy poza katalogami zatwierdzonymi w tym przebiegu.\n` +
+      'Kazda operacja kasujaca, przenoszaca i nadpisujaca w tych skryptach przechodzi przez to ' +
+      'sprawdzenie w chwili wykonania — niezaleznie od tego, skad wziela sie sciezka.',
+  );
+}
+
+/* The guarded operations. Nothing in these scripts calls the raw ones. */
+export const usun = (path, options) => (assertApproved(path, 'usuniecie'), rmSync(path, options));
+export const utworzKatalog = (path, options) => (
+  assertApproved(path, 'utworzenie katalogu'), mkdirSync(path, options)
+);
+export const zapisz = (path, data) => (assertApproved(path, 'zapis'), writeFileSync(path, data));
+export const kopiujPlik = (from, to) => (assertApproved(to, 'kopiowanie do'), copyFileSync(from, to));
+export const kopiujDrzewo = (from, to, options) => (
+  assertApproved(to, 'kopiowanie drzewa do'), cpSync(from, to, options)
+);
+export const przenies = (from, to) => {
+  assertApproved(from, 'przeniesienie');
+  assertApproved(to, 'przeniesienie do');
+  renameSync(from, to);
+};
 
 /* --------------------------------- sqlite --------------------------------- */
 
@@ -615,7 +746,14 @@ export function assertNobodyHoldsIt(dataDir, { label } = { label: 'stan' }) {
 export function tidy(dir) {
   for (const stray of ['app.db-wal', 'app.db-shm']) {
     const path = resolve(dir, stray);
-    if (existsSync(path)) rmSync(path);
+    /*
+     * Only inside a directory this run approved. A write-ahead log holds
+     * committed transactions that are not yet in the main file, so deleting one
+     * somewhere unexpected is data loss — exactly the thing this module exists
+     * to prevent. Where the directory was not approved, the stray files are
+     * left alone: an extra file is a nuisance, a missing log is not.
+     */
+    if (existsSync(path) && jestZatwierdzona(path)) usun(path);
   }
 }
 

@@ -29,15 +29,21 @@
  * It never runs against `data/`. The `--backup` argument must name a directory
  * holding a backup manifest, and the rehearsal works on a copy of that.
  */
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import {
   REPO,
+  approveOwnTemp,
+  approveTarget,
   assertAwayFromLiveData,
   census,
+  kopiujDrzewo,
+  usun,
+  utworzKatalog,
+  zapisz,
   fingerprint,
   makeArgs,
   prepareScratchDir,
@@ -310,11 +316,11 @@ function main() {
    * guard that refuses to delete a directory these scripts did not create.
    */
   const work = prepareScratchDir(
-    flag('out') ? flag('out') : mkdtempSync(resolve(tmpdir(), 'agentic-rehearsal-')),
+    flag('out') ? flag('out') : approveOwnTemp(mkdtempSync(resolve(tmpdir(), 'agentic-rehearsal-'))),
     { what: 'Katalog proby' },
   );
-  cpSync(backupDir, work, { recursive: true });
-  rmSync(resolve(work, 'manifest.json'), { force: true });
+  kopiujDrzewo(backupDir, work, { recursive: true });
+  usun(resolve(work, 'manifest.json'), { force: true });
 
   const dbFile = resolve(work, 'app.db');
   const before = census(dbFile, { identity: true });
@@ -356,7 +362,7 @@ function main() {
    * look like a data directory to the very guards that protect data
    * directories. Removed as soon as the last boot is done.
    */
-  rmSync(resolve(work, 'session.secret'), { force: true });
+  usun(resolve(work, 'session.secret'), { force: true });
 
   /* --- and the copy this was rehearsed from is still exactly a copy --- */
   const backupAfter = fingerprint(backupDir);
@@ -393,8 +399,16 @@ function main() {
 
   const jsonOut = flag('json');
   if (jsonOut) {
-    mkdirSync(resolve(jsonOut, '..'), { recursive: true });
-    writeFileSync(resolve(jsonOut), JSON.stringify(report, null, 2));
+    /*
+     * The report's directory is approved on its own terms — it was already
+     * checked against live data with the other arguments, above. `sprawdzPonizej`
+     * is off here: writing one file into a directory that happens to contain a
+     * data directory somewhere below harms nothing, and refusing it would fail
+     * on most home directories.
+     */
+    approveTarget(resolve(jsonOut, '..'), { what: 'Katalog raportu', sprawdzPonizej: false });
+    utworzKatalog(resolve(jsonOut, '..'), { recursive: true });
+    zapisz(resolve(jsonOut), JSON.stringify(report, null, 2));
     console.log(`[proba] raport: ${resolve(jsonOut)}`);
   }
 

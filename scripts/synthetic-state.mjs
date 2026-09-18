@@ -29,17 +29,21 @@
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   Database,
   REPO,
+  approveOwnTemp,
   makeArgs,
   prepareScratchDir,
   refuse,
   runScript,
+  usun,
+  utworzKatalog,
+  zapisz,
 } from './lib/state-tools.mjs';
 
 
@@ -106,15 +110,13 @@ export const FLAGS = {
  * module so that swapping the business module needs no edit here.
  */
 function migrationLists() {
-  const probe = mkdtempSync(resolve(tmpdir(), 'agentic-lista-migracji-'));
+  const probe = approveOwnTemp(mkdtempSync(resolve(tmpdir(), 'agentic-lista-migracji-')));
   const script = `
-    import { rmSync } from 'node:fs';
     import { composeApp } from ${JSON.stringify(resolve(REPO, 'apps/server/src/compose.ts'))};
     import { PLATFORM_MIGRATIONS } from ${JSON.stringify(resolve(REPO, 'packages/platform-server/src/db/migrations.ts'))};
     const p = composeApp({ dataDir: ${JSON.stringify(probe)} });
     const moduleIds = p.registry.migrations().map((m) => m.id);
     p.close();
-    rmSync(${JSON.stringify(probe)}, { recursive: true, force: true });
     console.log('LISTS ' + JSON.stringify({ platform: PLATFORM_MIGRATIONS.map((m) => m.id), module: moduleIds }));
   `;
   try {
@@ -127,7 +129,7 @@ function migrationLists() {
     if (!line) throw new Error(`nie udalo sie odczytac listy migracji:\n${out}`);
     return JSON.parse(line.slice('LISTS '.length));
   } finally {
-    rmSync(probe, { recursive: true, force: true });
+    usun(probe, { recursive: true, force: true });
   }
 }
 
@@ -155,7 +157,7 @@ function applyUpTo(dbFile, stage, lists) {
   const platformPrefix = lists.platform.slice(0, cut);
   // Unique per call: a fixed path meant two concurrent runs (the regression
   // runs several) shared one directory and raced on deleting it.
-  const modulesProbe = mkdtempSync(resolve(tmpdir(), 'agentic-sonda-modulow-'));
+  const modulesProbe = approveOwnTemp(mkdtempSync(resolve(tmpdir(), 'agentic-sonda-modulow-')));
   const script = `
     import { createRequire } from 'node:module';
     import { PLATFORM_MIGRATIONS, runMigrations } from ${JSON.stringify(resolve(REPO, 'packages/platform-server/src/db/migrations.ts'))};
@@ -197,7 +199,7 @@ function applyUpTo(dbFile, stage, lists) {
       { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'] },
     ).toString();
   } finally {
-    rmSync(modulesProbe, { recursive: true, force: true });
+    usun(modulesProbe, { recursive: true, force: true });
   }
   const line = out.split('\n').find((l) => l.startsWith('APPLIED '));
   if (!line) throw new Error(`nie udalo sie zastosowac migracji:\n${out}`);
@@ -304,14 +306,14 @@ function populate(dataDir, applied) {
    * let that migration be "rehearsed" without the rehearsal ever meeting the
    * case it changes.
    */
-  mkdirSync(resolve(dataDir, 'files', 'local-user'), { recursive: true });
+  utworzKatalog(resolve(dataDir, 'files', 'local-user'), { recursive: true });
   const fileRows = [
     ['file_syn_1', 'oferta.csv', 'text/csv', 'dostawca;cena\nAlfa;1234\n'],
     ['file_syn_2', 'notatka.txt', 'text/plain', 'notatka syntetyczna\n'],
   ];
   for (const [id, filename, mediaType, content] of fileRows) {
     const rel = `local-user/${id}-${filename}`;
-    writeFileSync(resolve(dataDir, 'files', rel), content);
+    zapisz(resolve(dataDir, 'files', rel), content);
     run(
       `INSERT INTO files (id, owner_id, filename, media_type, byte_size, sha256, rel_path, scope_kind, scope_id, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -411,7 +413,7 @@ function main() {
    * `--out <dane>/files` passed both and deleted the user's files.
    */
   const outDir = prepareScratchDir(flag('out'), { what: 'Katalog danych syntetycznych' });
-  mkdirSync(resolve(outDir, 'workspaces'), { recursive: true });
+  utworzKatalog(resolve(outDir, 'workspaces'), { recursive: true });
   const applied = applyUpTo(resolve(outDir, 'app.db'), stage, lists);
   const result = populate(outDir, applied);
 
