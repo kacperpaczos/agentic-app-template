@@ -403,8 +403,15 @@ describe('L7.9 — rownolegle rozmowy nie mieszaja sie', () => {
     expect((await crossed.json()).answered, 'zgoda cudzego uruchomienia zostala rozstrzygnieta').toBe(
       false,
     );
-    // A is still waiting: nothing was decided for it.
-    expect(runA.run().status).toBe('running');
+    /*
+     * A is still waiting: nothing was decided for it.
+     *
+     * The status says which kind of waiting since BL-09 added `awaiting_consent`
+     * — a run parked on a question is reported as such, so a client that is not
+     * watching this conversation can see that something needs it (L11.19). The
+     * claim of this assertion is unchanged: A has not been decided.
+     */
+    expect(runA.run().status).toBe('awaiting_consent');
     expect(runA.handle.consents).toHaveLength(0);
 
     // Answered at its own address, it resolves — and only it.

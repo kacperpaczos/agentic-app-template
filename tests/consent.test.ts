@@ -220,7 +220,7 @@ describe('bramka zgody', () => {
         kind: 'ask',
         toolName: 'Bash',
         input: { command: 'node przetworz.mjs' },
-        then: [{ kind: 'call', name: 'artifact_create', input: { title: 'Nie powinno powstac', kind: 'report', rendererType: 'platform.markdown', content: { text: 'x' } } }],
+        then: [{ kind: 'call', name: 'artifact_create', input: { title: 'Nie powinno powstac', kind: 'report', rendererType: 'platform.markdown', content: { text: 'x' }, operationId: 'zgoda-odmowa-1' } }],
       },
       { kind: 'text', text: 'koniec' },
     ]);
@@ -256,7 +256,7 @@ describe('bramka zgody', () => {
         kind: 'ask',
         toolName: 'Bash',
         input: { command: 'node przetworz.mjs' },
-        then: [{ kind: 'call', name: 'artifact_create', input: { title: 'Wynik', kind: 'report', rendererType: 'platform.markdown', content: { text: 'ok' } } }],
+        then: [{ kind: 'call', name: 'artifact_create', input: { title: 'Wynik', kind: 'report', rendererType: 'platform.markdown', content: { text: 'ok' }, operationId: 'zgoda-raz-1' } }],
       },
       { kind: 'text', text: 'koniec' },
     ]);
@@ -325,7 +325,7 @@ describe('bramka zgody', () => {
         kind: 'ask',
         toolName: 'Bash',
         input: { command: 'node przetworz.mjs' },
-        then: [{ kind: 'call', name: 'artifact_create', input: { title: 'Nie powinno powstac', kind: 'report', rendererType: 'platform.markdown', content: { text: 'x' } } }],
+        then: [{ kind: 'call', name: 'artifact_create', input: { title: 'Nie powinno powstac', kind: 'report', rendererType: 'platform.markdown', content: { text: 'x' }, operationId: 'zgoda-odmowa-1' } }],
       },
       { kind: 'text', text: 'koniec' },
     ]);

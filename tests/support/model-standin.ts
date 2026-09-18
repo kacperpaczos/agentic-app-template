@@ -46,6 +46,7 @@ export type Step =
    * separately.
    */
   | { kind: 'ask'; toolName: string; input?: Record<string, unknown>; then?: Step[] }
+  /**
    * A tool the run is not allowed to use unattended, asked for the way the SDK
    * asks: through the `canUseTool` callback in `sdkOptions`.
    *

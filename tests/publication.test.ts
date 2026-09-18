@@ -142,7 +142,7 @@ describe('wynik przezywa sprzatniecie workspace', () => {
       {
         kind: 'call',
         name: 'artifact_publish_file',
-        input: { path: 'raport.csv', title: 'Raport z sandboxa' },
+        input: { path: 'raport.csv', title: 'Raport z sandboxa', operationId: 'publikacja-raportu' },
       },
       { kind: 'text', text: 'Opublikowalem raport.' },
     ]);
@@ -178,7 +178,7 @@ describe('wynik przezywa sprzatniecie workspace', () => {
     const conv = conversation();
     const started = await startRun(conv, [
       { kind: 'writeOutput', path: 'tajne.txt', content: 'tresc wlasciciela' },
-      { kind: 'call', name: 'artifact_publish_file', input: { path: 'tajne.txt', title: 'Wynik' } },
+      { kind: 'call', name: 'artifact_publish_file', input: { path: 'tajne.txt', title: 'Wynik', operationId: 'publikacja-tajne' } },
     ]);
     await started.done;
 
@@ -363,7 +363,7 @@ describe('publikacja jest niepodzielna', () => {
     const conv = conversation();
     const started = await startRun(conv, [
       { kind: 'writeOutput', path: 'wynik.txt', content: 'trwala tresc' },
-      { kind: 'call', name: 'artifact_publish_file', input: { path: 'wynik.txt', title: 'Trwaly wynik' } },
+      { kind: 'call', name: 'artifact_publish_file', input: { path: 'wynik.txt', title: 'Trwaly wynik', operationId: 'publikacja-trwala' } },
     ]);
     await started.done;
     const artifactId = h.platform.services.artifacts.list(h.ownerId, { conversationId: conv })[0]!.id;
@@ -397,7 +397,7 @@ describe('zerwane zadanie nie publikuje niekompletnego wyniku', () => {
       { kind: 'writeOutput', path: 'niedokonczony.txt', content: 'polowa wyniku' },
       // The run is still working on the result when the user presses Stop.
       { kind: 'wait', ms: 10_000 },
-      { kind: 'call', name: 'artifact_publish_file', input: { path: 'niedokonczony.txt', title: 'Nie powinno powstac' } },
+      { kind: 'call', name: 'artifact_publish_file', input: { path: 'niedokonczony.txt', title: 'Nie powinno powstac', operationId: 'publikacja-przerwana' } },
     ]);
     await waitUntil(() => existsSync(resolve(started.workspaceDir, 'output', 'niedokonczony.txt')));
 
@@ -431,7 +431,7 @@ describe('zerwane zadanie nie publikuje niekompletnego wyniku', () => {
         requestUi: async () => ({ commandId: 'x', executed: false }),
       };
       await expect(
-        executeTool(entry, { path: 'nie-ma.txt', title: 'Nic' }, ctx),
+        executeTool(entry, { path: 'nie-ma.txt', title: 'Nic', operationId: 'publikacja-bez-pliku' }, ctx),
       ).rejects.toThrowError(/Brak pliku/);
       expect(rowCount('artifacts')).toBe(0);
     } finally {

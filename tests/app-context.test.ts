@@ -848,7 +848,8 @@ describe('L6.10 — cel operacji i aktualnosc wersji przy zapisie', () => {
      * reaches a schema, and demanding complete input there would be a lint
      * about nothing.
      */
-    const stepRe = /\{\s*kind:\s*'(call|text|wait|tool|spawnChild|streamError|startFailure|permission)'/g;
+    const stepRe =
+      /\{\s*kind:\s*'(call|text|wait|tool|spawnChild|streamError|startFailure|permission|ask|writeOutput|workspaceScript|idle|ui)'/g;
     const gaps: string[] = [];
     let checked = 0;
     for (const [file, src] of sources) {

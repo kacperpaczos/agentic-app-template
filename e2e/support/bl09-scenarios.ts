@@ -179,8 +179,16 @@ const attachedWorkbook = (calls: CallRecord[]): string => {
  * a question the browser can answer by looking, rather than by trusting the
  * answer text.
  */
-export const consentScript = (prompt: string): Step[] =>
-  prompt.includes('bez zgody')
+export const consentScript = (prompt: string): Step[] => {
+  /*
+   * One publication identifier per command, derived from the command.
+   *
+   * Fixed for a given command, so a repeat of *that* command publishes once;
+   * different between commands, so two runs in one test cannot quietly share a
+   * result — which would make "exactly one artifact" true for the wrong reason.
+   */
+  const operationId = `zgoda-${prompt.replace(/[^a-zA-Z0-9]/g, '').slice(-24) || 'domyslna'}`;
+  return prompt.includes('bez zgody')
     ? [{ kind: 'text', text: 'Nic nie wymaga zgody.', delayMs: 100 }]
     : [
         { kind: 'text', text: 'Przygotowalem skrypt. ', delayMs: 150 },
@@ -197,6 +205,7 @@ export const consentScript = (prompt: string): Step[] =>
                 kind: 'report',
                 rendererType: 'platform.markdown',
                 content: { text: 'Operacja wykonana po zgodzie uzytkownika.' },
+                operationId,
               },
               maxChars: 200,
             },
@@ -204,6 +213,7 @@ export const consentScript = (prompt: string): Step[] =>
         },
         { kind: 'text', text: 'Koniec.' },
       ];
+};
 
 /** Long background work with a marker the browser can count occurrences of. */
 export const continuityScript = (prompt: string): Step[] =>
