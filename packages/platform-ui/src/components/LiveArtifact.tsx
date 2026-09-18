@@ -20,18 +20,36 @@ const LIVE_LABEL: Record<LiveResolution['state'], string> = {
   forbidden: 'brak dostepu do zrodla',
 };
 
+/**
+ * What is being shown, and how current it is — as three separate facts.
+ *
+ * A live artifact has a *definition* (the saved question, versioned like any
+ * other artifact content), a *moment* it was answered, and a *source state* it
+ * was answered from. They move independently: the same definition read twice
+ * gives two moments, and the same moment says nothing about whether the data
+ * behind it changed. Collapsing them into one "live" label is what made a view
+ * that had not refreshed indistinguishable from one that had.
+ *
+ * All three are also attributes, so that two views of one artifact can be
+ * compared by a test the way a reader compares them on screen.
+ */
 export function LiveBadge({ live }: { live: LiveResolution | null }) {
-  if (!live) return <span className="pf-badge">snapshot</span>;
+  if (!live) return <span className="pf-badge" data-testid="artifact-live-state" data-live-state="snapshot">snapshot</span>;
   const ok = live.state === 'fresh';
   return (
     <span
       className={`pf-badge ${ok ? 'pf-badge--ok' : 'pf-badge--warn'}`}
       data-testid="artifact-live-state"
       data-live-state={live.state}
+      data-definition-version={live.definitionVersion}
+      data-source-fingerprint={live.sourceFingerprint ?? ''}
       title={live.operation ? `zrodlo: ${live.operation}` : undefined}
     >
       live · {LIVE_LABEL[live.state]}
       {ok && live.resolvedAt ? ` (${new Date(live.resolvedAt).toLocaleTimeString('pl-PL')})` : ''}
+      {' · def '}
+      {live.definitionVersion}
+      {live.sourceFingerprint ? ` · zrodlo ${live.sourceFingerprint.slice(0, 8)}` : ''}
     </span>
   );
 }

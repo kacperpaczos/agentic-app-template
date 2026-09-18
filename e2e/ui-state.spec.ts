@@ -421,25 +421,35 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     await page.getByTestId('switch-access-context').click();
     await expect(owner).not.toHaveText(was);
     /*
-     * The table in the chat no longer shows the first owner's rows.
+     * Nothing of the first owner's rows is in the chat, and the table they were
+     * in is gone entirely.
      *
-     * It used to: nothing outside the query cache was reset by a switch and the
-     * component was never re-rendered, so their rows stayed on screen. Asserted
-     * over the row ids captured **before** the switch (`mine`) — reading them
-     * again here would read them as the *second* owner, who owns none, so the
-     * loop would be empty and the assertion would pass without looking at
-     * anything.
+     * This line used to assert the opposite — `data-state="ready"`, with the
+     * note "not re-rendered: still the first owner's rows". It was a
+     * *precondition*, deliberately describing a known leak: nothing outside the
+     * query cache was reset by a switch and the panel was never rebuilt, so the
+     * rows stayed on screen and what followed showed that the agent is told
+     * none of it even then.
      *
-     * Deliberately no assertion about the table's own state attribute here, and
-     * deliberately over the **panel** rather than the table: two complementary
-     * fixes land on this screen (this package clears the shell store; the
-     * sibling package rebuilds `AgentInterface`), and they leave the table in
-     * different shapes — present and empty, or gone. A negated matcher on a
-     * locator that resolves to nothing fails rather than passes, so asserting
-     * over the table would make the test depend on which of the two happened.
-     * The panel is there either way, and "none of the first owner's rows are in
-     * the chat" is the claim that matters.
+     * Two complementary fixes land here. BL-11a clears the shell store, which
+     * empties what the table reads; BL-11c rebuilds `AgentInterface` on the
+     * access epoch, which takes the panel's own contents with it. With both in,
+     * the element is not on the screen at all, so that is what is asserted.
+     *
+     * Stated precisely, because the difference matters when reading this as
+     * evidence: **this line alone does not tell the two fixes apart.** Removing
+     * `key={accessKey}` and running this test leaves it green — the store
+     * clearing is enough to make the element go. What the rebuild adds is
+     * proved where it is visible on its own: `e2e/access-switch.spec.ts`, where
+     * the previous owner's conversation stays in the thread list without it.
+     * The row-name check stays under this one because it says something the
+     * element count does not: not one of those names is anywhere in the panel.
+     *
+     * The names come from `mine`, captured **before** the switch. Reading them
+     * again here would read them as the second owner, who owns none, and the
+     * loop would pass without looking at anything.
      */
+    await expect(table).toHaveCount(0);
     const chat = page.locator('.pf-chat');
     for (const name of mineNames) {
       await expect(chat).not.toContainText(name);
@@ -452,16 +462,22 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     expect(after.conversationId).toBeNull();
     const text = JSON.stringify(after);
     for (const id of mine) expect(text).not.toContain(id);
-    // Not even in the address, which still carries the conversation until the chat catches up.
+    // Not even in the address. It used to carry the conversation until the chat
+    // caught up, which is what this line was written against; the switch now
+    // clears it, so the assertion is satisfied twice over.
     expect(text).not.toContain(conversationId);
     expect(after.instances.some((i: any) => i.state === 'ready' && i.matched === mine.length)).toBe(false);
     expect(text).not.toContain(heldSpace);
 
     /*
-     * Then the canvas, inside the app. The space the shell held before the
-     * switch is gone from the store and from the address with it (L6.12), so
-     * the canvas opens on no space at all — where it used to open on the
-     * previous owner's and show a refusal.
+     * Then the canvas, inside the app.
+     *
+     * The space the shell held before the switch is gone from the store
+     * (BL-11a) and from the address (BL-11c clears `c` and `s` through the
+     * router), so the canvas opens on no space at all — where it used to open
+     * on the previous owner's and show a refusal. The line below therefore
+     * reads `not.toBe(heldSpace)`; it used to read `toBe(heldSpace)` with the
+     * note "the precondition: still held".
      */
     await page.locator('.pf-nav__link', { hasText: 'Canvas' }).click();
     await expect.poll(() => new URL(page.url()).pathname).toBe('/');

@@ -217,3 +217,15 @@ export function authIsUsable(status: AuthStatus): boolean {
   if (!status.credential.present) return false;
   return status.access.state !== 'revoked' && status.access.state !== 'refresh_refused';
 }
+
+/**
+ * Name of the MCP server the platform exposes its tools through.
+ *
+ * Shared because the exposed name (`mcp__app__<tool>`) is what the model sees,
+ * what the run stream reports as `toolCallName`, and what the browser matches a
+ * renderer against — three places that must agree, in three packages.
+ */
+export const MCP_SERVER_NAME = 'app';
+
+/** A tool's local name as the agent and the interface see it. */
+export const mcpToolName = (localName: string): string => `mcp__${MCP_SERVER_NAME}__${localName}`;

@@ -23,6 +23,14 @@ import { interactionsScript } from './interactions-scenario.ts';
 import { showValueScript } from './show-value-scenario.ts';
 import { scriptedAgent, type CallRecord, type Step } from './scripted-agent.ts';
 
+/** The case the artifact scenarios work on, read from the run's own first call. */
+const firstCaseId = (calls: CallRecord[]): string => {
+  const listed = calls.find((c) => c.name === 'procurement_list_cases');
+  const found = listed?.result?.cases?.find((c: { code: string }) => c.code === 'PC-2026-01');
+  if (!found) throw new Error('scenariusz: brak sprawy PC-2026-01');
+  return found.id as string;
+};
+
 /**
  * Scenarios the browser tests drive. Named so a spec reads as an intention
  * ("a run that calls a tool and then answers") rather than as a data structure.
@@ -407,6 +415,37 @@ const SCENARIOS: Record<string, Step[]> = {
     { kind: 'call', name: 'ui_sort', input: { targetId: 'procurement.data', clear: true } },
     { kind: 'call', name: 'ui_filter', input: { targetId: 'procurement.data', clear: true } },
     { kind: 'text', text: 'Przywrocilem domyslny widok.' },
+  ],
+  /*
+   * A snapshot and a live artifact of the same comparison, both made by real
+   * handlers: `procurement_save_comparison` freezes the numbers, the platform's
+   * own `artifact_create` saves the question instead. The second is a *platform*
+   * tool, so its answer carries `{ artifactId }` and the ready-made chat shows
+   * the artifact under the call — which is the preview the browser test
+   * compares against the full view in the artifact browser.
+   */
+  'artifact-snapshot-and-live': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'call', name: 'procurement_list_cases', maxChars: 200 },
+    {
+      kind: 'call',
+      name: 'procurement_save_comparison',
+      input: (calls: CallRecord[]) => ({ caseId: firstCaseId(calls), title: 'Zestawienie z chwili' }),
+      maxChars: 200,
+    },
+    {
+      kind: 'call',
+      name: 'artifact_create',
+      input: (calls: CallRecord[]) => ({
+        title: 'Zestawienie na zywo',
+        kind: 'table',
+        mode: 'live',
+        rendererType: 'procurement.comparison',
+        content: { operation: 'procurement.comparison', input: { caseId: firstCaseId(calls) } },
+      }),
+      maxChars: 200,
+    },
+    { kind: 'text', text: 'Zapisalem zestawienie i wersje na zywo.' },
   ],
   'tool-error': [
     {

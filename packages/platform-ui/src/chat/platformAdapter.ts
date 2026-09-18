@@ -1,5 +1,6 @@
 import { agUIAdapter, type StreamProtocolAdapter } from '@openuidev/react-headless';
 import type { QueryClient } from '@tanstack/react-query';
+import { accessEpoch } from '../api/accessContext.ts';
 import { useAppState } from '../state/appState.ts';
 import { applyRunEvent } from './runEvents.ts';
 import { claimRunStream, releaseRunStream } from './runStreams.ts';
@@ -28,6 +29,19 @@ export function platformAguiAdapter(qc: QueryClient): StreamProtocolAdapter {
       const conversationId =
         response.headers.get('X-Conversation-Id') ?? useAppState.getState().conversationId;
       const runId = response.headers.get('X-Run-Id');
+      /*
+       * The identity this stream belongs to.
+       *
+       * The request is already aborted on a switch (`accessFetch` in
+       * `chatWiring.ts`), but an abort is a race with whatever the browser has
+       * already buffered: a frame decoded before the abort took effect is still
+       * delivered to this loop. It is the previous owner's, and every event
+       * here has a side effect — it writes a run record, appends answer text
+       * and invalidates caches the new owner is about to read. So the epoch is
+       * checked per event and the stream is abandoned on the first one that
+       * does not belong here.
+       */
+      const issuedAt = accessEpoch();
 
       /*
        * Claim the run for this stream.
@@ -41,6 +55,9 @@ export function platformAguiAdapter(qc: QueryClient): StreamProtocolAdapter {
       if (runId) claimRunStream(runId);
       try {
         for await (const event of inner.parse(response)) {
+          // Nothing of the previous identity's is applied, and nothing of it is
+          // handed on to the chat to render.
+          if (accessEpoch() !== issuedAt) return;
           if (conversationId) {
             applyRunEvent(conversationId, event as Record<string, unknown>, {
               qc,

@@ -43,6 +43,26 @@ export const liveResolutionSchema = z.object({
   state: z.enum(['fresh', 'failed', 'unavailable', 'forbidden']),
   /** When the query ran. Null when it did not run. */
   resolvedAt: z.string().nullable(),
+  /**
+   * Which *state of the source* the answer came from.
+   *
+   * Three different things were being conflated under "live". The **definition
+   * version** says which saved question was asked; `resolvedAt` says **when**
+   * it was asked; neither says **what the source looked like** when it
+   * answered. Without the third, two reads a minute apart are both "fresh" and
+   * indistinguishable — so a view still showing the older answer looks exactly
+   * like a view that has just refreshed, and nothing marks the difference.
+   *
+   * What it is, precisely: a short digest of the result the registered read
+   * produced, over its canonical JSON. Equal fingerprints mean the read saw the
+   * same source state; different fingerprints mean the source moved between the
+   * two reads. It is deliberately *not* a monotonic record version — the
+   * platform has no domain-neutral access to one — so it orders nothing and
+   * only ever answers "same state or not".
+   *
+   * Null when the query did not run (there is no answer to fingerprint).
+   */
+  sourceFingerprint: z.string().nullable(),
   error: z.string().nullable(),
 });
 export type LiveResolution = z.infer<typeof liveResolutionSchema>;
@@ -72,6 +92,18 @@ export const artifactSchema = z.object({
   updatedAt: z.string(),
 });
 export type ArtifactMeta = z.infer<typeof artifactSchema>;
+
+/**
+ * The platform's own tools whose answer is `{ artifactId }`.
+ *
+ * Here rather than in the server package because both ends need the same list:
+ * the server registers the handlers, the browser registers the renderer that
+ * shows what they produced, and a tool name spelled differently in the two
+ * places is a preview that silently never appears. Module tools that create
+ * artifacts announce themselves through the `artifact_created` event instead —
+ * the platform cannot name them without learning the domain.
+ */
+export const ARTIFACT_PRODUCING_TOOLS = ['artifact_create', 'artifact_publish_file'] as const;
 
 export const artifactVersionSchema = z.object({
   artifactId: z.string(),

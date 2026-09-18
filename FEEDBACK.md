@@ -296,3 +296,76 @@ na porcie 8791 przez cały czas nietknięta — ten sam proces, identyczna suma 
 Zaktualizowane oceny dla kryteriów, dla których powstał dowód na tym kodzie. BL-01 i BL-02 zamknięte i
 usunięte z backlogu (zostaje 10 pakietów). Sumy: **77 / 107 / 9 / 7** (było 59 / 118 / 15 / 8).
 Żadna warstwa nie jest jeszcze zamknięta. Znane ograniczenia i pozycje odłożone: raport architekta §6.
+
+---
+
+## T3 — 2026-09-18 — BL-11c: cache i artefakty (L10.6, L10.7, L10.9, L10.11, L10.14, L10.15)
+
+Pakiet dotyczy jednego pytania: czy użytkownik może zobaczyć dane, które nie są jego albo nie są
+aktualne. Przed pracą sześć kryteriów miało dowód wyłącznie z testów kluczy cache i z dwóch odczytów
+HTTP tego samego endpointu — czyli z rzeczy, które nie rozstrzygają ani jednego z tych pytań.
+
+### Co było zepsute (nie tylko nieudowodnione)
+
+- **Podgląd artefaktu w wiadomości nie istniał, a pełny widok wywracał się.** Do `AgentInterface`
+  przekazywano `{ type, render }` rzutowane na `never`, podczas gdy biblioteka oczekuje
+  `{ type, toolName, parser, preview, actual }`. Nic nie było więc zaindeksowane po nazwie narzędzia
+  (artefakt nigdy nie pojawiał się pod wywołaniem), a przeglądarka artefaktów wołała
+  `renderer.parser`, którego nie było. Rzutowanie na `never` ukryło to przed kompilatorem.
+- **Przeglądarka artefaktów gotowego czatu czytała poza cache** (`createChatStorage` przez `apiGet`
+  bez klucza), więc lista, pełny widok i podgląd były trzema niezależnymi obrazami jednego artefaktu.
+- **Strumień `POST /api/agui/run` nie był związany z kontekstem dostępu.** Po przełączeniu
+  tożsamości zdarzenia poprzedniego właściciela nadal dochodziły do reduktora i unieważniały klucze,
+  które nowa tożsamość dopiero miała przeczytać. To samo dotyczyło żądań wątków (`restStorage`) i
+  uploadu plików.
+- **Stan klienta poza TanStack Query nie był czyszczony**: rozmowa, zadania, zaznaczenie, zasób,
+  przestrzeń, załączniki i szkice poprzedniego właściciela trafiały do kontekstu następnego polecenia.
+  Lista wątków i wiadomości gotowego czatu też zostawały na ekranie.
+- **Otwarty widok live nie odświeżał się po zmianie źródła z UI**: formularz modułu wołał
+  `invalidateBusinessData`, które nie unieważnia klucza `artifact`.
+- **Wynik live nie niósł stanu źródła.** `definitionVersion` mówi, które pytanie zadano, `resolvedAt`
+  — kiedy; nic nie mówiło, *co zobaczył* odczyt. Dwa odczyty minutę od siebie były nierozróżnialne.
+- Moduł zakupowy tworzył artefakty typu `procurement.comparison` i nie dostarczał dla nich renderera.
+
+### Co zbudowano
+
+- `accessFetch` w `api/client.ts` — wspólny sygnał i sprawdzenie epoki dla żądań, które nie mogą iść
+  przez `api()`: wątki gotowego czatu (`restStorage({ fetch })`), upload pliku, strumień uruchomienia.
+- Strażnik epoki w `platformAdapter` — zdarzenie, które prześliźnie się obok przerwania, nie jest
+  ani stosowane, ani przekazywane do czatu.
+- `resetForAccessChange()` w `appState` (z `scopedAppState()` jako jedyną definicją stanu zakresu) i
+  `registerAccessContextReset()`, montowane w powłoce po publikatorze opisu ekranu; czyści też
+  parametry sesji `c` i `s` z adresu. `AgentInterface` dostaje klucz epoki dostępu — jedyny klucz,
+  jaki wolno mu nadać.
+- `createChatStorage(qc)` czyta artefakty przez `qc.fetchQuery` na kluczach `qk.artifact` /
+  `qk.artifacts` i oddaje rendererowi **referencję** `{ artifactId }`, nigdy danych.
+- `ArtifactPane` — jedno renderowanie artefaktu dla podglądu i pełnego widoku, z wersją, wersją
+  definicji i odciskiem stanu źródła w atrybutach.
+- `LiveResolution.sourceFingerprint` — skrót rekordów zwróconych przez zarejestrowany odczyt (nie
+  całej koperty: wynik modułu potrafi nieść własny znacznik czasu, więc skrót koperty zmieniałby się
+  przy każdym odczycie i mówiłby „źródło się ruszyło” zawsze).
+- Renderer artefaktu `procurement.comparison` w module, na wydzielonym `ComparisonView`.
+
+### Czego świadomie nie zrobiono
+
+`refetchOnWindowFocus` zostaje wyłączony. Odświeżanie otwartego widoku live jest związane ze zmianą
+danych (unieważnienie klucza `artifact`), a nie z powrotem do okna — okno wraca też wtedy, gdy nic się
+nie zmieniło, a artefakt live przy każdym otwarciu uruchamia zapytanie na serwerze.
+
+### Zmiana w cudzym specu
+
+`e2e/ui-state.spec.ts` („przelaczenie tozsamosci na Ustawieniach…”) miał **założenie**, że po zmianie
+tożsamości tabela poprzedniego właściciela zostaje w czacie, a adres nadal niesie jego przestrzeń —
+czyli dokładnie te braki, które ten pakiet zamyka (L10.7, L10.11). Zmienione zostały dwa założenia
+(tabela ma zniknąć; adres nie ma nieść poprzedniej przestrzeni); wszystkie asercje o opisie ekranu
+zostały bez zmian i nadal przechodzą, tylko spełniane są mocniej.
+
+### Zaobserwowane, nienaprawione
+
+- `e2e/streaming.spec.ts` i `e2e/view-filter.spec.ts` zapisują pliki dowodowe przy **każdym**
+  domyślnym przebiegu (`docs/evidence/closure-2026-09-15/`, `docs/evidence/chat-ux-2026-09-16/`) —
+  ta sama klasa problemu, którą G18 zamknął po stronie `pnpm verify`.
+- Komponent nagłówka sprawy wysyła jeden odczyt `case_overview` z literałem `"undefined"` jako
+  `caseId`, zanim parametr `$caseId` zostanie związany. Żądanie może się tylko nie powieść.
+- Asercja `not.toContainText(<treść polecenia>)` na panelu czatu jest zawsze prawdziwa: gotowy czat
+  nazywa wątek bez końcowej kropki. Warto przejrzeć pozostałe spece pod tym kątem.

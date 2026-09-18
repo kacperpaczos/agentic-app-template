@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
+import { accessFetch, requestFailureMessage } from '../api/client.ts';
 import { useArtifacts, useFiles, qk } from '../api/queries.ts';
 
 /**
@@ -24,14 +25,19 @@ export function FilesPage() {
     try {
       const form = new FormData();
       form.append('file', file);
-      const res = await fetch('/api/files', { method: 'POST', body: form, credentials: 'include' });
+      // Bound to the access context like every other request: an upload that
+      // completes after an identity switch belongs to nobody on screen.
+      const res = await accessFetch('/api/files', { method: 'POST', body: form });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
         throw new Error(body.error?.message ?? `HTTP ${res.status}`);
       }
       await qc.invalidateQueries({ queryKey: qk.files() });
     } catch (e) {
-      setUploadError(e instanceof Error ? e.message : String(e));
+      // `null` when the upload was abandoned because the identity changed —
+      // see `requestFailureMessage`.
+      const message = requestFailureMessage(e);
+      if (message) setUploadError(message);
     } finally {
       setBusy(false);
       if (inputRef.current) inputRef.current.value = '';

@@ -3,7 +3,7 @@
 > Plik generowany przez `node scripts/acceptance-matrix.mjs` z `docs/acceptance/assessment.json`.
 > Każde otwarte kryterium macierzy (`docs/ACCEPTANCE.md`) należy do dokładnie jednego pakietu.
 
-Otwartych kryteriów: **91** z 200, w 7 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.
+Otwartych kryteriów: **85** z 200, w 7 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.
 
 | Pakiet | Tytuł | Kryteria | Liczba |
 |---|---|---|---|
@@ -12,7 +12,7 @@ Otwartych kryteriów: **91** z 200, w 7 pakietach. Kolejność pakietów jest pr
 | BL-07 | Trwałość, kopia i migracje | L7.13 | 1 |
 | BL-08 | Czat, zdarzenia i historia | L4.3, L4.5, L4.6, L4.7, L4.8, L4.9, L4.11, L4.13, L4.15, L5.2, L5.3, L5.4, L5.5, L5.6, L5.11, L5.12, L5.13, L5.14, L5.15 | 19 |
 | BL-09 | Pliki, sandbox i zadania w tle | L11.7, L11.10, L11.12, L11.13, L11.15, L11.16, L11.18, L11.19, L11.20, L11.22, L11.23, L11.24 | 12 |
-| BL-11 | Domena, backend i cache | L6.11, L7.4, L7.8, L7.9, L7.10, L9.2, L9.3, L9.5, L9.6, L9.7, L9.8, L9.14, L9.15, L10.6, L10.7, L10.9, L10.11, L10.14, L10.15 | 19 |
+| BL-11 | Domena, backend i cache | L6.11, L7.4, L7.8, L7.9, L7.10, L9.2, L9.3, L9.5, L9.6, L9.7, L9.8, L9.14, L9.15 | 13 |
 | BL-12 | Odbiór i jakość dowodów | L1.2, L1.8, L1.9, L1.11, L1.12, L12.5, L12.7, L12.10, L12.12, L12.15 | 10 |
 
 ## BL-03 — Powtarzalne próby na prawdziwym modelu w szablonie
@@ -143,12 +143,6 @@ Braki w warstwach 6, 7, 9 i 10 niepasujące do innych pakietów: współbieżno�
 | L9.8 | Operacja wieloetapowego zapisu jest atomowa albo ma jawny mechanizm odzyskania spójności. | niespełnione | Awaria w trakcie setCriterionWeights zostawia część wag zmienionych, a nieudane utworzenie artefaktu w artifact_publish_file zostawia osierocony plik na liście plików; dla tych operacji ani dla utraty wpisu idempotencji po mutacji nie ma opisanego mechanizmu odzyskania spójności. |
 | L9.14 | Jednoczesne ponowienia tej samej operacji powodują dokładnie jeden skutek; ten sam klucz z inną treścią jest odrzucany lub jednoznacznie rozstrzygany. | niespełnione | Ten sam operationId z inną treścią nie jest odrzucany: zwracany jest zapisany wynik pierwszego żądania (updateOfferItem tylko z replayed=true, canvas.addCard bez sygnału), więc wywołujący nie wie, że zmiany nie zastosowano; jednokrotność przy równoczesnych żądaniach zależy od tego, że fn nie oddaje sterowania przed zapisem, nie jest egzekwowana atomowo i nie ma testu równoległego w szablonie. |
 | L9.15 | Wymuszona awaria w połowie wieloetapowej mutacji potwierdza atomowość lub odzyskanie; test kopii bazy nie zastępuje tej próby. | częściowe | Wymuszona awaria w połowie istnieje tylko dla operacji platformy (artefakt); dla mutacji domenowej (updateItemChecked + touchOffer) i pozostałych zapisów wieloetapowych (wagi kryteriów, publikacja pliku jako artefaktu) brak próby awarii między krokami. |
-| L10.6 | Komponenty współdzielą pobrania dla tego samego zasobu; klucze cache uwzględniają kontekst dostępu i filtry. | częściowe | Część komponentów pobiera te same zasoby poza cache: przeglądarka artefaktów OpenUI przez createChatStorage (apiGet bez klucza), wątki przez restStorage biblioteki, upload w ComposerAttachments przez fetch; podgląd artefaktu w wiadomości i lista biblioteki nie dzielą pobrań i mogą pokazywać różne stany. Brak testu deduplikacji. |
-| L10.7 | Zmiana kontekstu właściciela nie ujawnia danych z poprzedniego cache. | częściowe | Stan klienta poza TanStack Query nie jest czyszczony przy zmianie właściciela: lista wątków i wiadomości AgentInterface (restStorage) oraz appState (aktywna rozmowa, zadania, załączniki, szkice) zostają w tej samej karcie; brak testu GUI bez przeładowania, który wykryłby taki wyciek. |
-| L10.9 | Podgląd i pełny widok wskazują tę samą wersję; pliki można pobrać po restarcie. | częściowe | Brak próby w przeglądarce, że podgląd artefaktu w wiadomości i pełny widok w przeglądarce artefaktów pokazują tę samą wersję (przeglądarka biblioteki czyta przez osobne apiGet), oraz brak pobrania przez /api/files/:id/content po rzeczywistym restarcie serwera. |
-| L10.11 | Przełączenie właściciela w tej samej instancji klienta usuwa poprzedni cache i odcina opóźnione żądania oraz strumienie; nowe wyniki nie zawierają poprzednich danych. | częściowe | Strumień wysyłania POST /api/agui/run (chat/chatWiring.ts) używa tylko sygnału biblioteki, bez accessSignal i epoki, więc opóźnione zdarzenia poprzedniej tożsamości nadal trafiają do applyRunEvent i unieważnień; żądania wątków restStorage i upload plików omijają api(); appState i lista wątków AgentInterface nie są resetowane. Brak testu z opóźnionym strumieniem przy zmianie właściciela w jednej karcie. |
-| L10.14 | Po zmianie źródła snapshot zachowuje treść, a live pokazuje aktualny wynik przy otwarciu i w otwartym widoku; obie ścieżki są sprawdzone po restarcie. | częściowe | Otwarty widok live nie odświeża się po zmianie źródła z UI (formularz modułu nie unieważnia klucza artifact, refetchOnWindowFocus wyłączony); brak testu GUI otwartego widoku live i obu ścieżek przez HTTP po rzeczywistym restarcie. |
-| L10.15 | Wersja definicji i świeżość wyniku live są rozróżnione; podgląd i pełny widok nie pokazują sprzecznych danych bez oznaczenia. | częściowe | Wynik live nie niesie wersji źródła (np. wersji rekordów), więc świeży odczyt nie jest odróżniony od odczytu starszego stanu źródła; nie sprawdzono w przeglądarce, że podgląd w wiadomości i przeglądarka artefaktów (czytająca poza cache) nie pokazują sprzecznych danych bez oznaczenia. |
 
 ## BL-12 — Odbiór i jakość dowodów
 

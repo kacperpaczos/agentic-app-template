@@ -1,0 +1,53 @@
+{
+  "opis": "Pakiet BL-11c (cache i artefakty): rozroznienie wersji definicji artefaktu live od stanu zrodla, oraz zakres stanu klienta czyszczonego przy zmianie wlasciciela.",
+  "zrodlo": "tests/cache-evidence.test.ts w regresji szablonu (pnpm evidence)",
+  "wersjaKodu": {
+    "commit": "8968362711af68dca18c62c7d224658a237bccaa",
+    "brudneDrzewo": false,
+    "node": "24.19.0",
+    "pakiety": {}
+  },
+  "artefaktLive": {
+    "artefakt": "art_d73f413ea6324d4ea096",
+    "pierwszyOdczyt": {
+      "definitionVersion": 1,
+      "state": "fresh",
+      "sourceFingerprint": "eabc0fc5bab830e3"
+    },
+    "drugiOdczytBezZmianyZrodla": {
+      "definitionVersion": 1,
+      "state": "fresh",
+      "sourceFingerprint": "eabc0fc5bab830e3"
+    },
+    "odczytPoZmianieZrodla": {
+      "definitionVersion": 1,
+      "state": "fresh",
+      "sourceFingerprint": "af351b923a927f36"
+    },
+    "wniosek": "definitionVersion stoi, resolvedAt rosnie przy kazdym odczycie, sourceFingerprint zmienia sie wylacznie wtedy, gdy zmienily sie rekordy zwrocone przez zarejestrowany odczyt."
+  },
+  "zmianaWlasciciela": {
+    "metoda": "kazde pole zakresu (wyliczone ze sklepu, bez navOpen) zostaje przed przelaczeniem ustawione na wartosc INNA niz stan po clearScopedContext i to jest sprawdzane osobno; dopiero potem \"wyczyszczone\" znaczy, ze zrobilo to przelaczenie, a nie ze pola nikt nie dotknal.",
+    "wpisyCachePoPrzelaczeniu": 0,
+    "wyczyszczonePolaStanuKlienta": [
+      "agentFilterKey",
+      "attachments",
+      "cardState",
+      "conversationId",
+      "drafts",
+      "filterOutcome",
+      "filters",
+      "lastRunId",
+      "resource",
+      "revealNotice",
+      "runs",
+      "selection",
+      "spaceId",
+      "viewStates",
+      "viewport"
+    ],
+    "niewyczyszczone": [
+      "navOpen — wlasciwosc okna, nie tozsamosci"
+    ]
+  }
+}

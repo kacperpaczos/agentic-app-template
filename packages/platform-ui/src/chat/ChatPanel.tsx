@@ -1,16 +1,25 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AgentInterface, artifactListPath } from '@openuidev/react-ui';
+import { defineArtifactRenderer, type ArtifactRendererControls } from '@openuidev/react-headless';
 import '@openuidev/react-ui/index.css';
 import { useQueryClient } from '@tanstack/react-query';
+import { ARTIFACT_PRODUCING_TOOLS, mcpToolName } from '@platform/contracts';
+import { accessEpoch, onAccessContextChange } from '../api/accessContext.ts';
 import { apiPost } from '../api/client.ts';
 import { useRegistry } from '../catalog/registry.tsx';
 import { useAppState } from '../state/appState.ts';
-import { ArtifactContent, LiveBadge } from '../components/LiveArtifact.tsx';
+import { ArtifactPane } from './ArtifactPane.tsx';
 import { makeAssistantMessage } from './AssistantMessage.tsx';
 import { ChatSlotsContext } from './chatSlots.ts';
 import { ComposerAttachments } from './ComposerAttachments.tsx';
 import { ConversationSync } from './ConversationSync.tsx';
-import { createChatLlm, createChatStorage, stopRun } from './chatWiring.ts';
+import {
+  artifactReferenceOf,
+  createChatLlm,
+  createChatStorage,
+  stopRun,
+  type ArtifactReference,
+} from './chatWiring.ts';
 import { useComposerStop } from './useComposerStop.ts';
 
 /**
@@ -274,7 +283,27 @@ export function ChatPanel() {
    */
   useComposerStop(panel);
 
-  const storage = useMemo(() => createChatStorage(), []);
+  /*
+   * The identity this chat belongs to.
+   *
+   * `AgentInterface` owns its thread list, the messages of the selected
+   * conversation and its artifact workspace, all inside a store it creates
+   * itself. Emptying the query cache does not touch any of it, so after a
+   * switch the panel went on showing the previous owner's conversations and the
+   * answer they were reading — in the same tab, with no reload. There is no
+   * prop for "forget everything"; a new key is the library's own way of saying
+   * it, and it is exactly right here because it happens only when the identity
+   * changes.
+   *
+   * Deliberately *not* the conversation id, which is what an earlier version
+   * keyed on: the backend assigns that id mid-run, so the chat was rebuilt
+   * while the user watched, and the answer vanished. The access epoch moves
+   * only on a switch, which is the one moment the chat must be rebuilt.
+   */
+  const [accessKey, setAccessKey] = useState(accessEpoch);
+  useEffect(() => onAccessContextChange(() => setAccessKey(accessEpoch())), []);
+
+  const storage = useMemo(() => createChatStorage(qc), [qc]);
   const llm = useMemo(() => createChatLlm(qc), [qc]);
 
   /*
@@ -291,35 +320,67 @@ export function ChatPanel() {
     [registry.starters],
   );
 
-  /*
-   * Artifact renderers are wrapped in `ArtifactContent` rather than handed the
-   * content the chat happens to be holding. For a live artifact that content is
-   * whatever was current when the list was last fetched; the wrapper re-reads
-   * the artifact — which re-runs its query server-side — and refuses to render
-   * anything at all if that refresh failed.
-   */
   const assistantMessage = useMemo(() => makeAssistantMessage(registry.library), [registry.library]);
 
-  const artifactRenderers = useMemo(
-    () =>
-      Object.entries(registry.artifactRenderers).map(([type, Renderer]) => ({
-        type,
-        render: ({ id }: { content: unknown; id: string }) => (
-          <ArtifactContent artifactId={id}>
-            {(a) => (
-              <div className="pf-artifact">
-                <div className="pf-artifact__head">
-                  <strong>{a.title}</strong>
-                  <LiveBadge live={a.live} />
-                </div>
-                <Renderer artifactId={id} content={a.content} meta={{ live: a.live }} />
-              </div>
-            )}
-          </ArtifactContent>
-        ),
-      })),
-    [registry.artifactRenderers],
-  );
+  /*
+   * Artifact renderers, in the shape the ready-made chat actually consumes.
+   *
+   * `ArtifactRendererConfig` is `{ type, toolName, parser, preview, actual }`,
+   * and the library indexes it twice: by tool name, to show an artifact under
+   * the call that produced it, and by artifact type, to render one opened in
+   * the artifact browser. What was passed here before was `{ type, render }`,
+   * cast to `never` to get past the compiler — so nothing was ever indexed by
+   * tool name (an artifact never appeared in a message) and the browser's full
+   * view called `renderer.parser`, which did not exist.
+   *
+   * One entry per registered artifact type covers the browser; one more entry
+   * covers the platform's artifact tools, because which renderer a call needs
+   * depends on the artifact it created and not on the tool that created it —
+   * `ArtifactPane` resolves that from the artifact itself. Every entry parses
+   * the same `{ artifactId }` reference and renders through `ArtifactPane`, so
+   * preview and full view are the same rendering of the same cache entry.
+   */
+  const artifactRenderers = useMemo(() => {
+    /*
+     * Built through `defineArtifactRenderer` — the library's own identity helper
+     * — and passed **without a cast**. The cast is the reason this section
+     * exists: `as never` silenced the compiler on a shape that had neither
+     * `toolName` nor `parser`, so both defects above shipped invisibly.
+     * Fixing the shape and leaving the cast would have fixed the symptom and
+     * kept the cause. With the helper, the props type is inferred from
+     * `parser`'s return value and a renderer that forgets a field is a build
+     * error rather than a blank panel.
+     */
+    const shared = {
+      parser: (raw: { args: unknown; response: unknown }) => {
+        const ref = artifactReferenceOf(raw.response);
+        // Null skips: while a call is still streaming there is no result yet,
+        // and the library then shows its own tool card instead of an empty
+        // artifact.
+        return ref ? { props: ref, meta: null } : null;
+      },
+      preview: (props: ArtifactReference, controls: ArtifactRendererControls) => (
+        <ArtifactPane artifactId={props.artifactId} where="preview" onOpen={controls.open} />
+      ),
+      actual: (props: ArtifactReference) => (
+        <ArtifactPane artifactId={props.artifactId} where="full" />
+      ),
+    };
+
+    return [
+      // By type, for the artifact browser. The tool name is a placeholder that
+      // no tool can have; matching by name is the next entry's job.
+      ...Object.keys(registry.artifactRenderers).map((type) =>
+        defineArtifactRenderer({ type, toolName: `platform.artifact.type:${type}`, ...shared }),
+      ),
+      // By tool name, for the preview inside the message.
+      defineArtifactRenderer({
+        type: 'platform.artifact-ref',
+        toolName: ARTIFACT_PRODUCING_TOOLS.map(mcpToolName),
+        ...shared,
+      }),
+    ];
+  }, [registry.artifactRenderers]);
 
   return (
     <section className="pf-chat" aria-label="Rozmowa z agentem" ref={panel}>
@@ -348,17 +409,20 @@ export function ChatPanel() {
       */}
       <div className="pf-chat__body" id="pf-chat-view">
         {/*
-          No `key` here.
+          The only `key` this chat may have is the access epoch.
 
           It used to be keyed on our own `conversationId`, which the backend
           assigns *during* the first run of a new conversation. React therefore
           unmounted and rebuilt the chat mid-stream, throwing away the thread the
           user was watching: the answer and the tool activity vanished as soon as
           the conversation got its id. The chat owns thread selection and reloads
-          its own messages — it must not be remounted from outside.
+          its own messages — it must not be remounted for anything that happens
+          inside a conversation. A change of identity is not inside one; see
+          `accessKey` above.
         */}
         <ChatSlotsContext.Provider value={slots}>
           <AgentInterface
+            key={accessKey}
             path={navPath}
             onNavigate={setNavPath}
             storage={storage}
@@ -366,7 +430,7 @@ export function ChatPanel() {
             componentLibrary={registry.library}
             components={{ AssistantMessage: assistantMessage as never }}
             agentName="Agent aplikacji"
-            artifactRenderers={artifactRenderers as never}
+            artifactRenderers={artifactRenderers}
             starters={starters}
             /*
               Every label the component exposes. Its artifact browser also has

@@ -1,6 +1,7 @@
 import { restStorage, type ChatLLM, type ChatStorage } from '@openuidev/react-headless';
 import type { QueryClient } from '@tanstack/react-query';
-import { apiGet, apiPatch, apiPost } from '../api/client.ts';
+import { accessFetch, apiGet, apiPatch, apiPost } from '../api/client.ts';
+import { qk } from '../api/queries.ts';
 import { useAppState } from '../state/appState.ts';
 import { uiSnapshotSession } from '../state/uiSnapshot.ts';
 import { platformAguiAdapter } from './platformAdapter.ts';
@@ -16,57 +17,106 @@ export async function stopRun(runId: string): Promise<void> {
 }
 
 /**
+ * The artifact reference a renderer is handed, in both paths the ready-made
+ * chat has.
+ *
+ * The library runs one `parser` for a tool call (`response` = what the tool
+ * returned) and for a stored artifact (`response` = the artifact's `content`),
+ * and its contract says the two must have the same shape. The platform's own
+ * artifact tools answer `{ artifactId }`, so the storage channel below reports
+ * `{ artifactId }` as well — and neither path hands a renderer any *data*.
+ *
+ * That is the point, not a shortcut. Data handed over here would be whatever
+ * the chat happened to be holding: the tool's result from when the run
+ * finished, or a list entry from when the browser last loaded. The renderer
+ * re-reads the artifact instead (`ArtifactContent` → `qk.artifact`), which for
+ * a live artifact re-runs its query server-side — so a preview in a message and
+ * the full view in the artifact browser read one cache entry and cannot show
+ * two different answers.
+ */
+export interface ArtifactReference {
+  artifactId: string;
+}
+
+/** The `{ artifactId }` in a tool result or a stored artifact's content, if there is one. */
+export function artifactReferenceOf(raw: unknown): ArtifactReference | null {
+  let value = raw;
+  // Tool results reach the chat as text: the SDK does not pre-parse them.
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  const id = (value as { artifactId?: unknown } | null)?.artifactId;
+  return typeof id === 'string' && id ? { artifactId: id } : null;
+}
+
+/** Cache key for the artifact list under one type filter. */
+const artifactListKey = (types?: readonly string[]) =>
+  qk.artifacts(types?.length ? `type:${[...types].sort().join(',')}` : undefined);
+
+/**
  * Conversation storage.
  *
  * `restStorage` is used as-is against `/api/threads`, because the backend was
  * written to its conventions (`/get`, `/create`, `/get/:id`, `/update/:id`,
- * `/delete/:id`). That is configuration, not an adapter.
+ * `/delete/:id`). That is configuration, not an adapter — except for the one
+ * thing it cannot know: which identity the request belongs to. Its own `fetch`
+ * option takes {@link accessFetch}, so a thread list or a message load issued
+ * as one owner is aborted, and its late answer refused, the moment the
+ * application acts as another. Without it the chat kept the previous owner's
+ * conversations on screen in the same tab.
  *
  * The artifact channel is ours: `restStorage` implements the `thread` channel
  * only, so without this the Artifacts navigation in the ready-made chat would
- * simply not appear.
+ * simply not appear. It reads **through the query cache**, not past it. The
+ * library's artifact browser used to call the API directly, so the browser's
+ * list, the full view it opens and a preview in a message were three
+ * independent fetches of the same artifact and could disagree — which is
+ * exactly what a reader cannot check. One key, one fetch, one answer.
  */
-export function createChatStorage(): ChatStorage {
-  const { thread } = restStorage({ baseUrl: '/api/threads' });
+export function createChatStorage(qc: QueryClient): ChatStorage {
+  const { thread } = restStorage({ baseUrl: '/api/threads', fetch: accessFetch });
+
+  const summarise = (a: Record<string, unknown>) => ({
+    id: String(a.id),
+    title: String(a.title),
+    type: String(a.type),
+    threadId: String(a.threadId ?? ''),
+    updatedAt: String(a.updatedAt ?? ''),
+  });
 
   return {
     thread,
     artifact: {
       async list(params) {
-        const query = params?.type?.length ? `?type=${params.type.join(',')}` : '';
-        const res = await apiGet<{ artifacts: Array<Record<string, unknown>> }>(`/api/artifacts${query}`);
-        return {
-          artifacts: res.artifacts.map((a) => ({
-            id: String(a.id),
-            title: String(a.title),
-            type: String(a.type),
-            threadId: String(a.threadId ?? ''),
-            updatedAt: String(a.updatedAt ?? ''),
-          })),
-        };
+        const types = params?.type?.length ? params.type : undefined;
+        const query = types ? `?type=${types.join(',')}` : '';
+        const res = await qc.fetchQuery({
+          queryKey: artifactListKey(types),
+          queryFn: () =>
+            apiGet<{ artifacts: Array<Record<string, unknown>> }>(`/api/artifacts${query}`),
+        });
+        return { artifacts: res.artifacts.map(summarise) };
       },
       async get(id) {
-        const a = await apiGet<Record<string, unknown>>(`/api/artifacts/${id}`);
-        return {
-          id: String(a.id),
-          title: String(a.title),
-          type: String(a.type),
-          threadId: String(a.threadId ?? ''),
-          updatedAt: String(a.updatedAt ?? ''),
-          content: a.content,
-        };
+        const a = await qc.fetchQuery({
+          queryKey: qk.artifact(id),
+          queryFn: () => apiGet<Record<string, unknown>>(`/api/artifacts/${id}`),
+        });
+        // A reference, not data — see `ArtifactReference`.
+        return { ...summarise(a), content: { artifactId: String(a.id) } satisfies ArtifactReference };
       },
       async update(patch) {
         const a = await apiPatch<Record<string, unknown>>(`/api/artifacts/${patch.id}`, {
           content: patch.content,
         });
-        return {
-          id: String(a.id),
-          title: String(a.title),
-          type: String(a.type),
-          threadId: String(a.threadId ?? ''),
-          updatedAt: String(a.updatedAt ?? ''),
-        };
+        // A new version: whatever is showing this artifact must re-read it.
+        void qc.invalidateQueries({ queryKey: qk.artifact(patch.id) });
+        void qc.invalidateQueries({ queryKey: ['artifacts'] });
+        return summarise(a);
       },
     },
   };
@@ -120,9 +170,21 @@ export function createChatLlm(qc: QueryClient): ChatLLM {
         });
       }
 
-      const res = await fetch('/api/agui/run', {
+      /*
+       * Through `accessFetch`, not a bare `fetch`.
+       *
+       * This is the one request whose body outlives it by minutes: the answer
+       * arrives as a stream that keeps feeding the reducer and invalidating
+       * caches long after the response resolved. Bound only to the library's
+       * own signal it survived an identity switch — the previous owner's tool
+       * results, canvas invalidations and answer text went on landing in a tab
+       * that was now acting as somebody else. The shared access signal aborts
+       * the body as well as the request; the epoch check in the adapter
+       * (`platformAdapter.ts`) is the second defence for an event that gets
+       * past the abort.
+       */
+      const res = await accessFetch('/api/agui/run', {
         method: 'POST',
-        credentials: 'include',
         headers: { 'content-type': 'application/json' },
         signal,
         body: JSON.stringify({

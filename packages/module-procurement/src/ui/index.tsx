@@ -14,6 +14,7 @@ import {
   DeliveryTermsCard,
   OfferItemFormCard,
   OfferListCard,
+  procurementArtifactRenderers,
   procurementCardRenderers,
 } from './cards.tsx';
 import { procurementDetailOpenuiComponents } from './detailComponents.tsx';
@@ -157,6 +158,7 @@ export const procurementUiModule: UiModule = {
     description: 'Karty, ekrany i komponenty OpenUI domeny zakupowej.',
   },
   cardRenderers: procurementCardRenderers,
+  artifactRenderers: procurementArtifactRenderers,
   openuiComponents,
   menu,
   menuSections,

@@ -162,6 +162,75 @@ describe('artefakt live odczytuje zarejestrowana operacje modulu', () => {
     expect(a.body.live.operation).toBe(b.body.live.operation);
   });
 
+  it('wersja definicji i stan zrodla sa rozroznione: definicja stoi, odcisk zrodla sie zmienia', async () => {
+    const { meta } = h.platform.services.artifacts.create({
+      ownerId: h.ownerId,
+      kind: 'table',
+      mode: 'live',
+      title: 'Wersja kontra swiezosc',
+      rendererType: 'procurement.comparison',
+      content: { operation: 'procurement.comparison', input: { caseId } },
+    });
+
+    const first = await api(`/api/artifacts/${meta.id}`);
+    // Far enough apart that every timestamp in the answer differs. Without the
+    // wait the two reads can land in one millisecond, and a fingerprint taken
+    // over the whole envelope — timestamps included — would pass by accident.
+    await new Promise((r) => setTimeout(r, 25));
+    const again = await api(`/api/artifacts/${meta.id}`);
+    // Two reads a moment apart, with nothing changed behind them: two different
+    // moments, one state of the source. Without the fingerprint the second read
+    // is indistinguishable from a view that never refreshed.
+    expect(again.body.live.resolvedAt).not.toBe(first.body.live.resolvedAt);
+    expect(again.body.live.sourceFingerprint).toBe(first.body.live.sourceFingerprint);
+    // The answers themselves are *not* identical — the module stamps each one
+    // with the moment it was computed — so the equality above is a statement
+    // about the source, not about the bytes.
+    expect(again.body.content.evaluatedAt).not.toBe(first.body.content.evaluatedAt);
+    expect(first.body.live.sourceFingerprint).toMatch(/^[0-9a-f]{16}$/);
+
+    const changedOffer = await changeSourceData();
+    expect(totalFor(changedOffer)).not.toBe(totalFor(changedOffer, first.body.content));
+
+    const afterChange = await api(`/api/artifacts/${meta.id}`);
+    // The saved question did not change...
+    expect(afterChange.body.live.definitionVersion).toBe(first.body.live.definitionVersion);
+    expect(afterChange.body.live.operation).toBe(first.body.live.operation);
+    // ...and the state it was answered from did.
+    expect(afterChange.body.live.sourceFingerprint).not.toBe(first.body.live.sourceFingerprint);
+    expect(afterChange.body.live.state).toBe('fresh');
+  });
+
+  it('snapshot nie ma ani odcisku zrodla, ani rozstrzygniecia live', async () => {
+    const snapshot = h.platform.services.artifacts.create({
+      ownerId: h.ownerId,
+      kind: 'table',
+      mode: 'snapshot',
+      title: 'Zamrozone',
+      rendererType: 'procurement.comparison',
+      content: h.service.compare(caseId, h.ownerId),
+    }).meta;
+    const read = await api(`/api/artifacts/${snapshot.id}`);
+    // A snapshot answers no question now, so it reports no state of the source.
+    expect(read.body.live).toBeNull();
+  });
+
+  it('nieudane rozstrzygniecie nie niesie odcisku zrodla', async () => {
+    const { meta } = h.platform.services.artifacts.create({
+      ownerId: h.ownerId,
+      kind: 'table',
+      mode: 'live',
+      title: 'Nierozwiazywalny',
+      rendererType: 'procurement.comparison',
+      content: { operation: 'procurement.comparison', input: { caseId: 'case_nie_istnieje' } },
+    });
+    const read = await api(`/api/artifacts/${meta.id}`);
+    expect(read.body.live.state).not.toBe('fresh');
+    // No answer, so nothing to fingerprint — and null, never a digest of
+    // `null`, which would read as "a source state was seen".
+    expect(read.body.live.sourceFingerprint).toBeNull();
+  });
+
   it('brak dostepu nie jest przedstawiany jako swieze dane', async () => {
     const { meta } = h.platform.services.artifacts.create({
       ownerId: h.ownerId,

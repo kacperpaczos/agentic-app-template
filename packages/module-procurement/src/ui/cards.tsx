@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { BarChart } from '@openuidev/react-ui';
 import {
   apiPatch,
-  invalidateBusinessData,
+  invalidateChangedData,
   qk,
   typedCard,
   useAppState,
@@ -210,26 +210,33 @@ const OfferListBody: CardComponent<OfferListProps> = ({ props }) => {
   );
 };
 
-const ComparisonTableBody: CardComponent<OfferComparisonProps> = ({ cardId, props }) => {
-  const caseId = String(props.caseId ?? '');
-  const showExcludedDefault = props.showExcluded !== false;
-  const { data, isLoading, error } = useComparison(caseId);
-
-  // Card-local view state lives in the app store, not in the canvas node, so it
-  // survives the agent rearranging the layout.
-  const cardState = useAppState((s) => s.cardState[cardId]);
-  const setCardState = useAppState((s) => s.setCardState);
-  const showExcluded = (cardState?.showExcluded as boolean | undefined) ?? showExcludedDefault;
-
-  if (isLoading) return <Loading />;
-  if (error) return <Failure error={error} />;
-  if (!data) return <div className="pf-state pf-state--empty">Brak danych porownania.</div>;
-
+/**
+ * The comparison itself, given a comparison.
+ *
+ * Split out of the card because the same table now has two sources and they
+ * must look the same: the card reads the case as it is *now*, an artifact
+ * carries a comparison that was *saved* (a snapshot) or has just been recomputed
+ * (a live artifact). Rendering a saved comparison by re-reading the case would
+ * turn the snapshot into a live view — which is exactly the difference the
+ * artifact exists to preserve — so the data is a parameter and nothing here
+ * fetches.
+ */
+export function ComparisonView({
+  data,
+  showExcluded,
+  onToggleExcluded,
+  testId,
+}: {
+  data: ComparisonResult;
+  showExcluded: boolean;
+  onToggleExcluded?: (next: boolean) => void;
+  testId: string;
+}) {
   const ranked = data.rows.filter((r) => r.comparable).sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
   const excluded = data.rows.filter((r) => !r.comparable);
 
   return (
-    <div data-testid="card-comparison">
+    <div data-testid={testId}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
         <span className="pf-badge">
           podstawa: {data.caseCurrency}, {data.casePriceBasis === 'net' ? 'netto' : 'brutto'}
@@ -238,7 +245,8 @@ const ComparisonTableBody: CardComponent<OfferComparisonProps> = ({ cardId, prop
           <input
             type="checkbox"
             checked={showExcluded}
-            onChange={(e) => setCardState(cardId, { showExcluded: e.target.checked })}
+            disabled={!onToggleExcluded}
+            onChange={(e) => onToggleExcluded?.(e.target.checked)}
           />{' '}
           pokaz wykluczone ({excluded.length})
         </label>
@@ -317,6 +325,58 @@ const ComparisonTableBody: CardComponent<OfferComparisonProps> = ({ cardId, prop
 
       <LineBreakdown rows={showExcluded ? data.rows : ranked} />
     </div>
+  );
+}
+
+/** The case's comparison as it is now. */
+const ComparisonTableBody: CardComponent<OfferComparisonProps> = ({ cardId, props }) => {
+  const caseId = String(props.caseId ?? '');
+  const showExcludedDefault = props.showExcluded !== false;
+  const { data, isLoading, error } = useComparison(caseId);
+
+  // Card-local view state lives in the app store, not in the canvas node, so it
+  // survives the agent rearranging the layout.
+  const cardState = useAppState((s) => s.cardState[cardId]);
+  const setCardState = useAppState((s) => s.setCardState);
+  const showExcluded = (cardState?.showExcluded as boolean | undefined) ?? showExcludedDefault;
+
+  if (isLoading) return <Loading />;
+  if (error) return <Failure error={error} />;
+  if (!data) return <div className="pf-state pf-state--empty">Brak danych porownania.</div>;
+
+  return (
+    <ComparisonView
+      data={data}
+      showExcluded={showExcluded}
+      onToggleExcluded={(next) => setCardState(cardId, { showExcluded: next })}
+      testId="card-comparison"
+    />
+  );
+};
+
+/**
+ * A saved or re-read comparison, shown wherever the platform shows an artifact:
+ * inline under the call that produced it, and as a page of its own in the
+ * artifact browser.
+ *
+ * The content is what the platform handed over — the frozen payload of a
+ * snapshot, or the answer a live artifact's query has just produced. It is
+ * never re-read here: that is the platform's job and doing it again would make
+ * the two views disagree.
+ */
+export const ComparisonArtifact = ({ content }: { content: unknown }) => {
+  const [showExcluded, setShowExcluded] = useState(true);
+  const data = content as ComparisonResult | null;
+  if (!data || !Array.isArray(data.rows)) {
+    return <div className="pf-state pf-state--empty">Artefakt nie zawiera zestawienia.</div>;
+  }
+  return (
+    <ComparisonView
+      data={data}
+      showExcluded={showExcluded}
+      onToggleExcluded={setShowExcluded}
+      testId="artifact-comparison"
+    />
   );
 };
 
@@ -512,7 +572,14 @@ const OfferItemFormBody: CardComponent<OfferItemFormProps> = ({ cardId, props })
       clearDraft(`item-${item?.id}`);
       setQuantity('');
       setUnitPrice('');
-      invalidateBusinessData(qc);
+      /*
+       * `invalidateChangedData`, not `invalidateBusinessData`: business data
+       * changed, and an open live artifact is a view of that data. Refreshing
+       * the tables and leaving the artifact alone is how a report labelled
+       * "dane aktualne" went on showing the number the user had just changed,
+       * next to the form they changed it in.
+       */
+      invalidateChangedData(qc);
       void qc.invalidateQueries({ queryKey: qk.spaces() });
     },
     onError: (e) => {
@@ -697,7 +764,6 @@ const ProvenanceBody: CardComponent<ItemProvenanceProps> = ({ props }) => {
   );
 };
 
-
 /* ---------------------------------------------------------------------------
  *  Typed cards
  *
@@ -715,6 +781,21 @@ export const CostChartCard = typedCard(offerCostChartPropsSchema, CostChartBody)
 export const DeliveryTermsCard = typedCard(deliveryTermsPropsSchema, DeliveryTermsBody);
 export const OfferItemFormCard = typedCard(offerItemFormPropsSchema, OfferItemFormBody);
 export const ProvenanceCard = typedCard(itemProvenancePropsSchema, ProvenanceBody);
+
+/**
+ * Artifact renderers of this module, keyed by `rendererType`.
+ *
+ * `save_comparison` has always produced artifacts of type
+ * `procurement.comparison`, and nothing in the browser knew how to draw one —
+ * so a saved comparison opened in the artifact browser as raw JSON, or as
+ * nothing at all. The renderer is the same table the card draws; only the
+ * source of the data differs — so it takes `ComparisonView`, the presentation,
+ * and never the card, which would re-read the case and turn a snapshot into a
+ * live view.
+ */
+export const procurementArtifactRenderers = {
+  'procurement.comparison': ComparisonArtifact,
+};
 
 export const procurementCardRenderers: Record<string, CardComponent> = {
   'procurement.caseSummary': CaseSummaryCard,
