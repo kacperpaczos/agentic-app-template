@@ -109,7 +109,10 @@ export interface MeasurementRecord {
  * Writes one measurement record into the task's evidence directory.
  *
  * Each producer owns its own file; nothing merges, so a run of one regression
- * cannot silently drop the other's results.
+ * cannot silently drop the other's results. A round of corrections writes under
+ * a new name rather than over the old one — a recorded measurement is a fact
+ * about the code that produced it, and replacing it in place would quietly
+ * rewrite history that a report already cites.
  */
 export function writeMeasurementRecord(
   fileName: string,

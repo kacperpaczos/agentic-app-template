@@ -17,8 +17,8 @@
     }
   },
   "lancuch": {
-    "rozmowa": "cnv_ea0cdfd4c1374c099f31",
-    "wykonanie": "run_8f3a9e042ecb462a8f95",
+    "rozmowa": "cnv_a7d193b6a5fa4d36a1a5",
+    "wykonanie": "run_e47ad2a1c88e43b4bc6b",
     "narzedzie": {
       "nazwa": "mcp__app__procurement_update_offer_item",
       "toolCallId": "tu_1",
@@ -26,23 +26,23 @@
       "zrodloWyniku": "run_events TOOL_CALL_RESULT oraz messages(role=tool)"
     },
     "mutacja": {
-      "rekord": "pci_d2365cd13b224bba8900",
+      "rekord": "pci_d3cabcfa74a942db857f",
       "wersjaPrzed": 1,
       "wersjaPo": 2,
       "zasobyZdarzenia": [
-        "case:pcs_af89e552f03644d6b763",
-        "offer:pco_9228ecc5e9a14972989d"
+        "case:pcs_4a693872e85542cda69a",
+        "offer:pco_1507bf2266684bf083de"
       ]
     },
     "artefakt": {
-      "id": "art_74ec864be01f4f7ba87e",
-      "runId": "run_8f3a9e042ecb462a8f95",
-      "conversationId": "cnv_ea0cdfd4c1374c099f31"
+      "id": "art_9667c5e6db484efcb9e9",
+      "runId": "run_e47ad2a1c88e43b4bc6b",
+      "conversationId": "cnv_a7d193b6a5fa4d36a1a5"
     }
   },
   "kontrolaNegatywna": {
     "opis": "artefakt utworzony poza uruchomieniem",
-    "artefakt": "art_27f97e21c3c6487396ce",
+    "artefakt": "art_88aea8f18d2f46469080",
     "runId": null
   }
 }

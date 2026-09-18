@@ -198,7 +198,7 @@ describe('powiazanie rozmowy z wykonaniem, narzedziem, mutacja i artefaktem', ()
     expect(byHand.meta.runId).toBeNull();
     expect(byHand.meta.conversationId).toBe(conversationId);
 
-    writeEvidence('powiazanie-diagnostyczne.json', {
+    writeEvidence('powiazanie-diagnostyczne-runda2.json', {
       opis:
         'Lancuch rozmowa → wykonanie → narzedzie → mutacja → artefakt, przejsty wylacznie po ' +
         'danych diagnostycznych (agent_runs, run_events, messages, artifacts), w obie strony.',
@@ -343,7 +343,7 @@ describe('klasy bledow sa rozroznialne w zapisanym uruchomieniu', () => {
       gdzieZapisane: 'messages(role=tool).content + meta.isError',
     };
 
-    writeEvidence('klasy-bledow.json', {
+    writeEvidence('klasy-bledow-runda2.json', {
       opis:
         'Rozroznialnosc klas bledow w zapisanych danych: blad modelu, blad integracji, odmowa ' +
         'sandboxa, limit dostepu i odmowa reguly domenowej. Kazdy ma inny kod i inne miejsce zapisu.',
@@ -412,25 +412,45 @@ describe('sekret ze srodowiska nie trafia do diagnostyki', () => {
       ).text();
 
       const db = h.platform.db.$client;
-      const surfaces: Record<string, string> = {
-        'logi serwera (console.*)': logged.join('\n'),
-        'agent_runs': JSON.stringify(db.prepare('SELECT * FROM agent_runs').all()),
-        'run_events': JSON.stringify(db.prepare('SELECT * FROM run_events').all()),
-        messages: JSON.stringify(db.prepare('SELECT * FROM messages').all()),
-        'odpowiedz /api/status': status,
-      };
       /*
-       * The database is three files in WAL mode, and the most recent writes are
-       * in the journal, not in the main file. Scanning `app.db` alone would look
-       * thorough and miss everything this run just wrote.
+       * Built fresh on every call, so the positive control below re-reads the
+       * same places rather than a snapshot of them.
        */
-      for (const suffix of ['', '-wal', '-shm']) {
-        const file = `${h.platform.config.dbFile}${suffix}`;
-        if (existsSync(file)) surfaces[`plik bazy ${suffix || 'app.db'}`] = readFileSync(file).toString('latin1');
-      }
-      const evidenceDir = resolve(process.cwd(), EVIDENCE_DIR);
-      for (const name of readdirSync(evidenceDir)) {
-        surfaces[`dowod ${name}`] = readFileSync(resolve(evidenceDir, name), 'utf8');
+      const collect = (): Record<string, string> => {
+        const out: Record<string, string> = {
+          'logi serwera (console.*)': logged.join('\n'),
+          'agent_runs': JSON.stringify(db.prepare('SELECT * FROM agent_runs').all()),
+          'run_events': JSON.stringify(db.prepare('SELECT * FROM run_events').all()),
+          messages: JSON.stringify(db.prepare('SELECT * FROM messages').all()),
+          'odpowiedz /api/status': status,
+        };
+        /*
+         * The database is three files in WAL mode, and the most recent writes
+         * are in the journal, not in the main file. Scanning `app.db` alone
+         * would look thorough and miss everything the run just wrote.
+         */
+        for (const suffix of ['', '-wal', '-shm']) {
+          const file = `${h.platform.config.dbFile}${suffix}`;
+          if (existsSync(file)) out[`plik bazy ${suffix || 'app.db'}`] = readFileSync(file).toString('latin1');
+        }
+        const evidenceDir = resolve(process.cwd(), EVIDENCE_DIR);
+        for (const name of readdirSync(evidenceDir)) {
+          out[`dowod ${name}`] = readFileSync(resolve(evidenceDir, name), 'utf8');
+        }
+        return out;
+      };
+
+      const surfaces = collect();
+      /*
+       * A surface that is not there cannot hide a secret, and a clean scan over
+       * nothing is the easiest way for this test to pass while proving nothing.
+       * A mistyped database path, for instance, would drop its file silently.
+       * The log is deliberately not on this list: an application that printed
+       * nothing is a result, not a missing surface.
+       */
+      for (const key of ['agent_runs', 'run_events', 'messages', 'odpowiedz /api/status', 'plik bazy app.db']) {
+        expect(Object.keys(surfaces), `brak powierzchni: ${key}`).toContain(key);
+        expect(surfaces[key]!.length, `pusta powierzchnia: ${key}`).toBeGreaterThan(0);
       }
 
       scanned = Object.fromEntries(Object.entries(surfaces).map(([k, v]) => [k, v.length]));
@@ -441,12 +461,29 @@ describe('sekret ze srodowiska nie trafia do diagnostyki', () => {
         expect(text, `fragment sekretu w: ${where}`).not.toContain(CANARY.slice(0, 20));
       }
 
-      /* ------------------------- negative control ------------------------- */
-      // The scan has to be able to fail: the same check over a surface that does
-      // contain the value must find it.
-      const fabricated = `ANTHROPIC_API_KEY=${CANARY}`;
-      expect(fabricated).toContain(CANARY);
-      expect(() => expect(fabricated).not.toContain(CANARY)).toThrow();
+      /* ------------------------- positive control ------------------------- */
+      /*
+       * Everything above is an absence, and an absence proves nothing until the
+       * same procedure is shown to detect a presence — on the real surfaces,
+       * not on a string this test just built. So the value is written where the
+       * application's own data lives, through the application's own service,
+       * and the surfaces are collected again.
+       */
+      h.platform.services.conversations.appendMessage(conversationId, h.ownerId, {
+        role: 'user',
+        content: `kontrola pozytywna skanu: ${CANARY}`,
+      });
+      // Moves the journal into the main file, so the file surface is exercised too.
+      db.pragma('wal_checkpoint(TRUNCATE)');
+      const planted = collect();
+      expect(planted.messages, 'skan nie widzi wartosci w tabeli messages').toContain(CANARY);
+      expect(
+        planted['plik bazy app.db'],
+        'skan nie widzi wartosci w pliku bazy — czyta nie ten plik',
+      ).toContain(CANARY);
+      // And the surfaces that were not written to stay clean, so the control
+      // located the value rather than the scan turning positive everywhere.
+      expect(planted['odpowiedz /api/status']).not.toContain(CANARY);
 
       /*
        * The environment handed to the agent's child is a different question
@@ -463,19 +500,26 @@ describe('sekret ze srodowiska nie trafia do diagnostyki', () => {
       for (const s of spies) s.mockRestore();
     }
 
-    writeEvidence('sekrety-w-diagnostyce.json', {
+    writeEvidence('sekrety-w-diagnostyce-runda2.json', {
       opis:
         'Wartosc poswiadczenia umieszczona w srodowisku procesu serwera nie wystepuje w zadnej ' +
         'powierzchni diagnostycznej aplikacji ani w plikach dowodow tego zadania.',
       zrodlo: 'pnpm test → tests/diagnostics.test.ts (regresja szablonu)',
       warunki:
-        'kanarki ustawione w ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN i APP_TAJNY_KANAREK przed ' +
-        'utworzeniem instancji; przebieg udany i przebieg zakonczony bledem; console.* przechwycone ' +
-        'na czas przebiegu; skan po tresci, nie po nazwie zmiennej',
+        'kanarki ustawione w ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN i APP_TAJNY_KANAREK w ' +
+        'srodowisku procesu przed przebiegami — instancja powstaje wczesniej, w beforeEach pliku, ' +
+        'wiec twierdzenie dotyczy przebiegow, nie startu instancji; przebieg udany i przebieg ' +
+        'zakonczony bledem; console.* przechwycone na czas przebiegow; skan po tresci wartosci, ' +
+        'nie po nazwie zmiennej',
       wersjaKodu: codeVersion(h.platform.versions),
       przeskanowanePowierzchnieZnakow: scanned,
-      kontrolaNegatywna:
-        'ten sam skan nad spreparowanym tekstem zawierajacym kanarka znajduje go — asercja potrafi oblac',
+      kontrolaPozytywna:
+        'po wpisaniu wartosci do wiadomosci rozmowy przez serwis aplikacji ten sam skan znajduje ja ' +
+        'w tabeli messages i w pliku bazy, a nie znajduje w odpowiedzi /api/status — czyli czyta ' +
+        'zywe powierzchnie, a nie napis zbudowany przez test',
+      wymaganePowierzchnie:
+        'agent_runs, run_events, messages, odpowiedz /api/status i plik bazy app.db musza istniec i ' +
+        'byc niepuste; znikniecie powierzchni nie moze uchodzic za czysty wynik',
       uwagaOLogach:
         'Zerowa dlugosc „logi serwera (console.*)” znaczy, ze aplikacja nie wypisala w tych przebiegach ' +
         'niczego — to wynik, nie brak pomiaru. Skan niepustego logu serwera produkcyjnego z pelnej tury ' +

@@ -736,8 +736,13 @@ export class ModelStreamError extends Error {
  *  - **integration** (`integration_failed`) — everything else, including a
  *    timeout and a call that never produced a stream at all.
  *
- * An error the application already classified keeps its own code: the sandbox
- * refuses by code, and downgrading that to a wording match would lose it.
+ * The four above are what this function *decides*. Before deciding anything it
+ * defers: an error the application already classified — any `AppError` whose
+ * code is not the catch-all `internal` — is passed through with the code it
+ * arrived with. That is deliberately wider than the four classes, because the
+ * layer that raised it knew more than a wording match ever can: the sandbox
+ * refuses by code, a domain rule refuses by code, and so do access, validation
+ * and conflict. Re-deriving any of those from the message would lose them.
  *
  * Exported because the classes are a contract, not an implementation detail —
  * the taxonomy is asserted directly over realistic failure texts.

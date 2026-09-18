@@ -227,7 +227,12 @@ describe('pomiary rozdzielone na punkty, zapisane z warunkami i wersja kodu', ()
         co: 'czas do pierwszego przyrostu tekstu odpowiedzi',
         od: 'start wykonania',
         do: 'pierwszy niepusty przyrost tekstu ze strumienia modelu',
-        warunki: `stand-in modelu; ${SAMPLES} uruchomien z tekstem i 1 uruchomienie bez tekstu (wywolanie narzedzia, zadnego slowa)`,
+        warunki:
+          `stand-in modelu; ${SAMPLES} uruchomien z tekstem i 1 uruchomienie bez tekstu ` +
+          '(wywolanie narzedzia, zadnego slowa). Skrypt odpowiedzi czeka 15 ms przed pierwszym ' +
+          'przyrostem i opoznia sam przyrost o 10 ms, wiec ok. 25 z mierzonych milisekund to ' +
+          'wymuszony sen stand-ina, nie czas modelu — ta liczba mowi o rozdzieleniu punktu ' +
+          'pomiaru, nie o szybkosci odpowiadania.',
         probkiMs: doPierwszegoTekstu,
         uwagi:
           'Ostatnia probka to null: uruchomienie bez tekstu nie ma czasu pierwszego tekstu. ' +
@@ -242,7 +247,7 @@ describe('pomiary rozdzielone na punkty, zapisane z warunkami i wersja kodu', ()
       },
     };
 
-    const file = writeMeasurementRecord('pomiary-backend.json', {
+    const file = writeMeasurementRecord('pomiary-backend-runda2.json', {
       opis:
         'Punkty pomiaru uruchomienia agenta rozdzielone: kolejka, start wykonania, pierwszy tekst, ' +
         'zakonczenie. Brak tekstu daje brak metryki, nie zero.',
@@ -320,6 +325,13 @@ describe('Stop: rozdzielone potwierdzenie zadania, koniec strumienia i koniec pr
         headers: { cookie },
       });
       const acknowledgedAt = Date.now();
+      /*
+       * Read in the same synchronous step as the instant itself. Asserting it
+       * after the `await` below would be asking about a moment several
+       * macrotasks later — the answer would usually still be right, and the
+       * measurement would no longer be about the instant it names.
+       */
+      const childExitedAtAck = r.stand.childExitedAt;
       expect(res.status).toBe(200);
       expect((await res.json()).cancelled).toBe(true);
 
@@ -333,7 +345,7 @@ describe('Stop: rozdzielone potwierdzenie zadania, koniec strumienia i koniec pr
        * to mean either "the backend heard you" or "the work has stopped", and
        * those are different times.
        */
-      expect(r.stand.childExitedAt).toBeNull();
+      expect(childExitedAtAck).toBeNull();
 
       await r.done;
       await r.reader;
@@ -372,15 +384,24 @@ describe('Stop: rozdzielone potwierdzenie zadania, koniec strumienia i koniec pr
 
       /* --------------------- no further mutations -------------------------- */
 
+      /*
+       * Counted per run, not per conversation. The conversation keeps growing
+       * on purpose — the follower run is executing in it — so a count of all
+       * its messages can only ever go up, and comparing it with `>=` asks a
+       * question that has no failing answer. What must not grow is what the
+       * *cancelled* run wrote.
+       */
+      const messagesOfCancelledRun = () =>
+        h.platform.services.conversations
+          .messages(conversationId, h.ownerId)
+          .filter((m) => (m.meta as { runId?: string } | null)?.runId === r.runId).length;
       const eventsAfterEnd = h.platform.services.runs.events(r.runId, h.ownerId).length;
-      const messagesAfterEnd = h.platform.services.conversations.messages(conversationId, h.ownerId)
-        .length;
+      const messagesAfterEnd = messagesOfCancelledRun();
+      expect(messagesAfterEnd, 'anulowane uruchomienie nie zapisalo nic').toBeGreaterThan(0);
       // Long enough that the cancelled script's remaining steps would have run.
       await new Promise((rs) => setTimeout(rs, 400));
       expect(h.platform.services.runs.events(r.runId, h.ownerId).length).toBe(eventsAfterEnd);
-      expect(
-        h.platform.services.conversations.messages(conversationId, h.ownerId).length,
-      ).toBeGreaterThanOrEqual(messagesAfterEnd);
+      expect(messagesOfCancelledRun()).toBe(messagesAfterEnd);
       // The domain is the real test: the cancelled script's next step was a write.
       expect(r.stand.performed).not.toContain('procurement_set_criteria_weights');
       expect(JSON.stringify(h.service.getCaseDetail(caseId, h.ownerId).criteria)).toBe(
@@ -411,7 +432,7 @@ describe('Stop: rozdzielone potwierdzenie zadania, koniec strumienia i koniec pr
       'strumieniujace tekst i trzymajace prawdziwy proces potomny zwiazany z sygnalem przerwania; ' +
       'proces potomny zastepuje proces Claude Agent SDK, ktorego ten przebieg nie uruchamia';
 
-    const file = writeMeasurementRecord('pomiary-stop.json', {
+    const file = writeMeasurementRecord('pomiary-stop-runda2.json', {
       opis:
         'Faktyczne anulowanie rozdzielone na trzy instanty: potwierdzenie zadania Stop, ' +
         'zakonczenie strumienia zdarzen i zakonczenie procesow uruchomienia. Po zakonczeniu ' +
