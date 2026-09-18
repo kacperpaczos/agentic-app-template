@@ -156,3 +156,51 @@ modelu — czyli od zachowania, które L11.23 wyklucza. Zmiana nie kosztuje tury
 | `… playwright test` (moje cztery spece) | 0 | **15 testów** |
 | `… playwright test` (cały domyślny przebieg) | 0 | **174 testy**, zero oblanych — test nawigacji, który oblał przy trzech równoległych zestawach, przechodzi |
 | `pnpm verify` | 0 | 45 plików / **723 testy**; `git status --porcelain` po przebiegu: pusto |
+
+---
+
+## Runda poprawek 2 (odtwarzanie a polecenia sterujące)
+
+Recenzent zauważył, że dla przebiegu ze ścieżki wysyłki `lastSeq` zostawał zerem, więc odtworzenie
+przepuszczało **wszystkie** zdarzenia własne, w tym polecenia sterujące interfejsem.
+
+Trzy odpowiedzi, każda z próbą:
+
+1. **Ochrona przez `commandId` już istnieje i obejmuje tę ścieżkę.** `UiCommandRunner` odmawia
+   polecenia, które ta karta już wykonała (zbiór w pamięci + kopia w `sessionStorage` na wypadek
+   przeładowania). Moja ścieżka jest łatwiejsza od tej, dla której ochronę pisano — karta nie jest
+   przeładowywana.
+2. **Kursor**: `platformAdapter` liczy zastosowane zdarzenia i zapisuje `lastSeq`. Numeru nie da się
+   odczytać z drutu (gotowy parser oddaje zdarzenia, nie linię `id:`), ale backend numeruje od 1 co 1 i
+   wysyła w kolejności od początku, więc licznik **jest** numerem ostatniego.
+3. **Odtworzenie zakończonego przebiegu nie niesie poleceń sterujących.** Takie polecenie to pytanie,
+   na które nikt już nie czeka — agent dostał `no_client`. Filtr działa wyłącznie w ścieżce z
+   dziennika; przebieg trwający dostaje polecenia ze strumienia na żywo.
+
+| # | Wycofana linia | Test | Jak oblał |
+|---|---|---|---|
+| P | zapis kursora w `platformAdapter` | `e2e/run-continuity.spec.ts` „po powrocie… nawigacja agenta nie powtarza sie” | `klient poprosil o odtworzenie od poczatku` (`from > 0`) |
+| Q | kursor **i** filtr jednocześnie | ten sam test | oblał **wyłącznie** na asercji o kursorze, która stoi za asercjami o ekranie — czyli ekran utrzymało samo `commandId` |
+| R | filtr poleceń sterujących w odtworzeniu | `tests/run-replay.test.ts` | „odtworzenie zakonczonego uruchomienia niesie polecenie sterujace interfejsem” |
+
+Kolejność asercji w teście przeglądarkowym zmieniona celowo: **skutek widoczny przed mechanizmem**,
+żeby próba psująca mechanizm mogła pokazać, czy ekran się utrzymał. Asercja, która nigdy się nie
+wykona, niczego nie dowodzi.
+
+### Zawężone opisy (bez zmian w kodzie)
+
+- cięcie zrywa odcinek **przeglądarka–pośrednik**; gniazdo pośrednika do aplikacji zostaje otwarte.
+  Połówkę po stronie serwera pokrywa próba zamknięcia karty;
+- `reachable === false` jest strażnikiem ustawienia, nie dowodem (spełnia go samo przejście w offline);
+  ciężar niosą: koniec przebiegu przy odciętej stronie i **brak znacznika na ekranie** w tym czasie;
+- odzyskiwanie odpalają tylko `online`, montowanie i zmiana rozmowy, a nieudane `attachToRun` nie jest
+  ponawiane — zapisane przy kodzie jako świadoma decyzja (ponowienie wymagałoby harmonogramu i licznika
+  czasu, który potrafi odpalić po zmianie tożsamości).
+
+### Przebiegi rundy 2
+
+| Polecenie | Kod | Wynik |
+|---|---|---|
+| `… playwright test` (run-continuity + bl10-agent-navigation + ui-navigation + interactions) | 0 | **20 testów** |
+| `… playwright test` (cały domyślny przebieg) | 0 | **175 testów**, zero oblanych |
+| `pnpm verify` | 0 | 45 plików / **725 testów**; drzewo po przebiegu czyste |
