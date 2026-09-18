@@ -81,3 +81,70 @@ kolejność momentów, ich rozdzielenie i liczby procesów.
 **Czego ten pomiar nie pokazuje:** proces potomny jest prawdziwym procesem systemowym związanym z
 sygnałem przerwania uruchomienia, ale stoi w miejscu procesu Claude Agent SDK na granicy adaptera.
 Bez grantu tur modelu nie wykazano, że Stop kończy proces potomny samego SDK (L11.7 pozostaje otwarte).
+
+---
+
+## Runda poprawek 1 (po recenzji)
+
+### C1 — próba utraty sieci przechodziła z niewłaściwego powodu
+
+Recenzent zmierzył własną sondą, że `BrowserContext.setOffline(true)` **nie zrywa nawiązanego
+strumienia**: po przejściu w offline strumień dostawał dalsze fragmenty i zdarzenie końcowe na tym
+samym połączeniu. Próba oparta na samym `setOffline` nie mogła więc oblać z powodu, który deklarowała.
+
+Co zrobiono:
+
+- **prawdziwe zerwanie**: przeglądarka rozmawia z instancją przez `e2e/support/cuttable-proxy.ts`,
+  który na żądanie niszczy wszystkie połączenia i odrzuca nowe. `setOffline` zostaje obok wyłącznie po
+  to, co robi uczciwie — zgłasza awarię stronie i wyzwala zdarzenia `offline`/`online`;
+- próba asertuje teraz stan pośredni: po zerwaniu **strona nie sięga serwera** (`fetch` z wnętrza
+  strony zwraca błąd) i **wynik nie pojawia się na ekranie**, a uruchomienie kończy się w backendzie
+  (pytanym spoza przeglądarki) bez żadnego obserwatora;
+- **naprawa produktu**: klient, który stracił strumień kończącego się przebiegu, nie miał żadnej
+  automatycznej drogi do odpowiedzi — `GET /api/runs/active` zwraca wyłącznie statusy aktywne, więc po
+  powrocie lista była pusta i `attachToRun` nie było wołane nigdy. `syncActiveRuns` dołącza teraz także
+  do przebiegów, które ten klient śledził, a których backend już nie wymienia; odtworzenie od kursora
+  przynosi zdarzenie końcowe, a za nim ponowny odczyt rozmowy. Bez przeładowania i bez zmiany rozmowy.
+
+| # | Wycofana linia | Test | Jak oblał |
+|---|---|---|---|
+| O | dołączanie do przebiegów nieobecnych na liście aktywnych (`syncActiveRuns`) | `e2e/run-continuity.spec.ts` „utrata sieci zrywa strumien…” | po 60 s marker odpowiedzi nigdy nie pojawił się w wątku (linia 239) |
+
+### I2 — atomowość zapisu mierzona wykonaną awarią
+
+`node:fs` jest mockowany przepuszczającym hakiem na `renameSync` (`vi.spyOn` nie działa na przestrzeni
+nazw ESM), co pozwala **wykonać** obie klauzule zamiast je opisywać.
+
+| # | Wycofana linia / wstrzyknięta awaria | Test | Jak oblał |
+|---|---|---|---|
+| M | przemianowanie zastąpione zapisem wprost pod nazwę docelową | `tests/publication.test.ts` | **4 testy**, w tym „bajty trafiaja pod nazwe docelowa przez zmiane nazwy” |
+| N | brak sprzątnięcia pliku tymczasowego po awarii zmiany nazwy | `tests/publication.test.ts` | „po awarii zmiany nazwy cos zostalo w magazynie: expected [ Array(1) ] to deeply equal []” |
+
+Próba F2 z pierwszej rundy (która wykrywała tylko śmieci) jest zastąpiona przez M i N.
+
+### I3 — luźna asercja w specu modelowym
+
+`e2e/files-agent.spec.ts` wymaga w B1 **liczby**; komórka formuły z zapisanym `result` nie zalicza.
+Biblioteka w workspace niczego nie liczy, więc niepusta wartość obok formuły mogłaby pochodzić tylko od
+modelu — czyli od zachowania, które L11.23 wyklucza. Zmiana nie kosztuje tury.
+
+### Drobne
+
+- usunięcie pliku: wiersz i bajty znikają w **jednej transakcji** (wcześniej błąd po usunięciu wiersza
+  rozjeżdżał magazyn z dyskiem);
+- bajty czytane **raz**, nad bramką idempotencji — odcisk i publikacja z tego samego odczytu (postać
+  uzgodniona do scalenia z pakietem orkiestracji);
+- suma kontrolna porównywana z bajtami wgranymi przez użytkownika zamiast z samą sobą;
+- pobranie **kliknięciem**, ze zdarzeniem pobrania, nazwą pliku i otwarciem zapisanego pliku;
+- próba artefaktu produkuje własny artefakt (uruchamia się osobno) i publikuje pod własną nazwą, żeby
+  przeglądarka artefaktów nie miała dwóch wpisów o tym samym tytule;
+- deklaracja ograniczeń skoroszytu nazywa wyłącznie wykres, który ma próbę.
+
+### Przebiegi rundy 1
+
+| Polecenie | Kod | Wynik |
+|---|---|---|
+| `pnpm verify` | 0 | 45 plików / **723 testy**, drzewo po przebiegu czyste |
+| `… playwright test e2e/run-continuity.spec.ts` | 0 | 4 testy (z prawdziwym zerwaniem połączenia) |
+| `… playwright test e2e/sandbox-files.spec.ts` | 0 | 5 testów |
+| `… playwright test e2e/sandbox-files.spec.ts -g "wynik jest artefaktem"` | 0 | 1 test — dowód, że nie zależy od sąsiadów |
