@@ -1,0 +1,40 @@
+# Warunek pomiaru ma trzy stany: true / false / null („nie wiadomo”).
+# Zadanie Z3 (BL-05), runda poprawek 4. Kod: commit e2f838a3436b088fb713b051a071b53cd8baf8bb.
+#
+# Wada: brudneDrzewo bylo typu boolean, wiec bez gita i bez deklaracji rekord
+# odpowiadal false — twierdzil, ze drzewo bylo czyste, choc nikt tego nie sprawdzil.
+#
+# Ponizsze przebiegi sa w KOPII repozytorium zrobionej przez check-module-swap --keep.
+
+## Kopia naprawde nie ma gita
+$ ls -d .git   -> ".git": No such file or directory (os error 2)
+$ git rev-parse HEAD
+  fatal: not a git repository (or any parent up to mount point /)
+
+## A. Tak, jak robi to krok podmiany: APP_CODE_TREE_DIRTY=1
+   (kopia zawsze rozni sie od commita — o podmiane warstwy skladania)
+   vitest tests/measurements.test.ts -> 5 passed
+   wersjaKodu.commit       = e2f838a3436b088fb713b051a071b53cd8baf8bb
+   wersjaKodu.brudneDrzewo = true      <- deklaracja uslyszana, bo git milczy
+
+## B. Bez deklaracji — nikt nie ma z czego ustalic stanu drzewa
+   env -u APP_CODE_TREE_DIRTY vitest tests/measurements.test.ts -> 1 failed | 4 passed
+   wersjaKodu.brudneDrzewo = null      <- „nie wiadomo”, NIE false
+
+   Oblanie jest tu wynikiem pozytywnym i jest proba zdolnosci wykrycia: asercja
+   rekordu rozroznia „ustalone” od „nieustalone”, zamiast przyjmowac dowolna wartosc.
+
+   AssertionError: stan drzewa musi byc ustalony — z gita albo z deklaracji kopii
+   bez gita: expected null not to be null   (tests/measurements.test.ts:288)
+
+   Przed poprawka ten sam przebieg zapisalby brudneDrzewo: false i przeszedlby
+   bez slowa — rekord twierdzilby, ze drzewo bylo czyste.
+
+## Co mowi sam rekord
+Ten plik powstaje na zadanie (APP_WRITE_EVIDENCE=1, czyli pnpm evidence), nie przy zwyklym pnpm verify. Pole brudneDrzewo ma trzy stany: true — drzewo robocze roznilo sie od commita, false — nie roznilo sie, null — nie dalo sie tego ustalic (przebieg bez gita i bez deklaracji APP_CODE_TREE_DIRTY; tak dzieje sie np. w kopii repozytorium). Null znaczy „nie wiadomo”, nie „czysto”. Odpowiedz dotyczy chwili tej regeneracji i pomija sam katalog dowodow, ktory regeneracja wlasnie przepisuje — nie mowi nic o stanie drzewa w chwili czytania pliku. Pole commit ma wartownika „nieznany” w tej samej sytuacji. Puste pakiety znacza, ze wersji zaleznosci w tym przebiegu nie zbierano — nie ze ich nie ma.
+
+## Uwaga do zlecenia rundy
+W kopii uruchamianej przez check-module-swap wartoscia jest true, nie null: krok
+podmiany podaje APP_CODE_TREE_DIRTY=1 (zmiana BL-06), wiec stan JEST ustalony.
+Stan „nie wiadomo” pojawia sie dopiero wtedy, gdy nie ma ani gita, ani deklaracji —
+i to pokazuje przebieg B powyzej.

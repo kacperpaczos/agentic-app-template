@@ -1,10 +1,14 @@
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AgentRuntime, collectToolEntries, platformTools } from '@platform/server';
 import { createHarness, login, type Harness } from './helpers.ts';
 import { dispatchingAgent, type Plan, type StandInHandle, type Step } from './support/model-standin.ts';
 import {
+  CODE_COMMIT_ENV,
+  CODE_TREE_DIRTY_ENV,
   EVIDENCE_DIR,
   codeVersion,
   evidenceWritingRequested,
@@ -270,9 +274,112 @@ describe('pomiary rozdzielone na punkty, zapisane z warunkami i wersja kodu', ()
     expect(written.pomiary.czasDoPierwszegoTekstu.podsumowanie.brakMetryki).toBe(1);
     expect(written.pomiary.czasDoPierwszegoTekstu.podsumowanie.zMetryka).toBe(SAMPLES);
     expect(written.wersjaKodu.commit).toMatch(/^[0-9a-f]{7,40}$/);
+    /*
+     * The condition of measurement has to be a fact or an explicit blank.
+     * This run happens inside the repository, so git can answer and the record
+     * must carry a decided answer — `null` here would mean the measurement was
+     * taken without knowing what it was taken on, which is a different (and
+     * reportable) situation, not an acceptable alternative.
+     */
+    expect([true, false, null]).toContain(written.wersjaKodu.brudneDrzewo);
+    expect(
+      written.wersjaKodu.brudneDrzewo,
+      'stan drzewa musi byc ustalony — z gita albo z deklaracji kopii bez gita',
+    ).not.toBeNull();
     expect(record.path).toContain(EVIDENCE_DIR);
     // The switch decides the write, and nothing else does.
     expect(record.written).toBe(evidenceWritingRequested());
+  });
+});
+
+/* --------------------- the conditions of a measurement --------------------- */
+
+describe('warunek pomiaru jest faktem albo jawnym brakiem, nigdy domyslnie korzystny', () => {
+  const cwd = process.cwd();
+  const saved = { commit: process.env[CODE_COMMIT_ENV], dirty: process.env[CODE_TREE_DIRTY_ENV] };
+  afterEach(() => {
+    process.chdir(cwd);
+    for (const [key, value] of [
+      [CODE_COMMIT_ENV, saved.commit],
+      [CODE_TREE_DIRTY_ENV, saved.dirty],
+    ] as const) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  it('bez gita i bez deklaracji stan drzewa jest nieustalony, a nie czysty', () => {
+    const outside = mkdtempSync(join(tmpdir(), 'agentic-bez-gita-'));
+    try {
+      process.chdir(outside);
+      delete process.env[CODE_TREE_DIRTY_ENV];
+      const v = codeVersion();
+      /*
+       * The case this test exists for. `false` would read as "checked, and the
+       * tree was clean" — a statement nobody was in a position to make. The
+       * honest answer is that the question could not be asked.
+       */
+      expect(v.brudneDrzewo).toBeNull();
+      expect(v.brudneDrzewo).not.toBe(false);
+    } finally {
+      process.chdir(cwd);
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('deklaracja liczy sie tylko wtedy, gdy git milczy, i tylko gdy cos mowi', () => {
+    const outside = mkdtempSync(join(tmpdir(), 'agentic-bez-gita-'));
+    try {
+      process.chdir(outside);
+      process.env[CODE_TREE_DIRTY_ENV] = '1';
+      expect(codeVersion().brudneDrzewo).toBe(true);
+      process.env[CODE_TREE_DIRTY_ENV] = '0';
+      expect(codeVersion().brudneDrzewo).toBe(false);
+      // Anything that is not a statement leaves the question open rather than
+      // closing it in the convenient direction.
+      process.env[CODE_TREE_DIRTY_ENV] = 'moze';
+      expect(codeVersion().brudneDrzewo).toBeNull();
+      process.env[CODE_TREE_DIRTY_ENV] = '';
+      expect(codeVersion().brudneDrzewo).toBeNull();
+    } finally {
+      process.chdir(cwd);
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('git wygrywa z deklaracja wszedzie tam, gdzie git moze odpowiedziec', () => {
+    /*
+     * Runs in two worlds: this repository (`pnpm verify`) and the copy without
+     * `.git` that `pnpm check:module-swap` builds. The rule is one, so it is
+     * written here whole and each world checks its own half — instead of the
+     * test assuming git is always there, which is the very assumption that made
+     * this field lie in the first place. The first draft of this test did assume
+     * it, and the copy failed it.
+     */
+    let gitAnswers = true;
+    try {
+      execFileSync('git', ['rev-parse', 'HEAD'], { stdio: ['ignore', 'pipe', 'ignore'] });
+    } catch {
+      gitAnswers = false;
+    }
+
+    if (gitAnswers) {
+      const real = codeVersion().brudneDrzewo;
+      expect(typeof real).toBe('boolean');
+      // A caller claiming the opposite must not be heard.
+      process.env[CODE_TREE_DIRTY_ENV] = real === true ? '0' : '1';
+      expect(codeVersion().brudneDrzewo, 'deklaracja przebila gita').toBe(real);
+      return;
+    }
+
+    // Without git the declaration is the only source — heard when it says
+    // something, and unable to invent an answer when it does not.
+    process.env[CODE_TREE_DIRTY_ENV] = '1';
+    expect(codeVersion().brudneDrzewo).toBe(true);
+    process.env[CODE_TREE_DIRTY_ENV] = '0';
+    expect(codeVersion().brudneDrzewo).toBe(false);
+    delete process.env[CODE_TREE_DIRTY_ENV];
+    expect(codeVersion().brudneDrzewo).toBeNull();
   });
 });
 

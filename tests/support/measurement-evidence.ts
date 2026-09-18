@@ -118,8 +118,19 @@ export interface Measurement {
 
 export interface CodeVersion {
   commit: string;
-  /** True when the working tree differed from the commit while measuring. */
-  brudneDrzewo: boolean;
+  /**
+   * Three answers, not two: `true` the tree differed from the commit, `false`
+   * it did not, `null` **nobody could tell**.
+   *
+   * The third one exists because the second used to be given in its place. With
+   * no git and no statement from the caller there is nothing to check, and a
+   * `boolean` has to say something anyway — it said `false`, so the record
+   * asserted a clean tree that had never been examined. That is a false
+   * condition of measurement, which is worse than a missing one: a reader
+   * cannot tell it from a checked result. A condition is true or explicitly
+   * unknown, never favourable by default.
+   */
+  brudneDrzewo: boolean | null;
   node: string;
   pakiety: Record<string, string>;
 }
@@ -146,10 +157,25 @@ export function codeVersion(pakiety: Record<string, string> = {}): CodeVersion {
   // `:(top)` so the answer is about the whole repository whatever the
   // working directory of the runner happens to be.
   const status = git(['status', '--porcelain', '--', ':(top)', `:(exclude,top)${EVIDENCE_DIR}`]);
+  /*
+   * Same precedence as the commit: git decides wherever it can answer, and only
+   * where it cannot does the caller's statement count. Anything other than an
+   * explicit "1" or "0" is not a statement, so it leaves the question open
+   * instead of closing it in the convenient direction.
+   */
+  const declared = process.env[CODE_TREE_DIRTY_ENV];
+  const dirty: boolean | null =
+    status !== null
+      ? status !== ''
+      : declared === '1'
+        ? true
+        : declared === '0'
+          ? false
+          : null;
   return {
     // git first: where it can answer, nothing passed in may contradict it.
     commit: fromGit ?? (COMMIT_RE.test(passedIn) ? passedIn : 'nieznany'),
-    brudneDrzewo: status !== null ? status !== '' : process.env[CODE_TREE_DIRTY_ENV] === '1',
+    brudneDrzewo: dirty,
     node: process.versions.node,
     pakiety,
   };
@@ -201,9 +227,13 @@ export function writeMeasurementRecord(
       'asertuje regresja: kolejnosc punktow pomiaru, ich rozdzielenie i obecnosc albo brak metryki.',
     uwagaOWersjiKodu:
       `Ten plik powstaje na zadanie (${EVIDENCE_ENV}=1, czyli pnpm evidence), nie przy zwyklym ` +
-      'pnpm verify. Pole brudneDrzewo opisuje drzewo robocze w chwili tej regeneracji, z pominieciem ' +
-      'samego katalogu dowodow (ktory ta regeneracja wlasnie przepisuje) — nie mowi nic o stanie ' +
-      'drzewa w chwili czytania pliku.',
+      'pnpm verify. Pole brudneDrzewo ma trzy stany: true — drzewo robocze roznilo sie od commita, ' +
+      'false — nie roznilo sie, null — nie dalo sie tego ustalic (przebieg bez gita i bez ' +
+      `deklaracji ${CODE_TREE_DIRTY_ENV}; tak dzieje sie np. w kopii repozytorium). Null znaczy ` +
+      '„nie wiadomo”, nie „czysto”. Odpowiedz dotyczy chwili tej regeneracji i pomija sam katalog ' +
+      'dowodow, ktory regeneracja wlasnie przepisuje — nie mowi nic o stanie drzewa w chwili ' +
+      'czytania pliku. Pole commit ma wartownika „nieznany” w tej samej sytuacji. Puste pakiety ' +
+      'znacza, ze wersji zaleznosci w tym przebiegu nie zbierano — nie ze ich nie ma.',
     pomiary: Object.fromEntries(
       Object.entries(record.pomiary).map(([k, m]) => [k, { ...m, podsumowanie: summarise(m.probkiMs) }]),
     ),
