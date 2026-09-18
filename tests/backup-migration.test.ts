@@ -201,11 +201,30 @@ describe('kopia zachowuje zatwierdzony stan SQLite wraz z WAL', () => {
      * out on purpose: SQLite rebuilds that index even on a read-only
      * connection, it holds no data, and pretending otherwise would be the kind
      * of assertion that has to be weakened later.
+     *
+     * The backup is taken *here*, into its own directory, rather than leaning on
+     * the one another test made. A detection trial showed why: run on its own,
+     * a version of this test that only compared `przed` with the current files
+     * passed while the source was being checkpointed, because no backup had run
+     * in that process at all.
      */
+    const kontrolna = dir('wal-kopia-kontrolna');
+    const before = Object.fromEntries(
+      ['app.db', 'app.db-wal']
+        .filter((f) => existsSync(resolve(dane, f)))
+        .map((f) => [f, sha256(resolve(dane, f))]),
+    );
+    expect(Object.keys(before)).toEqual(['app.db', 'app.db-wal']);
+
+    const r = run('backup-state.mjs', ['--data', dane, '--out', kontrolna]);
+    expect(r.status, r.out).toBe(0);
+
     for (const file of ['app.db', 'app.db-wal']) {
-      expect(sha256(resolve(dane, file)), `${file} zmieniony przez wykonanie kopii`).toBe(przed[file]);
+      expect(sha256(resolve(dane, file)), `${file} zmieniony przez wykonanie kopii`).toBe(before[file]);
+      // ...and unchanged since the fixture was built, i.e. by any earlier test.
+      expect(sha256(resolve(dane, file))).toBe(przed[file]);
     }
-  });
+  }, 120_000);
 });
 
 /* ========================================================================== */
