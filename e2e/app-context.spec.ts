@@ -411,17 +411,18 @@ test.describe('kontekst aplikacji dla agenta', () => {
      * that owner's last command a moment ago — the precondition above says so
      * for each. The second owner's command must carry none of them.
      *
-     * The case id is deliberately not on the list: it left the context when its
-     * screen closed, before the switch, so its absence here would prove nothing
-     * about the switch. That it leaves at all is proven in "wyjscie z ekranu
-     * rekordu…", and the item id below is the piece of the same case's data
-     * that a draft keeps alive across the whole walk to the settings screen.
+     * The case id is deliberately not on the list, and neither is `resource`
+     * asserted here: the record left the context when its screen closed, before
+     * the switch, so both would hold whatever the switch did — a control that
+     * cannot fail is worse than no control. That the record leaves at all is
+     * proven in "wyjscie z ekranu rekordu…"; the item id below is the piece of
+     * the same case's data that a draft keeps alive across the whole walk to
+     * the settings screen.
      */
     for (const leaked of [cardId, spaceId!, itemId, firstConversation]) {
       expect(leaked, 'kazdy identyfikator poprzedniego wlasciciela musi istniec').toBeTruthy();
       expect(text, `wyciek ${leaked}`).not.toContain(leaked);
     }
-    expect(context.resource).toBeNull();
     expect(context.selection).toEqual([]);
     expect(context.unsavedDrafts).toEqual([]);
     expect(context.conversationId).toBe(conversationId);
