@@ -62,16 +62,16 @@ const USERS = [
  * Every flag of this script that takes a path, and what it does with it.
  *
  * This is not documentation of the flags — it is where they come from.
- * `makeArgs(process.argv, FLAGS)` refuses any flag that is not in this list, so
- * an undeclared flag cannot be passed at all, whatever the code that would read
- * it looks like. `tests/script-path-flags.test.ts` then runs this script once
- * per declared flag and requires the behaviour its kind claims, plus one rule
- * that holds whatever the kind says: the directory a flag is pointed at must
- * come out byte-for-byte unchanged, unless the flag is `zapis-docelowy`.
+ * `makeArgs(process.argv, FLAGS)` refuses any flag that is not in this list and
+ * any positional argument, and `tests/script-path-flags.test.ts` runs this
+ * script once per declared flag to check that its behaviour matches the kind.
  *
- * It exists because this package shipped the same defect three times: a guard
- * that watched the wrong argument. Every time the code looked careful, and every
- * time it was a person or a recorded run — never a test — that noticed.
+ * It is the *second* line, though, and worth reading as such. The one that
+ * actually holds is in `lib/state-tools.mjs`: every operation that deletes,
+ * moves or overwrites checks its path at the moment of the call, so a path that
+ * arrives some way nobody anticipated is still refused. Five rounds of guarding
+ * the argument were walked around five times; guarding the operation is what
+ * stopped it.
  *
  *   zapis-chroniony  — writes; must refuse a live data directory
  *   odczyt-chroniony — only reads, but still refuses one

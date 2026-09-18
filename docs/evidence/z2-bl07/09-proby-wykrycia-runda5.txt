@@ -1,0 +1,47 @@
+PROBY ZDOLNOSCI WYKRYCIA — runda poprawek 5, zadanie Z2 / BL-07
+commit: 75d2566
+Proby A, B, C to POWTORZENIA UCIECZEK RECENZENTA z rerecenzji rundy 4.
+
+=== PROBA A — argument pozycyjny
+wycofana linia: state-tools.mjs, makeArgs znow POMIJA argumenty pozycyjne
+-- recznie (ucieczka recenzenta A):
+[backup] kopia to jeden plik app.db — odtworzenie: patrz docs/odzyskiwanie-stanu.md
+exit=0; baza ofiary: BAZA
+-- test:
+     × argument pozycyjny jest odrzucany, a nie ignorowany 56ms
+AssertionError: expected '[backup] ODMAWIAM: nieznana flaga --s…' to match /argument pozycyjny/
+      Tests  1 failed | 20 skipped (21)
+przywrocono: git checkout -- scripts/lib/state-tools.mjs
+UWAGA: przy wycofanej linii ucieczka recenzenta A juz NIE niszczy danych (baza ofiary
+nietknieta) — bo zatrzymuje ja zwezenie gardla z punktu 1, ktore nie patrzy na argumenty.
+Kontrola pozycyjna jest druga warstwa i test wychwytuje jej usuniecie.
+
+=== PROBA B — nowy skrypt importujacy biblioteke PODWOJNYM cudzyslowem
+dodany plik: scripts/nowy-skrypt-stanu.mjs z importem w podwojnych cudzyslowach,
+             bez FLAGS i z golym rmSync
+AssertionError: nowy-skrypt-stanu.mjs uzywa lib/state-tools.mjs, ale nie deklaruje FLAGS: expected undefined to be defined
+      Tests  25 skipped (25)
+przywrocono: usuniety scripts/nowy-skrypt-stanu.mjs
+
+=== PROBA C — flaga kasujaca zadeklarowana jako przelacznik, z przepisem, ktory jej nie podaje
+dodane linie: backup-state.mjs czyta flag('raport') i kasuje wskazany katalog;
+              wpis w FLAGS jako kind: przelacznik; przepis BEZ tej flagi
+     × backup-state.mjs: odmawia flagi, ktorej nie zadeklarowano 51ms
+     × backup-state.mjs: kazda flaga ma znany rodzaj, uzasadnienie i przepis 2ms
+     × backup-state.mjs: zachowanie kazdej flagi zgadza sie z jej rodzajem 233ms
+     × backup-state.mjs: nie wola sam operacji kasujacych, przenoszacych i nadpisujacych 1ms
+     × argument pozycyjny jest odrzucany, a nie ignorowany 46ms
+przywrocono: git checkout -- scripts/backup-state.mjs tests/script-path-flags.test.ts
+(proba C oblewa na piec sposobow naraz: przepis nie podaje flagi, rodzaj nie zgadza sie
+ z zachowaniem, i — najwazniejsze — skrypt wola rmSync poza zwezeniem gardla)
+
+=== PROBA D — zwezenie gardla samo w sobie
+wycofana linia: state-tools.mjs, usun() bez assertApproved
+     × operacja kasujaca poza zatwierdzonym katalogiem jest odrzucana w chwili wykonania 8ms
+AssertionError: expected [Function] to throw an error
+      Tests  1 failed | 20 skipped (21)
+przywrocono: git checkout -- scripts/lib/state-tools.mjs
+
+PODSUMOWANIE RUNDY 5: cztery proby, kazda oblala.
+A, B i C to doslowne powtorzenia ucieczek recenzenta z rerecenzji rundy 4.
+D sprawdza sam mechanizm, na ktorym opiera sie cala reszta.

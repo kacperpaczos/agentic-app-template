@@ -35,10 +35,19 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  *     a behavioural consequence, so the lie has to survive an actual run: the
  *     universal invariant below applies whatever the kind says.
  *
- * **The universal invariant**, which is what makes the kinds more than labels:
- * *no flag may modify the directory it is pointed at*, except the one kind
- * whose entire purpose is to write there (`zapis-docelowy`). That is checked by
- * fingerprinting the whole directory around every single run.
+ * **The invariant** that makes the kinds more than labels: no flag may modify
+ * the directory it is pointed at. It is checked by fingerprinting that
+ * directory around each run in the per-kind loop — including the
+ * `zapis-docelowy` branch, which is fingerprinted around the directory it
+ * *refuses*, since the one it accepts it is meant to change. `app.db-wal` and
+ * `app.db-shm` are left out of the fingerprint: SQLite creates them on any
+ * read, so comparing them would report reading as a modification.
+ *
+ * And the line that actually holds all of this up is not in this file: the
+ * scripts perform no destructive filesystem call of their own, and the ones in
+ * `lib/state-tools.mjs` check the path at the moment of the call. This file
+ * keeps that true (`nie wola sam operacji...`) and exercises it directly
+ * (`operacja kasujaca poza zatwierdzonym katalogiem...`).
  */
 
 const REPO = resolve(import.meta.dirname, '..');

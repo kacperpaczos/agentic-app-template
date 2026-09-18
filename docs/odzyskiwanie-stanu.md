@@ -158,26 +158,39 @@ aplikację), `zapis-docelowy` (pisze do katalogu danych celowo — `--data` w od
 (wolno wskazać katalog danych; `--data` w `backup-state.mjs` to jedyny taki przypadek, bo
 kopiowanie żywego katalogu jest sensem tego skryptu).
 
-Deklaracja nie jest opisem — jest **jedynym** źródłem, z którego skrypt zna swoje flagi.
-`makeArgs(process.argv, FLAGS)` odmawia każdej flagi spoza niej, więc flagi niezadeklarowanej nie da
-się podać; nie ma znaczenia, jak wygląda kod, który miałby ją czytać. Wcześniejsza wersja próbowała
-odwrotnie — szukała flag w źródle wyrażeniem regularnym — i dało się ją obejść literałem w
-podwójnych cudzysłowach.
+### Gdzie stoi sprawdzenie
 
-`tests/script-path-flags.test.ts` sprawdza sam ten mechanizm (każdy skrypt musi odrzucić flagę,
-której nie zna) i dla **każdej** zadeklarowanej flagi uruchamia skrypt, żądając zachowania zgodnego
-z jej rodzajem. Ponad rodzajami obowiązuje jeden niezmiennik: żaden przebieg nie może zmienić
-katalogu, na który flagę wskazano — z jedynym wyjątkiem `zapis-docelowy`, którego sensem jest tam
-pisać. Dzięki temu flaga zapisująca zadeklarowana jako `wartosc` i tak oblewa.
+Nie przy argumencie, tylko **przy operacji**. `rmSync`, `renameSync`, `writeFileSync`,
+`copyFileSync`, `cpSync` i `mkdirSync` są w tych czterech skryptach wywoływane wyłącznie przez
+`scripts/lib/state-tools.mjs` (`usun`, `przenies`, `zapisz`, `kopiujPlik`, `kopiujDrzewo`,
+`utworzKatalog`), a każda z nich sprawdza **w chwili wykonania**, czy ścieżka leży w katalogu
+zatwierdzonym wcześniej w tym przebiegu. Dzięki temu przestaje mieć znaczenie, **skąd** ścieżka się
+wzięła: z flagi, z argumentu pozycyjnego, ze zmiennej środowiskowej czy ze stałej.
 
-**Czego to nie obejmuje**, wprost: ścieżki docierającej do skryptu inaczej niż flagą wiersza poleceń
-(zmienna środowiskowa, plik konfiguracyjny, stała w kodzie) oraz skryptu, który w ogóle nie używa
-`scripts/lib/state-tools.mjs` — taki nie ma żadnej z tych ochron i jest poza zakresem tego testu.
+Pięć rund próbowało inaczej — strażnik stał przy argumencie i za każdym razem dało się do operacji
+dojść bokiem: literałem w podwójnych cudzysłowach, flagą zadeklarowaną pod rodzajem zwolnionym z
+kontroli, argumentem pozycyjnym, który parser pomijał. Kształty argumentu są nieograniczone,
+operacja nie jest.
 
-**Ten pakiet trzy razy miał tę samą wadę: strażnika pilnującego niewłaściwego argumentu**, i za
-każdym razem znajdował ją człowiek albo nagrany przebieg, nigdy test. To jest odpowiedź na ten
-wzorzec, nie na pojedynczy defekt — a granice tej odpowiedzi są wypisane wyżej, bo szerokie
-zapewnienie, które nie jest prawdziwe, było częścią tej samej choroby.
+Argumenty pozycyjne są dziś odrzucane (te skrypty ich nie przyjmują), a `makeArgs(process.argv,
+FLAGS)` odrzuca flagę spoza deklaracji skryptu.
+
+**Co jest sprawdzane w regresji** (`tests/script-path-flags.test.ts`): że żaden z tych czterech
+skryptów nie woła tych funkcji samodzielnie; że samo zwężenie gardła odrzuca operację poza
+zatwierdzonym katalogiem; że każdy skrypt odrzuca nieznaną flagę i argument pozycyjny; oraz że
+zachowanie każdej zadeklarowanej flagi zgadza się z jej rodzajem, przy czym po każdym przebiegu
+porównywany jest odcisk SHA-256 katalogu, na który flagę wskazano (poza `app.db-wal` i `app.db-shm`,
+które SQLite odtwarza przy samym czytaniu).
+
+**Czego to nie obejmuje**, wprost:
+
+- skryptu, który nie korzysta z `scripts/lib/state-tools.mjs` — taki nie ma żadnej z tych ochron;
+  test wypisuje listę objętych, żeby luka była widoczna, a nie domniemana;
+- wywołania `rmSync` i podobnych sięgniętego z pominięciem biblioteki w sposób, którego kontrola
+  źródła nie zobaczy (np. `(await import('node:fs')).rm`); kontrola jest o przeoczeniu, nie o
+  przeciwniku;
+- kolejności: zatwierdzenie i operacja są w tym samym procesie, więc katalog podmieniony **między**
+  sprawdzeniem a zapisem nie jest wykrywany.
 
 Kody wyjścia wszystkich czterech skryptów: **0** zrobione, **1** werdykt negatywny (kopia się nie
 weryfikuje, próba znalazła problemy, odtworzony stan nie zgadza się z manifestem), **2** odmowa,
