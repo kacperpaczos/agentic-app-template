@@ -109,3 +109,50 @@ P14 [L9.6] packages/platform-server/src/services/canvas.ts
     wynik          : OBLAL (poprawnie)
     asercja        : AssertionError: expected AppError: Card content changed since it w… { …(2) } to match object { code: 'validation_failed' }
     drzewo po przywroceniu: czyste
+
+P14b [L9.6] packages/platform-server/src/services/canvas.ts
+    wycofano       : if (input.expectedSpecVersion === undefined) {
+    test           : tests/domain-guarantees.test.ts -t "zmiana tresci karty bez wersji"
+    oczekiwano     : oblewa na — zapis bez wersji przechodzi po cichu (dokladny stan sprzed poprawki)
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/domain-guarantees.test.ts > L9.6 — konflikt aktualnosci nie nadpisuje nowszych danych > zmiana tresci karty bez wersji jest odrzucana w serwisie i przez HTTP
+        AssertionError: promise resolved "{ id: 'crd_37d1fb46f4ef48ad9fb9', …(8) }" instead of rejecting
+        
+        - Expected
+        + Received
+        
+        - Error {
+        -   "message": "rejected promise",
+        + {
+        +   "createdAt": "2026-09-18T16:35:07.908Z",
+        +   "geometry": {
+        +     "height": 360,
+        +     "width": 520,
+        +     "x": 0,
+    drzewo po przywroceniu: czyste
+P10b [L9.14] packages/platform-server/src/services/idempotency.ts
+    wycofano       : if (this.#reserve(operationId, ownerId, scope, fingerprint)) {
+    test           : tests/domain-guarantees.test.ts -t "osiem jednoczesnych ponowien zmiany pozycji"
+    oczekiwano     : oblewa na — ponowienia zdublowaly skutek
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/domain-guarantees.test.ts > L9.7, L9.14 — powtorzenie i jednoczesne ponowienia daja jeden skutek > osiem jednoczesnych ponowien zmiany pozycji: jeden przyrost wersji, jeden wynik
+        AppError: Pozycja zostala zmieniona przez kogos innego.
+         ❯ packages/module-procurement/src/server/services.ts:232:17
+            230|         if (!ok) {
+            231|           const current = this.repo.getItem(input.itemId, ownerId).ite…
+            232|           throw new AppError('conflict', 'Pozycja zostala zmieniona pr…
+               |                 ^
+            233|             expectedVersion: expected,
+            234|             currentVersion: current.version,
+         ❯ packages/platform-server/src/services/idempotency.ts:128:32
+         ❯ IdempotencyStore.#once packages/platform-server/src/services/idempotency.ts:137:8
+         ❯ IdempotencyStore.once packages/platform-server/src/services/idempotency.ts:112:17
+         ❯ ProcurementService.updateOfferItem packages/module-procurement/src/server/services.ts:179:66
+         ❯ tests/domain-guarantees.test.ts:550:19
+    drzewo po przywroceniu: czyste
