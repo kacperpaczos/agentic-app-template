@@ -1852,12 +1852,11 @@
       }
     },
     "L10.6": {
-      "status": "czesciowe",
-      "evidence": "test",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "tests/access-context.test.ts „ten sam zasob u dwoch tozsamosci ma rozne klucze” i „klucz rozroznia zasob i filtry w obrebie jednej tozsamosci”: klucze qk.* zawierają zakres dostępu, zasób i filtr. Analiza kodu: karty i ekrany modułu używają useModuleData z tym samym kluczem dla tego samego zasobu, więc TanStack Query współdzieli pobranie. Nie obejmuje: pomiaru liczby żądań przy kilku komponentach tego samego zasobu.",
-      "gap": "Część komponentów pobiera te same zasoby poza cache: przeglądarka artefaktów OpenUI przez createChatStorage (apiGet bez klucza), wątki przez restStorage biblioteki, upload w ComposerAttachments przez fetch; podgląd artefaktu w wiadomości i lista biblioteki nie dzielą pobrań i mogą pokazywać różne stany. Brak testu deduplikacji.",
-      "backlog": "BL-11",
+      "proof": "e2e/shared-fetch.spec.ts (test GUI bez modelu, instancja wlasna): na ekranie sprawy cztery komponenty czytajace procurement.case_overview (ramka ekranu, naglowek, tabela pozycji wymaganych, lista zrodel ofert) wysylaja dokladnie JEDNO POST /api/read, a inny zasob tego samego ekranu (case_offer_items) — swoje wlasne, wiec liczba nie jest \"jedno zadanie w ogole\"; lista artefaktow otwarta na ekranie Pliki i w przegladarce artefaktow gotowego czatu to jedno GET /api/artifacts. tests/access-switch.test.ts \"odczyt artefaktu przez magazyn czatu i przez klucz qk.artifact to jedno pobranie\": createChatStorage czyta przez qc.fetchQuery na kluczu qk.artifact, wiec przegladarka biblioteki i podglad w wiadomosci maja jeden wpis. tests/access-context.test.ts: klucze qk.* zawieraja zakres dostepu, zasob i filtr.",
+      "gap": "Poza cache pozostaja z zalozenia zadania, ktore nie sa odczytem: upload pliku i strumien uruchomienia (zwiazane z kontekstem dostepu przez accessFetch, ale bez klucza). Pomiar deduplikacji obejmuje dwa ekrany, nie wszystkie.",
       "scenarios": [
         "T12",
         "T26"
@@ -1868,12 +1867,10 @@
       }
     },
     "L10.7": {
-      "status": "czesciowe",
-      "evidence": "test",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "tests/access-context.test.ts „pamiec podreczna jest pusta po przelaczeniu”, „zadanie w locie jest przerywane w momencie przelaczenia”, „odpowiedz, ktora mimo wszystko dobiegnie, jest odrzucana po epoce”: prawdziwy QueryClient i api() z wstrzymanym fetch; cache pusty, odpowiedź poprzedniej tożsamości odrzucona. e2e/access-context.spec.ts „po przelaczeniu zaden wiersz poprzedniej tozsamosci nie jest widoczny”: po kliknięciu przełącznika test wykonuje page.goto('/cases'), czyli pełne przeładowanie strony, więc sprawdza sesję i odmowę dostępu backendu, a nie czyszczenie cache w tej samej instancji klienta.",
-      "gap": "Stan klienta poza TanStack Query nie jest czyszczony przy zmianie właściciela: lista wątków i wiadomości AgentInterface (restStorage) oraz appState (aktywna rozmowa, zadania, załączniki, szkice) zostają w tej samej karcie; brak testu GUI bez przeładowania, który wykryłby taki wyciek.",
-      "backlog": "BL-11",
+      "proof": "e2e/access-switch.spec.ts (test GUI bez modelu, symulacja modelu na granicy adaptera): przelaczenie tozsamosci w tej samej karcie, bez page.goto — po przelaczeniu znika pasek zadania i strumien odpowiedzi, kontekst polecenia pokazuje \"brak wybranej sprawy\", adres traci parametry c i s, a rozmowy poprzedniej tozsamosci nie ma na liscie gotowego czatu; powrot przywraca ja, wiec dane nie zostaly skasowane, tylko ukryte. tests/access-switch.test.ts \"przelaczenie zostawia pusty kontekst polecenia\": rozmowa, przestrzen, zasob, zaznaczenie, zalaczniki, szkice i zadania sa czyszczone, a toAppContext() nie niesie zadnego identyfikatora poprzedniego wlasciciela. tests/access-context.test.ts: cache pusty po przelaczeniu.",
       "scenarios": [
         "T12"
       ],
@@ -1898,12 +1895,10 @@
       }
     },
     "L10.9": {
-      "status": "czesciowe",
-      "evidence": "test",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "tests/live-artifacts.test.ts „podglad i pelny widok czytaja te sama wersje, wiec nie moga sie roznic”: dwa odczyty GET /api/artifacts/:id (bez i z ?version) dają te same dane i definitionVersion. tests/contracts.test.ts „plik przetrwa restart procesu backendu”: treść pliku po ponownym otwarciu platformy przez FileService.read. Analiza kodu: podgląd w wiadomości i karta canvasu używają ArtifactContent z kluczem qk.artifact. Nie obejmuje: GUI ani pobrania przez HTTP po restarcie.",
-      "gap": "Brak próby w przeglądarce, że podgląd artefaktu w wiadomości i pełny widok w przeglądarce artefaktów pokazują tę samą wersję (przeglądarka biblioteki czyta przez osobne apiGet), oraz brak pobrania przez /api/files/:id/content po rzeczywistym restarcie serwera.",
-      "backlog": "BL-11",
+      "proof": "e2e/artifact-views.spec.ts \"podglad w wiadomosci i pelny widok pokazuja te sama wersje i ten sam stan zrodla\" (test GUI bez modelu, symulacja modelu na granicy adaptera): artefakt live utworzony przez prawdziwy handler artifact_create ma podglad pod wywolaniem w wiadomosci i pelny widok w przegladarce artefaktow gotowego czatu; oba pokazuja ten sam identyfikator, te sama wersje, ta sama wersje definicji, ten sam odcisk stanu zrodla i te same wiersze tabeli. \"po restarcie backendu snapshot nadal zamrozony, live nadal biezacy, plik do pobrania\": plik wgrany z ekranu Pliki jest pobierany przez GET /api/files/:id/content po rzeczywistym zatrzymaniu i ponownym uruchomieniu procesu serwera, z porownaniem tresci. tests/contracts.test.ts: trwalosc pliku po ponownym otwarciu platformy.",
       "scenarios": [
         "T13",
         "T24"
@@ -1928,12 +1923,10 @@
       }
     },
     "L10.11": {
-      "status": "czesciowe",
-      "evidence": "test",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "tests/access-context.test.ts (8 testów): czyszczenie cache, przerwanie żądania w locie wspólnym sygnałem, odrzucenie spóźnionej odpowiedzi po epoce, klucze z zakresem dostępu — na prawdziwym QueryClient i api(). Analiza kodu: ponowne podłączenie do strumienia zadania (packages/platform-ui/src/chat/runStreams.ts attachToRun) jest związane z accessSignal. e2e/access-context.spec.ts przeładowuje stronę po przełączeniu (page.goto), więc nie dowodzi działania w tej samej instancji klienta. Nie obejmuje: strumieni i stanu klienta poza TanStack Query.",
-      "gap": "Strumień wysyłania POST /api/agui/run (chat/chatWiring.ts) używa tylko sygnału biblioteki, bez accessSignal i epoki, więc opóźnione zdarzenia poprzedniej tożsamości nadal trafiają do applyRunEvent i unieważnień; żądania wątków restStorage i upload plików omijają api(); appState i lista wątków AgentInterface nie są resetowane. Brak testu z opóźnionym strumieniem przy zmianie właściciela w jednej karcie.",
-      "backlog": "BL-11",
+      "proof": "e2e/access-switch.spec.ts \"opozniony strumien poprzedniego wlasciciela nie dociera do nastepnego\" (test GUI bez modelu, symulacja): uruchomienie pierwszej tozsamosci jeszcze strumieniuje (odpowiedz rosnie miedzy dwoma pomiarami), przelaczenie nastepuje w tej samej karcie, a przez kolejne 4 sekundy — gdy scenariusz nadal emituje — na ekranie nie pojawia sie ani pasek zadania, ani strumien, ani zaden fragment odpowiedzi poprzedniej tozsamosci. tests/access-switch.test.ts: accessFetch przerywa zadanie w locie i odrzuca odpowiedz po epoce (wiaze restStorage watkow i upload pliku), a straznik epoki w platformAdapter porzuca strumien — zdarzenia wyslane po przelaczeniu nie trafiaja ani do reduktora, ani do czatu. tests/access-context.test.ts (8 testow): cache, przerwanie, epoka, klucze.",
       "scenarios": [
         "T12"
       ]
@@ -1961,23 +1954,20 @@
       ]
     },
     "L10.14": {
-      "status": "czesciowe",
-      "evidence": "test",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "tests/live-artifacts.test.ts „snapshot zamraza liczby, live pokazuje biezace — po zmianie zrodla” (otwarcie przez HTTP) i „snapshot zachowuje liczby, live liczy od nowa po ponownym otwarciu bazy” (po ponownym otwarciu, przez serwis). tests/agui-stream.test.ts „zmiana danych uniewaznia odczyty modulu, canvas i otwarte artefakty” (zdarzenie data_changed z przebiegu agenta unieważnia klucz artifact). Nie obejmuje: otwartego widoku w przeglądarce ani ścieżki HTTP po restarcie.",
-      "gap": "Otwarty widok live nie odświeża się po zmianie źródła z UI (formularz modułu nie unieważnia klucza artifact, refetchOnWindowFocus wyłączony); brak testu GUI otwartego widoku live i obu ścieżek przez HTTP po rzeczywistym restarcie.",
-      "backlog": "BL-11",
+      "proof": "e2e/artifact-views.spec.ts \"snapshot i live po zmianie zrodla z interfejsu: otwarty widok live sie odswieza\" (test GUI bez modelu, symulacja): przy otwartym podgladzie artefaktu live uzytkownik przechodzi klikaniem (bez przeladowania) na canvas sprawy, wpisuje nowa ilosc w formularzu pozycji i zapisuje; ten sam, nieodmontowany podglad zmienia odcisk stanu zrodla i sumy przy niezmienionej wersji definicji, a snapshot zapisany przez ten sam przebieg ma nadal identyczna tresc. \"po restarcie backendu...\" sprawdza obie sciezki przez HTTP po rzeczywistym restarcie procesu: snapshot bajt w bajt, live fresh z niepustym wynikiem. tests/live-artifacts.test.ts: snapshot zamraza, live liczy od nowa (takze po ponownym otwarciu bazy). tests/agui-stream.test.ts: data_changed uniewaznia klucz artifact.",
       "scenarios": [
         "T13"
       ]
     },
     "L10.15": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "tests/live-artifacts.test.ts „podglad i pelny widok czytaja te sama wersje, wiec nie moga sie roznic” i „artefakt live nigdy nie przechowuje danych, tylko pytanie”: definitionVersion i operation zgodne, state fresh i resolvedAt rozdzielone od wersji definicji (kontrakt liveResolutionSchema w platform-contracts/src/artifacts.ts). Analiza kodu: LiveBadge pokazuje stan i czas odczytu, snapshot ma etykietę snapshot. Nie obejmuje: GUI ani wersji źródła danych.",
-      "gap": "Wynik live nie niesie wersji źródła (np. wersji rekordów), więc świeży odczyt nie jest odróżniony od odczytu starszego stanu źródła; nie sprawdzono w przeglądarce, że podgląd w wiadomości i przeglądarka artefaktów (czytająca poza cache) nie pokazują sprzecznych danych bez oznaczenia.",
-      "backlog": "BL-11",
+      "proof": "tests/live-artifacts.test.ts \"wersja definicji i stan zrodla sa rozroznione\": dwa odczyty bez zmiany zrodla daja rozne resolvedAt i ten sam sourceFingerprint, a odczyt po zmianie zrodla — te sama definitionVersion i inny sourceFingerprint; snapshot nie ma rozstrzygniecia live, a nieudane rozstrzygniecie ma sourceFingerprint null (nie skrot z null). e2e/artifact-views.spec.ts (test GUI bez modelu): podglad i pelny widok pokazuja te sama wersje definicji i ten sam odcisk stanu zrodla, a oba wypisuja je w odznace LiveBadge (\"live . dane aktualne (godzina) . def N . zrodlo XXXXXXXX\"), wiec rozbieznosc bylaby oznaczona na ekranie. tests/cache-evidence.test.ts zapisuje probke na zadanie (pnpm evidence).",
+      "gap": "sourceFingerprint to skrot rekordow zwroconych przez zarejestrowany odczyt, nie monotoniczna wersja rekordow: odpowiada na pytanie \"ten sam stan zrodla czy inny\", nie porzadkuje stanow i nie wskazuje, ktory jest nowszy. Odczyt bez zadeklarowanego deskryptora wyniku ma skrot z calej koperty, wiec wlasny znacznik czasu w wyniku takiego odczytu zmienialby go przy kazdym czytaniu.",
       "scenarios": [
         "T13"
       ]

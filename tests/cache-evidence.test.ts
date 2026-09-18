@@ -106,7 +106,7 @@ describe('dowod pakietu BL-11c', () => {
     });
     setAccessContext(qc, 'other-user');
     const cleared = Object.keys(scopedAppState()).filter((key) => {
-      const now = (useAppState.getState() as Record<string, unknown>)[key];
+      const now = (useAppState.getState() as unknown as Record<string, unknown>)[key];
       return JSON.stringify(now) === JSON.stringify((scopedAppState() as Record<string, unknown>)[key]);
     });
     const cacheEntries = qc.getQueryCache().getAll().length;
