@@ -138,35 +138,43 @@ afterEach(async () => {
  * taken before the suite and compared after it. A test that wrote to the real
  * login, or deleted it, changes both.
  */
-describe('testy negatywne nie dotykaja logowania uzytkownika', () => {
-  const realFile = claudeConfigDir({
-    ...process.env,
-    /* The real location, whatever this suite later redirects. */
-    CLAUDE_CONFIG_DIR: realConfigDirAtImport,
-  } as NodeJS.ProcessEnv);
-  const fingerprint = () => {
-    const file = join(realFile, '.credentials.json');
-    if (!existsSync(file)) return 'brak';
-    const st = statSync(file);
-    return `${st.size}:${st.mtimeMs}`;
-  };
-  const before = fingerprint();
+/** Prawdziwy katalog logowania — ustalony raz, zanim cokolwiek go przekieruje. */
+const realUserConfigDir = claudeConfigDir({
+  ...process.env,
+  CLAUDE_CONFIG_DIR: realConfigDirAtImport,
+} as NodeJS.ProcessEnv);
 
+const userCredentialFingerprint = (): string => {
+  const file = join(realUserConfigDir, '.credentials.json');
+  if (!existsSync(file)) return 'brak';
+  const st = statSync(file);
+  return `${st.size}:${st.mtimeMs}`;
+};
+const userCredentialBefore = userCredentialFingerprint();
+
+describe('testy negatywne nie dotykaja logowania uzytkownika', () => {
   it('katalog poswiadczen uzyty przez testy nie jest katalogiem uzytkownika', () => {
-    expect(configDir).not.toBe(realFile);
+    expect(configDir).not.toBe(realUserConfigDir);
     expect(configDir.startsWith(tmpdir())).toBe(true);
   });
 
-  /*
-   * In `afterAll`, not in an `it`: a test placed here would run before the rest
-   * of the file and could only report on what had happened up to that point.
-   * The hook runs once every test in this suite has finished, which is the
-   * moment the claim is about. `brak` on a machine with no login is a
-   * legitimate answer and compares equal to itself.
-   */
-  afterAll(() => {
-    expect(fingerprint(), 'plik logowania uzytkownika zmienil sie w trakcie testow').toBe(before);
-  });
+});
+
+/*
+ * Na poziomie PLIKU, nie wewnątrz `describe`.
+ *
+ * `afterAll` w bloku obejmuje tylko ten blok, więc odpalał się po pierwszym
+ * teście — zanim dwa kolejne w ogóle wystartowały — i sprawdzał okno, które
+ * prawie nic nie obejmowało. Commit, który to „naprawiał", nie osiągnął tego,
+ * co głosił jego opis; wyłapała to recenzja, sprawdzając semantykę
+ * doświadczalnie. Tutaj hook biegnie po **wszystkich** testach tego pliku,
+ * czyli w chwili, o której mówi asercja. `brak` na maszynie bez logowania jest
+ * poprawną odpowiedzią i porównuje się sam ze sobą.
+ */
+afterAll(() => {
+  expect(userCredentialFingerprint(), 'plik logowania uzytkownika zmienil sie w trakcie testow').toBe(
+    userCredentialBefore,
+  );
 });
 
 /* ---------------------------------- rule ---------------------------------- */

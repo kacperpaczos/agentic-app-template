@@ -86,20 +86,23 @@ export function classifyAccessFailure(message: string): AccessState {
   /*
    * Komunikat **potwierdzony na rzeczywistej awarii** SDK 0.3.270, nie zgadnięty.
    *
-   * `docs/evidence/z12-bl04/refresh-refused-*.json` i `revoked-*.json`: obie próby graniczne —
-   * termin w przeszłości z martwym refresh tokenem oraz termin w przyszłości z martwym access
-   * tokenem — dały **ten sam** tekst:
+   * `docs/evidence/z12-bl04/refresh-refused-*.json` i `revoked-*.json`: przy poświadczeniu z
+   * **nieprawidłowym refresh tokenem** SDK 0.3.270 podaje ten sam tekst niezależnie od tego, czy
+   * access token wygasł:
    *
    *     Claude Code returned an error result: Failed to authenticate:
    *     OAuth session expired and could not be refreshed
    *
-   * Dwie rzeczy z tego wynikają i obie są zapisane, nie przemilczane. Po pierwsze, ten warunek
-   * istnieje po to, żeby werdykt **nie zależał od przypadku**, że tekst zawiera akurat słowa
-   * „refresh" i „expired" — bo pod tą regułą niżej przechodził tylko dzięki temu. Po drugie, SDK
-   * **nie odróżnia** odwołanego logowania od odmowy odnowienia: oba przypadki wyglądają na wyjściu
-   * identycznie, więc aplikacja też ich nie odróżni, choćby klasyfikator był dowolnie sprytny.
-   * Stan `revoked` zostaje dla źródeł, które mówią to wprost (401, „please run /login"), a porada
-   * dla obu stanów i tak brzmi „zaloguj się ponownie".
+   * Ten warunek istnieje po to, żeby werdykt **nie zależał od przypadku**, że tekst zawiera akurat
+   * słowa „refresh" i „expired" — bo pod regułą niżej przechodził tylko dzięki temu.
+   *
+   * **Czego te próby NIE pokazały.** Żadna z nich nie wytworzyła odwołanego logowania: oba tryby
+   * zapisują tak samo nieprawidłowy refresh token i różnią się wyłącznie `expiresAt`, więc oba
+   * kończą tym samym zdarzeniem — odnowieniem, które nie mogło się udać. Identyczny tekst jest
+   * spodziewanym skutkiem takiego ustawienia, a nie dowodem, że SDK myli dwie różne przyczyny.
+   * Czy prawdziwe odwołanie (poprawny refresh token odrzucony po stronie serwera) daje się odróżnić
+   * — **pozostaje nieznane**. Stan `revoked` zostaje dla źródeł, które mówią to wprost (401,
+   * „please run /login"), a porada dla obu stanów i tak brzmi „zaloguj się ponownie".
    */
   if (m.includes('oauth session expired') || m.includes('could not be refreshed')) {
     return 'refresh_refused';

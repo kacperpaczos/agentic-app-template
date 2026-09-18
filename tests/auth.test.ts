@@ -419,15 +419,14 @@ describe('komunikaty potwierdzone na rzeczywistej awarii SDK 0.3.270', () => {
     expect(classifyAccessFailure(`${REAL_AUTH_FAILURE} (429 Too Many Requests)`)).toBe('rate_limited');
   });
 
-  it('SDK nie odroznia odwolanego logowania od odmowy odnowienia — i to jest zapisane', () => {
+  it('zrodla mowiace wprost o odwolaniu nadal daja "revoked"', () => {
     /*
-     * Obie próby graniczne (`refresh-refused-*.json`, `revoked-*.json`) dały ten sam tekst, więc
-     * aplikacja dostaje jeden stan dla dwóch różnych przyczyn. Asercja utrwala obserwację: gdyby
-     * przyszła wersja SDK zaczęła je rozróżniać, ten test przestanie opisywać rzeczywistość i
-     * trzeba będzie powtórzyć próbę.
+     * Dwie próby graniczne dały ten sam tekst, ale **żadna nie wytworzyła odwołanego logowania** —
+     * oba tryby zapisują tak samo nieprawidłowy refresh token i różnią się wyłącznie `expiresAt`.
+     * Stan `revoked` zostaje więc dla źródeł, które mówią to wprost, i to jest tutaj sprawdzane.
+     * Porównanie obu zapisanych komunikatów ze sobą robi `tests/sdk-session-evidence.test.ts`, nad
+     * plikami dowodowymi — bo to jest asercja o **danych**, a nie o czystej funkcji.
      */
-    expect(classifyAccessFailure(REAL_AUTH_FAILURE)).toBe(classifyAccessFailure(REAL_AUTH_FAILURE));
-    // Źródła, które mówią wprost o odwołaniu, nadal dają `revoked`.
     expect(classifyAccessFailure('HTTP 401 Unauthorized')).toBe('revoked');
     expect(classifyAccessFailure('credentials revoked, please run /login')).toBe('revoked');
   });

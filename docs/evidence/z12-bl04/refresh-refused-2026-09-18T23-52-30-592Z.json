@@ -1,19 +1,22 @@
 {
-  "opis": "Odmowa odnowienia tokena: komunikat, ktory naprawde produkuje Claude Agent SDK, i to, co robi z nim aplikacja. Poswiadczenie proby ma CELOWO ZEPSUTE oba tokeny, wiec zadna prawdziwa wartosc nie jest uzywana ani uniewazniana.",
+  "przypadek": "refresh-refused",
+  "opis": "Odmowa odnowienia tokena: komunikat, ktory naprawde produkuje Claude Agent SDK, i to, co robi z nim aplikacja. Poswiadczenie proby ma CELOWO ZEPSUTE oba tokeny, wiec zadna prawdziwa wartosc nie jest uzywana ani uniewazniana. Przebieg nie przechodzi uwierzytelnienia, wiec nie dociera do modelu i NIE WYDAJE TURY SUBSKRYPCJI.",
   "rodzajDowodu": "rzeczywisty przebieg przez Claude Agent SDK",
   "zrodlo": "node --experimental-transform-types scripts/probe-refresh-refused.ts",
-  "zapisano": "2026-09-18T22:58:50.434Z",
+  "turySubskrypcji": 0,
+  "zapisano": "2026-09-18T23:52:30.592Z",
   "wersje": {
     "node": "24.19.0",
     "claudeCli": "2.1.277 (Claude Code)",
-    "commit": "fff0222cefe3851c883ab3ea4ec4650cd12185b1",
+    "commit": "8c782808b9046d684f0d94f3fbb4c542be017c4f",
     "brudneDrzewo": true
   },
   "warunki": {
-    "katalogKonfiguracji": "/tmp/proba-odmowy-odnowienia-9adEMC",
+    "katalogKonfiguracji": "/tmp/proba-odmowy-odnowienia-Ka24X8",
     "accessToken": "zastapiony wartoscia, ktora nigdy nie byla tokenem",
     "refreshToken": "zastapiony wartoscia, ktora nigdy nie byla tokenem",
-    "expiresAt": "godzine w przeszlosci, wiec CLI musi sprobowac odnowienia"
+    "expiresAt": "godzine w PRZESZLOSCI, wiec CLI musi sprobowac odnowienia",
+    "czegoTenTrybNIEodtwarza": "Nie odtwarza wyczerpania limitu ani bledu sieci."
   },
   "wynik": {
     "statusUruchomienia": "failed",

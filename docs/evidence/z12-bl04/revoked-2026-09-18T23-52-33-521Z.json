@@ -4,18 +4,19 @@
   "rodzajDowodu": "rzeczywisty przebieg przez Claude Agent SDK",
   "zrodlo": "node --experimental-transform-types scripts/probe-refresh-refused.ts --revoked",
   "turySubskrypcji": 0,
-  "zapisano": "2026-09-18T22:59:47.195Z",
+  "zapisano": "2026-09-18T23:52:33.521Z",
   "wersje": {
     "node": "24.19.0",
     "claudeCli": "2.1.277 (Claude Code)",
-    "commit": "fff0222cefe3851c883ab3ea4ec4650cd12185b1",
+    "commit": "8c782808b9046d684f0d94f3fbb4c542be017c4f",
     "brudneDrzewo": true
   },
   "warunki": {
-    "katalogKonfiguracji": "/tmp/proba-odmowy-odnowienia-m4tVGQ",
+    "katalogKonfiguracji": "/tmp/proba-odmowy-odnowienia-Th2lij",
     "accessToken": "zastapiony wartoscia, ktora nigdy nie byla tokenem",
     "refreshToken": "zastapiony wartoscia, ktora nigdy nie byla tokenem",
-    "expiresAt": "godzine w przeszlosci, wiec CLI musi sprobowac odnowienia"
+    "expiresAt": "godzine w PRZYSZLOSCI, wiec CLI nie ma powodu odnawiac z wlasnej inicjatywy",
+    "czegoTenTrybNIEodtwarza": "To NIE jest odwolane logowanie. Refresh token jest tu tak samo nieprawidlowy jak w trybie refresh-refused — oba tryby roznia sie WYLACZNIE wartoscia expiresAt. Prawdziwe odwolanie (poprawny refresh token odrzucony po stronie serwera) nie zostalo wytworzone i nie da sie go wytworzyc bez konta testowego."
   },
   "wynik": {
     "statusUruchomienia": "failed",

@@ -266,7 +266,17 @@ const record = {
     katalogKonfiguracji: configDir,
     accessToken: 'zastapiony wartoscia, ktora nigdy nie byla tokenem',
     refreshToken: 'zastapiony wartoscia, ktora nigdy nie byla tokenem',
-    expiresAt: 'godzine w przeszlosci, wiec CLI musi sprobowac odnowienia',
+    expiresAt:
+      MODE === 'revoked'
+        ? 'godzine w PRZYSZLOSCI, wiec CLI nie ma powodu odnawiac z wlasnej inicjatywy'
+        : 'godzine w PRZESZLOSCI, wiec CLI musi sprobowac odnowienia',
+    czegoTenTrybNIEodtwarza:
+      MODE === 'revoked'
+        ? 'To NIE jest odwolane logowanie. Refresh token jest tu tak samo nieprawidlowy jak w trybie ' +
+          'refresh-refused — oba tryby roznia sie WYLACZNIE wartoscia expiresAt. Prawdziwe odwolanie ' +
+          '(poprawny refresh token odrzucony po stronie serwera) nie zostalo wytworzone i nie da sie ' +
+          'go wytworzyc bez konta testowego.'
+        : 'Nie odtwarza wyczerpania limitu ani bledu sieci.',
   },
   wynik: {
     statusUruchomienia: run?.status ?? null,

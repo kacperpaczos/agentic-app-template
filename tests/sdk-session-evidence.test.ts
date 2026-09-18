@@ -163,6 +163,26 @@ describe('zapisane proby graniczne uwierzytelnienia', () => {
     return { name, body: JSON.parse(readFileSync(resolve(dir, name), 'utf8')) };
   };
 
+  it('oba zapisane przebiegi niosa ten sam komunikat SDK — porownanie danych, nie funkcji', () => {
+    /*
+     * Asercja nad **dwoma plikami dowodowymi**, nie nad wynikiem czystej funkcji porównanym z samym
+     * sobą. Utrwala to, co faktycznie zaobserwowano: przy poświadczeniu z nieprawidłowym refresh
+     * tokenem tekst nie zależy od tego, czy access token wygasł. Gdy przyszła wersja SDK zacznie
+     * rozróżniać te ustawienia, ten test przestanie opisywać rzeczywistość — i o to chodzi.
+     *
+     * Czego NIE mówi: że SDK myli odwołane logowanie z odmową odnowienia. Żaden z tych przebiegów
+     * nie wytworzył odwołanego logowania (oba mają tak samo nieprawidłowy refresh token).
+     */
+    const a = newest('refresh-refused');
+    const b = newest('revoked');
+    expect(a, 'brak zapisu refresh-refused').not.toBeNull();
+    expect(b, 'brak zapisu revoked').not.toBeNull();
+    expect(a!.body.wynik.komunikatSdk).toBe(b!.body.wynik.komunikatSdk);
+    // Warunki obu przebiegów muszą się RÓŻNIĆ, inaczej porównanie wyżej nie ma o czym mówić.
+    expect(a!.body.warunki.expiresAt).not.toBe(b!.body.warunki.expiresAt);
+    expect(b!.body.warunki.czegoTenTrybNIEodtwarza).toContain('NIE jest odwolane logowanie');
+  });
+
   for (const [prefix, opis] of [
     ['refresh-refused', 'termin w przeszlosci, martwy refresh token'],
     ['revoked', 'termin w przyszlosci, martwy access token'],
