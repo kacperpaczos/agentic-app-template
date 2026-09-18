@@ -204,3 +204,22 @@ wykona, niczego nie dowodzi.
 | `… playwright test` (run-continuity + bl10-agent-navigation + ui-navigation + interactions) | 0 | **20 testów** |
 | `… playwright test` (cały domyślny przebieg) | 0 | **175 testów**, zero oblanych |
 | `pnpm verify` | 0 | 45 plików / **725 testów**; drzewo po przebiegu czyste |
+
+---
+
+## Synchronizacja z gałęzią integracyjną (G19)
+
+Scalone 33 commity (orkiestracja, czat, cache). **Szesnaście plików w konflikcie**, rozstrzygnięte jako
+suma. Szczegóły w raporcie zadania, §11; tutaj sam wynik bramki.
+
+| Polecenie | Kod | Wynik |
+|---|---|---|
+| `pnpm verify` (pierwszy przebieg po scaleniu) | 1 | 7 oblanych z 799 — **wszystkie moje**: 5 przez wymagany od teraz `operationId` (`artifact_create`, `artifact_publish_file`), 1 przez lint scenariuszy, który to złapał, 1 przez status oczekiwania w cudzym teście |
+| `pnpm verify` (po naprawach u źródła) | 0 | 45 plików / **799 testów**; drzewo po przebiegu czyste |
+| `pnpm exec playwright test` (cały domyślny przebieg, pod blokadą) | 0 | **185 testów**, zero oblanych |
+
+Kontrole spójności po scaleniu: `assessment.json` — 200 kryteriów, **95 bloków historycznych**,
+L11.7 / L11.12 / L11.23 nadal otwarte, moje dziewięć nadal potwierdzone; `docs/ACCEPTANCE.md` i
+`docs/BACKLOG.md` **odtworzone generatorem**, nie rozstrzygane ręcznie; migracje: obie strony obecne
+(`platform-0005-idempotency-reservation` z gałęzi integracyjnej zachowuje numer, moja przesunięta na
+`platform-0006-message-attachments`), sprawdzone testem migracji i próbą na kopii sprzed każdej z nich.
