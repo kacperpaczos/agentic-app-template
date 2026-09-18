@@ -1,0 +1,75 @@
+{
+  "opis": "Stop z interfejsu mierzony w procesach: liczba procesow potomnych serwera przed poleceniem, w trakcie wykonania i po zakonczeniu, oraz czasy trzech momentow (potwierdzenie zadania, koniec strumienia w karcie, zniknniecie procesu i workspace).",
+  "zrodlo": "pnpm evidence:z10 → e2e/stop-children.spec.ts (regresja szablonu)",
+  "zapisano": "2026-09-18T18:48:04.184Z",
+  "wersjaKodu": {
+    "commit": "c1c9d7c972eaa6731a6e01fea202874e13e1c579",
+    "brudneDrzewo": false,
+    "node": "24.19.0",
+    "pakiety": {
+      "node": "24.19.0",
+      "hono": "4.13.7",
+      "drizzle": "0.45.2",
+      "mastraCore": "1.66.0",
+      "mastraClaude": "0.3.1",
+      "claudeAgentSdk": "0.3.270",
+      "zod": "4.6.5"
+    }
+  },
+  "uwagaOJednostkach": "Wartosci w milisekundach zaleza od maszyny i obciazenia. Powtarzalne jest to, co asertuje regresja: kolejnosc punktow pomiaru, ich rozdzielenie i obecnosc albo brak metryki.",
+  "uwagaOWersjiKodu": "Ten plik powstaje na zadanie (APP_WRITE_EVIDENCE=1, czyli pnpm evidence), nie przy zwyklym pnpm verify. Pole brudneDrzewo ma trzy stany: true — drzewo robocze roznilo sie od commita, false — nie roznilo sie, null — nie dalo sie tego ustalic (przebieg bez gita i bez deklaracji APP_CODE_TREE_DIRTY; tak dzieje sie np. w kopii repozytorium). Null znaczy „nie wiadomo”, nie „czysto”. Odpowiedz dotyczy chwili tej regeneracji i pomija sam katalog dowodow, ktory regeneracja wlasnie przepisuje — nie mowi nic o stanie drzewa w chwili czytania pliku. Pole commit ma wartownika „nieznany” w tej samej sytuacji. Puste pakiety znacza, ze wersji zaleznosci w tym przebiegu nie zbierano — nie ze ich nie ma.",
+  "pomiary": {
+    "potwierdzenieZadania": {
+      "co": "Od klikniecia Stop do odpowiedzi backendu na POST /api/runs/:id/cancel.",
+      "od": "klikniecie przycisku Zatrzymaj w przegladarce",
+      "do": "odpowiedz HTTP na zadanie anulowania",
+      "warunki": "build produkcyjny serwowany przez backend, instancja scenariuszowa na porcie 8798 i wlasnym katalogu danych, Chromium, jeden worker; model zastapiony scenariuszem na granicy adaptera — proces potomny jest prawdziwym procesem systemowym zwiazanym z sygnalem przerwania uruchomienia, ale NIE jest procesem Claude Agent SDK (bez grantu tur modelu); 1 probka; procesy liczone z /proc jako potomkowie procesu serwera",
+      "probkiMs": [
+        168
+      ],
+      "podsumowanie": {
+        "probek": 1,
+        "zMetryka": 1,
+        "brakMetryki": 0,
+        "minMs": 168,
+        "medianaMs": 168,
+        "maxMs": 168
+      }
+    },
+    "koniecStrumienia": {
+      "co": "Od klikniecia Stop do stanu koncowego pokazanego w karcie uruchomienia.",
+      "od": "klikniecie przycisku Zatrzymaj w przegladarce",
+      "do": "zdarzenie konca uruchomienia widoczne w interfejsie",
+      "warunki": "build produkcyjny serwowany przez backend, instancja scenariuszowa na porcie 8798 i wlasnym katalogu danych, Chromium, jeden worker; model zastapiony scenariuszem na granicy adaptera — proces potomny jest prawdziwym procesem systemowym zwiazanym z sygnalem przerwania uruchomienia, ale NIE jest procesem Claude Agent SDK (bez grantu tur modelu); 1 probka; procesy liczone z /proc jako potomkowie procesu serwera",
+      "probkiMs": [
+        211
+      ],
+      "podsumowanie": {
+        "probek": 1,
+        "zMetryka": 1,
+        "brakMetryki": 0,
+        "minMs": 211,
+        "medianaMs": 211,
+        "maxMs": 211
+      }
+    },
+    "koniecProcesow": {
+      "co": "Od klikniecia Stop do zakonczenia procesu potomnego uruchomienia.",
+      "od": "klikniecie przycisku Zatrzymaj w przegladarce",
+      "do": "proces potomny zniknal z listy potomkow serwera (/proc)",
+      "warunki": "build produkcyjny serwowany przez backend, instancja scenariuszowa na porcie 8798 i wlasnym katalogu danych, Chromium, jeden worker; model zastapiony scenariuszem na granicy adaptera — proces potomny jest prawdziwym procesem systemowym zwiazanym z sygnalem przerwania uruchomienia, ale NIE jest procesem Claude Agent SDK (bez grantu tur modelu); 1 probka; procesy liczone z /proc jako potomkowie procesu serwera",
+      "probkiMs": [
+        248
+      ],
+      "uwagi": "Potomkowie serwera: przed 0, w trakcie 1, po 0. Trzy momenty sa rozdzielone: w chwili potwierdzenia workspace jeszcze istnial.",
+      "podsumowanie": {
+        "probek": 1,
+        "zMetryka": 1,
+        "brakMetryki": 0,
+        "minMs": 248,
+        "medianaMs": 248,
+        "maxMs": 248
+      }
+    }
+  }
+}
