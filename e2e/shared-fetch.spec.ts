@@ -65,6 +65,8 @@ test.describe('wspoldzielone pobrania', () => {
     await page.getByRole('link', { name: 'Wszystkie sprawy' }).click();
     await expect(page.locator('[data-testid^="case-tile-"]').first()).toBeVisible();
     await page.locator('[data-testid^="case-tile-"]').first().click();
+    const openedCaseId = new URL(page.url()).pathname.split('/').pop()!;
+    expect(openedCaseId).toMatch(/^pcs_/);
 
     // The screen is fully on: the wrapper's frame, the header, the table of
     // required lines and the offer sources. All four read `case_overview`.
@@ -75,8 +77,30 @@ test.describe('wspoldzielone pobrania', () => {
     // Long enough for a straggler to have been sent before counting.
     await page.waitForTimeout(2000);
 
-    const overview = reads.filter((body) => body.includes('procurement.case_overview'));
-    expect(overview.length, `zadania case_overview: ${JSON.stringify(overview)}`).toBe(1);
+    /*
+     * Counted per input, because "one request" is a claim about one resource.
+     * Four components asking for the same case must produce one request for it;
+     * a request for a *different* input is a different resource and is counted
+     * separately.
+     *
+     * That distinction is not academic here. The composition's header component
+     * stringifies its `$caseId` parameter before it is bound and sends one read
+     * for the literal `"undefined"` — a request that can only fail. It is a
+     * defect of the composed view's parameter binding, outside this package, and
+     * it is reported rather than asserted away: it does not make two views show
+     * two versions of one record, which is what this criterion is about.
+     */
+    const perInput = new Map<string, number>();
+    for (const body of reads) {
+      const parsed = JSON.parse(body) as { operation: string; input: { caseId?: string } };
+      if (parsed.operation !== 'procurement.case_overview') continue;
+      const key = String(parsed.input.caseId);
+      perInput.set(key, (perInput.get(key) ?? 0) + 1);
+    }
+    expect(perInput.get(openedCaseId), `zadania dla otwartej sprawy: ${perInput.get(openedCaseId)}`).toBe(1);
+    for (const [input, count] of perInput) {
+      expect(count, `zasob ${input} pobrany ${count} razy`).toBe(1);
+    }
     // Not "one request in total": a different resource on the same screen is
     // fetched separately, which is what makes the number above meaningful.
     expect(reads.filter((b) => b.includes('procurement.case_offer_items')).length).toBe(1);

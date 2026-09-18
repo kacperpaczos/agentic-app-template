@@ -124,18 +124,17 @@ test.describe('zmiana wlasciciela w jednej karcie przegladarki', () => {
     await expect(page.locator('.pf-chat')).not.toContainText('fragment');
     // Nothing of the previous identity's answer anywhere on the page.
     await expect(page.locator('body')).not.toContainText(partial.slice(0, 20));
-  });
 
-  test('powrot do pierwszej tozsamosci przywraca jej rozmowe — dane nie zginely', async ({ page }) => {
-    await gotoSettingsInApp(page);
-    const secondOwner = (await owner(page).textContent())?.trim();
+    /* ------------------- hidden, not destroyed ----------------------------- */
+
+    /*
+     * In the same tab, still without a reload: switching back must bring the
+     * first identity's conversation back. Kept in this test rather than in one
+     * of its own because a new test gets a new browser context, and a fresh
+     * page proves nothing about a cache that was never populated.
+     */
     await page.getByTestId('switch-access-context').click();
-    await expect(owner(page)).not.toHaveText(secondOwner ?? '');
-
-    // The conversation was hidden, not destroyed: it is the backend's, and the
-    // owner it belongs to sees it again.
-    await expect(page.locator('.pf-chat')).toContainText('Opowiedz dlugo o tej sprawie.', {
-      timeout: 20_000,
-    });
+    await expect(owner(page)).toHaveText(before ?? '');
+    await expect(page.locator('.pf-chat')).toContainText(command, { timeout: 20_000 });
   });
 });
