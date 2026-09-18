@@ -38,6 +38,8 @@ import {
   assertNobodyHoldsIt,
   assertOwnOrEmptyDir,
   kopiujPlik,
+  removeSideFilesWeCreated,
+  sideFilesPresent,
   utworzKatalog,
   zapisz,
   census as censusOf,
@@ -319,18 +321,20 @@ function main() {
   const { flag } = makeArgs(process.argv, FLAGS);
   const verifyOnly = flag('verify');
   if (verifyOnly) {
+    /*
+     * Reading the copy makes SQLite create its side files there. This records
+     * what was present first, so that afterwards exactly what this run added
+     * can be removed — and the copy really is the one file it was, which is
+     * what the last line of this branch tells the user.
+     */
+    const przedOdczytem = sideFilesPresent(resolve(verifyOnly));
     const problems = verify(resolve(verifyOnly));
     if (problems.length) {
       console.error(`[backup] KOPIA NIEPOPRAWNA (${problems.length}):`);
       for (const p of problems) console.error(`  - ${p}`);
       process.exit(1);
     }
-    /*
-     * Reading the copy opened its database, which recreates the log and the
-     * shared-memory index. A check that leaves files behind in the thing it was
-     * checking is not a check, so the copy goes back to the single file it was.
-     */
-    tidy(resolve(verifyOnly));
+    removeSideFilesWeCreated(resolve(verifyOnly), przedOdczytem);
     console.log(`[backup] kopia ${resolve(verifyOnly)} sprawdzona: bez zastrzezen`);
     process.exit(0);
   }

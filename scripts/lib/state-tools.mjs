@@ -538,8 +538,20 @@ export function assertLooksLikeDataDir(path, { what = 'Katalog docelowy' } = {})
 const zatwierdzone = new Set();
 
 /**
- * Approves a directory these scripts may work inside — after checking it is not
- * application data.
+ * Approves a directory these scripts may work inside.
+ *
+ * **What approval means, exactly:** this directory is not application data.
+ * That is the whole claim. It does **not** mean the directory is empty, is
+ * ours, or is safe to overwrite — an ordinary directory of somebody's files
+ * passes this check, and a reviewer duly approved one and deleted inside it.
+ *
+ * The second question — *may I destroy what is in there?* — belongs to the
+ * caller, which answers it with `prepareScratchDir` (must be empty or carry our
+ * marker) or `assertOwnOrEmptyDir` (must be empty or a previous backup of its
+ * own). Keeping the two apart is deliberate: they have different answers for
+ * the same directory depending on what is about to happen to it. It is written
+ * here because a scope that is only implied is the same thing as a scope nobody
+ * decided.
  */
 export function approveTarget(path, { what = 'Katalog', repo = REPO, sprawdzPonizej = true } = {}) {
   const target = assertAwayFromLiveData(path, { what, repo, sprawdzPonizej });
@@ -560,9 +572,29 @@ export function approveRestoreTarget(path, { what = 'Katalog docelowy' } = {}) {
   return target;
 }
 
-/** For directories these scripts create themselves and immediately own. */
-export function approveOwnTemp(path) {
+/**
+ * For a directory these scripts have just created for themselves — in practice
+ * the result of `mkdtempSync`.
+ *
+ * It used to approve whatever it was handed, which made it a door straight into
+ * the gate: `approveOwnTemp(<katalog danych>)` followed by `usun(<plik>)` and
+ * the file was gone. Being the narrowest of the three approvals is no reason to
+ * be the only unchecked one, so it now demands what is true of a directory
+ * created a moment ago and of nothing else: it exists, it is a directory, it is
+ * **empty**, and it is not application data.
+ */
+export function approveOwnTemp(path, { what = 'Katalog tymczasowy' } = {}) {
   const target = realResolve(path);
+  if (!existsSync(target) || !statSync(target).isDirectory()) {
+    refuse(`${what} ${target} nie istnieje albo nie jest katalogiem.`);
+  }
+  if (readdirSync(target).length > 0) {
+    refuse(
+      `${what} ${target} nie jest pusty, wiec nie zostal przed chwila utworzony przez ten skrypt.\n` +
+        'Ta furtka jest wylacznie dla katalogow z mkdtemp; do reszty sluzy approveTarget.',
+    );
+  }
+  assertAwayFromLiveData(target, { what });
   zatwierdzone.add(target);
   return target;
 }
@@ -605,6 +637,8 @@ export const przenies = (from, to) => {
 export const sha256File = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
 
 const DB_PARTS = ['app.db', 'app.db-wal', 'app.db-shm'];
+/** Recreated by SQLite on any connection, read-only included. */
+const SIDE_FILES = ['app.db-wal', 'app.db-shm'];
 
 /**
  * Row census of every table: counts, a content digest, and the column list.
@@ -743,8 +777,41 @@ export function assertNobodyHoldsIt(dataDir, { label } = { label: 'stan' }) {
  * one copy instead of three — and removes the chance of someone restoring the
  * main file without its log.
  */
+/**
+ * The SQLite side files present in a directory right now.
+ *
+ * Taken **before** opening a database there, so that whatever appears
+ * afterwards can be told apart from whatever was already there. Reading a
+ * database — even read-only — makes SQLite create `app.db-shm` and an empty
+ * `app.db-wal`, which is how these scripts came to leave litter in directories
+ * they had promised not to touch.
+ */
+export function sideFilesPresent(dir) {
+  return new Set(SIDE_FILES.filter((f) => existsSync(resolve(dir, f))));
+}
+
+/**
+ * Removes the side files **this process created** in `dir`, and only those.
+ *
+ * Deliberately outside the approval gate, and this is the one place where that
+ * is defensible: a file that did not exist when we arrived and exists now was
+ * made by our own read, so deleting it cannot lose anybody's data. A log that
+ * was already there is left alone — it may hold committed transactions, and
+ * that is exactly the thing never to delete on a hunch.
+ *
+ * The alternative was to leave everything and weaken the message instead. That
+ * would mean `--verify` telling the user their copy is untouched while having
+ * added files to it, which is the failure this whole package is about.
+ */
+export function removeSideFilesWeCreated(dir, before) {
+  for (const f of SIDE_FILES) {
+    const path = resolve(dir, f);
+    if (existsSync(path) && !before.has(f)) rmSync(path);
+  }
+}
+
 export function tidy(dir) {
-  for (const stray of ['app.db-wal', 'app.db-shm']) {
+  for (const stray of SIDE_FILES) {
     const path = resolve(dir, stray);
     /*
      * Only inside a directory this run approved. A write-ahead log holds

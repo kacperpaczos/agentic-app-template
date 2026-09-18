@@ -51,6 +51,8 @@ import {
   assertNobodyHoldsIt,
   census,
   kopiujDrzewo,
+  removeSideFilesWeCreated,
+  sideFilesPresent,
   kopiujPlik,
   przenies,
   usun,
@@ -169,10 +171,12 @@ function main() {
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 
   /* ---- 1. the copy is actually a copy ---- */
+  // Verifying opens the copy's database, so note what was in the directory
+  // first and put it back exactly like that afterwards: `--check` claims to
+  // change nothing, and that has to be true of the backup as well.
+  const przedOdczytem = sideFilesPresent(backupDir);
   const problems = verify(backupDir);
-  // `verify` opens the copy, which recreates its log files; the backup is left
-  // as the single file it was.
-  tidy(backupDir);
+  removeSideFilesWeCreated(backupDir, przedOdczytem);
   if (problems.length) {
     console.error(`[odtworzenie] KOPIA NIEPOPRAWNA (${problems.length}) — nie odtwarzam:`);
     for (const p of problems) console.error(`  - ${p}`);

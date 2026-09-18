@@ -182,15 +182,23 @@ zachowanie każdej zadeklarowanej flagi zgadza się z jej rodzajem, przy czym po
 porównywany jest odcisk SHA-256 katalogu, na który flagę wskazano (poza `app.db-wal` i `app.db-shm`,
 które SQLite odtwarza przy samym czytaniu).
 
-**Czego to nie obejmuje**, wprost:
+**Czego to nie obejmuje**, wprost — pełna lista:
 
-- skryptu, który nie korzysta z `scripts/lib/state-tools.mjs` — taki nie ma żadnej z tych ochron;
-  test wypisuje listę objętych, żeby luka była widoczna, a nie domniemana;
-- wywołania `rmSync` i podobnych sięgniętego z pominięciem biblioteki w sposób, którego kontrola
-  źródła nie zobaczy (np. `(await import('node:fs')).rm`); kontrola jest o przeoczeniu, nie o
-  przeciwniku;
-- kolejności: zatwierdzenie i operacja są w tym samym procesie, więc katalog podmieniony **między**
-  sprawdzeniem a zapisem nie jest wykrywany.
+1. **Skryptu, który nie korzysta z `scripts/lib/state-tools.mjs`.** Taki nie ma żadnej z tych ochron;
+   test wypisuje listę objętych, żeby luka była widoczna, a nie domniemana.
+2. **Sięgnięcia po `node:fs` w formie, której kontrola źródła nie zobaczy** (np.
+   `(await import('node:fs')).rm`). Ta kontrola jest o przeoczeniu, nie o przeciwniku.
+3. **Podmiany katalogu między zatwierdzeniem a operacją** (TOCTOU). Zatwierdzenie i zapis są w jednym
+   procesie i w krótkim odstępie, ale nie są atomowe.
+4. **Ścieżek wewnątrz zatwierdzonego katalogu.** Po zatwierdzeniu `--out` skrypt robi w nim, co chce —
+   tym właśnie jest katalog roboczy. `approveTarget` odpowiada wyłącznie na pytanie „czy to nie są
+   dane aplikacji”; na pytanie „czy wolno skasować to, co tam leży” odpowiada osobno `prepareScratchDir`
+   albo `assertOwnOrEmptyDir`.
+5. **Zapisów wykonywanych przez zależności, nie przez te skrypty.** `new Database(...)` tworzy
+   `app.db-wal` i `app.db-shm` obok czytanej bazy, a procesy potomne uruchamiane przez `execFileSync`
+   piszą w katalogach, które dostaną. Te zapisy **nie przechodzą** przez bramkę. Tam, gdzie chodzi o
+   cudzy katalog — `--verify` i `restore --check` — skrypt zapamiętuje, które pliki pomocnicze
+   zastał, i po odczycie usuwa dokładnie te, które sam utworzył; pliku, który tam był, nie rusza.
 
 Kody wyjścia wszystkich czterech skryptów: **0** zrobione, **1** werdykt negatywny (kopia się nie
 weryfikuje, próba znalazła problemy, odtworzony stan nie zgadza się z manifestem), **2** odmowa,

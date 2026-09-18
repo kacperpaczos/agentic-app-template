@@ -24,7 +24,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  * complete, and that the **behaviour matches the kind claimed**, by running the
  * script against a directory that looks like a live installation.
  *
- * **What neither covers, stated plainly:**
+ * **What neither covers, stated plainly** (the full list is in
+ * `docs/odzyskiwanie-stanu.md`; these are the ones that bear on this file):
  *   - a path that reaches a script other than through a command-line flag — an
  *     environment variable, a config file, a constant. Nothing here sees those;
  *   - a script that does not use `lib/state-tools.mjs` at all. It would have
@@ -32,8 +33,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  *     lists which scripts it covers so that gap is visible rather than implied;
  *   - a flag deliberately mis-declared (a writing flag called `wartosc`). The
  *     kind is then a lie in the file, not an omission — but every kind now has
- *     a behavioural consequence, so the lie has to survive an actual run: the
- *     universal invariant below applies whatever the kind says.
+ *     a behavioural consequence, so the lie has to survive an actual run;
+ *   - writes performed by dependencies rather than by these scripts:
+ *     `new Database(...)` creates SQLite's side files next to the database it
+ *     opens, and child processes write wherever they are pointed. Those do not
+ *     pass the gate; where it is somebody else's directory the script removes
+ *     exactly the side files it created and leaves any that were there.
  *
  * **The invariant** that makes the kinds more than labels: no flag may modify
  * the directory it is pointed at. It is checked by fingerprinting that
@@ -95,6 +100,8 @@ function run(script: string, args: string[]): { status: number; out: string } {
   });
   return { status: r.status ?? -1, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
 }
+
+const sha256 = (p: string) => createHash('sha256').update(readFileSync(p)).digest('hex');
 
 /** SHA-256 of every file in a tree — used to prove a run changed nothing. */
 function odcisk(dir: string): Record<string, string> {
@@ -427,6 +434,56 @@ describe('kazda flaga skryptow stanu ma rozstrzygniecie sprawdzone zachowaniem',
       expect(odcisk(zyweDane), `${script} zmienilo katalog podany pozycyjnie`).toEqual(przed);
     }
   }, 120_000);
+
+  it('odczyt cudzej kopii nie zostawia w niej sladu — z plikami pomocniczymi wlacznie', () => {
+    /*
+     * The one case where `odcisk()` cannot be used: it drops `app.db-wal` and
+     * `app.db-shm` on purpose, and this test is *about* those two files.
+     *
+     * Reading a database creates them. For a directory the run never approved —
+     * somebody's backup handed to `--verify`, or to `restore --check` — that
+     * meant leaving litter behind while printing "sprawdzona: bez zastrzezen"
+     * and "nic nie zostalo zmienione". A script that changes a user's directory
+     * and then states that it did not is worse than one that fails loudly, so
+     * the two files this run creates are removed again, and the ones that were
+     * already there are not.
+     */
+    const zrodloK = swiezy('slad-zrodlo');
+    expect(run('synthetic-state.mjs', ['--out', zrodloK, '--stage', 'current']).status).toBe(0);
+    const cudzaKopia = swiezy('slad-kopia');
+    expect(run('backup-state.mjs', ['--data', zrodloK, '--out', cudzaKopia]).status).toBe(0);
+
+    const pelnyOdcisk = () =>
+      readdirSync(cudzaKopia).sort().join(',') + '|' + sha256(resolve(cudzaKopia, 'app.db'));
+    const przed = pelnyOdcisk();
+
+    const w = run('backup-state.mjs', ['--verify', cudzaKopia]);
+    expect(w.status, w.out).toBe(0);
+    expect(pelnyOdcisk(), '--verify zostawilo pliki w sprawdzanej kopii').toBe(przed);
+
+    const c = run('restore-state.mjs', ['--backup', cudzaKopia, '--data', swiezy('slad-cel'), '--check']);
+    expect(c.status, c.out).toBe(0);
+    expect(pelnyOdcisk(), 'restore --check zostawilo pliki w kopii').toBe(przed);
+  }, 240_000);
+
+  it('approveOwnTemp nie zatwierdza katalogu, ktorego nie utworzylismy', async () => {
+    /*
+     * The narrowest of the three approvals was the only one that checked
+     * nothing, which made it a door straight into the gate: approve a live data
+     * directory, then delete inside it. It now demands what is true of a
+     * `mkdtemp` result and of almost nothing else — empty, and not application
+     * data.
+     */
+    const lib = await import(resolve(SCRIPTS_DIR, 'lib/state-tools.mjs'));
+
+    expect(() => lib.approveOwnTemp(zyweDane)).toThrow(/nie jest pusty|katalogu danych aplikacji/);
+    expect(() => lib.usun(plikUzytkownika)).toThrow(/poza katalogami zatwierdzonymi/);
+    expect(readFileSync(plikUzytkownika, 'utf8')).toBe('tresc uzytkownika\n');
+
+    // A directory that really was just created still goes through.
+    const swiezyTmp = mkdtempSync(join(work, 'prawdziwy-tmp-'));
+    expect(() => lib.approveOwnTemp(swiezyTmp)).not.toThrow();
+  }, 60_000);
 
   it('backup-state --data faktycznie kopiuje zywy katalog danych', () => {
     /*
