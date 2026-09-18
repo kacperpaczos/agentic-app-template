@@ -34,6 +34,12 @@ export const PLATFORM_CUSTOM_EVENTS = {
   permissionRequest: 'platform.permission_request',
   sessionBound: 'platform.session_bound',
   /**
+   * The stored Claude session could not be resumed because its transcript is
+   * gone. Carries what was lost and what was done about it, so the client can
+   * say "the earlier context was not restored" instead of implying it was.
+   */
+  sessionTranscriptLost: 'platform.session_transcript_lost',
+  /**
    * The agent asking the client to move the interface.
    *
    * A request, not a result: the client decides whether it can be performed and

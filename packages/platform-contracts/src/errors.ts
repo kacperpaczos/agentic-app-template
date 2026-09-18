@@ -16,6 +16,14 @@ export const APP_ERROR_CODES = [
   'unsupported_operation',
   'integration_failed',
   'model_failed',
+  /**
+   * The conversation is kept here, but the Claude Agent SDK transcript it
+   * resumes is gone. Distinct from `integration_failed` on purpose: it is not a
+   * broken integration but a recoverable loss of the model's memory, and the
+   * user has to be told that the memory was *not* restored rather than shown a
+   * generic failure.
+   */
+  'session_transcript_lost',
   'sandbox_denied',
   'cancelled',
   'internal',
@@ -35,6 +43,9 @@ export const ERROR_HTTP_STATUS: Record<AppErrorCode, number> = {
   unsupported_operation: 501,
   integration_failed: 502,
   model_failed: 502,
+  // The two sides of the conversation disagree about what still exists: the
+  // application kept it, the SDK did not.
+  session_transcript_lost: 409,
   sandbox_denied: 403,
   cancelled: 499,
   internal: 500,

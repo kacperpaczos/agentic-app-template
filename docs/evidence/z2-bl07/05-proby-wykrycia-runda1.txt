@@ -1,0 +1,77 @@
+PROBY ZDOLNOSCI WYKRYCIA — runda poprawek 1 (C1), zadanie Z2 / BL-07
+commit: 681438d — Runda poprawek 1: ochrona sciezek kasowanych przez skrypty s
+Procedura: commit najpierw, proba na czystym drzewie, wycofanie linii, test oblewa,
+git checkout -- <plik>, drzewo znow czyste.
+Stan wyjsciowy: 1 zmienionych plikow (poza nowym plikiem dowodu).
+
+=== C1/1 — zawieranie zamiast rownosci (cel WEWNATRZ i NAD katalogiem danych)
+wycofane linie: state-tools.mjs, assertAwayFromLiveData bez obu petli isWithin
+                i bez dataDirAtOrAbove/dataDirBelow — zostaje porownanie na rownosc
+   ✓ kopie i proby odmawiaja pracy na katalogu danych aplikacji (5)
+     ✓ kopia do wnetrza katalogu danych jest odrzucona 41ms
+     ✓ kopia bazy trzymanej przez proces jest odrzucona 202ms
+     ✓ proba migracji na katalogu wskazanym przez APP_DATA_DIR jest odrzucona 54ms
+     ✓ proba migracji na katalogu z session.secret jest odrzucona, nawet bez APP_DATA_DIR 51ms
+     ✓ generator danych syntetycznych odmawia nadpisania katalogu danych 1095ms
+     × synthetic-state.mjs odmawia katalogu WEWNATRZ katalogu danych 1639ms
+     × migration-rehearsal.mjs odmawia katalogu WEWNATRZ katalogu danych 54ms
+     ✓ synthetic-state.mjs odmawia katalogu NADRZEDNEGO wobec katalogu danych 1371ms
+     ✓ migration-rehearsal.mjs odmawia katalogu NADRZEDNEGO wobec katalogu danych 47ms
+     × dowiazanie symboliczne nie obchodzi kontroli 1279ms
+     ✓ odmawia skasowania cudzego niepustego katalogu bez znacznika 1252ms
+     ✓ katalog pusty albo wlasny jest uzywany normalnie 4834ms
+     × odtworzenie odmawia katalogu --data, ktory nie wyglada na katalog danych 80ms
+
+UWAGA do powyzszego: test 'odtworzenie odmawia katalogu --data' oblal w tej probie
+z powodu niezwiazanego z wycofana linia — z filtrem -t nie widzial kopii tworzonej
+w sasiednim opisie. To druga (po probie 7 z pierwszej rundy) wada tej samej klasy;
+test poprawiony osobnym commitem i korzysta z kopii ze swojego describe.
+Tresc proby C1/1: oblaly 'WEWNATRZ katalogu danych' (oba skrypty) i 'dowiazanie
+symboliczne' — czyli dokladnie scenariusz z przegladu. Przypadki 'NADRZEDNY'
+przeszly, bo zatrzymala je ochrona 3 (znacznik) — to jest zamierzone nakladanie sie
+ochron, pokazane osobno w probie C1/3.
+
+=== C1/2 — rozwiazywanie dowiazan (realResolve)
+wycofana linia: state-tools.mjs, realResolve zwraca resolve() bez realpathSync
+ ✓ tests/backup-migration.test.ts (33 tests | 32 skipped) 3004ms
+   ✓ sciezki wokol katalogu danych — trzy ochrony przed skasowaniem (9)
+     ✓ dowiazanie symboliczne nie obchodzi kontroli 937ms
+      Tests  1 passed | 32 skipped (33)
+PIERWSZE PODEJSCIE: test przeszedl mimo wycofanego realpathSync — lapala go inna
+ochrona (session.secret w katalogu nad celem), wiec nie sprawdzal tego, co mial.
+Test przepisany tak, by zadna inna ochrona nie mogla zadzialac (brak sekretu, cel
+nieistniejacy, katalog danych wskazany przez APP_DATA_DIR sciezka rzeczywista).
+Proba powtorzona:
+     × dowiazanie symboliczne nie obchodzi kontroli 994ms
+AssertionError: [syntetyk] katalog: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-rHWFKv/dowiazanie-do-danych/nowy
+    468|     expect(existsSync(resolve(prawdziwe, 'nowy')), 'skrypt wszedl do k…
+      Tests  1 failed | 32 skipped (33)
+przywrocono: git checkout -- scripts/lib/state-tools.mjs
+
+=== C1/3 — odmowa skasowania katalogu, ktorego te skrypty nie utworzyly
+wycofane linie: state-tools.mjs, prepareScratchDir bez wymogu znacznika
+     × odmawia skasowania cudzego niepustego katalogu bez znacznika 1047ms
+AssertionError: [syntetyk] katalog: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-ZXc705/cudze-zdjecia
+      Tests  1 failed | 32 skipped (33)
+przywrocono: git checkout -- scripts/lib/state-tools.mjs
+
+=== C1/4 — restore-state.mjs odmawia --data, ktory nie wyglada na katalog danych
+wycofana linia: restore-state.mjs, wywolanie assertLooksLikeDataDir
+     × odtworzenie odmawia katalogu --data, ktory nie wyglada na katalog danych 1015ms
+AssertionError: [odtworzenie] kopia /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-DhlcQN/ofiara-kopia: sprawdzona (sumy, census, integrity_check)
+      Tests  1 failed | 32 skipped (33)
+przywrocono: git checkout -- scripts/restore-state.mjs
+
+=== C1/5 — osobny kod wyjscia dla awarii skryptu (I3)
+wycofana linia: state-tools.mjs, runScript zglasza awarie kodem 1 zamiast 4
+     × awaria skryptu ma inny kod wyjscia niz werdykt proby 54ms
+AssertionError: [proba] AWARIA: SqliteError: unable to open database file
+      Tests  1 failed | 32 skipped (33)
+przywrocono: git checkout -- scripts/lib/state-tools.mjs
+
+=== PODSUMOWANIE RUNDY 1
+5 prob. Wszystkie oblaly po wycofaniu linii i przeszly po przywroceniu.
+Dwie proby (C1/1 dla przypadku NADRZEDNY, C1/2 przy pierwszym podejsciu) pokazaly,
+ze inna ochrona przejmuje przypadek — w C1/1 jest to zamierzone nakladanie sie ochron,
+w C1/2 oznaczalo slaby test, ktory zostal przepisany i powtorzony.
+Po kazdej probie git status --porcelain pokazywal wylacznie nowe pliki dowodow.

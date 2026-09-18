@@ -1,0 +1,12 @@
+PROBA ZDOLNOSCI WYKRYCIA — runda poprawek 7, zadanie Z2 / BL-07
+commit: ca8a6e6
+
+=== PROBA 7/1 — sprzatanie przed werdyktem (sciezka nieudanej weryfikacji)
+wycofana zmiana: removeSideFilesWeCreated znow PO wyjsciu z if (problems.length)
+     × odczyt cudzej kopii nie zostawia w niej sladu — z plikami pomocniczymi wlacznie 4372ms
+AssertionError: nieudana weryfikacja zostawila pliki w sprawdzanej kopii: expected 'app.db,app.db-shm,app.db-wal,files,ma…' to be 'app.db,files,manifest.json' // Object.is equality
+    500|       'nieudana weryfikacja zostawila pliki w sprawdzanej kopii',
+      Tests  1 failed | 22 skipped (23)
+przywrocono: git checkout -- scripts/backup-state.mjs
+(przed poprawka: KOPIA NIEPOPRAWNA, kod 1 — i app.db-shm oraz app.db-wal zostawione
+ w sprawdzanym katalogu uzytkownika)

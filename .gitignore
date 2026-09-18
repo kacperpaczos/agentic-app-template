@@ -13,6 +13,11 @@ playwright-report/
 .e2e-data/
 .e2e-scripted*/
 
+# Dane syntetyczne prób kopii, migracji i odtworzenia (tests/backup-migration.test.ts
+# oraz scripts/synthetic-state.mjs). Wymyślone, ale to nadal katalogi danych — nie
+# trafiają do repozytorium ani do obrazu.
+.e2e-bl07/
+
 # Licznik tur subskrypcji wydanych przez spece modelowe. Kopia robocza, nie
 # dowód: rejestr zamkniętego grantu leży w docs/evidence/ i nikt go nie nadpisuje.
 .e2e-model-turns/

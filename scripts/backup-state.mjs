@@ -27,41 +27,36 @@
  * database: a byte copy of a database being written to can be torn, and the
  * check is what makes the copy trustworthy rather than merely likely.
  */
-import { createHash } from 'node:crypto';
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { basename, join, relative, resolve } from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import {
+  Database,
+  SCRATCH_MARKER,
+  approveTarget,
+  assertAwayFromLiveData,
+  assertNobodyHoldsIt,
+  assertOwnOrEmptyDir,
+  kopiujPlik,
+  removeSideFilesWeCreated,
+  sideFilesPresent,
+  utworzKatalog,
+  zapisz,
+  census as censusOf,
+  isWithin,
+  makeArgs,
+  realResolve,
+  refuse,
+  runScript,
+  sha256File as sha256,
+  tidy,
+} from './lib/state-tools.mjs';
 
-/*
- * `better-sqlite3` is a dependency of `@platform/server`, not of the repository
- * root, and it stays that way: adding it to the root manifest so a script can
- * `import` it would declare a dependency the application does not have. This
- * resolves it from the package that legitimately owns it.
- */
-const Database = createRequire(resolve(import.meta.dirname, '../packages/platform-server/package.json'))(
-  'better-sqlite3',
-);
+export { tidy };
 
-const args = process.argv.slice(2);
-const flag = (name, fallback = null) => {
-  const i = args.indexOf(`--${name}`);
-  return i >= 0 && args[i + 1] ? args[i + 1] : fallback;
-};
 
 const DB_PARTS = ['app.db', 'app.db-wal', 'app.db-shm'];
 const TREES = ['files', 'workspaces'];
-
-const sha256 = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
 
 function walk(dir, base = dir) {
   if (!existsSync(dir)) return [];
@@ -75,68 +70,131 @@ function walk(dir, base = dir) {
 }
 
 /**
- * Row census of every table, plus the applied migrations.
+ * The manifest's census, in the manifest's own shape.
  *
- * Counts alone would miss content that changed without changing shape, so each
- * table also gets a digest over its rows in primary-key order. That is what
- * lets the migration rehearsal say "these conversations are the same
- * conversations" rather than "there are still eleven of them".
+ * The computation is shared (`lib/state-tools.mjs`); only the field names are
+ * this file's, and they are kept as they were because they are **written into
+ * every manifest ever produced**. A backup taken last month is read by
+ * `--verify` and by `restore-state.mjs` today, so renaming a key here would
+ * quietly declare older copies unverifiable.
  */
+/**
+ * Every flag of this script that takes a path, and what it does with it.
+ *
+ * This is not documentation of the flags — it is where they come from.
+ * `makeArgs(process.argv, FLAGS)` refuses any flag that is not in this list and
+ * any positional argument, and `tests/script-path-flags.test.ts` runs this
+ * script once per declared flag to check that its behaviour matches the kind.
+ *
+ * It is the *second* line, though, and worth reading as such. The one that
+ * actually holds is in `lib/state-tools.mjs`: every operation that deletes,
+ * moves or overwrites checks its path at the moment of the call, so a path that
+ * arrives some way nobody anticipated is still refused. Five rounds of guarding
+ * the argument were walked around five times; guarding the operation is what
+ * stopped it.
+ *
+ *   zapis-chroniony  — writes; must refuse a live data directory
+ *   odczyt-chroniony — only reads, but still refuses one
+ *   zapis-docelowy   — writes *into* a data directory on purpose
+ *   odczyt           — only reads; a live data directory is allowed, and `why`
+ *                      has to say why that is safe
+ *   wartosc          — not a path at all
+ */
+export const FLAGS = {
+  data: {
+    kind: 'odczyt',
+    why: 'Zrodlo kopii. Czytanie zywego katalogu danych jest sensem tego skryptu, a czyta go '
+      + 'wylacznie jako bajty, bez otwierania bazy — wiec ta flaga celowo NIE ma ochrony przed '
+      + 'katalogiem danych. To jedyne takie miejsce w tych skryptach i dlatego jest tu napisane wprost.',
+  },
+  out: {
+    kind: 'zapis-chroniony',
+    why: 'Kopia nadpisuje app.db i drzewa plikow. Wskazana na czyjs katalog danych niszczyla baze '
+      + 'uzytkownika i konczyla sie kodem 0 (do 2026-09-18).',
+  },
+  verify: {
+    kind: 'odczyt',
+    why: 'Sprawdza istniejaca kopie: czyta manifest i baze kopii, niczego nie zapisuje.',
+  },
+};
+
+
 export function census(dbFile) {
-  const db = new Database(dbFile, { readonly: true });
-  try {
-    const tables = db
-      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
-      .all()
-      .map((r) => r.name);
-    const tableCounts = {};
-    const tableDigests = {};
-    for (const t of tables) {
-      tableCounts[t] = db.prepare(`SELECT COUNT(*) AS n FROM "${t}"`).get().n;
-      const rows = db.prepare(`SELECT * FROM "${t}"`).all();
-      const canonical = rows
-        .map((r) => JSON.stringify(Object.keys(r).sort().map((k) => [k, r[k]])))
-        .sort();
-      tableDigests[t] = createHash('sha256').update(canonical.join('\n')).digest('hex');
-    }
-    const migrations = tables.includes('schema_migrations')
-      ? db.prepare('SELECT id FROM schema_migrations ORDER BY id').all().map((r) => r.id)
-      : [];
-    const integrity = db.pragma('integrity_check', { simple: true });
-    return { tables, tableCounts, tableDigests, migrations, integrity };
-  } finally {
-    db.close();
-  }
+  const c = censusOf(dbFile);
+  return {
+    tables: c.tables,
+    tableCounts: c.counts,
+    tableDigests: c.digests,
+    tableColumns: c.columns,
+    migrations: c.migrations,
+    integrity: c.integrity,
+  };
 }
 
-/** Refuses to copy a database some process may be writing to. */
-function assertNobodyHoldsIt(dbFile) {
-  for (const part of DB_PARTS) {
-    const p = resolve(dbFile, '..', part);
-    if (!existsSync(p)) continue;
-    try {
-      const holders = execFileSync('fuser', [p], { stdio: ['ignore', 'pipe', 'ignore'] })
-        .toString()
-        .trim();
-      if (holders) {
-        throw new Error(
-          `Plik ${p} jest otwarty przez proces(y): ${holders}.\n` +
-            'Zatrzymaj aplikacje przed wykonaniem kopii — kopia bazy zapisywanej w tle moze byc niespojna.',
-        );
-      }
-    } catch (e) {
-      // `fuser` exits non-zero when nothing holds the file: that is the good case.
-      if (e instanceof Error && /jest otwarty przez proces/.test(e.message)) throw e;
-    }
+/**
+ * Where the copy may be written.
+ *
+ * Three questions, and for a long time this asked only the first two.
+ *
+ *  1. Is `--out` **inside** `--data`? Then the backup is copied into itself on
+ *     the next run, grows without bound, and is deleted by the same
+ *     `rm -rf data` the recovery procedure warns about.
+ *  2. Does `--out` **contain** `--data`? Then the copy and the original share a
+ *     fate, which is the one thing a copy must not do.
+ *  3. Is `--out` somebody's **live data directory** — any live data directory,
+ *     not just the one being copied?
+ *
+ * The third was missing, and its absence was the worst defect in this package:
+ * `--data <cokolwiek> --out <katalog danych>` overwrote the user's `app.db` and
+ * their file tree with another installation's, printed "weryfikacja: kopia
+ * odczytana ponownie, sumy i census zgodne" and exited 0. A backup destroying
+ * data while reporting success is the exact inverse of what L10.19 requires,
+ * and no amount of care about `--data` could have caught it, because the copy
+ * *reads* `--data` and *writes* `--out`.
+ *
+ * `assertAwayFromLiveData` is deliberately applied to `--out` only. Reading a
+ * live data directory is this script's whole purpose; writing into one never is.
+ */
+function assertSafeOutDir(dataDir, outDir) {
+  const data = realResolve(dataDir);
+  const out = realResolve(outDir);
+  if (isWithin(out, data)) {
+    refuse(
+      `Katalog kopii ${out} lezy wewnatrz katalogu danych ${data}.\n` +
+        'Wskaz katalog poza katalogiem danych (--out), inaczej kopia jest czescia tego, co kopiuje.',
+    );
   }
+  if (isWithin(data, out)) {
+    refuse(
+      `Katalog kopii ${out} zawiera katalog danych ${data}.\n` +
+        'Kopia i oryginal dzielilyby los; wskaz katalog obok (--out).',
+    );
+  }
+  assertAwayFromLiveData(out, { what: 'Katalog kopii' });
+  /*
+   * And, even where nothing marks the destination as application data: a backup
+   * overwrites `app.db` and the file trees, so it may only land somewhere empty,
+   * new, or recognisably a previous backup of its own (`manifest.json`).
+   */
+  assertOwnOrEmptyDir(out, {
+    what: 'Katalog kopii',
+    ownMarkers: ['manifest.json', SCRATCH_MARKER],
+  });
 }
 
-function backup({ dataDir, outDir }) {
+export function backup({ dataDir, outDir }) {
   const dbFile = resolve(dataDir, 'app.db');
-  if (!existsSync(dbFile)) throw new Error(`Nie znaleziono bazy: ${dbFile}`);
-  assertNobodyHoldsIt(dbFile);
+  if (!existsSync(dbFile)) refuse(`Nie znaleziono bazy: ${dbFile}`);
+  assertSafeOutDir(dataDir, outDir);
+  assertNobodyHoldsIt(dataDir, { label: 'backup' });
 
-  mkdirSync(outDir, { recursive: true });
+  /*
+   * From here on every write goes through the guarded operations, and they only
+   * work inside a directory this run approved. `--out` is that directory; the
+   * source is read and never written.
+   */
+  approveTarget(outDir, { what: 'Katalog kopii' });
+  utworzKatalog(outDir, { recursive: true });
 
   /* ---- 1. the database, as bytes, all parts together ---- */
   const parts = [];
@@ -144,7 +202,7 @@ function backup({ dataDir, outDir }) {
     const src = resolve(dataDir, part);
     if (!existsSync(src)) continue;
     const dst = resolve(outDir, part);
-    copyFileSync(src, dst);
+    kopiujPlik(src, dst);
     parts.push({ part, bytes: statSync(src).size, sha256: sha256(src) });
   }
   if (!parts.some((p) => p.part === 'app.db-wal')) {
@@ -174,8 +232,8 @@ function backup({ dataDir, outDir }) {
     trees[tree] = files;
     for (const f of files) {
       const dst = resolve(outDir, tree, f.path);
-      mkdirSync(resolve(dst, '..'), { recursive: true });
-      copyFileSync(resolve(src, f.path), dst);
+      utworzKatalog(resolve(dst, '..'), { recursive: true });
+      kopiujPlik(resolve(src, f.path), dst);
     }
   }
 
@@ -199,7 +257,7 @@ function backup({ dataDir, outDir }) {
     census: census(resolve(outDir, 'app.db')),
     trees,
   };
-  writeFileSync(resolve(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+  zapisz(resolve(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
   return manifest;
 }
 
@@ -210,9 +268,9 @@ function backup({ dataDir, outDir }) {
  * turns one into the other, and it is run immediately after writing so the
  * result is reported at the moment of creation rather than discovered later.
  */
-function verify(outDir) {
+export function verify(outDir) {
   const manifestPath = resolve(outDir, 'manifest.json');
-  if (!existsSync(manifestPath)) throw new Error(`Brak manifestu: ${manifestPath}`);
+  if (!existsSync(manifestPath)) refuse(`Brak manifestu: ${manifestPath} — to nie wyglada na kopie.`);
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   const problems = [];
 
@@ -246,65 +304,85 @@ function verify(outDir) {
 
 /* --------------------------------- main ---------------------------------- */
 
-const verifyOnly = flag('verify');
-if (verifyOnly) {
-  const problems = verify(resolve(verifyOnly));
+/**
+ * Guarded so the functions above can be imported — by `restore-state.mjs`,
+ * which must verify a backup before it touches anything, and by the regression
+ * tests. Without the guard, importing this file would run a backup.
+ *
+ * `tidy` (dropping the now-empty log after the last read) is shared, and
+ * re-exported at the top of this file so callers still find it here.
+ */
+function main() {
+  /*
+   * Inside `main`, so that a refusal over an unknown flag is reported the way
+   * every other refusal is (exit 2) instead of escaping module evaluation as an
+   * uncaught error.
+   */
+  const { flag } = makeArgs(process.argv, FLAGS);
+  const verifyOnly = flag('verify');
+  if (verifyOnly) {
+    /*
+     * Reading the copy makes SQLite create its side files there. This records
+     * what was present first, so that afterwards exactly what this run added
+     * can be removed — on both exits, the clean one and the failed one.
+     */
+    const przedOdczytem = sideFilesPresent(resolve(verifyOnly));
+    const problems = verify(resolve(verifyOnly));
+    /*
+     * Before the verdict, not after it. This used to sit below the early exit,
+     * so a copy that failed verification kept the side files this run had
+     * created in it — the one path where "leaves no trace" was false, and the
+     * only one no test covered, because the tests all checked a copy that
+     * verified. A directory belonging to someone else is put back the way it
+     * was whatever the answer turns out to be.
+     */
+    removeSideFilesWeCreated(resolve(verifyOnly), przedOdczytem);
+    if (problems.length) {
+      console.error(`[backup] KOPIA NIEPOPRAWNA (${problems.length}):`);
+      for (const p of problems) console.error(`  - ${p}`);
+      process.exit(1);
+    }
+    console.log(`[backup] kopia ${resolve(verifyOnly)} sprawdzona: bez zastrzezen`);
+    process.exit(0);
+  }
+
+  const dataDir = resolve(flag('data', resolve(process.cwd(), 'data')));
+  const outDir = resolve(
+    flag('out', resolve(process.cwd(), 'backups', `${basename(dataDir)}-${new Date().toISOString().replace(/[:.]/g, '-')}`)),
+  );
+
+  const manifest = backup({ dataDir, outDir });
+  const problems = verify(outDir);
+
+  console.log(`[backup] zrodlo:   ${dataDir}`);
+  console.log(`[backup] kopia:    ${outDir}`);
+  console.log(
+    `[backup] baza:     ${manifest.databaseParts.map((p) => `${p.part} ${(p.bytes / 1024).toFixed(0)} kB`).join(', ')}` +
+      ` → app.db ${(manifest.databaseAfterCheckpoint.bytes / 1024).toFixed(0)} kB po zwinieciu WAL`,
+  );
+  console.log(`[backup] migracje: ${manifest.census.migrations.join(', ') || '(brak)'}`);
+  const interesting = ['conversations', 'messages', 'agent_runs', 'run_events', 'canvas_spaces', 'canvas_cards', 'artifacts', 'files'];
+  console.log(
+    `[backup] wiersze:  ${interesting
+      .filter((t) => t in manifest.census.tableCounts)
+      .map((t) => `${t}=${manifest.census.tableCounts[t]}`)
+      .join(' ')}`,
+  );
+  for (const [tree, files] of Object.entries(manifest.trees)) {
+    console.log(`[backup] ${tree}: ${files.length} plikow`);
+  }
+
   if (problems.length) {
-    console.error(`[backup] KOPIA NIEPOPRAWNA (${problems.length}):`);
+    console.error(`[backup] WERYFIKACJA NIEUDANA (${problems.length}):`);
     for (const p of problems) console.error(`  - ${p}`);
     process.exit(1);
   }
-  console.log(`[backup] kopia ${resolve(verifyOnly)} sprawdzona: bez zastrzezen`);
-  process.exit(0);
+  tidy(outDir);
+
+  console.log('[backup] weryfikacja: kopia odczytana ponownie, sumy i census zgodne, integrity_check ok');
+  console.log(`[backup] kopia to jeden plik app.db — odtworzenie: patrz docs/odzyskiwanie-stanu.md`);
 }
 
-const dataDir = resolve(flag('data', resolve(process.cwd(), 'data')));
-const outDir = resolve(
-  flag('out', resolve(process.cwd(), 'backups', `${basename(dataDir)}-${new Date().toISOString().replace(/[:.]/g, '-')}`)),
-);
-
-const manifest = backup({ dataDir, outDir });
-const problems = verify(outDir);
-
-console.log(`[backup] zrodlo:   ${dataDir}`);
-console.log(`[backup] kopia:    ${outDir}`);
-console.log(
-  `[backup] baza:     ${manifest.databaseParts.map((p) => `${p.part} ${(p.bytes / 1024).toFixed(0)} kB`).join(', ')}` +
-    ` → app.db ${(manifest.databaseAfterCheckpoint.bytes / 1024).toFixed(0)} kB po zwinieciu WAL`,
-);
-console.log(`[backup] migracje: ${manifest.census.migrations.join(', ') || '(brak)'}`);
-const interesting = ['conversations', 'messages', 'agent_runs', 'run_events', 'canvas_spaces', 'canvas_cards', 'artifacts', 'files'];
-console.log(
-  `[backup] wiersze:  ${interesting
-    .filter((t) => t in manifest.census.tableCounts)
-    .map((t) => `${t}=${manifest.census.tableCounts[t]}`)
-    .join(' ')}`,
-);
-for (const [tree, files] of Object.entries(manifest.trees)) {
-  console.log(`[backup] ${tree}: ${files.length} plikow`);
+if (process.argv[1] && realResolve(process.argv[1]) === realResolve(fileURLToPath(import.meta.url))) {
+  runScript('backup', main);
 }
-
-if (problems.length) {
-  console.error(`[backup] WERYFIKACJA NIEUDANA (${problems.length}):`);
-  for (const p of problems) console.error(`  - ${p}`);
-  process.exit(1);
-}
-/*
- * Last, after every read: drop the empty log and the shared-memory index.
- *
- * They are recreated by each `census`/`verify` connection, so clearing them
- * earlier achieves nothing. Removing them here leaves the backup as a single
- * `app.db`, which is what makes a restore one copy instead of three — and
- * removes the chance of someone restoring the main file without its log, the
- * exact mistake this script exists to prevent.
- */
-export function tidy(dir) {
-  for (const stray of ['app.db-wal', 'app.db-shm']) {
-    const p = resolve(dir, stray);
-    if (existsSync(p)) rmSync(p);
-  }
-}
-tidy(outDir);
-
-console.log('[backup] weryfikacja: kopia odczytana ponownie, sumy i census zgodne, integrity_check ok');
-console.log(`[backup] kopia to jeden plik app.db — odtworzenie: patrz docs/odzyskiwanie-stanu.md`);

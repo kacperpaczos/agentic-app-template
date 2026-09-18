@@ -1,0 +1,25 @@
+PROBY ZDOLNOSCI WYKRYCIA — runda poprawek 3, zadanie Z2 / BL-07
+commit: 7b1f4db — test wyliczajacy flagi sciezkowe
+Procedura: commit najpierw, proba na czystym drzewie, wycofanie/zmiana linii, test oblewa,
+git checkout -- <plik>, drzewo znow czyste.
+
+=== PROBA 3/1 — nowa flaga sciezkowa bez ochrony (zadanie tego testu)
+dodane linie: synthetic-state.mjs dostaje flage --kopia-zapasowa, ktora kopiuje wynik
+do wskazanego katalogu, i NIE przechodzi przez assertAwayFromLiveData
+     × synthetic-state.mjs: kod i deklaracja wymieniaja te same flagi 4ms
+AssertionError: expected [ 'kopia-zapasowa', 'out', 'stage' ] to deeply equal [ 'out', 'stage' ]
+      Tests  1 failed | 17 passed (18)
+(etap 1: flaga uzyta w kodzie, ale niezadeklarowana — test oblewa i wskazuje ktora)
+
+=== PROBA 3/2 — flaga zadeklarowana jako chroniona, ale ochrona pominieta
+dodane linie: ta sama flaga + wpis w FLAGS (kind: zapis-chroniony) + przepis w tescie,
+              wciaz BEZ assertAwayFromLiveData — czyli autor 'uciszyl' pierwszy etap
+     × synthetic-state.mjs: flagi zapisujace odmawiaja zywego katalogu danych 1877ms
+AssertionError: synthetic-state.mjs --kopia-zapasowa nie odmowilo: [syntetyk] katalog: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/flagi-0bVPyW/sy-vo3d70
+    214|       expect(r.status, `${script} --${flag} nie odmowilo: ${r.out}`).t…
+      Tests  1 failed | 17 passed (18)
+przywrocono: git checkout -- scripts/synthetic-state.mjs tests/script-path-flags.test.ts
+
+PODSUMOWANIE: test oblewa na obu etapach — gdy flaga jest tylko dodana (niezadeklarowana)
+i gdy jest zadeklarowana jako chroniona, ale ochrony w kodzie nie ma. Drugi etap jest tym,
+o ktory chodzi: deklaracja nie wystarczy, bo skrypt jest naprawde uruchamiany.

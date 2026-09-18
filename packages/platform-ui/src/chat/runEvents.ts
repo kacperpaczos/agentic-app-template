@@ -181,6 +181,18 @@ export function applyRunEvent(
       if (parsed.success && uiCommandHandler) uiCommandHandler(parsed.data);
       break;
     }
+    case PLATFORM_CUSTOM_EVENTS.sessionTranscriptLost: {
+      /*
+       * The backend has just dropped this conversation's Claude session binding
+       * because the SDK no longer has its transcript. Re-reading the
+       * conversation is what keeps the interface from showing a session id that
+       * no longer exists; the run's own RUN_ERROR carries the explanation the
+       * user reads, so nothing is patched here.
+       */
+      const lost = value.conversationId as string | undefined;
+      if (lost) void ctx.qc.invalidateQueries({ queryKey: qk.conversation(lost) });
+      break;
+    }
     case PLATFORM_CUSTOM_EVENTS.runCancelled:
       patch({ phase: 'cancelled', activeTool: null, pendingPermission: null });
       break;
