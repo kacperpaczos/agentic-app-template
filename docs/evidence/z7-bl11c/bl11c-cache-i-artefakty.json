@@ -2,32 +2,32 @@
   "opis": "Pakiet BL-11c (cache i artefakty): rozroznienie wersji definicji artefaktu live od stanu zrodla, oraz zakres stanu klienta czyszczonego przy zmianie wlasciciela.",
   "zrodlo": "tests/cache-evidence.test.ts w regresji szablonu (pnpm evidence)",
   "wersjaKodu": {
-    "commit": "0237fa9dcb8c706a3777fb5c825406159810634a",
+    "commit": "8968362711af68dca18c62c7d224658a237bccaa",
     "brudneDrzewo": false,
     "node": "24.19.0",
     "pakiety": {}
   },
   "artefaktLive": {
-    "artefakt": "art_ad0d14dba5d7487eae62",
+    "artefakt": "art_d73f413ea6324d4ea096",
     "pierwszyOdczyt": {
       "definitionVersion": 1,
       "state": "fresh",
-      "sourceFingerprint": "ce498db98c63c54b"
+      "sourceFingerprint": "eabc0fc5bab830e3"
     },
     "drugiOdczytBezZmianyZrodla": {
       "definitionVersion": 1,
       "state": "fresh",
-      "sourceFingerprint": "ce498db98c63c54b"
+      "sourceFingerprint": "eabc0fc5bab830e3"
     },
     "odczytPoZmianieZrodla": {
       "definitionVersion": 1,
       "state": "fresh",
-      "sourceFingerprint": "0b203d24596aaf60"
+      "sourceFingerprint": "af351b923a927f36"
     },
     "wniosek": "definitionVersion stoi, resolvedAt rosnie przy kazdym odczycie, sourceFingerprint zmienia sie wylacznie wtedy, gdy zmienily sie rekordy zwrocone przez zarejestrowany odczyt."
   },
   "zmianaWlasciciela": {
-    "metoda": "kazde pole zakresu (scopedAppState) zostaje przed przelaczeniem ustawione na wartosc INNA niz domyslna i to jest sprawdzane osobno; dopiero potem \"wyczyszczone\" znaczy, ze zrobil to reset, a nie ze pola nikt nie dotknal.",
+    "metoda": "kazde pole zakresu (wyliczone ze sklepu, bez navOpen) zostaje przed przelaczeniem ustawione na wartosc INNA niz stan po clearScopedContext i to jest sprawdzane osobno; dopiero potem \"wyczyszczone\" znaczy, ze zrobilo to przelaczenie, a nie ze pola nikt nie dotknal.",
     "wpisyCachePoPrzelaczeniu": 0,
     "wyczyszczonePolaStanuKlienta": [
       "agentFilterKey",
