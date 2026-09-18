@@ -380,3 +380,65 @@ wycofano linie w packages/platform-ui/src/state/accessReset.ts
 przywrocono; git status --porcelain:
 
 DONE
+
+Runda 6 — proby po scaleniu galezi integracyjnej
+================================================
+
+Dwie awarie na scalonym drzewie (kolizja z pakietem orkiestracji) i ich proby.
+
+UWAGA PROCEDURALNA. Proba P16 zostala uruchomiona na pliku, ktory NIE byl jeszcze
+zatwierdzony, wiec konczace ja `git checkout -- <plik>` cofnelo nie tylko probe,
+ale i sama poprawke. Wychwycone od razu — kontrola `git status` po przywroceniu
+jest czescia procedury wlasnie po to — poprawka zostala nalozona ponownie,
+zatwierdzona, a regresja powtorzona. To jest dokladnie powod, dla ktorego G16
+kaze commitowac PRZED proba; zapisane, zeby nie wygladalo na przypadek.
+
+=================================================================
+PROBA P14 (L4.3) — tytul nie jest przycinany do 120 znakow
+plik: packages/platform-server/src/http/app.ts
+wycofana/zmieniona linia: conv = services.conversations.rename(id, ownerId, body.title.trim().slice(0, 120));
+zamieniona na           : conv = services.conversations.rename(id, ownerId, body.title.trim());
+wycofano linie w packages/platform-server/src/http/app.ts
+AssertionError: expected 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…' to have a length of 120 but got 180
+
+- Expected
++ Received
+
+- 120
++ 180
+
+ ❯ tests/chat-history.test.ts:259:34
+    257|     });
+    258|     expect(shortened.status).toBe(200);
+przywrocono
+
+=================================================================
+PROBA P15 (L4.3) — trasa watkow przestaje odrzucac tytul ponad limit wejscia
+plik: packages/platform-server/src/http/app.ts
+wycofana/zmieniona linia:   title: z.string().max(200).nullish(),
+zamieniona na           :   title: z.string().nullish(),
+wycofano linie w packages/platform-server/src/http/app.ts
+AssertionError: expected 200 to be 400 // Object.is equality
+
+- Expected
++ Received
+
+- 400
++ 200
+
+ ❯ tests/chat-history.test.ts:277:28
+    275|       body: JSON.stringify({ title: 'x'.repeat(400) }),
+    276|     });
+przywrocono
+
+=================================================================
+PROBA P16 (lint wymaganych pol) — scenariusz przestaje podawac operationId
+plik: e2e/support/chat-history-scenario.ts
+wycofana/zmieniona linia:             operationId: `e2e-chat-history-artefakt-${crypto.randomUUID()}`,
+zamieniona na           : 
+wycofano linie w e2e/support/chat-history-scenario.ts
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
++   "e2e/support/chat-history-scenario.ts: artifact_create bez operationId",
+      Tests  1 failed | 23 skipped (24)
+przywrocono
+

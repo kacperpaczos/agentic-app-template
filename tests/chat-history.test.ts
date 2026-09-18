@@ -245,12 +245,42 @@ describe('L4.3 — tytul rozmowy: nadany lokalnie i zmienialny', () => {
     });
     expect(blank.body.title).toBe('Zestawienie ofert — marzec');
 
-    // Bounded, so a pasted document cannot become a title.
-    const long = await asJson(`/api/threads/update/${id}`, {
+    /*
+     * Bounded twice, and the two bounds are different promises.
+     *
+     * A title the route accepts is **shortened** to what a thread list can show
+     * — 120 characters — so a long sentence cannot become the whole drawer.
+     */
+    const shortened = await asJson(`/api/threads/update/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title: 'x'.repeat(180) }),
+    });
+    expect(shortened.status).toBe(200);
+    expect(shortened.body.title).toHaveLength(120);
+
+    /*
+     * A title past the route's input ceiling is **refused**, and refused as a
+     * client error naming the field — not quietly accepted and cut down.
+     *
+     * This assertion used to expect the 400-character title to come back
+     * shortened, because the route used to take anything and `slice` it. The
+     * thread routes now validate their body (`threadWriteSchema`, max 200), so
+     * a pasted document is answered rather than mangled. That is the better
+     * contract of the two: a caller learns their title did not survive, instead
+     * of discovering it later in a list. Shortening is not lost — the case
+     * above still proves it for every title the route accepts.
+     */
+    const refused = await asJson(`/api/threads/update/${id}`, {
       method: 'PATCH',
       body: JSON.stringify({ title: 'x'.repeat(400) }),
     });
-    expect(long.body.title).toHaveLength(120);
+    expect(refused.status).toBe(400);
+    expect(refused.body.error.code).toBe('validation_failed');
+    expect(refused.body.error.details.issues.map((i: any) => i.path)).toContain('title');
+    // And the refusal changed nothing: the title from the accepted call stands.
+    expect((await asJson(`/api/conversations/${id}`)).body.title).toBe(
+      shortened.body.title,
+    );
   });
 
   it('cudzej rozmowy nie da sie przemianowac', async () => {
