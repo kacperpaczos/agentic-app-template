@@ -46,7 +46,6 @@ import {
   runScript,
 } from './lib/state-tools.mjs';
 
-const { flag } = makeArgs(process.argv);
 
 /* ------------------------------- the census ------------------------------- */
 
@@ -90,6 +89,7 @@ export const FLAGS = {
       + 'gdzie ten plik laduje — --json <katalog danych>/app.db niszczylo baze.',
   },
 };
+
 
 /**
  * Starts the platform once against `dataDir`, then shuts it down.
@@ -259,6 +259,12 @@ function compareIdempotent(first, second) {
 /* --------------------------------- main ---------------------------------- */
 
 function main() {
+  /*
+   * Inside `main`, so that a refusal over an unknown flag is reported the way
+   * every other refusal is (exit 2) instead of escaping module evaluation as an
+   * uncaught error.
+   */
+  const { flag } = makeArgs(process.argv, FLAGS);
 
   const backupDir = realResolve(flag('backup', resolve(REPO, 'backups/data-2026-09-15')));
 

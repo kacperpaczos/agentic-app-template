@@ -42,7 +42,6 @@ import {
   runScript,
 } from './lib/state-tools.mjs';
 
-const { args, flag, has } = makeArgs(process.argv);
 
 /*
  * Ids and values the platform itself owns. Kept in one place because the
@@ -81,12 +80,21 @@ export const FLAGS = {
     kind: 'zapis-chroniony',
     why: 'Katalog jest KASOWANY, a potem wypelniany danymi syntetycznymi.',
   },
+  list: {
+    kind: 'przelacznik',
+    why: 'Wypisuje dostepne etapy migracji i konczy prace — nie dotyka zadnej sciezki poza katalogiem tymczasowym sondy.',
+  },
+  'leave-wal': {
+    kind: 'przelacznik',
+    why: 'Zostawia zatwierdzony zapis w app.db-wal katalogu, ktory ten skrypt wlasnie utworzyl — sciezki nie przyjmuje.',
+  },
   stage: {
     kind: 'wartosc',
     why: 'Nazwa etapu migracji (identyfikator z --list), a nie sciezka — nic nie otwiera i niczego '
       + 'nie zapisuje, wiec nie ma tu czego chronic.',
   },
 };
+
 
 /**
  * The migration lists, read from the composition root.
@@ -374,6 +382,12 @@ function leaveRowInWal(dataDir) {
 /* --------------------------------- main ---------------------------------- */
 
 function main() {
+  /*
+   * Inside `main`, so that a refusal over an unknown flag is reported the way
+   * every other refusal is (exit 2) instead of escaping module evaluation as an
+   * uncaught error.
+   */
+  const { flag, has } = makeArgs(process.argv, FLAGS);
   const lists = migrationLists();
   if (has('list')) {
     console.log(`[syntetyk] etapy: empty, ${lists.platform.join(', ')}, current`);

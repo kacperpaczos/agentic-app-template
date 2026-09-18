@@ -64,7 +64,6 @@ import {
   tidy,
 } from './lib/state-tools.mjs';
 
-const { flag, has } = makeArgs(process.argv);
 
 /**
  * Every flag of this script that takes a path, and what it does with it.
@@ -92,6 +91,10 @@ export const FLAGS = {
     kind: 'odczyt',
     why: 'Kopia, z ktorej odtwarzamy. Czytana i weryfikowana, nigdy zapisywana.',
   },
+  check: {
+    kind: 'przelacznik',
+    why: 'Tryb na sucho: skrypt odpowiada na pytania o kopie i nie przenosi ani nie zapisuje niczego.',
+  },
   data: {
     kind: 'zapis-docelowy',
     why: 'Katalog danych aplikacji to WLASCIWY cel odtworzenia — tu ochrona przed katalogiem danych '
@@ -99,6 +102,7 @@ export const FLAGS = {
       + 'niepusty musi wygladac na katalog danych, zanim zostanie przeniesiony na bok.',
   },
 };
+
 
 /**
  * Migration ids this checkout would apply, obtained by letting it apply them.
@@ -138,6 +142,12 @@ function knownMigrations() {
 /* --------------------------------- main ---------------------------------- */
 
 function main() {
+  /*
+   * Inside `main`, so that a refusal over an unknown flag is reported the way
+   * every other refusal is (exit 2) instead of escaping module evaluation as an
+   * uncaught error.
+   */
+  const { flag, has } = makeArgs(process.argv, FLAGS);
   if (!flag('backup')) refuse('podaj --backup <katalog kopii>');
   const backupDir = realResolve(flag('backup'));
   /*

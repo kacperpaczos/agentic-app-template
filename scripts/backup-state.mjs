@@ -56,7 +56,6 @@ import {
 
 export { tidy };
 
-const { flag } = makeArgs(process.argv);
 
 const DB_PARTS = ['app.db', 'app.db-wal', 'app.db-shm'];
 const TREES = ['files', 'workspaces'];
@@ -119,6 +118,7 @@ export const FLAGS = {
     why: 'Sprawdza istniejaca kopie: czyta manifest i baze kopii, niczego nie zapisuje.',
   },
 };
+
 
 export function census(dbFile) {
   const c = censusOf(dbFile);
@@ -308,6 +308,12 @@ export function verify(outDir) {
  * re-exported at the top of this file so callers still find it here.
  */
 function main() {
+  /*
+   * Inside `main`, so that a refusal over an unknown flag is reported the way
+   * every other refusal is (exit 2) instead of escaping module evaluation as an
+   * uncaught error.
+   */
+  const { flag } = makeArgs(process.argv, FLAGS);
   const verifyOnly = flag('verify');
   if (verifyOnly) {
     const problems = verify(resolve(verifyOnly));
@@ -316,6 +322,12 @@ function main() {
       for (const p of problems) console.error(`  - ${p}`);
       process.exit(1);
     }
+    /*
+     * Reading the copy opened its database, which recreates the log and the
+     * shared-memory index. A check that leaves files behind in the thing it was
+     * checking is not a check, so the copy goes back to the single file it was.
+     */
+    tidy(resolve(verifyOnly));
     console.log(`[backup] kopia ${resolve(verifyOnly)} sprawdzona: bez zastrzezen`);
     process.exit(0);
   }

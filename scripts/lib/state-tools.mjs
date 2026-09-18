@@ -90,24 +90,95 @@ export function runScript(label, body) {
 
 /* -------------------------------- arguments ------------------------------- */
 
+/** The kinds a declared flag can have. Each one is exercised by the regression. */
+export const FLAG_KINDS = [
+  /** Takes a path and writes to it; must refuse a live data directory. */
+  'zapis-chroniony',
+  /** Takes a path and only reads it, but refuses a live data directory anyway. */
+  'odczyt-chroniony',
+  /** Takes a path and writes **into** a data directory on purpose. */
+  'zapis-docelowy',
+  /** Takes a path and only reads it; a live data directory is allowed. */
+  'odczyt',
+  /** Takes a value that is not a path. */
+  'wartosc',
+  /** Takes no value at all. */
+  'przelacznik',
+];
+
 /**
- * @param argv usually `process.argv`.
+ * Reads the command line **against the script's own declaration**, and refuses
+ * anything that is not in it.
  *
- * `flag('out')` on `--out --verify X` returns the fallback rather than the
- * string `"--verify"`. Two of the four scripts used to take the next word
- * whatever it was, so a forgotten value silently turned another flag into a
- * path — and these scripts delete paths.
+ * This is an inversion, and it is the answer to a defect this package produced
+ * three times: a path argument that nobody had protected. Every attempt to
+ * close it by *looking* for such arguments — comparing paths, then scanning the
+ * source for `flag('...')` — was a guard on the shape of the code, and each was
+ * walked around: a double-quoted literal, a computed name, a hand-rolled
+ * `args.indexOf('--x')`. The shapes are unbounded; the command line is not.
+ *
+ * So the script no longer discovers its flags — it declares them, and anything
+ * else on the command line is refused before the script does any work. A flag
+ * that is not declared cannot be passed, whatever the code that would have read
+ * it looks like, and `flag('x')` for an undeclared `x` is a programming error
+ * rather than a silent `null`.
+ *
+ * What this does **not** cover, said plainly: a path arriving through an
+ * environment variable, a configuration file, or a hard-coded constant. Those
+ * are not command-line flags and nothing here sees them.
+ *
+ * `flag('out')` on `--out --verify X` still returns the fallback rather than
+ * the string `"--verify"`.
+ *
+ * @param argv     usually `process.argv`
+ * @param declared the script's `FLAGS` map: `{ name: { kind, why } }`
  */
-export function makeArgs(argv) {
+export function makeArgs(argv, declared) {
   const args = argv.slice(2);
+  const known = new Set(Object.keys(declared ?? {}));
+
+  for (const [name, decl] of Object.entries(declared ?? {})) {
+    if (!FLAG_KINDS.includes(decl?.kind)) {
+      throw new Error(`flaga --${name}: nieznany rodzaj ${decl?.kind}`);
+    }
+  }
+
+  for (const token of args) {
+    if (!token.startsWith('--')) continue;
+    const name = token.slice(2);
+    if (!known.has(name)) {
+      refuse(
+        `nieznana flaga --${name}.\n` +
+          `Ten skrypt przyjmuje wylacznie: ${[...known].map((f) => `--${f}`).join(', ')}.\n` +
+          'Kazda flaga musi byc zadeklarowana w FLAGS razem z rodzajem — inaczej nic nie wiadomo ' +
+          'o tym, czy jej sciezka jest chroniona.',
+      );
+    }
+  }
+
+  const assertDeclared = (name) => {
+    if (declared && !known.has(name)) {
+      // A bug in the script, not in the invocation: the code reads a flag it
+      // never declared, so nothing has decided what protects it.
+      throw new Error(`flaga --${name} jest czytana, ale nie ma jej w FLAGS`);
+    }
+  };
+
   const flag = (name, fallback = null) => {
+    assertDeclared(name);
     const i = args.indexOf(`--${name}`);
     if (i < 0) return fallback;
     const value = args[i + 1];
     if (value === undefined || value.startsWith('--')) return fallback;
     return value;
   };
-  return { args, flag, has: (name) => args.includes(`--${name}`) };
+
+  const has = (name) => {
+    assertDeclared(name);
+    return args.includes(`--${name}`);
+  };
+
+  return { flag, has };
 }
 
 /* ------------------------------ path handling ----------------------------- */
@@ -304,7 +375,15 @@ export function assertOwnOrEmptyDir(path, { what = 'Katalog docelowy', ownMarker
   if (!existsSync(target)) return target;
   if (!statSync(target).isDirectory()) refuse(`${what} ${target} istnieje i nie jest katalogiem.`);
   if (readdirSync(target).length === 0) return target;
-  if (ownMarkers.some((m) => existsSync(join(target, m)))) return target;
+  /*
+   * The scratch marker is checked with `isOurs` (path-bound); any other marker
+   * — `manifest.json` for a backup — is a structural fact about the directory,
+   * not a claim about who made it, so its mere presence is the right test.
+   */
+  const ours = ownMarkers.some((m) =>
+    m === SCRATCH_MARKER ? isOurs(target) : existsSync(join(target, m)),
+  );
+  if (ours) return target;
   refuse(
     `${what} ${target} istnieje, nie jest pusty i nie zostal utworzony przez te skrypty ` +
       `(nie ma zadnego z: ${ownMarkers.join(', ')}).\n` +
@@ -341,7 +420,16 @@ export function prepareScratchDir(path, { what = 'Katalog roboczy', repo = REPO 
       refuse(`${what} ${target} istnieje i nie jest katalogiem.`);
     }
     const entries = readdirSync(target);
-    if (entries.length > 0 && !existsSync(join(target, SCRATCH_MARKER))) {
+    /*
+     * `isOurs`, not `existsSync(marker)`. The path check landed in `isOurs`
+     * when the copied-marker hole was closed, but the two places that let a
+     * marker **authorise a deletion** still looked only at whether the file was
+     * there — so `cp -r` of a scratch directory still handed the copy the right
+     * to be wiped. A reviewer deleted a directory of user files that way, exit
+     * 0. The rule now reads the same everywhere: a marker counts only for the
+     * path written inside it.
+     */
+    if (entries.length > 0 && !isOurs(target)) {
       refuse(
         `${what} ${target} istnieje, nie jest pusty i nie zostal utworzony przez te skrypty ` +
           `(brak znacznika ${SCRATCH_MARKER}).\n` +
