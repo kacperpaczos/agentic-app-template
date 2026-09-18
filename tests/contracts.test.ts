@@ -54,7 +54,10 @@ describe('kontrakty: walidacja, uprawnienia, konflikty, powtorzenia', () => {
   it('odrzuca ujemna cene regula domenowa, nie schematem', async () => {
     const { item } = firstItem();
     await expect(
-      h.service.updateOfferItem({ itemId: item.id, unitPrice: -1 }, h.ownerId),
+      h.service.updateOfferItem(
+        { itemId: item.id, unitPrice: -1, expectedVersion: item.version },
+        h.ownerId,
+      ),
     ).rejects.toMatchObject({ code: 'domain_rule_violated' });
   });
 
@@ -196,11 +199,11 @@ describe('kontrakty: walidacja, uprawnienia, konflikty, powtorzenia', () => {
     const op = `op-test-${Date.now()}`;
 
     const first = await h.service.updateOfferItem(
-      { itemId: item.id, quantity: 7, operationId: op },
+      { itemId: item.id, quantity: 7, expectedVersion: before.version, operationId: op },
       h.ownerId,
     );
     const second = await h.service.updateOfferItem(
-      { itemId: item.id, quantity: 7, operationId: op },
+      { itemId: item.id, quantity: 7, expectedVersion: before.version, operationId: op },
       h.ownerId,
     );
 
@@ -267,7 +270,9 @@ describe('kontrakty: walidacja, uprawnienia, konflikty, powtorzenia', () => {
     const res = await h.platform.app.request(`/api/m/procurement/items/${item.id}`, {
       method: 'PATCH',
       headers: { cookie, 'content-type': 'application/json' },
-      body: JSON.stringify({ unitPrice: -5 }),
+      // Both doors now name the version they replace; the rule under test is
+      // the one that fires afterwards, and it has to be the same rule.
+      body: JSON.stringify({ unitPrice: -5, expectedVersion: item.version }),
     });
     expect(res.status).toBe(422);
     expect((await res.json()).error.code).toBe('domain_rule_violated');
@@ -328,7 +333,7 @@ describe('kontrakty: walidacja, uprawnienia, konflikty, powtorzenia', () => {
   it('artefakt-snapshot zachowuje tresc mimo pozniejszej zmiany danych', async () => {
     const saved = (await h.platform.registry.callTool(
       'procurement_save_comparison',
-      { caseId },
+      { caseId, operationId: `op-snapshot-${Date.now()}` },
       toolCtx(h),
     )) as any;
 
@@ -337,7 +342,10 @@ describe('kontrakty: walidacja, uprawnienia, konflikty, powtorzenia', () => {
 
     // Change the underlying data.
     const { item } = firstItem();
-    await h.service.updateOfferItem({ itemId: item.id, unitPrice: 1 }, h.ownerId);
+    await h.service.updateOfferItem(
+      { itemId: item.id, unitPrice: 1, expectedVersion: item.version },
+      h.ownerId,
+    );
 
     const after = h.platform.services.artifacts.version(saved.artifactId, h.ownerId);
     expect((after.content as any).rows.map((r: any) => r.totalMinor)).toEqual(frozenTotals);

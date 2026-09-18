@@ -1,4 +1,4 @@
-import { AppError } from '@platform/contracts';
+import { AppError, stableJson } from '@platform/contracts';
 import type { PlatformServices } from '@platform/server';
 import { newId, nowIso } from '@platform/server';
 import {
@@ -15,6 +15,19 @@ import {
   type Requirement,
 } from '../shared/index.ts';
 import { ProcurementRepository } from './repository.ts';
+
+/**
+ * What a repeat has to match to be a repeat.
+ *
+ * The key alone says "this is the same operation"; the fingerprint is what
+ * makes that claim checkable. Without it the store answers a *different*
+ * request with the first one's result and reports success, so the caller
+ * believes a change it never made was applied.
+ */
+const requestFingerprint = (request: Record<string, unknown>): string => {
+  const { operationId: _ignored, ...rest } = request;
+  return stableJson(rest);
+};
 
 export interface CaseDetail {
   procurementCase: ProcurementCase;
@@ -158,7 +171,7 @@ export class ProcurementService {
       unitPrice?: number | null;
       unit?: string;
       note?: string | null;
-      expectedVersion?: number;
+      expectedVersion: number;
       operationId?: string;
     },
     ownerId: string,
@@ -170,6 +183,24 @@ export class ProcurementService {
       async () => {
         const { item, offer } = this.repo.getItem(input.itemId, ownerId);
 
+        /*
+         * The version check lives here, not only in the schemas.
+         *
+         * `input.expectedVersion ?? item.version` is what this line used to be,
+         * and it meant that a caller who named no version was compared against
+         * the row it was about to overwrite: a check that can never fail. The
+         * schemas of both doors now demand the field, and this is the statement
+         * that makes that a property of the operation rather than of whoever
+         * happens to call it — including a future caller inside this module.
+         */
+        if (input.expectedVersion === undefined) {
+          throw new AppError(
+            'validation_failed',
+            'Zmiana pozycji oferty wymaga expectedVersion — podaj version pozycji, na ktorej pracujesz.',
+            { reason: 'expected_version_missing', currentVersion: item.version },
+          );
+        }
+
         if (input.quantity !== undefined && input.quantity < 0) {
           throw new AppError('domain_rule_violated', 'Ilosc nie moze byc ujemna.');
         }
@@ -177,7 +208,7 @@ export class ProcurementService {
           throw new AppError('domain_rule_violated', 'Cena jednostkowa nie moze byc ujemna.');
         }
 
-        const expected = input.expectedVersion ?? item.version;
+        const expected = input.expectedVersion;
         const patch = {
           quantityMilli: input.quantity !== undefined ? parseQuantityToMilli(input.quantity) : undefined,
           unitPriceMinor:
@@ -205,6 +236,7 @@ export class ProcurementService {
         }
         return { item: this.repo.getItem(input.itemId, ownerId).item, changed: true };
       },
+      { fingerprint: requestFingerprint(input) },
     );
     return { ...result, replayed };
   }
@@ -278,6 +310,14 @@ export class ProcurementService {
     return { results, matched: results.length, query: wanted, totals: counts };
   }
 
+  /**
+   * Sets the weights of a case's comparison criteria.
+   *
+   * One transaction, because it is one decision. Written as a loop of separate
+   * upserts, a failure on the third criterion left the first two changed and
+   * the rest as they were — a weighting nobody chose, which the comparison
+   * would then rank by without anything looking wrong (L9.8).
+   */
   setCriterionWeights(
     caseId: string,
     ownerId: string,
@@ -286,15 +326,24 @@ export class ProcurementService {
     this.repo.getCase(caseId, ownerId);
     const existing = this.repo.listCriteria(caseId);
     const base = existing.length ? existing : defaultCriteria(caseId);
-    for (const c of base) {
-      const override = weights.find((w) => w.key === c.key);
-      this.repo.upsertCriterion({ ...c, weight: override ? override.weight : c.weight });
-    }
+    this.repo.transaction(() => {
+      for (const c of base) {
+        const override = weights.find((w) => w.key === c.key);
+        this.repo.upsertCriterion({ ...c, weight: override ? override.weight : c.weight });
+      }
+    });
     return this.repo.listCriteria(caseId);
   }
 
-  /** Saves the current comparison as a frozen platform artifact. */
-  saveComparisonArtifact(input: {
+  /**
+   * Saves the current comparison as a frozen platform artifact.
+   *
+   * `operationId` is honoured, not merely accepted. It was in the input schema
+   * and passed down to here, where nothing read it: a retry of the same save —
+   * an agent reconnecting mid-answer — produced a second artifact of the same
+   * comparison, and the user's library grew a duplicate nobody asked for.
+   */
+  async saveComparisonArtifact(input: {
     caseId: string;
     ownerId: string;
     conversationId: string | null;
@@ -302,20 +351,39 @@ export class ProcurementService {
     runId?: string | null;
     title?: string;
     operationId?: string;
-  }) {
-    const result = this.compare(input.caseId, input.ownerId);
-    const detail = this.repo.getCase(input.caseId, input.ownerId);
-    const created = this.platform.artifacts.create({
-      ownerId: input.ownerId,
-      conversationId: input.conversationId,
-      runId: input.runId ?? null,
-      kind: 'table',
-      mode: 'snapshot',
-      title: input.title ?? `Zestawienie ofert - ${detail.code}`,
-      rendererType: 'procurement.comparison',
-      content: result,
-    });
-    return { artifactId: created.meta.id, version: created.meta.currentVersion, result };
+  }): Promise<{ artifactId: string; version: number; result: ComparisonResult; replayed: boolean }> {
+    const { result, replayed } = await this.platform.idempotency.once(
+      input.operationId,
+      input.ownerId,
+      'procurement.saveComparison',
+      async () => {
+        const comparison = this.compare(input.caseId, input.ownerId);
+        const detail = this.repo.getCase(input.caseId, input.ownerId);
+        const created = this.platform.artifacts.create({
+          ownerId: input.ownerId,
+          conversationId: input.conversationId,
+          runId: input.runId ?? null,
+          kind: 'table',
+          mode: 'snapshot',
+          title: input.title ?? `Zestawienie ofert - ${detail.code}`,
+          rendererType: 'procurement.comparison',
+          content: comparison,
+        });
+        return {
+          artifactId: created.meta.id,
+          version: created.meta.currentVersion,
+          result: comparison,
+        };
+      },
+      {
+        fingerprint: requestFingerprint({
+          caseId: input.caseId,
+          title: input.title ?? null,
+          conversationId: input.conversationId,
+        }),
+      },
+    );
+    return { ...result, replayed };
   }
 
   /* ---------------------------- writes used by seed ----------------------- */

@@ -217,6 +217,27 @@ export const PLATFORM_MIGRATIONS: ModuleMigration[] = [
       CREATE INDEX IF NOT EXISTS idx_artifacts_run ON artifacts(run_id);
     `,
   },
+  {
+    /**
+     * The idempotency key becomes a reservation, not a receipt.
+     *
+     * The row used to be written *after* the operation, and carried nothing but
+     * its result. Two things were therefore impossible to state: that an
+     * operation is running right now (so a concurrent retry has something to
+     * join instead of a second execution), and that the key was used for a
+     * different request (so a reuse is a conflict rather than someone else's
+     * answer). `status` and `fingerprint` say both.
+     *
+     * Existing rows are `done` with no fingerprint, which is exactly what they
+     * are: completed operations whose request body was never recorded. They
+     * keep replaying as before, and nothing about them is guessed.
+     */
+    id: 'platform-0005-idempotency-reservation',
+    sql: /* sql */ `
+      ALTER TABLE idempotency_keys ADD COLUMN status TEXT NOT NULL DEFAULT 'done';
+      ALTER TABLE idempotency_keys ADD COLUMN fingerprint TEXT;
+    `,
+  },
 ];
 
 /** Applies every not-yet-applied migration inside one transaction each. */
