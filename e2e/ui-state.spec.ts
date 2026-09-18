@@ -433,10 +433,17 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
      *
      * Two complementary fixes land here. BL-11a clears the shell store, which
      * empties what the table reads; BL-11c rebuilds `AgentInterface` on the
-     * access epoch, which removes the table itself. With both in, the strongest
-     * true statement is the element being absent — so it is asserted, and the
-     * row-name check stays under it because it says something the element count
-     * does not: not one of those names is anywhere in the panel.
+     * access epoch, which takes the panel's own contents with it. With both in,
+     * the element is not on the screen at all, so that is what is asserted.
+     *
+     * Stated precisely, because the difference matters when reading this as
+     * evidence: **this line alone does not tell the two fixes apart.** Removing
+     * `key={accessKey}` and running this test leaves it green — the store
+     * clearing is enough to make the element go. What the rebuild adds is
+     * proved where it is visible on its own: `e2e/access-switch.spec.ts`, where
+     * the previous owner's conversation stays in the thread list without it.
+     * The row-name check stays under this one because it says something the
+     * element count does not: not one of those names is anywhere in the panel.
      *
      * The names come from `mine`, captured **before** the switch. Reading them
      * again here would read them as the second owner, who owns none, and the
