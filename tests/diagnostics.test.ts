@@ -12,7 +12,12 @@ import {
 import { AppError } from '@platform/contracts';
 import { createHarness, login, type Harness } from './helpers.ts';
 import { dispatchingAgent, type Plan, type StandInHandle, type Step } from './support/model-standin.ts';
-import { EVIDENCE_DIR, codeVersion, writeEvidence } from './support/measurement-evidence.ts';
+import {
+  EVIDENCE_DIR,
+  codeVersion,
+  evidenceWritingRequested,
+  writeEvidence,
+} from './support/measurement-evidence.ts';
 
 /**
  * What the diagnostic data has to answer after the fact.
@@ -512,7 +517,7 @@ describe('sekret ze srodowiska nie trafia do diagnostyki', () => {
       for (const s of spies) s.mockRestore();
     }
 
-    writeEvidence('sekrety-w-diagnostyce-runda3.json', {
+    const secretsEvidence = writeEvidence('sekrety-w-diagnostyce-runda3.json', {
       opis:
         'Wartosc poswiadczenia umieszczona w srodowisku procesu serwera nie wystepuje w zadnej ' +
         'powierzchni diagnostycznej aplikacji ani w plikach dowodow tego zadania.',
@@ -541,5 +546,7 @@ describe('sekret ze srodowiska nie trafia do diagnostyki', () => {
         'APP_TAJNY_KANAREK jest przekazywany do srodowiska procesu agenta, bo nie jest przelacznikiem ' +
         'dostawcy; dowodem jest brak jego wartosci w logach i w zapisanych danych, nie brak zmiennej.',
     });
+    // The switch decides the write; every assertion above ran regardless.
+    expect(secretsEvidence.written).toBe(evidenceWritingRequested());
   });
 });

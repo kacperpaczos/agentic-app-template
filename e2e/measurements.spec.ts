@@ -1,10 +1,11 @@
-import { existsSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { expect, test } from './support/fixtures.ts';
 import { ScriptedInstance } from './support/scripted.ts';
 import {
   codeVersion,
+  evidenceWritingRequested,
   writeMeasurementRecord,
   type CodeVersion,
   type Measurement,
@@ -164,7 +165,14 @@ test.describe('czas odswiezenia po mutacji przez interfejs', () => {
  * is fabricated and never leaves this repository.
  */
 const CANARY = 'sk-ant-kanarek-e2e-z3bl05-0123456789abcdef';
-const LOG_FILE = 'docs/evidence/z3-bl05/log-serwera-scenariuszowego.txt';
+/*
+ * Captured into a working directory, not into the evidence tree. A test run has
+ * to produce this log to be able to scan it, but an ordinary run must leave the
+ * repository clean — so the copy that becomes evidence is written only when
+ * evidence is asked for (`APP_WRITE_EVIDENCE=1`).
+ */
+const LOG_FILE = 'test-results/z3-bl05-serwer-scenariuszowy.log';
+const LOG_EVIDENCE = 'docs/evidence/z3-bl05/log-serwera-scenariuszowego.txt';
 
 /*
  * Its own instance, on its own reserved port, over its own data directory —
@@ -427,19 +435,23 @@ test.describe('diagnostyka serwera po przebiegu', () => {
     expect(`ANTHROPIC_API_KEY=${CANARY}`).toContain(CANARY);
 
     /*
-     * The scan above ran on the file as written. What is kept as evidence has
+     * The scan above ran on the file as captured. What is kept as evidence has
      * the machine's own paths replaced: this is a template meant to be
      * published, and an absolute home directory is not part of the finding.
      */
-    writeFileSync(
-      slow.logPath!,
-      [
-        '# Wyjscie serwera scenariuszowego (stdout + stderr) z pelnej tury, przechwycone przez',
-        '# e2e/measurements.spec.ts. Skan na obecnosc wartosci poswiadczenia wykonano na tresci',
-        '# sprzed podmiany sciezek; ponizej katalogi maszyny zastapione znacznikami.',
-        '',
-        log.split(slow.config.repoRoot).join('<repo>').split(homedir()).join('<home>'),
-      ].join('\n'),
-    );
+    if (evidenceWritingRequested()) {
+      const target = resolve(slow.config.repoRoot, LOG_EVIDENCE);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(
+        target,
+        [
+          '# Wyjscie serwera scenariuszowego (stdout + stderr) z pelnej tury, przechwycone przez',
+          '# e2e/measurements.spec.ts. Skan na obecnosc wartosci poswiadczenia wykonano na tresci',
+          '# sprzed podmiany sciezek; ponizej katalogi maszyny zastapione znacznikami.',
+          '',
+          log.split(slow.config.repoRoot).join('<repo>').split(homedir()).join('<home>'),
+        ].join('\n'),
+      );
+    }
   });
 });
