@@ -2,7 +2,7 @@
   "opis": "Stany opisu zasobu i okno odczytu narzedzi agenta, z regresji tests/app-context.test.ts. Bez modelu i bez przegladarki: prawdziwe serwisy, prawdziwe handlery MCP.",
   "zrodlo": "pnpm evidence:z5 (APP_WRITE_EVIDENCE=1 vitest run tests/app-context.test.ts)",
   "wersjaKodu": {
-    "commit": "e9f58cf5d5ab298dac6134d962cc9f6b305d0829",
+    "commit": "e7d4887ebcbc61a4f9b1355b9d7b140da4fabbd7",
     "brudneDrzewo": false,
     "node": "24.19.0",
     "pakiety": {
@@ -25,12 +25,15 @@
   "oknoOdczytu": {
     "domyslnyLimit": 25,
     "narzedzia": [
+      "agent_views_list",
       "canvas_list_cards",
       "files_list",
-      "ui_catalog",
-      "procurement_list_cases",
+      "files_versions",
       "procurement_get_case",
-      "procurement_list_offers"
+      "procurement_list_cases",
+      "procurement_list_offers",
+      "ui_catalog",
+      "workspace_outputs"
     ]
   }
 }
