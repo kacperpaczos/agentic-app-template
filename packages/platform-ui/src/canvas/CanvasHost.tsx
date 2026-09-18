@@ -3,6 +3,7 @@ import {
   Background,
   Controls,
   MiniMap,
+  NodeResizer,
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
@@ -20,7 +21,7 @@ import {
   useSpaces,
   useUpdateGeometry,
 } from '../api/queries.ts';
-import { useAppState } from '../state/appState.ts';
+import { useAppState, type DraftRecord } from '../state/appState.ts';
 import { CardBody } from './CardBody.tsx';
 import { QueryErrorState } from '../components/ErrorState.tsx';
 import { cardsOnScreen, useDisplayCanvas } from '../state/displayedCanvas.ts';
@@ -41,7 +42,7 @@ interface CardNodeData extends Record<string, unknown> {
   selected: boolean;
 }
 
-function CardNode({ id, data }: NodeProps<Node<CardNodeData>>) {
+function CardNode({ id, data, selected }: NodeProps<Node<CardNodeData>>) {
   const card = data.card;
   const remove = useRemoveCard(card.spaceId);
   const selection = useAppState((s) => s.selection);
@@ -51,15 +52,45 @@ function CardNode({ id, data }: NodeProps<Node<CardNodeData>>) {
   return (
     <div
       className={`pf-card ${isSelected ? 'pf-card--selected' : ''}`}
-      style={{ width: card.geometry.width, height: card.geometry.height }}
+      /*
+       * The node's box is React Flow's, not ours.
+       *
+       * The card used to repeat the stored size here, which is why resizing
+       * could not work: while the library was dragging a handle it changed the
+       * node's dimensions, and this inline size held the frame at the old one.
+       * Filling the node lets the library own the geometry during the gesture,
+       * and the write-back in `onNodesChange` makes it persistent.
+       */
+      style={{ width: '100%', height: '100%' }}
       data-testid={`card-${id}`}
       data-component={card.spec.kind === 'component' ? card.spec.component : 'openui'}
     >
+      {/*
+        Resizing is the library's own control (`NodeResizer`, @xyflow/react
+        12.11.6), shown on the selected card. We add no handle, no pointer maths
+        and no drag state: the component reports `dimensions` changes through
+        the same `onNodesChange` that carries a move, and they are persisted by
+        the same path.
+
+        Limitation, stated plainly: the handles are pointer-only — the library
+        renders them as unlabelled `div`s with no keyboard affordance — so a
+        keyboard user can move a card (the header is a control) but cannot
+        resize one. Nothing here can fix that without reimplementing the
+        control this criterion requires be the ready-made one.
+      */}
+      <NodeResizer
+        isVisible={selected}
+        minWidth={240}
+        minHeight={120}
+        lineClassName="pf-card__resize-line"
+        handleClassName="pf-card__resize-handle"
+      />
       <header className="pf-card__head">
         <button
           type="button"
           className="pf-card__title"
           title="Zaznacz karte dla agenta"
+          aria-pressed={isSelected}
           onClick={() => toggleSelection({ kind: 'card', id })}
         >
           {isSelected ? '◉ ' : '○ '}
@@ -82,6 +113,48 @@ function CardNode({ id, data }: NodeProps<Node<CardNodeData>>) {
 }
 
 const nodeTypes = { card: CardNode };
+
+/**
+ * Unsaved work whose card is no longer in the composition.
+ *
+ * A composition changes under the user: the agent adds, updates, moves or
+ * removes a card, and every client showing that space re-reads it. Selections,
+ * per-card view state and drafts survive that by construction — they are held
+ * in `appState`, outside the canvas library's nodes — but a card that is
+ * *removed* takes its form off the screen with it, and the half-typed values in
+ * it are then held by a store nothing is showing.
+ *
+ * Losing them silently is the failure this notice exists to prevent. The draft
+ * is kept, named, and the user decides: nothing is discarded until they say so.
+ */
+function LostDraftNotice({ drafts, onDiscard }: { drafts: DraftRecord[]; onDiscard: (formId: string) => void }) {
+  if (!drafts.length) return null;
+  return (
+    <div className="pf-draft-conflict" role="alert" data-testid="draft-conflict">
+      <strong>Karta z niezapisanymi zmianami zniknela z kompozycji.</strong>
+      <ul>
+        {drafts.map((d) => (
+          <li key={d.formId} data-testid={`draft-conflict-${d.formId}`}>
+            <code>{d.entity}</code>
+            {d.entityId ? ` ${d.entityId.slice(-8)}` : ''} — niezapisane pola:{' '}
+            <strong>{d.dirtyFields.join(', ')}</strong>
+            <button
+              type="button"
+              className="pf-btn pf-btn--tiny"
+              data-testid={`draft-discard-${d.formId}`}
+              onClick={() => onDiscard(d.formId)}
+            >
+              Odrzuc szkic
+            </button>
+          </li>
+        ))}
+      </ul>
+      <span className="pf-muted">
+        Nic nie zostalo zapisane ani odrzucone. Szkic czeka, dopoki nie zdecydujesz.
+      </span>
+    </div>
+  );
+}
 
 interface CanvasSurfaceProps {
   spaceId: string;
@@ -113,6 +186,20 @@ function CanvasInner({
   const updateGeometry = useUpdateGeometry(spaceId);
   const saveViewport = useSaveViewport(spaceId);
   const setViewport = useAppState((s) => s.setViewport);
+  const drafts = useAppState((s) => s.drafts);
+  const clearDraft = useAppState((s) => s.clearDraft);
+  /*
+   * Cards this canvas has shown. Held per space — the component is keyed by
+   * `spaceId` — so a draft in another space's card is not reported missing
+   * here, and a card that was never on this canvas cannot be reported lost
+   * from it.
+   */
+  const seenCards = useRef(new Set<string>());
+  for (const card of data?.cards ?? []) seenCards.current.add(card.id);
+  const presentCards = new Set((data?.cards ?? []).map((c) => c.id));
+  const lostDrafts: DraftRecord[] = Object.values(drafts).filter(
+    (d) => d.cardId && seenCards.current.has(d.cardId) && !presentCards.has(d.cardId),
+  );
   const { setViewport: applyViewport, getNode, setCenter, getZoom } = useReactFlow();
 
   // Centring one card, for a command that points at a value inside it (`canvasFocus.ts`).
@@ -132,7 +219,16 @@ function CanvasInner({
   /** Pending geometry writes, flushed after the pointer settles. */
   const pending = useRef(new Map<string, { x: number; y: number; width?: number; height?: number }>());
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [localGeometry, setLocalGeometry] = useState<Record<string, { x: number; y: number }>>({});
+  /**
+   * Geometry this session has changed and the server has not echoed back yet.
+   *
+   * Holds the size as well as the position, because the size is now something
+   * the user changes (`NodeResizer`): without it a resized card snapped back to
+   * the stored size on the next render, before the debounced write landed.
+   */
+  const [localGeometry, setLocalGeometry] = useState<
+    Record<string, { x?: number; y?: number; width?: number; height?: number }>
+  >({});
   const viewportRestored = useRef(false);
 
   useEffect(() => {
@@ -167,15 +263,20 @@ function CanvasInner({
 
   const nodes: Node<CardNodeData>[] = useMemo(
     () =>
-      (data?.cards ?? []).map((card) => ({
-        id: card.id,
-        type: 'card',
-        position: localGeometry[card.id] ?? { x: card.geometry.x, y: card.geometry.y },
-        data: { card, selected: false },
-        style: { width: card.geometry.width, height: card.geometry.height },
-        // Dragging only from the header keeps card content interactive.
-        dragHandle: '.pf-card__head',
-      })),
+      (data?.cards ?? []).map((card) => {
+        const local = localGeometry[card.id];
+        return {
+          id: card.id,
+          type: 'card',
+          position: { x: local?.x ?? card.geometry.x, y: local?.y ?? card.geometry.y },
+          data: { card, selected: false },
+          width: local?.width ?? card.geometry.width,
+          height: local?.height ?? card.geometry.height,
+          style: { width: local?.width ?? card.geometry.width, height: local?.height ?? card.geometry.height },
+          // Dragging only from the header keeps card content interactive.
+          dragHandle: '.pf-card__head',
+        };
+      }),
     [data, localGeometry],
   );
 
@@ -183,7 +284,8 @@ function CanvasInner({
     (changes: NodeChange<Node<CardNodeData>>[]) => {
       for (const change of changes) {
         if (change.type === 'position' && change.position) {
-          setLocalGeometry((prev) => ({ ...prev, [change.id]: change.position as { x: number; y: number } }));
+          const at = change.position;
+          setLocalGeometry((prev) => ({ ...prev, [change.id]: { ...(prev[change.id] ?? {}), x: at.x, y: at.y } }));
           pending.current.set(change.id, {
             ...(pending.current.get(change.id) ?? { x: 0, y: 0 }),
             x: Math.round(change.position.x),
@@ -212,6 +314,15 @@ function CanvasInner({
             width,
             height,
           });
+          /*
+           * A resize the *user* performed is also held locally until the write
+           * lands, exactly as a move is. A plain measurement is not: taking it
+           * as local state would pin every card to whatever the browser
+           * measured on mount and undo the stored layout.
+           */
+          if (change.resizing || change.setAttributes) {
+            setLocalGeometry((prev) => ({ ...prev, [change.id]: { ...(prev[change.id] ?? {}), width, height } }));
+          }
           scheduleFlush();
         }
       }
@@ -251,6 +362,7 @@ function CanvasInner({
       {data.cards.length === 0 && (
         <div className="pf-state pf-state--empty pf-state--overlay">{emptyMessage}</div>
       )}
+      <LostDraftNotice drafts={lostDrafts} onDiscard={clearDraft} />
     </ReactFlow>
   );
 }

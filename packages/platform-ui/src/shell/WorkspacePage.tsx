@@ -13,7 +13,6 @@ import { QueryErrorState } from '../components/ErrorState.tsx';
  */
 export function WorkspacePage() {
   const { data, isLoading, error } = useSpaces();
-  const setSpace = useAppState((s) => s.setSpace);
   const currentSpace = useAppState((s) => s.spaceId);
 
   if (isLoading) return <div className="pf-state">Wczytywanie przestrzeni…</div>;
@@ -35,7 +34,19 @@ export function WorkspacePage() {
               key={s.id}
               to="/"
               className="pf-tile"
-              onClick={() => setSpace(s.id)}
+              /*
+               * The space travels in the address, not through a store call
+               * beside the navigation.
+               *
+               * Setting it in `onClick` made `SpaceSync` rewrite *this* entry's
+               * address (it corrects the URL by replacement) and only then did
+               * the link push the canvas. The entry the user came from lost the
+               * space it was opened with, so Back landed on this page with the
+               * new space already in force and a second Back was needed to undo
+               * one click. Carried in the link, one history entry holds one
+               * choice and Back restores exactly the previous workspace.
+               */
+              search={(prev: Record<string, unknown>) => ({ ...prev, s: s.id })}
               data-testid={`space-${s.id}`}
             >
               <strong>{s.title}</strong>

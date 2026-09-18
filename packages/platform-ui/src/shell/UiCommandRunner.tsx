@@ -6,6 +6,7 @@ import {
   viewAddressKey,
   type UiCommand,
   type UiCommandResult,
+  type UiRevealAdjustment,
   type UiTarget,
   type ViewDefinition,
 } from '@platform/contracts';
@@ -15,6 +16,7 @@ import { setUiCommandHandler } from '../chat/runEvents.ts';
 import { uiSnapshotSession } from '../state/uiSnapshot.ts';
 import { performAndAcknowledge, pollUntil, waitingDeadline } from './uiCommandAck.ts';
 import { cachedLoader, planViewCommand } from './uiCommandPlan.ts';
+import { expandCollapsedAncestors, hasBox } from './expandSection.ts';
 import { markHighlighted, performReveal } from './uiReveal.ts';
 
 /**
@@ -74,20 +76,37 @@ export function UiCommandRunner() {
     [],
   );
 
-  /** Scrolls to the element and marks it, returning whether it was found. */
-  const reveal = useCallback(async (selector: string | undefined, waitUntil: number): Promise<boolean> => {
-    if (!selector) return false;
-    // One frame for the route change to paint before looking for the element.
-    const el = await pollUntil(() => document.querySelector<HTMLElement>(selector), {
-      attempts: 12,
-      intervalMs: 60,
-      until: waitUntil,
-    });
-    if (!el) return false;
-    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    markHighlighted(el);
-    return true;
-  }, []);
+  /**
+   * Scrolls to the element and marks it.
+   *
+   * Returns whether it was shown, and what had to be opened to show it. A
+   * target inside a collapsed part of the screen is uncovered first
+   * (`expandCollapsedAncestors`) — until that existed, the element was found in
+   * the document, scrolled to and marked while the user saw nothing at all, and
+   * the command reported success. An element that still has no box after that
+   * is reported as not shown rather than highlighted invisibly.
+   */
+  const reveal = useCallback(
+    async (
+      selector: string | undefined,
+      waitUntil: number,
+    ): Promise<{ shown: boolean; adjustments: UiRevealAdjustment[] }> => {
+      if (!selector) return { shown: false, adjustments: [] };
+      // One frame for the route change to paint before looking for the element.
+      const el = await pollUntil(() => document.querySelector<HTMLElement>(selector), {
+        attempts: 12,
+        intervalMs: 60,
+        until: waitUntil,
+      });
+      if (!el) return { shown: false, adjustments: [] };
+      const adjustments = expandCollapsedAncestors(el);
+      if (!hasBox(el)) return { shown: false, adjustments };
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      markHighlighted(el);
+      return { shown: true, adjustments };
+    },
+    [],
+  );
 
   const perform = useCallback(
     async (command: UiCommand, budget: { deadline: number }): Promise<UiCommandResult> => {
@@ -246,17 +265,22 @@ export function UiCommandRunner() {
         if (viewReport && narrowing) filtered = { matched: viewReport.matched, total: viewReport.total };
       }
 
-      const highlighted = target.selector ? await reveal(target.selector, waitUntil) : false;
-      if (target.selector && !highlighted) {
+      const pointed = target.selector
+        ? await reveal(target.selector, waitUntil)
+        : { shown: false, adjustments: [] as UiRevealAdjustment[] };
+      if (target.selector && !pointed.shown) {
         /*
          * The screen may well have changed, but the element the agent was asked
          * to point at is not there. Reporting success would tell the user to
-         * look at something that is not on their screen.
+         * look at something that is not on their screen. Anything that *was*
+         * opened on the way is still reported: a change nobody reports is a
+         * change the user cannot undo.
          */
         return {
           ...base,
           executed: false,
           reason: UI_COMMAND_FAILURES.notPresent,
+          ...(pointed.adjustments.length ? { adjustments: pointed.adjustments } : {}),
           url: window.location.pathname + window.location.search,
         };
       }
@@ -264,7 +288,8 @@ export function UiCommandRunner() {
       return {
         ...base,
         executed: true,
-        highlighted,
+        highlighted: pointed.shown,
+        ...(pointed.adjustments.length ? { adjustments: pointed.adjustments } : {}),
         ...(filtered ? { filtered } : {}),
         ...(viewReport && ordering !== undefined ? { sorted: viewReport.sort } : {}),
         ...(viewReport?.page ? { page: viewReport.page } : {}),

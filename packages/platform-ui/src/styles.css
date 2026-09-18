@@ -150,6 +150,51 @@ body {
 
 .pf-card__body { flex: 1; overflow: auto; padding: 10px; min-height: 0; }
 
+/*
+  Handles of the library's own `NodeResizer`, shown on the selected card.
+
+  Made deliberately large (12px) rather than the library's default 4px dot: a
+  target that small is a usability problem and, in a browser test, is a hit test
+  that passes or fails on a pixel. Colour and shape only — the geometry, the
+  pointer capture and the aspect handling stay the library's.
+*/
+.pf-card__resize-handle {
+  width: 12px; height: 12px;
+  background: var(--pf-accent);
+  border: 2px solid var(--pf-panel);
+  border-radius: 3px;
+}
+.pf-card__resize-line { border-color: var(--pf-accent); }
+
+/*
+  A collapsed section of a page.
+
+  `<details>` and nothing else: the disclosure control, its keyboard behaviour
+  and its announced state come from the browser, so there is no `aria-expanded`
+  of ours to get out of step with what is on screen.
+*/
+.pf-details { border: 1px solid var(--pf-border); border-radius: var(--pf-radius); padding: 4px 12px; margin: 12px 0; background: var(--pf-panel); }
+.pf-details > summary { cursor: pointer; font-size: 16px; font-weight: 600; padding: 6px 0; }
+.pf-details[open] > summary { border-bottom: 1px solid var(--pf-border); margin-bottom: 8px; }
+
+/*
+  Unsaved work whose card the composition no longer has.
+
+  Over the canvas rather than in a card, because the card it belongs to is gone;
+  above the minimap and the controls, because a conflict about unsaved data is
+  the one thing on this screen that must not be missed.
+*/
+.pf-draft-conflict {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  z-index: 30; max-width: min(680px, 92%);
+  padding: 8px 12px; font-size: 13px;
+  background: #fff8e8; border: 1px solid var(--pf-warn); border-radius: var(--pf-radius);
+  box-shadow: 0 2px 8px rgba(16, 24, 40, .12);
+}
+.pf-draft-conflict ul { margin: 6px 0; padding-left: 18px; }
+.pf-draft-conflict li { margin-bottom: 4px; }
+.pf-draft-conflict .pf-btn { margin-left: 8px; }
+
 /* ------------------------------- states ---------------------------------- */
 
 .pf-state { padding: 12px; color: var(--pf-muted); font-size: 13px; }
