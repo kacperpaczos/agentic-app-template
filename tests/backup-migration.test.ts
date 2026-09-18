@@ -484,7 +484,7 @@ describe('sciezki wokol katalogu danych — trzy ochrony przed skasowaniem', () 
     mkdirSync(cudzy, { recursive: true });
     writeFileSync(resolve(cudzy, 'notatki.md'), 'tresc\n');
 
-    const r = run('restore-state.mjs', ['--backup', dir('wal-kopia'), '--data', cudzy]);
+    const r = run('restore-state.mjs', ['--backup', kopia, '--data', cudzy]);
     expect(r.status, r.out).toBe(2);
     expect(r.out).toMatch(/nie wyglada na katalog danych aplikacji/);
     expect(readFileSync(resolve(cudzy, 'notatki.md'), 'utf8')).toBe('tresc\n');
