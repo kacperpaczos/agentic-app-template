@@ -1,44 +1,38 @@
-# Proby zdolnosci wykrycia powtorzone na HEAD 6630ca6 — 2026-09-18T12:30:44+02:00
+# Proby zdolnosci wykrycia — JEDEN przebieg na HEAD 4fb4de4, 2026-09-18T12:58:27+02:00
 #
-# Pliki 03-06 sa zapisem przebiegu na f43ac88 i zostaja nienaruszone. Ten plik
-# jest zapisem prob na drzewie, ktore idzie do scalenia. Komunikaty i liczby testow
-# roznia sie od 03-06, bo skrypty i test kontraktu zmienily sie od tamtej pory.
+# Wszystkie proby ponizej wykonane na tym samym drzewie: tym, ktore idzie do scalenia.
+# (Poprzedni zapis deklarowal HEAD 6630ca6, a czesc prob zrobiono na pozniejszych
+# commitach; zamiast latac naglowek, caly komplet przebiegl od nowa — taniej niz
+# tlumaczyc, ktora proba jest z ktorego commita.)
 #
-# Zmiana wzgledem 03-06 warta odnotowania: od commita bfe3187 proba wymiany
-# uruchamia na kopii regresje jednostkowa, wiec wycofanie rejestracji renderera
-# (proba A) oblewa juz TAM — wczesniej niz w kroku przegladarkowym. Zeby krok
-# przegladarkowy byl sprawdzony osobno, doszla proba A2: renderer zostaje
-# zarejestrowany, ale przestaje czytac wlasna trase backendu — tego zadne testy
-# jednostkowe nie widza, bo niczego nie renderuja.
-#
-# Proby F sprawdzaja, ze kontrole negatywne proby wymiany, wyprowadzone teraz
-# z manifestow modulow niescalanych, naprawde zyja.
+# Pliki 03-06 (proby A-D na f43ac88) i 08 (proba E na 2247e34) zostaja nietkniete
+# jako zapis przebiegow, ktore sie odbyly.
 
 # drzewo przed probami:
 (pusto = czyste)
 
-======== PROBA A — renderer karty modulu kontrolnego niezarejestrowany ========
+======== A — renderer karty modulu kontrolnego niezarejestrowany ========
 -const cardRenderers: Record<string, CardComponent> = { [NOTE_LIST_CARD]: NoteListCard };
 +const cardRenderers: Record<string, CardComponent> = {};
 OK   build frontendu i backendu
-BLAD regresja jednostkowa na kopii przechodzi (test dymny podmiany) — t.ts > przerwana operacja wieloetapowa nie zostawia polowicznego stanu > kopia bazy otwiera sie z tym samym stanem, ktory zglosil backend
+BLAD regresja jednostkowa na kopii przechodzi (test dymny podmiany) — a
 EXIT=1
 (oblewa na kroku regresji: tests/module-contract.test.ts sprawdza rejestracje renderera)
 
-======== PROBA A2 — renderer zarejestrowany, ale nie czyta trasy modulu ========
+======== A2 — renderer zarejestrowany, ale nie czyta trasy modulu ========
 -  const { data, isLoading, error } = useModuleData<{ notes: ProbeNote[] }>(MODULE_ID, '/notes');
 +  const { data, isLoading, error } = useModuleData<{ notes: ProbeNote[] }>(MODULE_ID, '/trasa-ktorej-nie-ma');
-OK   powłoka w przeglądarce: menu i nagłówki sekcji od modułu kontrolnego, bez słownika nieobecnego modułu — naglowki=[Przestrzen pracy | Notatki | Pliki i raporty | Ustawienia]; sprawdzono 20 pojec
+OK   powłoka w przeglądarce: menu i nagłówki sekcji od modułu kontrolnego, bez słownika nieobecnego modułu — naglowki=[Przestrzen pracy | Notatki | Pliki i raporty | Ustawienia]; pozycje=[Canvas | Zapisane kompozycje | Widoki agenta | Notatki testowe | Pliki i raporty | Ustawienia]; sprawdzono 20 pojec
 BLAD karta modułu kontrolnego wyrenderowana z katalogu, danymi z trasy modułu — brak listy na canvasie; strona:  ☰Przestrzen pracyCanvasZapisane kompozycjeWidoki agentaNotatkiNotatki testowePliki i raportyPliki i raportyUstawieniaUstawieniaClaude: subskrypcja (max)·model claude-sonnet-4-5·1 modul(y), 28 narzedz
 EXIT=1
 (regresja jednostkowa przechodzi — oblewa dopiero krok przegladarkowy)
 
-======== PROBA B — ekran modulu zalezny od rejestracji tras aplikacji ========
+======== B — ekran modulu zalezny od rejestracji tras aplikacji ========
 +import { useParams } from '@tanstack/react-router';
 @@ -52 +53 @@ export function CaseDetailPage() {
 -  const { caseId = '' } = useScreenParams();
 +  const { caseId } = useParams({ from: '/cases/$caseId' });
---- pnpm typecheck:modules
+--- typecheck:modules
 packages/module-procurement/src/ui/pages.tsx(2,27): error TS2307: Cannot find module '@tanstack/react-router' or its corresponding type declarations.
 
 1 modul(y) nie przechodza typecheck samodzielnie.
@@ -48,11 +42,11 @@ EXIT=1
 
 1 naruszen.
 EXIT=1
---- pnpm typecheck:src
+--- typecheck:src
 packages/module-procurement/src/ui/pages.tsx(2,27): error TS2307: Cannot find module '@tanstack/react-router' or its corresponding type declarations.
 EXIT=1
 
-======== PROBA C — granica platforma-domena w kodzie i w konfiguracji ========
+======== C — granica platforma-domena w kodzie i w konfiguracji ========
 --- C1: tabela modulu w kodzie platformy
   - [slownik] packages/platform-server/src/registry/modules.ts:52 zawiera pojecie domenowe modulu module-procurement "pc_offers": const LEGACY_TABLE = 'pc_offers';
   - [tabele] packages/platform-server/src/registry/modules.ts:52 odwoluje sie do tabeli modulu module-procurement: pc_offers
@@ -72,18 +66,16 @@ EXIT=1
 2 naruszen.
 EXIT=1
 
-======== PROBA D — deklaracja komponentu OpenUI po stronie serwera modulu ========
--    openuiComponents: Object.values(PROBE_OPENUI_COMPONENTS),
-+    openuiComponents: [],
+======== D — deklaracja komponentu OpenUI po stronie serwera modulu ========
      × polowka serwerowa: migracja, narzedzia, odczyt live, komponenty, nawigacja, trasy 19ms
      × odczyt live modulu przechodzi przez platforme z jego wlasnym deskryptorem 3ms
      × katalog przegladarki i katalog serwera znaja ten sam komponent modulu 3ms
      × kompozycja domyslna modulu jest walidowana katalogiem platformy 3ms
-     × pusty rejestr: zadna tabela zadnego modulu nie powstaje 3ms
+     × pusty rejestr: zadna tabela zadnego modulu nie powstaje 2ms
       Tests  5 failed | 5 passed (10)
 EXIT=1
 
-======== PROBA E — pojecie domenowe w etykiecie powloki (powtorka na HEAD) ========
+======== E — pojecie domenowe w etykiecie powloki ========
 --- E1: naglowek sekcji znow na stale w powloce
   - [etykieta] packages/platform-ui/src/shell/AppShell.tsx:49 zawiera pojecie domenowe modulu module-procurement "sprawy": <h2 className="pf-nav__heading">{section === 'records' ? 'Sprawy zakupowe' : registry.menu
 
@@ -100,36 +92,23 @@ EXIT=1
 1 naruszen.
 EXIT=1
 --- E4: modul kontrolny przestaje nazywac swoja sekcje
-     × naglowki sekcji nawigacji pochodza od modulu, a nieponazwane sa neutralne 6ms
+     × naglowki sekcji nawigacji pochodza od modulu, a nieponazwane sa neutralne 3ms
       Tests  1 failed | 9 passed (10)
 EXIT=1
 
-======== PROBA F — kontrole negatywne proby wymiany sa zywe, a nie wpisane ========
---- F1: etykieta pozycji menu modulu kontrolnego niesie slowo nieobecnego modulu
-        (testy jednostkowe etykiet pozycji nie sprawdzaja — oblac ma krok przegladarkowy)
--  { id: NOTES_SCREEN_ID, section: 'records', label: 'Notatki testowe', to: NOTES_PATH, order: 10 },
-+  { id: NOTES_SCREEN_ID, section: 'records', label: 'Wszystkie sprawy', to: NOTES_PATH, order: 10 },
-OK   baza: tabela modułu kontrolnego, żadnej tabeli nieobecnego modułu — tabele=15; sprawdzono 8 tabel nieobecnego modułu
-BLAD powłoka w przeglądarce: menu i nagłówki sekcji od modułu kontrolnego, bez słownika nieobecnego modułu — naglowki=[Przestrzen pracy | Notatki | Pliki i raporty | Ustawienia]; sprawdzono 20 pojec
+======== F — kontrole negatywne proby wymiany sa zywe, a nie wpisane ========
+--- F1: etykieta pozycji menu modulu kontrolnego niesie slowo modulu nieobecnego
+BLAD powłoka w przeglądarce: menu i nagłówki sekcji od modułu kontrolnego, bez słownika nieobecnego modułu — slownik nieobecnego modulu w nawigacji: sprawy — Przestrzen pracy | Notatki | Pliki i raporty | Ustawienia | Canvas | Zapisane kompozycje | Widoki agenta | Wszystkie sprawy | Pliki i raporty | Ustawienia
 EXIT=1
 --- F2: modul niescalany przestaje deklarowac etykiety -> kontrole nie maja czego sprawdzac
-OK   kopia robocza — 365 plików → /tmp/agentic-module-swap-tSGzkP
-BLAD moduł niescalany dostarcza słownik do kontroli negatywnych — module-procurement: 12 przedrostkow, 0 etykiet, 8 tabel
+BLAD moduł niescalany dostarcza słownik do kontroli negatywnych — module-procurement: 12 przedrostkow, 0 etykiet, 8 tabel, zakresy [case]; modul skladany: zakresy [probe]
+EXIT=1
+--- F3: modul skladany odpowiada na zakres canvasu modulu nieobecnego
+        (probe.defaultComposition zaczyna obslugiwac zakres 'case' modulu przykladowego)
+-      scope.kind === MODULE_ID
++      scope.kind === MODULE_ID || scope.kind === 'case'
+BLAD zadeklarowane zakresy nieobecnych modułów nie dają kart — case: HTTP 200, karty=1
 EXIT=1
 
 # przywrocenie
 (pusto = drzewo znow czyste)
-
-======== PROBA F1 — powtorzona po poprawce z b2905eb ========
-# Pierwszy przebieg F1 (przed ta poprawka) oblal, ale z niewlasciwego powodu:
-# kontrola slownika szukala w textContent calej nawigacji, gdzie „Wszystkie sprawy”
-# i „Pliki i raporty” sklejaja sie w „sprawyPliki”, wiec dopasowanie calego slowa
-# nie widzialo granicy. Oblewal wtedy warunek obecnosci pozycji „Notatki testowe”.
-# Po poprawce slownik jest szukany w rozdzielonych napisach naglowkow i pozycji.
--  { id: NOTES_SCREEN_ID, section: 'records', label: 'Notatki testowe', to: NOTES_PATH, order: 10 },
-+  { id: NOTES_SCREEN_ID, section: 'records', label: 'Wszystkie sprawy', to: NOTES_PATH, order: 10 },
-OK   baza: tabela modułu kontrolnego, żadnej tabeli nieobecnego modułu — tabele=15; sprawdzono 8 tabel nieobecnego modułu
-BLAD powłoka w przeglądarce: menu i nagłówki sekcji od modułu kontrolnego, bez słownika nieobecnego modułu — slownik nieobecnego modulu w nawigacji: sprawy — Przestrzen pracy | Notatki | Pliki i raporty | Ustawienia | Canvas | Zapisane kompozycje | Widoki agenta | Wszystkie sprawy | Pliki i raporty | Ustawienia
-EXIT=1
-# drzewo:
-(pusto = czyste)
