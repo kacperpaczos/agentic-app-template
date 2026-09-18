@@ -142,6 +142,19 @@ export function createPlatform(input: {
   ensureUser(db, DEFAULT_USER_ID, 'Uzytkownik lokalny');
   ensureUser(db, SECOND_USER_ID, 'Inny uzytkownik');
   services.runs.reconcileOnBoot();
+  /*
+   * A write that was in flight when the process died leaves a reserved
+   * idempotency key. It is marked interrupted rather than dropped: the effect
+   * of that operation is unknown, and a key that simply disappeared would let
+   * the next retry re-apply it silently.
+   */
+  const interrupted = services.idempotency.reconcileOnBoot();
+  if (interrupted > 0) {
+    console.warn(
+      `[platform] przerwane operacje z kluczem idempotencji: ${interrupted}. ` +
+        'Powtorzenie z tym samym kluczem zostanie odrzucone z powodem operation_interrupted.',
+    );
+  }
   // Rebuilds tool activity for conversations recorded before it was persisted,
   // and repairs any run whose process died mid-stream. Idempotent, so it is
   // safe on every boot; silent when there is nothing to rebuild.

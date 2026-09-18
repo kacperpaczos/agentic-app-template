@@ -120,7 +120,11 @@ describe('powiazanie rozmowy z wykonaniem, narzedziem, mutacja i artefaktem', ()
         name: 'procurement_update_offer_item',
         input: { itemId: item.id, quantity: 11, expectedVersion: item.version },
       },
-      { kind: 'call', name: 'procurement_save_comparison', input: { caseId } },
+      {
+        kind: 'call',
+        name: 'procurement_save_comparison',
+        input: { caseId, operationId: `op-diag-${Date.now()}` },
+      },
       { kind: 'text', text: 'Zmienilem pozycje i zapisalem zestawienie.' },
     ]);
     expect(r.run().status).toBe('succeeded');

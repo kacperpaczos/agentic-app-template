@@ -650,12 +650,28 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
     return json(c, { accepted: runtime.acknowledgeUiCommand(parsed.data) });
   });
 
+  /**
+   * Answers a consent request of the run in the address.
+   *
+   * Both halves matter and neither used to be complete: the body was read with
+   * a bare `c.req.json()`, so a malformed or absent body became an unhandled
+   * exception and a 500 `internal` rather than a validation failure; and the
+   * request id was passed on without the run, so the ownership check on the
+   * address and the consent actually granted could be about different runs.
+   */
   app.post('/api/runs/:id/permission', async (c) => {
     const ownerId = c.get('ownerId');
-    services.runs.get(c.req.param('id'), ownerId); // ownership check
-    const body = (await c.req.json()) as { requestId?: string; allow?: boolean };
-    if (!body.requestId) throw new AppError('validation_failed', 'Brak requestId.');
-    const answered = runtime.answerPermission(body.requestId, body.allow === true);
+    const runId = c.req.param('id');
+    services.runs.get(runId, ownerId); // ownership check
+    const parsed = z
+      .object({ requestId: z.string().min(1), allow: z.boolean().optional() })
+      .safeParse(await c.req.json().catch(() => undefined));
+    if (!parsed.success) {
+      throw new AppError('validation_failed', 'Nieprawidlowa odpowiedz na prosbe o zgode.', {
+        issues: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+      });
+    }
+    const answered = runtime.answerPermission(parsed.data.requestId, parsed.data.allow === true, runId);
     return json(c, { answered });
   });
 

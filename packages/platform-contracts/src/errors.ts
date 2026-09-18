@@ -79,9 +79,45 @@ export class AppError extends Error implements AppErrorShape {
 
   static from(err: unknown): AppError {
     if (err instanceof AppError) return err;
+    const zod = zodIssues(err);
+    /*
+     * A schema rejection is a validation failure wherever it happens.
+     *
+     * Every `schema.parse(...)` that was not wrapped by hand used to arrive
+     * here as a bare `Error` and leave as `internal` — a 500 whose message was
+     * the whole serialised issue list, which says "the server broke" about a
+     * request the server understood perfectly well and correctly refused. The
+     * code and the issue list are recovered here so that one unguarded parse
+     * cannot turn a recognisable cause into an unrecognisable one.
+     */
+    if (zod) {
+      return new AppError('validation_failed', 'Nieprawidlowe dane wejsciowe.', { issues: zod });
+    }
     if (err instanceof Error) return new AppError('internal', err.message);
     return new AppError('internal', String(err));
   }
 }
 
 export const isAppError = (e: unknown): e is AppError => e instanceof AppError;
+
+/**
+ * Reads a Zod rejection without importing Zod's class.
+ *
+ * Structural on purpose: the issue list is part of Zod's public error shape,
+ * while `instanceof ZodError` breaks the moment two copies of the library end
+ * up in one process — which is exactly the situation a monorepo with a module
+ * boundary creates. Only a `name` of `ZodError` with an array of issues counts,
+ * so an ordinary error carrying an `issues` field is not mistaken for one.
+ */
+function zodIssues(err: unknown): Array<{ path: string; message: string }> | null {
+  if (!err || typeof err !== 'object') return null;
+  const e = err as { name?: unknown; issues?: unknown };
+  if (e.name !== 'ZodError' || !Array.isArray(e.issues)) return null;
+  return e.issues.map((i) => {
+    const issue = i as { path?: unknown; message?: unknown };
+    return {
+      path: Array.isArray(issue.path) ? issue.path.join('.') : '',
+      message: typeof issue.message === 'string' ? issue.message : 'nieprawidlowa wartosc',
+    };
+  });
+}

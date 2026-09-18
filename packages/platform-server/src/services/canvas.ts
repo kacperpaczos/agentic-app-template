@@ -2,6 +2,7 @@ import {
   AGENT_VIEWS_SCOPE_KIND,
   AppError,
   canvasViewportSchema,
+  stableJson,
   type AddCardInput,
   type CanvasCard,
   type CanvasSpace,
@@ -42,6 +43,19 @@ export function assertOwnConversationViews(
 }
 
 const DEFAULT_GEOMETRY: CardGeometry = { x: 0, y: 0, width: 520, height: 360, z: 0 };
+
+/**
+ * What a repeated canvas write has to match to count as the same write.
+ *
+ * Everything the call asks for except the key itself: a second call under one
+ * `operationId` carrying a different title, spec or target is not a retry of
+ * the first, and returning the first one's answer to it would report a change
+ * that was never applied.
+ */
+const cardWriteFingerprint = (input: Record<string, unknown>): string => {
+  const { operationId: _ignored, ...request } = input;
+  return stableJson(request);
+};
 
 interface SpaceRow {
   id: string;
@@ -232,7 +246,11 @@ export class CanvasService {
   }
 
   async addCard(input: AddCardInput, ownerId: string): Promise<CanvasCard> {
-    const { result } = await this.idem.once(input.operationId, ownerId, 'canvas.addCard', async () => {
+    const { result } = await this.idem.once(
+      input.operationId,
+      ownerId,
+      'canvas.addCard',
+      async () => {
       this.#spaceRow(input.spaceId, ownerId);
       const id = newId('crd');
       const ts = nowIso();
@@ -253,7 +271,9 @@ export class CanvasService {
       return toCard(
         this.db.$client.prepare('SELECT * FROM canvas_cards WHERE id = ?').get(id) as CardRow,
       );
-    });
+      },
+      { fingerprint: cardWriteFingerprint(input) },
+    );
     return result;
   }
 
@@ -265,10 +285,20 @@ export class CanvasService {
       'canvas.updateSpec',
       async () => {
         const { card } = this.#cardRow(input.cardId, ownerId);
-        if (
-          input.expectedSpecVersion !== undefined &&
-          input.expectedSpecVersion !== card.spec_version
-        ) {
+        /*
+         * No version, no write. The comparison used to be skipped entirely when
+         * the field was absent, so the one caller that could not be bothered to
+         * read the card first was also the one caller that could overwrite
+         * anything. The check now belongs to the card, not to the door.
+         */
+        if (input.expectedSpecVersion === undefined) {
+          throw new AppError(
+            'validation_failed',
+            'Zmiana tresci karty wymaga expectedSpecVersion — podaj specVersion karty, na ktorej pracujesz.',
+            { reason: 'expected_version_missing', currentSpecVersion: card.spec_version },
+          );
+        }
+        if (input.expectedSpecVersion !== card.spec_version) {
           throw new AppError('conflict', 'Card content changed since it was read.', {
             currentSpecVersion: card.spec_version,
           });
@@ -287,6 +317,7 @@ export class CanvasService {
             .get(input.cardId) as CardRow,
         );
       },
+      { fingerprint: cardWriteFingerprint(input) },
     );
     return result;
   }
@@ -326,6 +357,7 @@ export class CanvasService {
         this.#touchSpace(card.space_id);
         return { removed: input.cardId };
       },
+      { fingerprint: cardWriteFingerprint(input) },
     );
     return result;
   }

@@ -127,8 +127,17 @@ export const updateCardSpecInputSchema = z.object({
   cardId: z.string(),
   title: z.string().max(200).optional(),
   spec: cardSpecSchema,
-  /** Last seen `specVersion`; a stale value is rejected with `conflict`. */
-  expectedSpecVersion: z.number().int().nonnegative().optional(),
+  /**
+   * Last seen `specVersion`; a stale value is rejected with `conflict`.
+   *
+   * Required, and required on every door. Optional meant that a content write
+   * which left it out was compared against the row it was about to overwrite —
+   * that is, not compared at all — so whoever wrote without a version silently
+   * replaced a change made since they read (L9.6). The agent's tool has
+   * demanded it since BL-11a; the HTTP route demanded nothing, which made the
+   * rule a property of one caller instead of a property of the card.
+   */
+  expectedSpecVersion: z.number().int().nonnegative(),
   operationId: z.string().min(8).max(200).optional(),
 });
 export type UpdateCardSpecInput = z.infer<typeof updateCardSpecInputSchema>;
