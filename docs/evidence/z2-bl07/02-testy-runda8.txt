@@ -1,0 +1,56 @@
+TESTY REGRESJI — zadanie Z2 / BL-07 (po rundzie poprawek 8, drzewo z BL-05 i BL-07)
+commit: ed32c35+
+data: 2026-09-18T15:36:25+02:00
+
+$ pnpm exec vitest run tests/backup-migration.test.ts tests/session-transcript.test.ts tests/script-path-flags.test.ts
+ RUN  v5.0.0 /home/paczos/Documents/agentic-app-template-wt/z2-bl07
+ ✓ tests/session-transcript.test.ts (19 tests) 380ms
+ ✓ tests/script-path-flags.test.ts (23 tests) 23670ms
+   ✓ kazda flaga skryptow stanu ma rozstrzygniecie sprawdzone zachowaniem (23)
+     ✓ backup-state.mjs: zachowanie kazdej flagi zgadza sie z jej rodzajem 382ms
+     ✓ restore-state.mjs: zachowanie kazdej flagi zgadza sie z jej rodzajem 4303ms
+     ✓ synthetic-state.mjs: zachowanie kazdej flagi zgadza sie z jej rodzajem 6711ms
+     ✓ flagi czytajace naprawde przetwarzaja wskazany katalog, a nie odpadaja wczesniej 1389ms
+     ✓ odczyt cudzej kopii nie zostawia w niej sladu — z plikami pomocniczymi wlacznie 3949ms
+     ✓ backup-state --data faktycznie kopiuje zywy katalog danych 2598ms
+ ✓ tests/backup-migration.test.ts (42 tests) 90132ms
+   ✓ kopia zachowuje zatwierdzony stan SQLite wraz z WAL (5)
+     ✓ kopia zawiera zapis lezacy w WAL i jest jednym samowystarczalnym plikiem 686ms
+     ✓ wykonanie kopii nie zmienia zrodla 668ms
+   ✓ uszkodzona kopia i niespojny manifest sa wykrywane (4)
+     ✓ zmieniony plik uzytkownika w kopii 328ms
+     ✓ zmieniona baza w kopii 344ms
+     ✓ manifest niezgodny z kopia 344ms
+     ✓ brak pliku wymienionego w manifescie 363ms
+   ✓ kopie i proby odmawiaja pracy na katalogu danych aplikacji (5)
+     ✓ generator danych syntetycznych odmawia nadpisania katalogu danych 1356ms
+   ✓ sciezki wokol katalogu danych — trzy ochrony przed skasowaniem (16)
+     ✓ synthetic-state.mjs odmawia katalogu WEWNATRZ katalogu danych 1154ms
+     ✓ synthetic-state.mjs odmawia katalogu NADRZEDNEGO wobec katalogu danych 1215ms
+     ✓ dowiazanie symboliczne nie obchodzi kontroli 1143ms
+     ✓ odmawia skasowania cudzego niepustego katalogu bez znacznika 1140ms
+     ✓ katalog pusty albo wlasny jest uzywany normalnie 3177ms
+     ✓ odtworzenie odmawia katalogu --data, ktory nie wyglada na katalog danych 1117ms
+     ✓ kopia NIE MOZE byc zapisana do zywego katalogu danych 2058ms
+     ✓ kopia NIE MOZE nadpisac cudzego niepustego katalogu 2043ms
+     ✓ kopia do katalogu wskazanego przez APP_DATA_DIR jest odrzucona 2123ms
+     ✓ kopia do katalogu pustego i do wlasnej wczesniejszej kopii dziala 2537ms
+     ✓ katalog danych ukryty POD celem jest wykryty osobna regula 1114ms
+     ✓ znacznik skopiowany do innego katalogu nic nie znaczy 2316ms
+     ✓ skopiowany znacznik nie autoryzuje SKASOWANIA katalogu 4708ms
+   ✓ proba migracji na syntetycznej kopii sprzed kazdej migracji platformy (8)
+     ✓ kopia sprzed platform-0001-init: migracja zachowuje dane i nie dubluje ich 5664ms
+     ✓ kopia sprzed platform-0002-run-measurement-points: migracja zachowuje dane i nie dubluje ich 5507ms
+     ✓ kopia sprzed platform-0003-file-versions: migracja zachowuje dane i nie dubluje ich 5639ms
+     ✓ kopia sprzed platform-0004-artifact-run-link: migracja zachowuje dane i nie dubluje ich 6297ms
+     ✓ proba jest powtarzalna do tego samego --out, mimo ze boot zapisuje tam session.secret 12621ms
+     ✓ trzecie uruchomienie takze nic nie zmienia — sprawdzone przez test, nie przez skrypt 970ms
+   ✓ procedura odtworzenia stanu (4)
+     ✓ --check niczego nie zmienia i odpowiada na trzy pytania procedury 1046ms
+     ✓ odmawia kopii nowszej niz kod, bo migracji nie da sie cofnac 1249ms
+     ✓ odklada stan sprzed proby, odtwarza kopie i aplikacja wstaje na odtworzonym stanie 4591ms
+ Test Files  3 passed (3)
+      Tests  84 passed (84)
+   Start at  15:36:25
+   Duration  91.88s (tests 97%, import 2%, transform 1%)
+kod wyjscia: 0

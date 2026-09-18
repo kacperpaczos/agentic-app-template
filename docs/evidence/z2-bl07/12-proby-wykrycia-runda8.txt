@@ -1,0 +1,25 @@
+PROBA ZDOLNOSCI WYKRYCIA — runda poprawek 8, zadanie Z2 / BL-07
+commit: ed32c35
+
+=== PROBA 8/1 — poszerzenie tabeli przechodzi, ZMIANA DANYCH pod nia nadal oblewa
+wstawiona linia: platform-0004-artifact-run-link dodatkowo UPDATE artifacts SET title = title || '!'
+     × kopia sprzed platform-0004-artifact-run-link: migracja zachowuje dane i nie dubluje ich 5771ms
+  - tabela artifacts: zmieniona tresc w kolumnach sprzed migracji
+      Tests  1 failed | 41 skipped (42)
+przywrocono: git checkout -- packages/platform-server/src/db/migrations.ts
+(dodanie kolumny jest dopuszczone, bo mowi o nim ALTER TABLE ... ADD COLUMN;
+ zmiana wartosci w kolumnie sprzed migracji nie jest i nadal oblewa)
+
+=== KONTROLA POZOSTALYCH TABEL (punkt 4 zlecenia)
+Przeglad SQL wszystkich migracji obecnych po scaleniu:
+platform-0001-init                 ADD COLUMN: - | przepisuje wiersze: -
+platform-0002-run-measurement-points ADD COLUMN: agent_runs.enqueued_at | przepisuje wiersze: UPDATE agent_runs
+platform-0003-file-versions        ADD COLUMN: files.derived_from_file_id, files.version | przepisuje wiersze: -
+platform-0004-artifact-run-link    ADD COLUMN: artifacts.run_id | przepisuje wiersze: -
+procurement-0001-init              ADD COLUMN: - | przepisuje wiersze: -
+
+Wniosek: jedyna migracja z UPDATE to platform-0002, ktora wypelnia kolumne WLASNIE dodana
+(enqueued_at), wiec odcisk kolumn sprzed migracji sie nie zmienia i regula dziala.
+Zaden inny pakiet nie przyniosl migracji przepisujacej istniejace wiersze. Gdyby przyniosl,
+proba oblalaby na 'zmieniona tresc w kolumnach sprzed migracji' i wymagalaby decyzji czlowieka —
+czyli dokladnie tak, jak ma dzialac.
