@@ -1,6 +1,6 @@
 PRZEBIEG ODBIOROWY — zadanie Z2 / BL-07 (trwalosc, kopia, migracje)
-data: 2026-09-18T11:35:46+02:00
-commit: 7d01ec3 — Proba wykrycia ujawnila wadliwy test: 'kopia nie zmienia zrodla' wykonuje teraz wlasna kopie
+data: 2026-09-18T12:09:15+02:00
+commit: 71e70c4 — Test dowiazania izoluje ochrone, ktora ma sprawdzac
 katalog roboczy: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod  (dane SYNTETYCZNE; .e2e-bl07/ jest ignorowany przez git)
 zadna komenda ponizej nie dotyka data/, APP_DATA_DIR ani zadnego katalogu poza .e2e-bl07/dowod
 wersja node: v24.19.0
@@ -15,18 +15,18 @@ $ node scripts/synthetic-state.mjs --out .e2e-bl07/dowod/dane --stage platform-0
 [kod wyjscia: 0]
 $ ls -l .e2e-bl07/dowod/dane
 total 332
--rw-r--r--. 1 paczos paczos 274432 Sep 18 11:35 app.db
--rw-r--r--. 1 paczos paczos  32768 Sep 18 11:35 app.db-shm
--rw-r--r--. 1 paczos paczos  28872 Sep 18 11:35 app.db-wal
-drwxr-xr-x. 1 paczos paczos     20 Sep 18 11:35 files
-drwxr-xr-x. 1 paczos paczos      0 Sep 18 11:35 workspaces
+-rw-r--r--. 1 paczos paczos 274432 Sep 18 12:09 app.db
+-rw-r--r--. 1 paczos paczos  32768 Sep 18 12:09 app.db-shm
+-rw-r--r--. 1 paczos paczos  28872 Sep 18 12:09 app.db-wal
+drwxr-xr-x. 1 paczos paczos     20 Sep 18 12:09 files
+drwxr-xr-x. 1 paczos paczos      0 Sep 18 12:09 workspaces
 [kod wyjscia: 0]
 
 ### 2. Sumy kontrolne zrodla PRZED kopia
 $ sha256sum .e2e-bl07/dowod/dane/app.db .e2e-bl07/dowod/dane/app.db-wal .e2e-bl07/dowod/dane/app.db-shm
-0ce335f21bb9903f96a7af428485b27d35063222830378e89d4ecc059fe47595  .e2e-bl07/dowod/dane/app.db
-1121fd381a34c3a09e549e9ebafe85f5b5ca6368d544626e9860a8ad97026d6b  .e2e-bl07/dowod/dane/app.db-wal
-137a49818b3c9dade84e2799eeb8db1a4406fe55c77dd401867522725ac18763  .e2e-bl07/dowod/dane/app.db-shm
+d0135cc3e03bf6ffc55ec87bb94d4c82d3ab5e48f2f5ab583de47aa0ca792bd9  .e2e-bl07/dowod/dane/app.db
+c28747d97390991d7cd477bf01abb27ae7e37e5f37f5ee03546d4c22aca91c90  .e2e-bl07/dowod/dane/app.db-wal
+2db498830e8e9eb32cc0d48df0c1d29073891e82636aec06840386ef148141f6  .e2e-bl07/dowod/dane/app.db-shm
 [kod wyjscia: 0]
 
 ### 3. Kontrola: sam app.db (to, co skopiowalby 'cp data/app.db') nie zawiera zapisu z WAL
@@ -57,9 +57,9 @@ $ node scripts/backup-state.mjs --data .e2e-bl07/dowod/dane --out .e2e-bl07/dowo
 [kod wyjscia: 0]
 $ ls -l .e2e-bl07/dowod/kopia
 total 276
--rw-r--r--. 1 paczos paczos 274432 Sep 18 11:35 app.db
-drwxr-xr-x. 1 paczos paczos     20 Sep 18 11:35 files
--rw-r--r--. 1 paczos paczos   8175 Sep 18 11:35 manifest.json
+-rw-r--r--. 1 paczos paczos 274432 Sep 18 12:09 app.db
+drwxr-xr-x. 1 paczos paczos     20 Sep 18 12:09 files
+-rw-r--r--. 1 paczos paczos   8175 Sep 18 12:09 manifest.json
 [kod wyjscia: 0]
 
 ### 5. Kopia zawiera zapis, ktory lezal wylacznie w WAL
@@ -89,9 +89,9 @@ console.log('integrity      ', m.census.integrity);
 console.log('wiersze        ', Object.entries(m.census.tableCounts).filter(([,n])=>n>0).map(([t,n])=>t+'='+n).join(' '));
 console.log('pliki          ', m.trees.files.map(f=>f.path+' '+f.sha256.slice(0,12)+'...').join('; '));
 console.log('session.secret w kopii:', require('fs').existsSync('.e2e-bl07/dowod/kopia/session.secret'));
-createdAt       2026-09-18T09:35:49.289Z
+createdAt       2026-09-18T10:09:18.278Z
 databaseParts   app.db 274432B, app.db-wal 28872B, app.db-shm 32768B
-po checkpoincie 274432B 1dd7133c1e0c1ba8...
+po checkpoincie 274432B 073d782511476db4...
 migracje        platform-0001-init, platform-0002-run-measurement-points, procurement-0001-init
 integrity       ok
 wiersze         agent_runs=1 artifact_versions=1 artifacts=1 canvas_cards=1 canvas_spaces=1 conversations=2 files=2 messages=4 run_events=10 schema_migrations=3 users=2
@@ -106,9 +106,9 @@ $ node scripts/backup-state.mjs --verify .e2e-bl07/dowod/kopia
 
 ### 8. Sumy kontrolne zrodla PO kopii i po weryfikacji
 $ sha256sum .e2e-bl07/dowod/dane/app.db .e2e-bl07/dowod/dane/app.db-wal .e2e-bl07/dowod/dane/app.db-shm
-0ce335f21bb9903f96a7af428485b27d35063222830378e89d4ecc059fe47595  .e2e-bl07/dowod/dane/app.db
-1121fd381a34c3a09e549e9ebafe85f5b5ca6368d544626e9860a8ad97026d6b  .e2e-bl07/dowod/dane/app.db-wal
-04dd6c70382c4934f9d0811137c000d16c3a708d999f7554e8a691a37771b771  .e2e-bl07/dowod/dane/app.db-shm
+d0135cc3e03bf6ffc55ec87bb94d4c82d3ab5e48f2f5ab583de47aa0ca792bd9  .e2e-bl07/dowod/dane/app.db
+c28747d97390991d7cd477bf01abb27ae7e37e5f37f5ee03546d4c22aca91c90  .e2e-bl07/dowod/dane/app.db-wal
+181156dd2cc56d80199c103dfbd3d4042aef68a5d2c5a14e4f0fc3b5ece1ceb6  .e2e-bl07/dowod/dane/app.db-shm
 [kod wyjscia: 0]
    (app.db i app.db-wal — caly stan zatwierdzony — identyczne z punktem 2;
     app.db-shm to indeks pamieci wspoldzielonej, odtwarzalny, bez danych)
@@ -216,29 +216,54 @@ $ node scripts/backup-state.mjs --verify .e2e-bl07/dowod/kopia-baza
 ### 15. Odmowy — proba i kopia wycelowane w katalog wygladajacy na dane aplikacji
 -- odcisk bazy przed probami odmowy:
 $ sha256sum .e2e-bl07/dowod/udawane-dane/app.db
-0ce335f21bb9903f96a7af428485b27d35063222830378e89d4ecc059fe47595  .e2e-bl07/dowod/udawane-dane/app.db
+d0135cc3e03bf6ffc55ec87bb94d4c82d3ab5e48f2f5ab583de47aa0ca792bd9  .e2e-bl07/dowod/udawane-dane/app.db
 [kod wyjscia: 0]
 -- proba migracji z APP_DATA_DIR wskazujacym ten katalog:
 $ APP_DATA_DIR=.e2e-bl07/dowod/udawane-dane node scripts/migration-rehearsal.mjs --backup .e2e-bl07/dowod/udawane-dane
-[proba] odmawiam proby na katalogu danych aplikacji (/home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane). Uzyj kopii:
-        node scripts/backup-state.mjs --data <dane> --out backups/<nazwa>
+[proba] ODMAWIAM: Kopia zrodlowa /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane lezy w katalogu danych aplikacji /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane. Nie tkne go.
 [kod wyjscia: 2]
 -- proba migracji bez APP_DATA_DIR (rozpoznanie po session.secret):
 $ node scripts/migration-rehearsal.mjs --backup .e2e-bl07/dowod/udawane-dane
-[proba] /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane zawiera session.secret, wiec jest katalogiem danych aplikacji, nie kopia. Odmawiam.
+[proba] ODMAWIAM: Kopia zrodlowa /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane lezy w katalogu danych aplikacji /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane (rozpoznany po pliku session.secret, ktorego kopia nigdy nie zawiera). Nie tkne go.
 [kod wyjscia: 2]
 -- kopia do wnetrza kopiowanego katalogu:
 $ node scripts/backup-state.mjs --data .e2e-bl07/dowod/udawane-dane --out .e2e-bl07/dowod/udawane-dane/backups/x
-[backup] PRZERWANO: Katalog kopii /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane/backups/x lezy wewnatrz katalogu danych /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane.
+[backup] ODMAWIAM: Katalog kopii /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane/backups/x lezy wewnatrz katalogu danych /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane.
 Wskaz katalog poza katalogiem danych (--out), inaczej kopia jest czescia tego, co kopiuje.
 [kod wyjscia: 2]
 -- generator danych syntetycznych wycelowany w ten katalog:
 $ node scripts/synthetic-state.mjs --out .e2e-bl07/dowod/udawane-dane --stage current
-[syntetyk] /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane zawiera session.secret — to katalog danych aplikacji. Odmawiam.
+[syntetyk] ODMAWIAM: Katalog danych syntetycznych /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane lezy w katalogu danych aplikacji /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane (rozpoznany po pliku session.secret, ktorego kopia nigdy nie zawiera). Nie tkne go.
 [kod wyjscia: 2]
+-- generator wycelowany WEWNATRZ katalogu danych (przypadek z przegladu):
+$ node scripts/synthetic-state.mjs --out .e2e-bl07/dowod/udawane-dane/files --stage empty
+[syntetyk] ODMAWIAM: Katalog danych syntetycznych /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane/files lezy w katalogu danych aplikacji /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane (rozpoznany po pliku session.secret, ktorego kopia nigdy nie zawiera). Nie tkne go.
+[kod wyjscia: 2]
+-- proba migracji wycelowana WEWNATRZ katalogu danych:
+$ node scripts/migration-rehearsal.mjs --backup .e2e-bl07/dowod/kopia --out .e2e-bl07/dowod/udawane-dane/files
+[proba] ODMAWIAM: Katalog proby /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane/files lezy w katalogu danych aplikacji /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane (rozpoznany po pliku session.secret, ktorego kopia nigdy nie zawiera). Nie tkne go.
+[kod wyjscia: 2]
+-- generator wycelowany w katalog NADRZEDNY wobec katalogu danych:
+$ node scripts/synthetic-state.mjs --out .e2e-bl07/dowod --stage empty
+[syntetyk] ODMAWIAM: Katalog danych syntetycznych /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod zawiera katalog danych aplikacji /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/proba (rozpoznany po pliku session.secret). Nie tkne go.
+[kod wyjscia: 2]
+-- generator wycelowany w cudzy niepusty katalog (bez znacznika):
+$ node scripts/synthetic-state.mjs --out .e2e-bl07/dowod/cudzy-katalog --stage empty
+[syntetyk] ODMAWIAM: Katalog danych syntetycznych /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/cudzy-katalog istnieje, nie jest pusty i nie zostal utworzony przez te skrypty (brak znacznika .katalog-roboczy-agentic).
+Nie kasuje cudzego katalogu. Wskaz katalog nieistniejacy albo pusty.
+[kod wyjscia: 2]
+-- pliki uzytkownika i cudzy katalog po wszystkich probach:
+$ ls .e2e-bl07/dowod/udawane-dane/files/local-user .e2e-bl07/dowod/cudzy-katalog
+.e2e-bl07/dowod/cudzy-katalog:
+plik.txt
+
+.e2e-bl07/dowod/udawane-dane/files/local-user:
+file_syn_1-oferta.csv
+file_syn_2-notatka.txt
+[kod wyjscia: 0]
 -- odcisk bazy po probach odmowy (musi byc identyczny):
 $ sha256sum .e2e-bl07/dowod/udawane-dane/app.db
-0ce335f21bb9903f96a7af428485b27d35063222830378e89d4ecc059fe47595  .e2e-bl07/dowod/udawane-dane/app.db
+d0135cc3e03bf6ffc55ec87bb94d4c82d3ab5e48f2f5ab583de47aa0ca792bd9  .e2e-bl07/dowod/udawane-dane/app.db
 [kod wyjscia: 0]
 
 ### 16. Odtworzenie — najpierw na sucho (--check)
@@ -249,13 +274,23 @@ $ node scripts/restore-state.mjs --backup .e2e-bl07/dowod/kopia --data .e2e-bl07
 [odtworzenie] kopia jest starsza niz kod: pierwszy start zastosuje platform-0003-file-versions.
               Przecwicz to najpierw: node scripts/migration-rehearsal.mjs --backup /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia
 [odtworzenie] sesje przegladarki: `session.secret` nie jest w kopii; jest przenoszony ze stanu odlozonego na bok, a bez niego wszyscy musza zalogowac sie ponownie (dane pozostaja)
-[odtworzenie] transkrypty Claude Agent SDK: leza poza katalogiem danych, nie sa kopiowane ani usuwane. Rozmowa z zapisanym claude_session_id, dla ktorej transkrypt nie istnieje, konczy polecenie jawnym bledem session_transcript_lost i czysci powiazanie — pamiec modelu NIE wraca wraz z baza
+[odtworzenie] transkrypty Claude Agent SDK: leza poza katalogiem danych, nie sa kopiowane ani
+              usuwane. Pamiec modelu NIE wraca wraz z baza. Rozmowa z zapisanym
+              claude_session_id, dla ktorej transkrypt nie istnieje, dostaje jawny wynik
+              jedna z dwoch droga, zaleznie od tego, jak zachowa sie SDK:
+                - odmowa wznowienia → polecenie konczy sie bledem session_transcript_lost,
+                  a powiazanie z martwa sesja zostaje wyczyszczone;
+                - wznowienie odpowiadajace z innej sesji → niezgodnosc identyfikatora jest
+                  wykryta, zapisana w zdarzeniach uruchomienia i odnotowana w logu serwera,
+                  a rozmowa zostaje przepieta na sesje, ktora istnieje.
+              Ktora z tych drog zachodzi na prawdziwym SDK — NIE ZOSTALO ZAOBSERWOWANE
+              (kryterium L7.13 jest z tego powodu otwarte, patrz docs/ACCEPTANCE.md).
 [odtworzenie] --check: nic nie zostalo zmienione
 [kod wyjscia: 0]
 
 ### 17. Odtworzenie — wykonane na katalogu docelowym z innym stanem i wlasnym sekretem
 $ sha256sum .e2e-bl07/dowod/cel/app.db
-09139cd2348d0f0e02874abb72d0221f1f7e3c06627ef71595cb711ad465f904  .e2e-bl07/dowod/cel/app.db
+e7591707e6cf4dbd85a9badb3e484bcda30d72713029368e430d74a749032112  .e2e-bl07/dowod/cel/app.db
 [kod wyjscia: 0]
 $ node scripts/restore-state.mjs --backup .e2e-bl07/dowod/kopia --data .e2e-bl07/dowod/cel
 [odtworzenie] kopia /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia: sprawdzona (sumy, census, integrity_check)
@@ -264,20 +299,30 @@ $ node scripts/restore-state.mjs --backup .e2e-bl07/dowod/kopia --data .e2e-bl07
 [odtworzenie] kopia jest starsza niz kod: pierwszy start zastosuje platform-0003-file-versions.
               Przecwicz to najpierw: node scripts/migration-rehearsal.mjs --backup /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia
 [odtworzenie] sesje przegladarki: `session.secret` nie jest w kopii; jest przenoszony ze stanu odlozonego na bok, a bez niego wszyscy musza zalogowac sie ponownie (dane pozostaja)
-[odtworzenie] transkrypty Claude Agent SDK: leza poza katalogiem danych, nie sa kopiowane ani usuwane. Rozmowa z zapisanym claude_session_id, dla ktorej transkrypt nie istnieje, konczy polecenie jawnym bledem session_transcript_lost i czysci powiazanie — pamiec modelu NIE wraca wraz z baza
-[odtworzenie] stan sprzed proby odlozony: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/cel.przed-odtworzeniem-2026-09-18T09-35-58-597Z (nic nie zostalo usuniete)
+[odtworzenie] transkrypty Claude Agent SDK: leza poza katalogiem danych, nie sa kopiowane ani
+              usuwane. Pamiec modelu NIE wraca wraz z baza. Rozmowa z zapisanym
+              claude_session_id, dla ktorej transkrypt nie istnieje, dostaje jawny wynik
+              jedna z dwoch droga, zaleznie od tego, jak zachowa sie SDK:
+                - odmowa wznowienia → polecenie konczy sie bledem session_transcript_lost,
+                  a powiazanie z martwa sesja zostaje wyczyszczone;
+                - wznowienie odpowiadajace z innej sesji → niezgodnosc identyfikatora jest
+                  wykryta, zapisana w zdarzeniach uruchomienia i odnotowana w logu serwera,
+                  a rozmowa zostaje przepieta na sesje, ktora istnieje.
+              Ktora z tych drog zachodzi na prawdziwym SDK — NIE ZOSTALO ZAOBSERWOWANE
+              (kryterium L7.13 jest z tego powodu otwarte, patrz docs/ACCEPTANCE.md).
+[odtworzenie] stan sprzed proby odlozony: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/cel.przed-odtworzeniem-2026-09-18T10-09-29-464Z (nic nie zostalo usuniete)
 [odtworzenie] przeniesiono session.secret — otwarte sesje przegladarki pozostaja wazne
 [odtworzenie] odtworzono: conversations=2 messages=4 agent_runs=1 canvas_cards=1 files=2 artifacts=1; integrity_check ok
 [odtworzenie] gotowe — uruchom: pnpm build && pnpm start
 [kod wyjscia: 0]
 -- co powstalo:
-$ ls -d .e2e-bl07/dowod/cel .e2e-bl07/dowod/cel.przed-odtworzeniem-2026-09-18T09-35-58-597Z
+$ ls -d .e2e-bl07/dowod/cel .e2e-bl07/dowod/cel.przed-odtworzeniem-2026-09-18T10-09-29-464Z
 .e2e-bl07/dowod/cel
-.e2e-bl07/dowod/cel.przed-odtworzeniem-2026-09-18T09-35-58-597Z
+.e2e-bl07/dowod/cel.przed-odtworzeniem-2026-09-18T10-09-29-464Z
 [kod wyjscia: 0]
 -- stan sprzed proby (odlozony) bajt w bajt taki, jak przed odtworzeniem:
-$ sha256sum .e2e-bl07/dowod/cel.przed-odtworzeniem-2026-09-18T09-35-58-597Z/app.db
-09139cd2348d0f0e02874abb72d0221f1f7e3c06627ef71595cb711ad465f904  .e2e-bl07/dowod/cel.przed-odtworzeniem-2026-09-18T09-35-58-597Z/app.db
+$ sha256sum .e2e-bl07/dowod/cel.przed-odtworzeniem-2026-09-18T10-09-29-464Z/app.db
+e7591707e6cf4dbd85a9badb3e484bcda30d72713029368e430d74a749032112  .e2e-bl07/dowod/cel.przed-odtworzeniem-2026-09-18T10-09-29-464Z/app.db
 [kod wyjscia: 0]
 -- sekret instalacji przeniesiony, nie wziety z kopii:
 $ cat .e2e-bl07/dowod/cel/session.secret
@@ -321,5 +366,44 @@ $ node scripts/restore-state.mjs --backup .e2e-bl07/dowod/kopia-uszkodzona --dat
 [odtworzenie] KOPIA NIEPOPRAWNA (1) — nie odtwarzam:
   - inna suma kontrolna files/local-user/file_syn_1-oferta.csv
 [kod wyjscia: 1]
+
+### 21. Odmowa odtworzenia do katalogu, ktory nie wyglada na katalog danych
+$ node scripts/restore-state.mjs --backup .e2e-bl07/dowod/kopia --data .e2e-bl07/dowod/cudzy-cel
+[odtworzenie] kopia /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia: sprawdzona (sumy, census, integrity_check)
+[odtworzenie] migracje w kopii:  platform-0001-init, platform-0002-run-measurement-points, procurement-0001-init
+[odtworzenie] migracje w kodzie: platform-0001-init, platform-0002-run-measurement-points, platform-0003-file-versions, procurement-0001-init
+[odtworzenie] kopia jest starsza niz kod: pierwszy start zastosuje platform-0003-file-versions.
+              Przecwicz to najpierw: node scripts/migration-rehearsal.mjs --backup /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia
+[odtworzenie] sesje przegladarki: `session.secret` nie jest w kopii; jest przenoszony ze stanu odlozonego na bok, a bez niego wszyscy musza zalogowac sie ponownie (dane pozostaja)
+[odtworzenie] transkrypty Claude Agent SDK: leza poza katalogiem danych, nie sa kopiowane ani
+              usuwane. Pamiec modelu NIE wraca wraz z baza. Rozmowa z zapisanym
+              claude_session_id, dla ktorej transkrypt nie istnieje, dostaje jawny wynik
+              jedna z dwoch droga, zaleznie od tego, jak zachowa sie SDK:
+                - odmowa wznowienia → polecenie konczy sie bledem session_transcript_lost,
+                  a powiazanie z martwa sesja zostaje wyczyszczone;
+                - wznowienie odpowiadajace z innej sesji → niezgodnosc identyfikatora jest
+                  wykryta, zapisana w zdarzeniach uruchomienia i odnotowana w logu serwera,
+                  a rozmowa zostaje przepieta na sesje, ktora istnieje.
+              Ktora z tych drog zachodzi na prawdziwym SDK — NIE ZOSTALO ZAOBSERWOWANE
+              (kryterium L7.13 jest z tego powodu otwarte, patrz docs/ACCEPTANCE.md).
+[odtworzenie] ODMAWIAM: Katalog docelowy /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/cudzy-cel istnieje, nie jest pusty i nie wyglada na katalog danych aplikacji (nie ma zadnego z: app.db, session.secret, files, workspaces, .katalog-roboczy-agentic).
+Nie przenosze cudzego katalogu. Sprawdz sciezke --data.
+[kod wyjscia: 2]
+$ cat .e2e-bl07/dowod/cudzy-cel/notatki.md
+notatki
+[kod wyjscia: 0]
+
+### 22. Awaria skryptu ma inny kod wyjscia (4) niz werdykt proby (1)
+$ node scripts/migration-rehearsal.mjs --backup .e2e-bl07/dowod/kopia-bez-bazy --out .e2e-bl07/dowod/proba-awaria
+[proba] AWARIA: SqliteError: unable to open database file
+    at new Database (/home/paczos/Documents/agentic-app-template-wt/z2-bl07/node_modules/.pnpm/better-sqlite3@13.0.3/node_modules/better-sqlite3/lib/database.js:58:27)
+    at census (file:///home/paczos/Documents/agentic-app-template-wt/z2-bl07/scripts/lib/state-tools.mjs:333:14)
+    at main (file:///home/paczos/Documents/agentic-app-template-wt/z2-bl07/scripts/migration-rehearsal.mjs:262:18)
+    at runScript (file:///home/paczos/Documents/agentic-app-template-wt/z2-bl07/scripts/lib/state-tools.mjs:80:5)
+    at file:///home/paczos/Documents/agentic-app-template-wt/z2-bl07/scripts/migration-rehearsal.mjs:365:1
+    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)
+    at async node:internal/modules/esm/loader:643:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+[kod wyjscia: 4]
 
 ### KONIEC. Katalog .e2e-bl07/dowod pozostaje na dysku do wgladu i jest ignorowany przez git.

@@ -65,9 +65,10 @@ tej instalacji; kopia stanu nie ma być kopią sekretów. Po odtworzeniu na nowe
 maszynie sesje przeglądarki wygasną — trzeba się zalogować ponownie, dane
 pozostają.
 
-Skrypt **odmawia** (kod wyjścia 2) zapisania kopii do wnętrza kopiowanego katalogu: taka kopia jest
-częścią tego, co kopiuje, i znika razem z nim. Jeśli w systemie nie ma `fuser`, sprawdzenie z punktu 1
-nie może się odbyć — skrypt wypisuje wtedy ostrzeżenie zamiast milcząco udawać, że sprawdził.
+Skrypt **odmawia** (kod wyjścia 2) zapisania kopii do wnętrza kopiowanego katalogu ani w katalogu,
+który ten katalog zawiera: w pierwszym przypadku kopia jest częścią tego, co kopiuje, w drugim kopia
+i oryginał dzielą los. Jeśli w systemie nie ma `fuser`, sprawdzenie z punktu 1 nie może się odbyć —
+skrypt wypisuje wtedy ostrzeżenie zamiast milcząco udawać, że sprawdził.
 
 ### Ponowne sprawdzenie istniejącej kopii
 
@@ -113,9 +114,37 @@ kompozycje kart, identyfikatory plików i artefaktów. Na koniec skrypt porównu
 wszystkich plików kopii źródłowej sprzed i po próbie — „próba pracuje na kopii” jest w ten sposób
 zmierzone, a nie tylko wynikające z konstrukcji.
 
-Próba odmawia pracy (kod wyjścia 2), gdy `--backup` albo `--out` wskazuje katalog `data` repozytorium,
-katalog z `APP_DATA_DIR`, albo dowolny katalog zawierający `session.secret` — kopia nigdy go nie
-zawiera, więc jego obecność oznacza katalog danych aplikacji, nawet jeśli nikt go nie nazwał.
+### Czego te skrypty nie tkną
+
+Próba migracji i generator danych syntetycznych **kasują** katalog, na który je wskażesz, zanim go
+wypełnią. Dlatego odmawiają pracy (kod wyjścia 2) w każdym z tych przypadków:
+
+- ścieżka **jest** katalogiem danych, **leży w nim** albo **go zawiera** — porównanie po zawieraniu,
+  w obie strony, a nie po równości. `--out data/files` i `--out <katalog nad data>` są odrzucane tak
+  samo jak `--out data`;
+- ścieżka prowadzi tam **przez dowiązanie symboliczne** — porównywane są ścieżki rozwiązane
+  (`realpath`), więc dowiązanie nie jest obejściem;
+- gdziekolwiek **nad** ścieżką (na dowolnym poziomie) albo tuż **pod** nią leży `session.secret` —
+  kopia nigdy go nie zawiera, więc jego obecność oznacza katalog danych aplikacji, nawet jeśli nikt
+  go nie nazwał w konfiguracji;
+- katalog **istnieje, nie jest pusty i nie został utworzony przez te skrypty** — rozpoznają własne
+  po pliku `.katalog-roboczy-agentic`. Nie ma znacznika, nie ma kasowania; wskaż katalog pusty albo
+  nieistniejący.
+
+Katalogiem danych jest przy tym `data/` w repozytorium **i** katalog z `APP_DATA_DIR`, bo instalacja
+może trzymać stan gdzie indziej.
+
+> Do 2026-09-18 te kontrole porównywały ścieżkę na równość i szukały `session.secret` tylko na
+> najwyższym poziomie. `--out <katalog-danych>/files` przechodziło i kasowało pliki użytkownika z
+> kodem wyjścia 0. Każdy z czterech przypadków wyżej ma dziś test w regresji.
+
+`restore-state.mjs` niczego nie kasuje, ale **przenosi** katalog wskazany przez `--data`, więc
+odmawia, gdy ten katalog istnieje, nie jest pusty i nie wygląda na katalog danych aplikacji (nie ma
+`app.db`, `session.secret`, `files`, `workspaces` ani znacznika).
+
+Kody wyjścia wszystkich czterech skryptów: **0** zrobione, **1** werdykt negatywny (kopia się nie
+weryfikuje, próba znalazła problemy, odtworzony stan nie zgadza się z manifestem), **2** odmowa,
+**3** kopia nowsza niż build (tylko odtworzenie), **4** awaria skryptu.
 
 ### Próba bez danych użytkownika — na danych syntetycznych
 
@@ -130,7 +159,7 @@ node scripts/migration-rehearsal.mjs --backup .e2e-bl07/kopia --out .e2e-bl07/pr
 ```
 
 `--stage <id>` oznacza **stan tuż przed tą migracją**: wszystkie wcześniejsze zastosowane, ta jeszcze
-nie. To jedyny kształt, w którym da się przećwiczyć „ta migracja zachowuje istniejące dane”, i to
+nie. Generator kasuje katalog, który dostanie — obowiązują go odmowy opisane niżej. To jedyny kształt, w którym da się przećwiczyć „ta migracja zachowuje istniejące dane”, i to
 właśnie robi regresja szablonu — po jednym przebiegu na kopii sprzed każdej migracji platformy
 (`tests/backup-migration.test.ts`). Katalog `.e2e-bl07/` jest ignorowany przez git.
 

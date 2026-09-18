@@ -1,59 +1,34 @@
-TESTY REGRESJI — zadanie Z2 / BL-07
-commit: 7d01ec3
-data: 2026-09-18T11:37:04+02:00
+TESTY REGRESJI — zadanie Z2 / BL-07 (po rundzie poprawek 1)
+commit: 71e70c4
+data: 2026-09-18T12:09:50+02:00
 
 $ pnpm exec vitest run tests/backup-migration.test.ts tests/session-transcript.test.ts
  RUN  v5.0.0 /home/paczos/Documents/agentic-app-template-wt/z2-bl07
-
-
-
-
-
-
-
-
-
-
-
-
-
-[run run_e63e233c48e44efa9dbf] wznowienie sesji sess_stara odpowiedzialo z sesji sess_zupelnie_inna: pamiec wczesniejszej rozmowy NIE zostala odtworzona
-
-
-
-
-
-
-
-
-
-
-
-
-
-
- ✓ tests/session-transcript.test.ts (18 tests) 274ms
- ✓ tests/backup-migration.test.ts (24 tests) 33819ms
+ ✓ tests/session-transcript.test.ts (19 tests) 194ms
+ ✓ tests/backup-migration.test.ts (33 tests) 44856ms
    ✓ kopia zachowuje zatwierdzony stan SQLite wraz z WAL (5)
-     ✓ kopia zawiera zapis lezacy w WAL i jest jednym samowystarczalnym plikiem 541ms
-     ✓ wykonanie kopii nie zmienia zrodla 520ms
-   ✓ uszkodzona kopia i niespojny manifest sa wykrywane (4)
-     ✓ zmieniona baza w kopii 309ms
+     ✓ kopia zawiera zapis lezacy w WAL i jest jednym samowystarczalnym plikiem 437ms
+     ✓ wykonanie kopii nie zmienia zrodla 452ms
    ✓ kopie i proby odmawiaja pracy na katalogu danych aplikacji (5)
-     ✓ generator danych syntetycznych odmawia nadpisania katalogu danych 1022ms
+     ✓ generator danych syntetycznych odmawia nadpisania katalogu danych 1073ms
+   ✓ sciezki wokol katalogu danych — trzy ochrony przed skasowaniem (9)
+     ✓ synthetic-state.mjs odmawia katalogu WEWNATRZ katalogu danych 1036ms
+     ✓ synthetic-state.mjs odmawia katalogu NADRZEDNEGO wobec katalogu danych 1041ms
+     ✓ dowiazanie symboliczne nie obchodzi kontroli 1102ms
+     ✓ odmawia skasowania cudzego niepustego katalogu bez znacznika 1128ms
+     ✓ katalog pusty albo wlasny jest uzywany normalnie 3652ms
+     ✓ odtworzenie odmawia katalogu --data, ktory nie wyglada na katalog danych 1119ms
    ✓ proba migracji na syntetycznej kopii sprzed kazdej migracji platformy (6)
-     ✓ kopia sprzed platform-0001-init: migracja zachowuje dane i nie dubluje ich 4620ms
-     ✓ kopia sprzed platform-0002-run-measurement-points: migracja zachowuje dane i nie dubluje ich 4324ms
-     ✓ kopia sprzed platform-0003-file-versions: migracja zachowuje dane i nie dubluje ich 3870ms
-     ✓ trzecie uruchomienie takze nic nie zmienia — sprawdzone przez test, nie przez skrypt 908ms
+     ✓ kopia sprzed platform-0001-init: migracja zachowuje dane i nie dubluje ich 4592ms
+     ✓ kopia sprzed platform-0002-run-measurement-points: migracja zachowuje dane i nie dubluje ich 4558ms
+     ✓ kopia sprzed platform-0003-file-versions: migracja zachowuje dane i nie dubluje ich 4874ms
+     ✓ trzecie uruchomienie takze nic nie zmienia — sprawdzone przez test, nie przez skrypt 1083ms
    ✓ procedura odtworzenia stanu (4)
-     ✓ --check niczego nie zmienia i odpowiada na trzy pytania procedury 1086ms
-     ✓ odmawia kopii nowszej niz kod, bo migracji nie da sie cofnac 1403ms
-     ✓ odklada stan sprzed proby, odtwarza kopie i aplikacja wstaje na odtworzonym stanie 4916ms
-
+     ✓ --check niczego nie zmienia i odpowiada na trzy pytania procedury 931ms
+     ✓ odmawia kopii nowszej niz kod, bo migracji nie da sie cofnac 1210ms
+     ✓ odklada stan sprzed proby, odtwarza kopie i aplikacja wstaje na odtworzonym stanie 4225ms
  Test Files  2 passed (2)
-      Tests  42 passed (42)
-   Start at  11:37:05
-   Duration  35.25s (tests 92%, import 6%, transform 2%)
-
+      Tests  52 passed (52)
+   Start at  12:09:50
+   Duration  45.96s (tests 95%, import 4%, transform 1%)
 kod wyjscia: 0
