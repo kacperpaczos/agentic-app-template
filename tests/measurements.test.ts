@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AgentRuntime, collectToolEntries, platformTools } from '@platform/server';
@@ -7,6 +7,7 @@ import { dispatchingAgent, type Plan, type StandInHandle, type Step } from './su
 import {
   EVIDENCE_DIR,
   codeVersion,
+  evidenceWritingRequested,
   writeMeasurementRecord,
   type Measurement,
 } from './support/measurement-evidence.ts';
@@ -247,7 +248,7 @@ describe('pomiary rozdzielone na punkty, zapisane z warunkami i wersja kodu', ()
       },
     };
 
-    const file = writeMeasurementRecord('pomiary-backend-runda3.json', {
+    const record = writeMeasurementRecord('pomiary-backend-runda3.json', {
       opis:
         'Punkty pomiaru uruchomienia agenta rozdzielone: kolejka, start wykonania, pierwszy tekst, ' +
         'zakonczenie. Brak tekstu daje brak metryki, nie zero.',
@@ -256,15 +257,22 @@ describe('pomiary rozdzielone na punkty, zapisane z warunkami i wersja kodu', ()
       pomiary,
     });
 
-    // The evidence file is part of the assertion: a `null` that becomes a `0`
-    // on the way to disk would undo the distinction the test just proved.
-    const written = JSON.parse(readFileSync(file, 'utf8'));
+    /*
+     * The serialised record is part of the assertion: a `null` that becomes a
+     * `0` on the way to the file would undo the distinction the test just
+     * proved. Asserted on the bytes a write *would* produce, not on the file,
+     * so this check runs on an ordinary `pnpm verify` too — where nothing is
+     * written at all (see `evidenceWritingRequested`).
+     */
+    const written = JSON.parse(record.body);
     const probki = written.pomiary.czasDoPierwszegoTekstu.probkiMs as Array<number | null>;
     expect(probki.at(-1)).toBeNull();
     expect(written.pomiary.czasDoPierwszegoTekstu.podsumowanie.brakMetryki).toBe(1);
     expect(written.pomiary.czasDoPierwszegoTekstu.podsumowanie.zMetryka).toBe(SAMPLES);
     expect(written.wersjaKodu.commit).toMatch(/^[0-9a-f]{7,40}$/);
-    expect(file).toContain(EVIDENCE_DIR);
+    expect(record.path).toContain(EVIDENCE_DIR);
+    // The switch decides the write, and nothing else does.
+    expect(record.written).toBe(evidenceWritingRequested());
   });
 });
 
@@ -432,7 +440,7 @@ describe('Stop: rozdzielone potwierdzenie zadania, koniec strumienia i koniec pr
       'strumieniujace tekst i trzymajace prawdziwy proces potomny zwiazany z sygnalem przerwania; ' +
       'proces potomny zastepuje proces Claude Agent SDK, ktorego ten przebieg nie uruchamia';
 
-    const file = writeMeasurementRecord('pomiary-stop-runda3.json', {
+    const stopRecord = writeMeasurementRecord('pomiary-stop-runda3.json', {
       opis:
         'Faktyczne anulowanie rozdzielone na trzy instanty: potwierdzenie zadania Stop, ' +
         'zakonczenie strumienia zdarzen i zakonczenie procesow uruchomienia. Po zakonczeniu ' +
@@ -477,7 +485,8 @@ describe('Stop: rozdzielone potwierdzenie zadania, koniec strumienia i koniec pr
       },
     });
 
-    const written = JSON.parse(readFileSync(file, 'utf8'));
+    const written = JSON.parse(stopRecord.body);
+    expect(stopRecord.written).toBe(evidenceWritingRequested());
     for (const key of ['stopPotwierdzenieZadania', 'stopKoniecStrumienia', 'stopKoniecProcesow']) {
       expect(written.pomiary[key].podsumowanie.zMetryka).toBe(3);
       expect(written.pomiary[key].podsumowanie.brakMetryki).toBe(0);

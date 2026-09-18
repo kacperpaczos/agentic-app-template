@@ -29,6 +29,45 @@ import { resolve } from 'node:path';
 /** Evidence directory of this task. Named after the task, not after older work. */
 export const EVIDENCE_DIR = 'docs/evidence/z3-bl05';
 
+/** The switch that lets a run write evidence files. */
+export const EVIDENCE_ENV = 'APP_WRITE_EVIDENCE';
+
+/**
+ * Whether this run may write into the evidence directory.
+ *
+ * Off by default, and the default is the point. These tests belong to
+ * `pnpm verify`, whose acceptance condition is "exit 0 **and** a repository
+ * without litter" — and a regression that rewrites files inside the tree it is
+ * being judged on cannot satisfy both at once. Worse, a committed and reviewed
+ * measurement would stop being the record of one examined run and become a
+ * trace of whoever last ran the tests, including someone who ran them out of
+ * curiosity.
+ *
+ * So an ordinary run performs **every assertion** — nothing is skipped, nothing
+ * is weakened — and only the write to disk waits for `APP_WRITE_EVIDENCE=1`
+ * (`pnpm evidence`). Named like the repository's other deliberate switch,
+ * `APP_E2E_MODEL`.
+ */
+export const evidenceWritingRequested = (): boolean => process.env[EVIDENCE_ENV] === '1';
+
+/** What a write would produce, and whether it happened. */
+export interface EvidenceResult {
+  /** Where the file belongs, whether or not it was written. */
+  path: string;
+  /** Exactly the bytes a write would put there — asserted on either way. */
+  body: string;
+  written: boolean;
+}
+
+function emit(fileName: string, body: string): EvidenceResult {
+  const dir = resolve(process.cwd(), EVIDENCE_DIR);
+  const path = resolve(dir, fileName);
+  if (!evidenceWritingRequested()) return { path, body, written: false };
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path, body);
+  return { path, body, written: true };
+}
+
 export interface Measurement {
   /** What was measured, in one sentence. */
   co: string;
@@ -117,10 +156,7 @@ export interface MeasurementRecord {
 export function writeMeasurementRecord(
   fileName: string,
   record: Omit<MeasurementRecord, 'wersjaKodu'> & { wersjaKodu?: CodeVersion },
-): string {
-  const dir = resolve(process.cwd(), EVIDENCE_DIR);
-  mkdirSync(dir, { recursive: true });
-  const path = resolve(dir, fileName);
+): EvidenceResult {
   const wersjaKodu = record.wersjaKodu ?? codeVersion();
   const body = {
     opis: record.opis,
@@ -130,19 +166,19 @@ export function writeMeasurementRecord(
     uwagaOJednostkach:
       'Wartosci w milisekundach zaleza od maszyny i obciazenia. Powtarzalne jest to, co ' +
       'asertuje regresja: kolejnosc punktow pomiaru, ich rozdzielenie i obecnosc albo brak metryki.',
+    uwagaOWersjiKodu:
+      `Ten plik powstaje na zadanie (${EVIDENCE_ENV}=1, czyli pnpm evidence), nie przy zwyklym ` +
+      'pnpm verify. Pole brudneDrzewo opisuje drzewo robocze w chwili tej regeneracji, z pominieciem ' +
+      'samego katalogu dowodow (ktory ta regeneracja wlasnie przepisuje) — nie mowi nic o stanie ' +
+      'drzewa w chwili czytania pliku.',
     pomiary: Object.fromEntries(
       Object.entries(record.pomiary).map(([k, m]) => [k, { ...m, podsumowanie: summarise(m.probkiMs) }]),
     ),
   };
-  writeFileSync(path, `${JSON.stringify(body, null, 2)}\n`);
-  return path;
+  return emit(fileName, `${JSON.stringify(body, null, 2)}\n`);
 }
 
 /** Writes a non-measurement proof (correlation, error classes, secret scan). */
-export function writeEvidence(fileName: string, body: unknown): string {
-  const dir = resolve(process.cwd(), EVIDENCE_DIR);
-  mkdirSync(dir, { recursive: true });
-  const path = resolve(dir, fileName);
-  writeFileSync(path, `${JSON.stringify(body, null, 2)}\n`);
-  return path;
+export function writeEvidence(fileName: string, body: unknown): EvidenceResult {
+  return emit(fileName, `${JSON.stringify(body, null, 2)}\n`);
 }

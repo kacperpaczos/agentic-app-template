@@ -96,7 +96,21 @@ pnpm test:e2e        # przeglądarka na istniejącym buildzie produkcyjnym (po v
                      # BEZ testów z prawdziwym modelem — nie zużywa ani jednej tury subskrypcji
 pnpm test:e2e:model  # tylko testy z prawdziwym modelem; koszt: 11 tur subskrypcji na przebieg
 pnpm check:module-swap   # przy zmianach kontraktu modułu lub warstwy składania
+pnpm evidence            # regeneracja plików dowodowych z regresji (APP_WRITE_EVIDENCE=1) — na żądanie
+pnpm evidence:e2e        # to samo dla pomiarów przeglądarkowych
 ```
+
+**Regresja nie zapisuje dowodów przy zwykłym przebiegu.** Warunek odbioru brzmi „`pnpm verify` = 0
+**i** repozytorium bez śmieci”, a test, który przepisuje pliki w drzewie, na którym sam jest oceniany,
+nie może spełnić obu naraz. Zatwierdzony dowód przestałby też być zapisem jednego zrecenzowanego
+przebiegu i stałby się śladem po ostatnim uruchomieniu kogokolwiek. Dlatego `pnpm verify` wykonuje
+**wszystkie** asercje testów pomiarowych — łącznie z tymi, które sprawdzają treść zapisu — a samo
+zapisanie pliku włącza dopiero `APP_WRITE_EVIDENCE=1` (`pnpm evidence`). Ta sama zasada co przy
+`APP_E2E_MODEL`: kosztowny albo nieodwracalny skutek jest świadomym wyborem, nie domyślnym.
+
+Po regeneracji sprawdź `git status` i zatwierdź dowód razem z kodem, na którym powstał. Pole
+`brudneDrzewo` w rekordzie opisuje drzewo w chwili regeneracji (bez samego katalogu dowodów), a nie
+w chwili czytania pliku.
 
 `pnpm typecheck` sprawdza dwie konfiguracje: `tsconfig.json` (pakiety, aplikacje, `tests/`, `scripts/`)
 i `tsconfig.e2e.json` (`e2e/` i `playwright.config.ts`). Playwright uruchamia TypeScript bez sprawdzania
