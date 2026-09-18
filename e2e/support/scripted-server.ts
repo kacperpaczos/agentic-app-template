@@ -17,6 +17,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { collectToolEntries, platformTools, type PlatformInstance } from '@platform/server';
 import { composeApp } from '../../apps/server/src/compose.ts';
 import { agentViewsScript } from './agent-views-scenario.ts';
+import { appContextScript } from './app-context-scenario.ts';
 import { interactionsScript } from './interactions-scenario.ts';
 import { showValueScript } from './show-value-scenario.ts';
 import { scriptedAgent, type CallRecord, type Step } from './scripted-agent.ts';
@@ -429,6 +430,7 @@ const stopMeasurementScript = (prompt: string): Step[] =>
  */
 const CONVERSATION_SCENARIOS: Record<string, (prompt: string) => Step[]> = {
   'agent-views': agentViewsScript,
+  'app-context': appContextScript,
   interactions: interactionsScript,
   'show-value': showValueScript,
   'stop-measurement': stopMeasurementScript,

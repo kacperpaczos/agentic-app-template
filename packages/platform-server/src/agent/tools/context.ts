@@ -63,9 +63,16 @@ export function contextTools(services: PlatformServices): Array<ModuleToolDefini
           .optional()
           .describe('Najnizsza wersja opisu karty, ktora uznajesz za aktualna'),
         clientId: z.string().max(80).optional().describe('Karta przegladarki, o ktora pytasz'),
+        waitForChange: z
+          .boolean()
+          .optional()
+          .describe(
+            'Czekaj na opis NOWSZY niz ten, z ktorym przyszlo polecenie — czyli az uzytkownik cos zmieni. ' +
+              'Bez tego dostajesz od razu to, co jest.',
+          ),
       }),
       handler: async (
-        input: { waitMs?: number; minVersion?: number; clientId?: string },
+        input: { waitMs?: number; minVersion?: number; clientId?: string; waitForChange?: boolean },
         ctx: ToolCallContext,
       ) => {
         const description = await services.modules.describeResource(ctx.appContext.resource, ctx.ownerId);
@@ -88,16 +95,26 @@ export function contextTools(services: PlatformServices): Array<ModuleToolDefini
         };
 
         const conversationId = ctx.conversationId ?? ctx.appContext.conversationId;
+        /*
+         * "Until the user changes something" expressed as a version: one past
+         * the description the command was sent with, on the tab that sent it.
+         * Without a marker there is nothing to be newer than, and the flag is
+         * simply an ordinary read.
+         */
+        const marker = ctx.appContext.ui;
+        const minVersion =
+          input.minVersion ?? (input.waitForChange && marker ? marker.version + 1 : undefined);
+        const clientId = input.clientId ?? (input.waitForChange && marker ? marker.clientId : undefined);
         const live = conversationId
           ? await services.uiSnapshots.waitFor(ctx.ownerId, conversationId, {
-              ...(input.clientId !== undefined ? { clientId: input.clientId } : {}),
-              ...(input.minVersion !== undefined ? { minVersion: input.minVersion } : {}),
+              ...(clientId !== undefined ? { clientId } : {}),
+              ...(minVersion !== undefined ? { minVersion } : {}),
               context: ctx.appContext.ui
                 ? { clientId: ctx.appContext.ui.clientId, version: ctx.appContext.ui.version }
                 : null,
               acknowledged: services.uiSnapshots.acknowledgement(ctx.ownerId, ctx.runId),
               waitMs: Math.min(
-                input.waitMs ?? (input.minVersion !== undefined ? UI_STATE_DEFAULT_WAIT_MS : 0),
+                input.waitMs ?? (minVersion !== undefined ? UI_STATE_DEFAULT_WAIT_MS : 0),
                 UI_STATE_MAX_WAIT_MS,
               ),
             })
