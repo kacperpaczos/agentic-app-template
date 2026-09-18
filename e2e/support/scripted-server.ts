@@ -132,7 +132,8 @@ const SCENARIOS: Record<string, Step[]> = {
       kind: 'call',
       name: 'ui_state',
       input: { minVersion: '$last.uiVersion', clientId: '$last.uiClientId' },
-      maxChars: 300,
+      // Long enough for the description's target to be in the echo the chat shows.
+      maxChars: 700,
     },
     { kind: 'text', text: 'Otworzylem pliki i odczytalem ekran.' },
   ],
