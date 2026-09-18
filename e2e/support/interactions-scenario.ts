@@ -86,7 +86,14 @@ export function interactionsScript(prompt: string): Step[] {
           const offer = offers.find((o: { supplier: string }) => o.supplier.startsWith(MCP_SUPPLIER));
           const item = offer?.items?.find((i: { name: string }) => i.name.includes('Projektor'));
           if (!item) throw new Error(`scenariusz: brak projektora dostawcy ${MCP_SUPPLIER}`);
-          return { itemId: item.id, unitPrice: MCP_PRICE, operationId: 'scripted-mcp-projector-price' };
+          // The version the listing above returned: the tool requires it, so a
+          // write based on a stale reading is refused instead of overwriting.
+          return {
+            itemId: item.id,
+            unitPrice: MCP_PRICE,
+            expectedVersion: item.version,
+            operationId: 'scripted-mcp-projector-price',
+          };
         },
       },
       { kind: 'text', text: 'Zmienilem cene projektora. ', delayMs: 100 },

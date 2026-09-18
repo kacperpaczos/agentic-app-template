@@ -411,7 +411,20 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     const was = (await owner.textContent())?.trim() ?? '';
     await page.getByTestId('switch-access-context').click();
     await expect(owner).not.toHaveText(was);
-    await expect(table).toHaveAttribute('data-state', 'ready'); // not re-rendered: still the first owner's rows
+    /*
+     * The table in the chat is no longer the first owner's.
+     *
+     * It used to stay `ready` with their rows, because nothing outside the query
+     * cache was reset by a switch and the component was never re-rendered. The
+     * shell state is now cleared on a switch (L6.12), which re-renders it — so
+     * the rows go, and what is left is an empty table under the new identity.
+     * Asserted as "not their rows" rather than as one state name, because the
+     * claim is about the data, not about the wording of a state.
+     */
+    await expect(table).not.toHaveAttribute('data-state', 'ready');
+    for (const id of await suppliers(page).then((s) => s.ids)) {
+      await expect(table).not.toContainText(id);
+    }
 
     // What the new owner's backend holds for this tab (the page's session is now the new owner's).
     const after = await published(page, (s) => s.target?.id === 'platform.settings');
@@ -425,10 +438,15 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     expect(after.instances.some((i: any) => i.state === 'ready' && i.matched === mine.length)).toBe(false);
     expect(text).not.toContain(heldSpace);
 
-    // Then the canvas, inside the app: it renders the space the shell still holds from before the switch.
+    /*
+     * Then the canvas, inside the app. The space the shell held before the
+     * switch is gone from the store and from the address with it (L6.12), so
+     * the canvas opens on no space at all — where it used to open on the
+     * previous owner's and show a refusal.
+     */
     await page.locator('.pf-nav__link', { hasText: 'Canvas' }).click();
     await expect.poll(() => new URL(page.url()).pathname).toBe('/');
-    expect(new URL(page.url()).searchParams.get('s')).toBe(heldSpace); // the precondition: still held
+    expect(new URL(page.url()).searchParams.get('s')).not.toBe(heldSpace);
     const onCanvas = await published(page, (s) => s.target?.id === 'platform.canvas');
     expect(onCanvas).toMatchObject({ spaceId: null, cardsSpaceId: null, cardsState: 'none', cards: [] });
     expect(JSON.stringify(onCanvas)).not.toContain(heldSpace);

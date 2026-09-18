@@ -15,6 +15,7 @@ import {
   collectToolEntries,
   executeTool,
   platformTools,
+  TOOL_RESULT_STORED_CHARS,
 } from '@platform/server';
 import { setAccessContext, resetAccessContext } from '../packages/platform-ui/src/api/accessContext.ts';
 import { useAppState } from '../packages/platform-ui/src/state/appState.ts';
@@ -292,6 +293,36 @@ describe('L6.7 — wiekszy zbior jest pobierany oknem, nie w calosci', () => {
     expect(past.cases).toHaveLength(0);
     expect(past.window.total).toBe(all.length);
     expect(past.windowNote).toContain(String(all.length));
+  });
+
+  it('domyslna odpowiedz listujaca miesci sie w tym, co rozmowa przechowuje', async () => {
+    /*
+     * The coupling worth stating: a tool answer longer than
+     * `TOOL_RESULT_STORED_CHARS` is stored cut in the middle of a value, so
+     * whatever reads the conversation back gets text that no longer parses.
+     * That is what a read window is for — and it is only a remedy while the
+     * default window actually fits. Asserted here so growth shows up as this
+     * sentence rather than as a JSON error in a browser test.
+     *
+     * The listings that grow with the *user's* data, and only those.
+     * `ui_catalog` grows with what the application declares about itself, which
+     * no window shrinks and no user can enlarge; its answer is over the limit
+     * already, which is a defect of the stored projection rather than of the
+     * window, and is reported as one.
+     */
+    const caseId = h.service.listCases(h.ownerId)[0]!.id;
+    const answers: Array<[string, unknown]> = [
+      ['procurement_list_cases', await callTool('procurement_list_cases', {})],
+      ['procurement_list_offers', await callTool('procurement_list_offers', { caseId })],
+      ['procurement_get_case', await callTool('procurement_get_case', { caseId })],
+      ['canvas_list_cards', await callTool('canvas_list_cards', { spaceId: await spaceWithCards() })],
+      ['files_list', await callTool('files_list', {})],
+    ];
+    for (const [name, answer] of answers) {
+      expect(JSON.stringify(answer).length, `${name} nie miesci sie w zapisie wyniku narzedzia`).toBeLessThan(
+        TOOL_RESULT_STORED_CHARS,
+      );
+    }
   });
 
   it('limit poza zakresem schematu jest odrzucany, a nie znosi ograniczenia odczytu', async () => {
@@ -730,6 +761,27 @@ describe('dowod pakietu', () => {
     expect(JSON.parse(result.body).stanyOpisuZasobu.cudzy).toBe('forbidden');
   });
 });
+
+/** A space of the signed-in owner, with a few cards in it. */
+async function spaceWithCards(cards = 3): Promise<string> {
+  const space = h.platform.services.canvas.createSpace({
+    ownerId: h.ownerId,
+    title: 'Przestrzen pomiarowa',
+    scopeKind: 'workspace',
+    scopeId: `w_${Math.random().toString(36).slice(2, 8)}`,
+  });
+  for (let i = 0; i < cards; i += 1) {
+    await h.platform.services.canvas.addCard(
+      {
+        spaceId: space.id,
+        title: `Karta ${i}`,
+        spec: { kind: 'component', component: 'platform.markdown', props: { markdown: 'x'.repeat(40) } },
+      },
+      h.ownerId,
+    );
+  }
+  return space.id;
+}
 
 const emptyHandle = (): StandInHandle => ({
   childExitedAt: null,

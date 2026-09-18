@@ -133,7 +133,13 @@ export function procurementTools(service: ProcurementService): ModuleToolDefinit
                   it.unitPriceMinor === null ? null : formatMinor(it.unitPriceMinor, o.offer.currency),
                 version: it.version,
               })),
-              itemsWindow: items.window,
+              /*
+               * Only when something was left out. A window that covers the
+               * whole list says nothing the list does not already say, and a
+               * tool answer is context the model pays for — the top-level
+               * `window` and `windowNote` carry the general statement.
+               */
+              ...(items.window.truncated ? { itemsWindow: items.window } : {}),
             };
           }),
           window,
