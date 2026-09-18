@@ -1370,11 +1370,11 @@
       "scenarios": []
     },
     "L7.13": {
-      "status": "niespelnione",
-      "evidence": "kod",
+      "status": "czesciowe",
+      "evidence": "symulacja",
       "origin": "szablon",
-      "proof": "Analiza kodu: runtime.ts #execute woła resumeStream z conversation.claudeSessionId bez sprawdzenia istnienia transkryptu; hookCallback przy odmiennym session_id po cichu przepina rozmowę (bindSession), a błąd wznowienia trafia do classifyModelError jako integration_failed i ustawia stan dostępu failed. Brak testu i brak kodu obsługi; raport wykonawcy §6 i §7 pkt 3 wymienia ten przypadek jako niewywołany.",
-      "gap": "Aplikacja nie wykrywa brakującego transkryptu SDK i nie daje jawnego wyniku odzyskiwania: zależnie od niesprawdzonego zachowania SDK nowa sesja zostaje podpięta bez informacji (historia UI sugeruje zachowaną pamięć) albo polecenia kończą się ogólnym błędem, a zapisany claude_session_id nie jest czyszczony.",
+      "proof": "tests/session-transcript.test.ts (18 testów, stand-in modelu na granicy adaptera): odmowa wznowienia rozpoznana jako brak transkryptu daje własny kod błędu `session_transcript_lost` i komunikat „pamięć NIE została odtworzona”, powiązanie z martwą sesją jest czyszczone, żadna odpowiedź z nowej sesji nie zostaje podstawiona (stand-in ma gotową odpowiedź i nie zostaje wywołany), zdarzenie CUSTOM platform.session_transcript_lost niesie lostSessionId i memoryRestored=false, dokładnie jedno RUN_ERROR. Druga ścieżka: wznowienie, które po cichu odpowiada z innej sesji, jest wykryte po niezgodności session_id, opisane tym samym zdarzeniem (detectedBy=session_id_mismatch) i przepina rozmowę na sesję, która istnieje. Kontrole: inny błąd wznowienia (reset połączenia) zostaje integration_failed i NIE kasuje powiązania; wznowienie tej samej sesji nie zgłasza niczego; 10 przypadków rozpoznawania komunikatu (5 rozpoznanych, 5 odrzuconych, w tym „Rekord nie zostal znaleziony” i „Tool result not found”). packages/platform-server/src/agent/runtime.ts #resumeOrReportLostTranscript, isMissingSessionTranscript, bindSession; forgetClaudeSession warunkowy na identyfikatorze (nie kasuje nowszego powiązania).",
+      "gap": "Nie sprawdzono na prawdziwym SDK, którą z dwóch reakcji daje faktycznie brak transkryptu (odmowa wznowienia czy cicha nowa sesja) — zadanie nie miało budżetu tur, a przypadku nie da się wywołać bez usunięcia transkryptu prawdziwej sesji; rozpoznanie opiera się na wzorcach komunikatów, więc nieznane brzmienie z nowszej wersji SDK wpadnie w integration_failed zamiast we własny kod. Dla ścieżki „cicha nowa sesja” jawny wynik to zdarzenie, wpis w run_events i ostrzeżenie serwera — uruchomienie celowo nie jest przerywane (przerwanie przy hipotetycznym rozwidlaniu sesji przez SDK zepsułoby każdą kontynuację), więc użytkownik nie widzi wtedy komunikatu w wątku.",
       "backlog": "BL-07",
       "scenarios": [
         "T16"
@@ -1793,19 +1793,15 @@
       }
     },
     "L10.2": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "tests/migration.test.ts „zachowuje rozmowy, wiadomosci uzytkownika, kompozycje i dane domenowe”, „powtorne uruchomienie nie dubluje danych”, „uruchomienie bez zachowanych zdarzen zostawia stara wiadomosc nietknieta”, „migracja na pustym katalogu tworzy kompletny schemat”: baza z samą platform-0001 migrowana przez createPlatform; zachowane rozmowy, wiadomości użytkownika, karty, claude_session_id, odtworzona tura, brak zmian po powtórnym starcie (odciski wszystkich tabel). tests/runtime.test.ts „skopiowany katalog danych otwiera sie z kompletnym stanem”: checkpoint WAL w procesie, cpSync katalogu, ponowne otwarcie z artefaktem, plikiem i kartą. Nie obejmuje: platform-0003-file-versions na niepustej tabeli files (fikstura nie ma plików), skryptów scripts/backup-state.mjs i scripts/migration-rehearsal.mjs (niewykonywane w testach ani w verify), odtworzenia według docs/odzyskiwanie-stanu.md.",
-      "gap": "Migracja platform-0003 nie jest sprawdzona na danych z plikami, a próba migracji na kopii sprzed 0003 z plikami zgłosiłaby fałszywą zmianę tabeli files (brak w EXPECTED_TO_CHANGE, analiza kodu). W szablonie nie wykonano kopii, próby migracji ani odtworzenia na żadnej kopii (brak danych użytkownika, próby syntetycznej nie przeprowadzono), więc zachowanie istniejących danych przy migracji do tej wersji nie jest wykazane.",
-      "backlog": "BL-07",
+      "proof": "tests/backup-migration.test.ts: dla kopii sprzed KAŻDEJ migracji platformy (etapy czytane ze scripts/synthetic-state.mjs --list, więc nowa migracja wchodzi do pętli sama) pełny przebieg kopia → próba migracji → porównanie → drugie uruchomienie; report.problems puste, migrationsApplied zawiera migrację danego etapu, liczby rozmów, plików, kart i zdarzeń bez zmian. Dane syntetyczne (scripts/synthetic-state.mjs) obejmują rozmowę, wiadomości, uruchomienie z 10 zdarzeniami, kartę, 2 pliki z bajtami na dysku i artefakt; kolumny użyte przy wstawianiu odpowiadają etapowi, więc fikstura jest naprawdę starą bazą. Odtworzenie trwałego stanu: scripts/restore-state.mjs wykonany w regresji — stan sprzed próby odłożony i nietknięty (odcisk wszystkich tabel), kopia odtworzona wraz z zapisem, który leżał wyłącznie w WAL, aplikacja wstaje na odtworzonym katalogu (composeApp). tests/migration.test.ts nadal pilnuje migracji na bazie budowanej w teście.",
+      "gap": "—",
+      "backlog": null,
       "scenarios": [
         "T18"
-      ],
-      "historical": {
-        "status": "potwierdzone",
-        "note": "przebieg: kopia i próba migracji na danych AgenticApp sprzed platform-0003, potem migracja za zgodą; dowody poza repozytorium"
-      }
+      ]
     },
     "L10.3": {
       "status": "potwierdzone",
@@ -1983,45 +1979,45 @@
       ]
     },
     "L10.16": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "tests/runtime.test.ts „skopiowany katalog danych otwiera sie z kompletnym stanem”: wal_checkpoint(TRUNCATE) na otwartym połączeniu, cpSync całego katalogu danych, ponowne otwarcie kopii i odczyt artefaktu, pliku i karty. Analiza kodu scripts/backup-state.mjs: kopiuje app.db, app.db-wal i app.db-shm jako bajty bez otwierania źródła, zwija WAL w kopii, kopiuje files i workspaces z SHA-256, zapisuje manifest i weryfikuje kopię (sumy, liczby i odciski tabel, integrity_check), odmawia przy bazie trzymanej przez proces. Nie obejmuje: wykonania skryptu w szablonie.",
-      "gap": "scripts/backup-state.mjs nie jest wykonywany przez żaden test ani pnpm verify i w szablonie nie wykonano żadnej kopii (brak danych użytkownika, próby syntetycznej nie przeprowadzono); test Vitest używa innego mechanizmu bez integrity_check i manifestu, a wykrywanie uszkodzonej kopii lub niespójnego manifestu nie jest sprawdzone.",
-      "backlog": "BL-07",
+      "proof": "tests/backup-migration.test.ts „kopia zachowuje zatwierdzony stan SQLite wraz z WAL”: fikstura powstaje przez zabicie procesu bez punktu kontrolnego, więc zatwierdzona rozmowa leży wyłącznie w app.db-wal (kontrola: kopia samego app.db jej nie ma). scripts/backup-state.mjs wykonany naprawdę — kopia zawiera ten zapis, jest jednym plikiem app.db (WAL zwinięty, brak -wal i -shm sprawdzony przed pierwszym otwarciem kopii), manifest niesie integrity_check ok, listę migracji i sumy SHA-256 plików, session.secret nie jest kopiowany. Ponowny odczyt: --verify kod 0. Kontrole negatywne: dopisany bajt do pliku w kopii, usunięty wiersz w bazie kopii, podmieniona liczba w manifeście i usunięty plik wymieniony w manifeście — każda daje kod 1 z nazwanym powodem.",
+      "gap": "—",
+      "backlog": null,
       "scenarios": [
         "T18"
       ]
     },
     "L10.17": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "tests/migration.test.ts „zachowuje rozmowy, wiadomosci uzytkownika, kompozycje i dane domenowe” (tożsamość rozmowy, treść wiadomości, odciski canvas_cards, canvas_spaces i run_events) i „powtorne uruchomienie nie dubluje danych” (liczby i odciski wszystkich tabel po drugim i trzecim starcie) — na bazie zbudowanej w teście, nie na kopii. Analiza kodu scripts/migration-rehearsal.mjs: kopia do katalogu tymczasowego, spis z odciskami, prawdziwy composeApp, porównanie z listą EXPECTED_TO_CHANGE, sprawdzenie tożsamości rozmów, wiadomości, kart, plików i artefaktów, drugi start z wymogiem identycznego spisu.",
-      "gap": "Próba na kopii nie jest wykonywana w szablonie, a EXPECTED_TO_CHANGE nie zawiera tabeli files zmienianej przez platform-0003-file-versions przy porównaniu wszystkich kolumn: dla kopii sprzed 0003 z plikami próba zgłosi fałszywą zmianę (analiza kodu, bez próby), więc nie może dziś potwierdzić gotowości migracji takich danych. Test Vitest nie ma jawnej listy dopuszczonych zmian i nie zawiera plików.",
-      "backlog": "BL-07",
+      "proof": "scripts/migration-rehearsal.mjs wykonany w regresji na kopii sprzed każdej migracji platformy (tests/backup-migration.test.ts). Tożsamość i treść: identyfikatory rozmów, treść i przypisanie wiadomości użytkownika, kompozycje kart, identyfikatory plików i artefaktów. Jawnie dopuszczone zmiany mają dwie siły: tabele tylko poszerzone (agent_runs.enqueued_at, files.derived_from_file_id i files.version) muszą zachować identyczną treść kolumn sprzed migracji, tę samą liczbę wierszy i żadnych nieopisanych nowych kolumn; tabele przepisywane (schema_migrations, messages) są nazwane z powodem. To zamyka fałszywą zmianę tabeli files: przebieg na kopii z 2 plikami raportuje „dodane kolumny …; dane bez zmian” i kończy się kodem 0. Drugie uruchomienie: skrypt wymaga identycznego spisu, a test dodatkowo bierze własny odcisk wszystkich tabel wokół TRZECIEGO uruchomienia, więc nie polega na werdykcie skryptu.",
+      "gap": "—",
+      "backlog": null,
       "scenarios": [
         "T18"
       ]
     },
     "L10.18": {
-      "status": "czesciowe",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "docs/odzyskiwanie-stanu.md §4 i §5: przed odtworzeniem obecny data przenoszony do data.przed-odtworzeniem-<data>, kopiowanie app.db, files i workspaces, polecenie sprawdzające liczby wierszy i integrity_check przed startem, session.secret poza kopią (sesje przeglądarki wygasają na nowej maszynie), transkrypty SDK poza katalogiem danych, ani kopiowane, ani usuwane. Nie obejmuje: wykonania procedury.",
-      "gap": "Procedura nie była wykonana ani w szablonie, ani w AgenticApp (raport §6: krok kopiowania do data nie był sprawdzony), więc nie jest „sprawdzona”; nie określa zgodności wersji kodu z kopią (kopia nowsza niż build, brak cofania migracji) ani skutku braku transkryptu SDK dla rozmów z zapisanym claude_session_id po odtworzeniu.",
-      "backlog": "BL-07",
+      "proof": "scripts/restore-state.mjs — procedura jako skrypt wykonywany w regresji (tests/backup-migration.test.ts „procedura odtworzenia stanu”, 4 testy). Stan sprzed próby: przeniesiony do data.przed-odtworzeniem-<znacznik>, nigdy nadpisany; test porównuje odcisk wszystkich tabel odłożonego katalogu z odciskiem sprzed odtworzenia. Zgodność wersji kodu: migracje z manifestu zestawione z migracjami, które zna build (czytane przez uruchomienie kompozycji aplikacji, więc obejmują moduł) — kopia z migracją nieznaną buildowi jest ODRZUCONA kodem 3 z uzasadnieniem „migracji nie da się cofnąć”, kopia starsza przechodzi z listą migracji, które zastosuje start. Los sesji aplikacji: session.secret nie jest w kopii, jest przenoszony ze stanu odłożonego (test sprawdza treść po odtworzeniu) — bez niego trzeba zalogować się ponownie. Los transkryptów SDK: nie są kopiowane ani usuwane, a rozmowa z zapisanym claude_session_id bez transkryptu daje jawny wynik (L7.13, symulacja). Kopia, która się nie weryfikuje, jest odrzucana kodem 1 ZANIM cokolwiek zostanie przesunięte; po odtworzeniu liczby wierszy porównane z manifestem i integrity_check, a aplikacja wstaje na odtworzonym katalogu. docs/odzyskiwanie-stanu.md §4 opisuje dokładnie tę procedurę.",
+      "gap": "—",
+      "backlog": null,
       "scenarios": [
         "T18"
       ]
     },
     "L10.19": {
-      "status": "czesciowe",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "Analiza kodu: scripts/backup-state.mjs czyta źródło wyłącznie jako bajty i odmawia pracy przy otwartej bazie; scripts/migration-rehearsal.mjs pracuje na kopii w katalogu tymczasowym i odmawia, gdy --backup wskazuje katalog data repozytorium; tests/migration.test.ts i tests/durability.test.ts używają katalogów tymczasowych przez APP_DATA_DIR. docs/odzyskiwanie-stanu.md §3 i README („Istniejące dane — najpierw kopia”) oddzielają próbę na kopii od uruchomienia na danych. Nie obejmuje: wykonanego sprawdzenia sum źródła przed i po kopii lub próbie.",
-      "gap": "Brak wykonanej w szablonie kontroli, że kopia i próba nie zmieniają aktywnej bazy; ochrona próby porównuje ścieżkę tylko z data w repozytorium, nie z APP_DATA_DIR; pnpm start stosuje zaległe migracje automatycznie bez wymogu wcześniejszej próby, więc rozdział gotowości i zastosowania opiera się tylko na dokumentacji.",
-      "backlog": "BL-07",
+      "proof": "tests/backup-migration.test.ts: sumy SHA-256 app.db i app.db-wal źródła identyczne przed i po wykonaniu kopii (app.db-shm celowo poza asercją — SQLite przebudowuje go także przy połączeniu readonly, nie zawiera danych); scripts/migration-rehearsal.mjs sam liczy odciski wszystkich plików kopii źródłowej przed i po próbie i raportuje sourceUntouched, co test sprawdza dla każdego etapu. Odmowy (kod 2, stan nietknięty — sprawdzony odciskiem tabel): próba na katalogu wskazanym przez APP_DATA_DIR, próba na katalogu zawierającym session.secret (kopia nigdy go nie ma, więc rozpoznanie nie wymaga znajomości ścieżki), --out kopii wewnątrz kopiowanego katalogu, kopia bazy trzymanej przez proces (test trzyma połączenie otwarte), generator danych syntetycznych wycelowany w katalog danych. Rozdział gotowości od zastosowania: próba i odtworzenie to osobne polecenia pracujące na kopii, restore-state.mjs --check nie zmienia niczego i odsyła do próby, gdy kopia jest starsza niż kod.",
+      "gap": "pnpm start nadal stosuje zaległe migracje automatycznie — nic nie wymusza wcześniejszej próby, rozdział opiera się na osobnych poleceniach i dokumentacji, nie na blokadzie w starcie aplikacji.",
+      "backlog": null,
       "scenarios": [
         "T18"
       ]
@@ -2621,9 +2617,9 @@
       "gap": "Aplikacja nie odczytuje źródła klucza z SDK, więc przebieg przez OAuth subskrypcji nie jest potwierdzony wprost; wygaśnięcie, odmowa odświeżenia i odwołanie są sprawdzone tylko na klasyfikatorze (L8.2, L8.10–L8.12)."
     },
     "T18": {
-      "status": "czesciowe",
-      "proof": "tests/migration.test.ts: migracja z zachowaniem danych i bez skutku przy drugim uruchomieniu; tests/runtime.test.ts: kopia katalogu danych z checkpointem WAL.",
-      "gap": "scripts/backup-state.mjs i scripts/migration-rehearsal.mjs nie są wykonywane w szablonie; platform-0003 na niepustej tabeli files niesprawdzona, a próba migracji zgłosiłaby fałszywą zmianę; odtworzenie według procedury nie było przećwiczone."
+      "status": "potwierdzone",
+      "proof": "tests/backup-migration.test.ts (24 testy, dane syntetyczne w .e2e-bl07/): kopia z zapisem leżącym wyłącznie w WAL, weryfikacja i ponowny odczyt, próba migracji na kopii sprzed każdej migracji platformy, drugie i trzecie uruchomienie bez skutku, odtworzenie z odłożeniem stanu sprzed próby i startem aplikacji. Kontrole: uszkodzony plik, zmieniona baza, niespójny manifest, brakujący plik, kopia nowsza niż build; źródło bajt w bajt nietknięte.",
+      "gap": "—"
     },
     "T19": {
       "status": "czesciowe",
@@ -2699,8 +2695,8 @@
     {
       "id": "BL-07",
       "title": "Trwałość, kopia i migracje",
-      "summary": "Próba migracji nie uwzględnia platform-0003-file-versions (tabela files) na liście oczekiwanych zmian; kopia i odtworzenie nie zostały przećwiczone w szablonie na danych syntetycznych; brak sprawdzonej obsługi utraty transkryptu SDK.",
-      "done": "migration-rehearsal obejmuje wszystkie migracje platformy z testem na syntetycznej kopii sprzed każdej migracji; kopia, weryfikacja i odtworzenie przećwiczone w szablonie na danych syntetycznych z dowodem; ścieżka utraty transkryptu daje jawny wynik."
+      "summary": "Pozostaje jedno pytanie, na które nie da się odpowiedzieć bez tury modelu: którą z dwóch reakcji daje prawdziwy SDK, gdy transkrypt wznawianej sesji nie istnieje. Obie ścieżki są obsłużone i sprawdzone stand-inem na granicy adaptera; kopia z WAL, próba migracji sprzed każdej migracji platformy i odtworzenie są przećwiczone w szablonie na danych syntetycznych (Z2, 2026-09-18).",
+      "done": "jedna próba na prawdziwym modelu: rozmowa z sesją, usunięcie jej transkryptu, kolejne polecenie — zapisany komunikat SDK rozstrzyga, która ścieżka zachodzi, i potwierdza albo uzupełnia wzorce rozpoznawania w isMissingSessionTranscript."
     },
     {
       "id": "BL-08",

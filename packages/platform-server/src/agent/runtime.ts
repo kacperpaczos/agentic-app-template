@@ -1,6 +1,7 @@
 import { Mastra } from '@mastra/core';
 import { ClaudeSDKAgent } from '@mastra/claude';
 import {
+  AppError,
   PLATFORM_CUSTOM_EVENTS,
   UI_COMMAND_ACK_TIMEOUT_MS,
   UI_COMMAND_FAILURES,
@@ -407,8 +408,47 @@ export class AgentRuntime {
       this.services.runs.bindSession(runId, conversation.claudeSessionId);
     }
 
+    /* The session this run asked the SDK to continue, or null for a new one. */
+    const requestedResume = conversation.claudeSessionId;
+    let resumeMismatchReported = false;
+
     const bindSession = (sessionId: string) => {
-      if (sessionBound || !sessionId) return;
+      if (!sessionId) return;
+      /*
+       * The second way a transcript can be gone — and the quiet one.
+       *
+       * `#resumeOrReportLostTranscript` covers the case where the SDK refuses
+       * the resume. It may instead accept it and answer from a *different*
+       * session, in which case nothing fails and the conversation's earlier
+       * history is on screen above an answer produced without it. Whatever the
+       * reason, a session id other than the one we asked to resume means this
+       * run is not continuing that transcript, so the memory was not restored
+       * and the application says so rather than implying otherwise.
+       *
+       * The run is **not** aborted here, deliberately. Which of the two
+       * behaviours the SDK actually exhibits when a transcript is missing has
+       * not been observed on a real session (see docs/ACCEPTANCE.md, L7.13), and
+       * if a future SDK version were to hand out a fresh id on every ordinary
+       * resume, failing the run would break every follow-up message in every
+       * conversation. Reporting is safe under both readings; refusing is not.
+       */
+      if (requestedResume && sessionId !== requestedResume && !resumeMismatchReported) {
+        resumeMismatchReported = true;
+        this.services.conversations.forgetClaudeSession(args.conversationId, requestedResume);
+        stream.custom(PLATFORM_CUSTOM_EVENTS.sessionTranscriptLost, {
+          conversationId: args.conversationId,
+          lostSessionId: requestedResume,
+          newSessionId: sessionId,
+          memoryRestored: false,
+          bindingCleared: true,
+          detectedBy: 'session_id_mismatch',
+        });
+        console.warn(
+          `[run ${runId}] wznowienie sesji ${requestedResume} odpowiedzialo z sesji ${sessionId}: ` +
+            'pamiec wczesniejszej rozmowy NIE zostala odtworzona',
+        );
+      }
+      if (sessionBound) return;
       sessionBound = true;
       this.services.runs.bindSession(runId, sessionId);
       this.services.conversations.bindClaudeSession(args.conversationId, sessionId);
@@ -582,7 +622,7 @@ export class AgentRuntime {
         ...(this.#modelAgent ? { toolContext: toolCtx } : {}),
       };
       const modelStream = resume
-        ? await agent.resumeStream({ message: args.prompt, sessionId: resume }, callOptions as never)
+        ? await this.#resumeOrReportLostTranscript(agent, resume, args, callOptions, stream)
         : await agent.stream(args.prompt, callOptions as never);
 
       for await (const chunk of modelStream.fullStream as AsyncIterable<Record<string, any>>) {
@@ -616,7 +656,17 @@ export class AgentRuntime {
     } catch (err) {
       const message = errorMessage(err);
       const cancelled = abort.signal.aborted && !message.includes('run_timeout');
-      const code = cancelled ? 'cancelled' : classifyModelError(message);
+      /*
+       * A failure the runtime itself classified (an `AppError` raised below,
+       * such as a lost SDK transcript) keeps its own code: re-deriving one from
+       * the message would flatten it back into `integration_failed` and lose
+       * exactly the distinction it was raised to make.
+       */
+      const code = cancelled
+        ? 'cancelled'
+        : err instanceof AppError
+          ? err.code
+          : classifyModelError(message);
       if (textOpened) stream.textEnd(messageId);
       // Partial text is already persisted by the projection, so a failed or
       // cancelled run keeps whatever the model managed to say.
@@ -630,8 +680,13 @@ export class AgentRuntime {
        * and is recorded as one. Filtering by error code — as this used to —
        * meant a rate limit or a refused refresh left the reported access state
        * showing the last success, long after it stopped being true.
+       *
+       * A lost transcript is the one failure that says nothing about access: the
+       * subscription and the login are fine, the SDK simply no longer has the
+       * conversation. Reporting it as an access failure would put "połączenie z
+       * modelem nie działa" in Settings for a problem that is not there.
        */
-      if (!cancelled) recordVerification(false, message);
+      if (!cancelled && code !== 'session_transcript_lost') recordVerification(false, message);
       if (cancelled) stream.custom(PLATFORM_CUSTOM_EVENTS.runCancelled, { runId });
       // Exactly one resolving terminal event, so the UI never hangs on loading.
       stream.runError(message, code);
@@ -639,6 +694,72 @@ export class AgentRuntime {
       clearTimeout(timeout);
       this.services.uiSnapshots.forgetRun(runId);
       stream.close();
+    }
+  }
+
+  /**
+   * Resumes the conversation's Claude session, or says plainly that it is gone.
+   *
+   * The application keeps conversations for as long as the user wants them; the
+   * Claude Agent SDK keeps its transcripts where and for as long as *it* wants.
+   * The two therefore come apart — a pruned transcript, a restored backup (the
+   * copy carries the database, never the SDK's own files), a different machine,
+   * a cleaned home directory. What must not happen when they do is the thing
+   * this method exists to prevent: the run quietly starting a **new** session
+   * while the chat still shows the whole earlier history, so the interface says
+   * the model remembers a conversation it has never seen.
+   *
+   * What happens instead, in this order:
+   *   1. the stale binding is dropped, so the next attempt is honestly a fresh
+   *      conversation and does not fail the same way for ever;
+   *   2. an explicit event names the session that was lost and states that the
+   *      memory was **not** restored;
+   *   3. the run fails with its own error code, which the chat shows.
+   *
+   * Deliberately not "retry silently in a new session": the user asked a
+   * question in a conversation with a history behind it, and an answer produced
+   * without that history is a different answer. They are told, and they decide
+   * whether to ask again — the next run starts clean because of step 1.
+   *
+   * Only the resume *call* is guarded. A failure after the stream has opened is
+   * an ordinary run failure and is left to the normal path; re-classifying it
+   * here would mean re-reading a message the model wrote.
+   */
+  async #resumeOrReportLostTranscript(
+    agent: ModelAgentLike,
+    sessionId: string,
+    args: { conversationId: string; prompt: string },
+    callOptions: unknown,
+    stream: RunEventStream,
+  ): Promise<{ fullStream: AsyncIterable<unknown> }> {
+    try {
+      return await agent.resumeStream(
+        { message: args.prompt, sessionId },
+        callOptions as never,
+      );
+    } catch (err) {
+      const message = errorMessage(err);
+      if (!isMissingSessionTranscript(message)) throw err;
+
+      const forgotten = this.services.conversations.forgetClaudeSession(
+        args.conversationId,
+        sessionId,
+      );
+      stream.custom(PLATFORM_CUSTOM_EVENTS.sessionTranscriptLost, {
+        conversationId: args.conversationId,
+        lostSessionId: sessionId,
+        /* Stated, not implied: nothing of the model's memory came back. */
+        memoryRestored: false,
+        bindingCleared: forgotten,
+        sdkMessage: truncate(message, 300),
+      });
+      throw new AppError(
+        'session_transcript_lost',
+        `Transkrypt sesji Claude (${sessionId}) jest niedostepny, wiec pamiec wczesniejszej rozmowy NIE zostala odtworzona. ` +
+          'Historia rozmowy w aplikacji pozostaje nietknieta. Powiazanie z ta sesja zostalo usuniete — ' +
+          'wyslij polecenie ponownie, aby kontynuowac w nowej sesji, bez wczesniejszego kontekstu modelu.',
+        { conversationId: args.conversationId, lostSessionId: sessionId },
+      );
     }
   }
 
@@ -699,6 +820,32 @@ function errorMessage(err: unknown): string {
   } catch {
     return String(err);
   }
+}
+
+/**
+ * Does this failure mean the SDK no longer holds the session we asked it to
+ * resume?
+ *
+ * The Claude Agent SDK reports this as a message, not as a code, and the
+ * wording has changed between versions — so the recogniser matches a *shape*
+ * (something about a session, transcript or conversation, plus something about
+ * it not being there) rather than one sentence. Both halves are required: a
+ * bare "not found" from a tool, a module or the network must not be read as a
+ * lost transcript, because the consequence of a false positive is dropping a
+ * session binding that was perfectly good.
+ *
+ * Exported so the patterns can be tested against the wordings that have been
+ * observed, and so a new one can be added with a failing test first.
+ */
+const MISSING_TRANSCRIPT_PATTERNS: RegExp[] = [
+  /no conversation found with session id/i,
+  /(session|transcript|conversation)[^.\n]{0,60}\b(not found|no longer exists?|does ?n[o']t exist|is missing|has expired)/i,
+  /\b(no such|unknown|missing|expired)\b[^.\n]{0,60}\b(session|transcript)/i,
+  /\bENOENT\b[^\n]*\.jsonl/i,
+];
+
+export function isMissingSessionTranscript(message: string): boolean {
+  return MISSING_TRANSCRIPT_PATTERNS.some((re) => re.test(message));
 }
 
 /** Distinguishes auth / limit problems from generic integration failures. */

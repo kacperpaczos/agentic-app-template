@@ -3,7 +3,7 @@
 > Plik generowany przez `node scripts/acceptance-matrix.mjs` z `docs/acceptance/assessment.json`.
 > Każde otwarte kryterium macierzy (`docs/ACCEPTANCE.md`) należy do dokładnie jednego pakietu.
 
-Otwartych kryteriów: **123** z 200, w 10 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.
+Otwartych kryteriów: **118** z 200, w 10 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.
 
 | Pakiet | Tytuł | Kryteria | Liczba |
 |---|---|---|---|
@@ -11,7 +11,7 @@ Otwartych kryteriów: **123** z 200, w 10 pakietach. Kolejność pakietów jest 
 | BL-04 | Uwierzytelnienie subskrypcyjne i limity — próby graniczne | L8.2, L8.3, L8.6, L8.7, L8.8, L8.9, L8.10, L8.11, L8.12, L8.13, L8.14 | 11 |
 | BL-05 | Pomiary i obserwowalność | L11.14, L12.1, L12.2, L12.3, L12.13 | 5 |
 | BL-06 | Wymienialność modułu domenowego | L9.11, L9.12 | 2 |
-| BL-07 | Trwałość, kopia i migracje | L7.13, L10.2, L10.16, L10.17, L10.18, L10.19 | 6 |
+| BL-07 | Trwałość, kopia i migracje | L7.13 | 1 |
 | BL-08 | Czat, zdarzenia i historia | L4.3, L4.5, L4.6, L4.7, L4.8, L4.9, L4.11, L4.13, L4.15, L5.2, L5.3, L5.4, L5.5, L5.6, L5.11, L5.12, L5.13, L5.14, L5.15 | 19 |
 | BL-09 | Pliki, sandbox i zadania w tle | L11.7, L11.10, L11.12, L11.13, L11.15, L11.16, L11.18, L11.19, L11.20, L11.22, L11.23, L11.24 | 12 |
 | BL-10 | Frontend, dostępność i stany UI | L2.1, L2.3, L2.5, L2.8, L2.9, L2.11, L2.12, L2.14, L2.15, L3.5, L3.7, L3.11 | 12 |
@@ -93,18 +93,13 @@ Testy platformy korzystają z modułu przykładowego jako danych testowych (test
 
 ## BL-07 — Trwałość, kopia i migracje
 
-Próba migracji nie uwzględnia platform-0003-file-versions (tabela files) na liście oczekiwanych zmian; kopia i odtworzenie nie zostały przećwiczone w szablonie na danych syntetycznych; brak sprawdzonej obsługi utraty transkryptu SDK.
+Pozostaje jedno pytanie, na które nie da się odpowiedzieć bez tury modelu: którą z dwóch reakcji daje prawdziwy SDK, gdy transkrypt wznawianej sesji nie istnieje. Obie ścieżki są obsłużone i sprawdzone stand-inem na granicy adaptera; kopia z WAL, próba migracji sprzed każdej migracji platformy i odtworzenie są przećwiczone w szablonie na danych syntetycznych (Z2, 2026-09-18).
 
-**Warunek zamknięcia:** migration-rehearsal obejmuje wszystkie migracje platformy z testem na syntetycznej kopii sprzed każdej migracji; kopia, weryfikacja i odtworzenie przećwiczone w szablonie na danych syntetycznych z dowodem; ścieżka utraty transkryptu daje jawny wynik.
+**Warunek zamknięcia:** jedna próba na prawdziwym modelu: rozmowa z sesją, usunięcie jej transkryptu, kolejne polecenie — zapisany komunikat SDK rozstrzyga, która ścieżka zachodzi, i potwierdza albo uzupełnia wzorce rozpoznawania w isMissingSessionTranscript.
 
 | ID | Wymaganie | Stan | Brak |
 |---|---|---|---|
-| L7.13 | Brak transkryptu SDK dla zachowanej rozmowy daje jawny wynik odzyskiwania lub błąd; aplikacja nie deklaruje zachowania pamięci, której nie odtworzyła. | niespełnione | Aplikacja nie wykrywa brakującego transkryptu SDK i nie daje jawnego wyniku odzyskiwania: zależnie od niesprawdzonego zachowania SDK nowa sesja zostaje podpięta bez informacji (historia UI sugeruje zachowaną pamięć) albo polecenia kończą się ogólnym błędem, a zapisany claude_session_id nie jest czyszczony. |
-| L10.2 | Migracje tworzą i aktualizują bazę bez utraty obsługiwanych danych; sprawdzona jest kopia i odtworzenie trwałego stanu lokalnego. | częściowe | Migracja platform-0003 nie jest sprawdzona na danych z plikami, a próba migracji na kopii sprzed 0003 z plikami zgłosiłaby fałszywą zmianę tabeli files (brak w EXPECTED_TO_CHANGE, analiza kodu). W szablonie nie wykonano kopii, próby migracji ani odtworzenia na żadnej kopii (brak danych użytkownika, próby syntetycznej nie przeprowadzono), więc zachowanie istniejących danych przy migracji do tej wersji nie jest wykazane. |
-| L10.16 | Kopia zachowuje zatwierdzony stan SQLite wraz z WAL oraz powiązane pliki; jest ponownie odczytana i sprawdzona pod względem integralności. | częściowe | scripts/backup-state.mjs nie jest wykonywany przez żaden test ani pnpm verify i w szablonie nie wykonano żadnej kopii (brak danych użytkownika, próby syntetycznej nie przeprowadzono); test Vitest używa innego mechanizmu bez integrity_check i manifestu, a wykrywanie uszkodzonej kopii lub niespójnego manifestu nie jest sprawdzone. |
-| L10.17 | Próba migracji na kopii porównuje tożsamość i treść danych, jawnie dopuszczone zmiany oraz drugie uruchomienie bez dodatkowego skutku. | częściowe | Próba na kopii nie jest wykonywana w szablonie, a EXPECTED_TO_CHANGE nie zawiera tabeli files zmienianej przez platform-0003-file-versions przy porównaniu wszystkich kolumn: dla kopii sprzed 0003 z plikami próba zgłosi fałszywą zmianę (analiza kodu, bez próby), więc nie może dziś potwierdzić gotowości migracji takich danych. Test Vitest nie ma jawnej listy dopuszczonych zmian i nie zawiera plików. |
-| L10.18 | Istnieje sprawdzona procedura odtworzenia, określająca zachowanie stanu sprzed próby, zgodność wersji kodu oraz los sesji aplikacji i transkryptów SDK. | częściowe | Procedura nie była wykonana ani w szablonie, ani w AgenticApp (raport §6: krok kopiowania do data nie był sprawdzony), więc nie jest „sprawdzona”; nie określa zgodności wersji kodu z kopią (kopia nowsza niż build, brak cofania migracji) ani skutku braku transkryptu SDK dla rozmów z zapisanym claude_session_id po odtworzeniu. |
-| L10.19 | Kopie i testy migracji nie zmieniają aktywnej bazy użytkownika; gotowość migracji jest odróżniona od jej zastosowania na docelowych danych. | częściowe | Brak wykonanej w szablonie kontroli, że kopia i próba nie zmieniają aktywnej bazy; ochrona próby porównuje ścieżkę tylko z data w repozytorium, nie z APP_DATA_DIR; pnpm start stosuje zaległe migracje automatycznie bez wymogu wcześniejszej próby, więc rozdział gotowości i zastosowania opiera się tylko na dokumentacji. |
+| L7.13 | Brak transkryptu SDK dla zachowanej rozmowy daje jawny wynik odzyskiwania lub błąd; aplikacja nie deklaruje zachowania pamięci, której nie odtworzyła. | częściowe | Nie sprawdzono na prawdziwym SDK, którą z dwóch reakcji daje faktycznie brak transkryptu (odmowa wznowienia czy cicha nowa sesja) — zadanie nie miało budżetu tur, a przypadku nie da się wywołać bez usunięcia transkryptu prawdziwej sesji; rozpoznanie opiera się na wzorcach komunikatów, więc nieznane brzmienie z nowszej wersji SDK wpadnie w integration_failed zamiast we własny kod. Dla ścieżki „cicha nowa sesja” jawny wynik to zdarzenie, wpis w run_events i ostrzeżenie serwera — uruchomienie celowo nie jest przerywane (przerwanie przy hipotetycznym rozwidlaniu sesji przez SDK zepsułoby każdą kontynuację), więc użytkownik nie widzi wtedy komunikatu w wątku. |
 
 ## BL-08 — Czat, zdarzenia i historia
 

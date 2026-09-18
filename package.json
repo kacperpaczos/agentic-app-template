@@ -32,7 +32,10 @@
     "check:closure": "node scripts/closure-matrix.mjs --summary > /dev/null",
     "backup": "node scripts/backup-state.mjs",
     "backup:verify": "node scripts/backup-state.mjs --verify",
-    "migration:rehearsal": "node scripts/migration-rehearsal.mjs"
+    "migration:rehearsal": "node scripts/migration-rehearsal.mjs",
+    "restore": "node scripts/restore-state.mjs",
+    "restore:check": "node scripts/restore-state.mjs --check",
+    "synthetic:state": "node scripts/synthetic-state.mjs"
   },
   "devDependencies": {
     "@app/server": "workspace:*",

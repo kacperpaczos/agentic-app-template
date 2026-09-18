@@ -141,6 +141,29 @@ export class ConversationService {
   }
 
   /**
+   * Drops the binding to a Claude session that no longer has a transcript.
+   *
+   * Keeping the id after a failed resume is what turns one lost transcript into
+   * a conversation that can never be used again: every later run resumes the
+   * same dead session and fails the same way. Clearing it is also the honest
+   * record — the application no longer claims to hold a session it cannot open.
+   *
+   * Conditional on the id: a run that failed while a *newer* session had already
+   * been bound (a queued run, a retry) must not erase that newer binding.
+   *
+   * Returns whether the binding was actually dropped.
+   */
+  forgetClaudeSession(id: string, sessionId: string): boolean {
+    const res = this.db.$client
+      .prepare(
+        `UPDATE conversations SET claude_session_id = NULL, updated_at = ?
+         WHERE id = ? AND claude_session_id = ?`,
+      )
+      .run(nowIso(), id, sessionId);
+    return res.changes > 0;
+  }
+
+  /**
    * Deleting a conversation cascades to its messages and runs (FK ON DELETE
    * CASCADE) and detaches its artifacts (ON DELETE SET NULL) so published work
    * survives. The Claude session id is dropped with the row; the SDK's own

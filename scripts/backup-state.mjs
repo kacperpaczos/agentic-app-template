@@ -39,6 +39,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { basename, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
@@ -91,8 +92,20 @@ export function census(dbFile) {
       .map((r) => r.name);
     const tableCounts = {};
     const tableDigests = {};
+    const tableColumns = {};
     for (const t of tables) {
       tableCounts[t] = db.prepare(`SELECT COUNT(*) AS n FROM "${t}"`).get().n;
+      /*
+       * Columns as the schema declares them, not as the rows happen to show
+       * them: an empty table has rows to read no names from, and "which columns
+       * existed before the migration" is exactly what the rehearsal needs in
+       * order to tell an added column from changed data.
+       */
+      tableColumns[t] = db
+        .prepare(`PRAGMA table_info("${t}")`)
+        .all()
+        .map((c) => c.name)
+        .sort();
       const rows = db.prepare(`SELECT * FROM "${t}"`).all();
       const canonical = rows
         .map((r) => JSON.stringify(Object.keys(r).sort().map((k) => [k, r[k]])))
@@ -103,7 +116,7 @@ export function census(dbFile) {
       ? db.prepare('SELECT id FROM schema_migrations ORDER BY id').all().map((r) => r.id)
       : [];
     const integrity = db.pragma('integrity_check', { simple: true });
-    return { tables, tableCounts, tableDigests, migrations, integrity };
+    return { tables, tableCounts, tableDigests, tableColumns, migrations, integrity };
   } finally {
     db.close();
   }
@@ -111,6 +124,7 @@ export function census(dbFile) {
 
 /** Refuses to copy a database some process may be writing to. */
 function assertNobodyHoldsIt(dbFile) {
+  let checked = false;
   for (const part of DB_PARTS) {
     const p = resolve(dbFile, '..', part);
     if (!existsSync(p)) continue;
@@ -118,6 +132,7 @@ function assertNobodyHoldsIt(dbFile) {
       const holders = execFileSync('fuser', [p], { stdio: ['ignore', 'pipe', 'ignore'] })
         .toString()
         .trim();
+      checked = true;
       if (holders) {
         throw new Error(
           `Plik ${p} jest otwarty przez proces(y): ${holders}.\n` +
@@ -127,13 +142,48 @@ function assertNobodyHoldsIt(dbFile) {
     } catch (e) {
       // `fuser` exits non-zero when nothing holds the file: that is the good case.
       if (e instanceof Error && /jest otwarty przez proces/.test(e.message)) throw e;
+      /*
+       * Anything else means the check itself did not run — `fuser` missing is
+       * the common one. That is said out loud rather than passed over: a
+       * protection that can silently be absent is worse than none, because the
+       * output would otherwise read exactly like a checked copy.
+       */
+      if (e && e.code === 'ENOENT') {
+        console.warn(
+          '[backup] UWAGA: nie znaleziono narzedzia `fuser` — NIE sprawdzono, czy baza jest otwarta ' +
+            'przez jakis proces. Upewnij sie sam, ze aplikacja jest zatrzymana.',
+        );
+        return;
+      }
+      checked = true;
     }
+  }
+  if (!checked) return;
+}
+
+/**
+ * Refuses to write the copy into the directory being copied.
+ *
+ * A backup inside `data/` is copied into itself on the next run, grows without
+ * bound and — worse — is deleted by the same `rm -rf data` that the recovery
+ * procedure tells people to avoid. It also puts the copy on the wrong side of
+ * the "never touch the live directory" line this script exists to hold.
+ */
+function assertSafeOutDir(dataDir, outDir) {
+  const data = resolve(dataDir);
+  const out = resolve(outDir);
+  if (out === data || out.startsWith(data + '/')) {
+    throw new Error(
+      `Katalog kopii ${out} lezy wewnatrz katalogu danych ${data}.\n` +
+        'Wskaz katalog poza katalogiem danych (--out), inaczej kopia jest czescia tego, co kopiuje.',
+    );
   }
 }
 
-function backup({ dataDir, outDir }) {
+export function backup({ dataDir, outDir }) {
   const dbFile = resolve(dataDir, 'app.db');
   if (!existsSync(dbFile)) throw new Error(`Nie znaleziono bazy: ${dbFile}`);
+  assertSafeOutDir(dataDir, outDir);
   assertNobodyHoldsIt(dbFile);
 
   mkdirSync(outDir, { recursive: true });
@@ -210,7 +260,7 @@ function backup({ dataDir, outDir }) {
  * turns one into the other, and it is run immediately after writing so the
  * result is reported at the moment of creation rather than discovered later.
  */
-function verify(outDir) {
+export function verify(outDir) {
   const manifestPath = resolve(outDir, 'manifest.json');
   if (!existsSync(manifestPath)) throw new Error(`Brak manifestu: ${manifestPath}`);
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
@@ -244,59 +294,14 @@ function verify(outDir) {
   return problems;
 }
 
-/* --------------------------------- main ---------------------------------- */
-
-const verifyOnly = flag('verify');
-if (verifyOnly) {
-  const problems = verify(resolve(verifyOnly));
-  if (problems.length) {
-    console.error(`[backup] KOPIA NIEPOPRAWNA (${problems.length}):`);
-    for (const p of problems) console.error(`  - ${p}`);
-    process.exit(1);
-  }
-  console.log(`[backup] kopia ${resolve(verifyOnly)} sprawdzona: bez zastrzezen`);
-  process.exit(0);
-}
-
-const dataDir = resolve(flag('data', resolve(process.cwd(), 'data')));
-const outDir = resolve(
-  flag('out', resolve(process.cwd(), 'backups', `${basename(dataDir)}-${new Date().toISOString().replace(/[:.]/g, '-')}`)),
-);
-
-const manifest = backup({ dataDir, outDir });
-const problems = verify(outDir);
-
-console.log(`[backup] zrodlo:   ${dataDir}`);
-console.log(`[backup] kopia:    ${outDir}`);
-console.log(
-  `[backup] baza:     ${manifest.databaseParts.map((p) => `${p.part} ${(p.bytes / 1024).toFixed(0)} kB`).join(', ')}` +
-    ` → app.db ${(manifest.databaseAfterCheckpoint.bytes / 1024).toFixed(0)} kB po zwinieciu WAL`,
-);
-console.log(`[backup] migracje: ${manifest.census.migrations.join(', ') || '(brak)'}`);
-const interesting = ['conversations', 'messages', 'agent_runs', 'run_events', 'canvas_spaces', 'canvas_cards', 'artifacts', 'files'];
-console.log(
-  `[backup] wiersze:  ${interesting
-    .filter((t) => t in manifest.census.tableCounts)
-    .map((t) => `${t}=${manifest.census.tableCounts[t]}`)
-    .join(' ')}`,
-);
-for (const [tree, files] of Object.entries(manifest.trees)) {
-  console.log(`[backup] ${tree}: ${files.length} plikow`);
-}
-
-if (problems.length) {
-  console.error(`[backup] WERYFIKACJA NIEUDANA (${problems.length}):`);
-  for (const p of problems) console.error(`  - ${p}`);
-  process.exit(1);
-}
 /*
- * Last, after every read: drop the empty log and the shared-memory index.
+ * After every read: drop the empty log and the shared-memory index.
  *
  * They are recreated by each `census`/`verify` connection, so clearing them
- * earlier achieves nothing. Removing them here leaves the backup as a single
- * `app.db`, which is what makes a restore one copy instead of three — and
- * removes the chance of someone restoring the main file without its log, the
- * exact mistake this script exists to prevent.
+ * earlier achieves nothing. Removing them at the end leaves the backup as a
+ * single `app.db`, which is what makes a restore one copy instead of three —
+ * and removes the chance of someone restoring the main file without its log,
+ * the exact mistake this script exists to prevent.
  */
 export function tidy(dir) {
   for (const stray of ['app.db-wal', 'app.db-shm']) {
@@ -304,7 +309,69 @@ export function tidy(dir) {
     if (existsSync(p)) rmSync(p);
   }
 }
-tidy(outDir);
 
-console.log('[backup] weryfikacja: kopia odczytana ponownie, sumy i census zgodne, integrity_check ok');
-console.log(`[backup] kopia to jeden plik app.db — odtworzenie: patrz docs/odzyskiwanie-stanu.md`);
+/* --------------------------------- main ---------------------------------- */
+
+/**
+ * Guarded so the functions above can be imported — by `restore-state.mjs`,
+ * which must verify a backup before it touches anything, and by the regression
+ * tests. Without the guard, importing this file would run a backup.
+ */
+function main() {
+  const verifyOnly = flag('verify');
+  if (verifyOnly) {
+    const problems = verify(resolve(verifyOnly));
+    if (problems.length) {
+      console.error(`[backup] KOPIA NIEPOPRAWNA (${problems.length}):`);
+      for (const p of problems) console.error(`  - ${p}`);
+      process.exit(1);
+    }
+    console.log(`[backup] kopia ${resolve(verifyOnly)} sprawdzona: bez zastrzezen`);
+    process.exit(0);
+  }
+
+  const dataDir = resolve(flag('data', resolve(process.cwd(), 'data')));
+  const outDir = resolve(
+    flag('out', resolve(process.cwd(), 'backups', `${basename(dataDir)}-${new Date().toISOString().replace(/[:.]/g, '-')}`)),
+  );
+
+  const manifest = backup({ dataDir, outDir });
+  const problems = verify(outDir);
+
+  console.log(`[backup] zrodlo:   ${dataDir}`);
+  console.log(`[backup] kopia:    ${outDir}`);
+  console.log(
+    `[backup] baza:     ${manifest.databaseParts.map((p) => `${p.part} ${(p.bytes / 1024).toFixed(0)} kB`).join(', ')}` +
+      ` → app.db ${(manifest.databaseAfterCheckpoint.bytes / 1024).toFixed(0)} kB po zwinieciu WAL`,
+  );
+  console.log(`[backup] migracje: ${manifest.census.migrations.join(', ') || '(brak)'}`);
+  const interesting = ['conversations', 'messages', 'agent_runs', 'run_events', 'canvas_spaces', 'canvas_cards', 'artifacts', 'files'];
+  console.log(
+    `[backup] wiersze:  ${interesting
+      .filter((t) => t in manifest.census.tableCounts)
+      .map((t) => `${t}=${manifest.census.tableCounts[t]}`)
+      .join(' ')}`,
+  );
+  for (const [tree, files] of Object.entries(manifest.trees)) {
+    console.log(`[backup] ${tree}: ${files.length} plikow`);
+  }
+
+  if (problems.length) {
+    console.error(`[backup] WERYFIKACJA NIEUDANA (${problems.length}):`);
+    for (const p of problems) console.error(`  - ${p}`);
+    process.exit(1);
+  }
+  tidy(outDir);
+
+  console.log('[backup] weryfikacja: kopia odczytana ponownie, sumy i census zgodne, integrity_check ok');
+  console.log(`[backup] kopia to jeden plik app.db — odtworzenie: patrz docs/odzyskiwanie-stanu.md`);
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    main();
+  } catch (err) {
+    console.error(`[backup] PRZERWANO: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(2);
+  }
+}

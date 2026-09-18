@@ -65,6 +65,10 @@ tej instalacji; kopia stanu nie ma być kopią sekretów. Po odtworzeniu na nowe
 maszynie sesje przeglądarki wygasną — trzeba się zalogować ponownie, dane
 pozostają.
 
+Skrypt **odmawia** (kod wyjścia 2) zapisania kopii do wnętrza kopiowanego katalogu: taka kopia jest
+częścią tego, co kopiuje, i znika razem z nim. Jeśli w systemie nie ma `fuser`, sprawdzenie z punktu 1
+nie może się odbyć — skrypt wypisuje wtedy ostrzeżenie zamiast milcząco udawać, że sprawdził.
+
 ### Ponowne sprawdzenie istniejącej kopii
 
 ```bash
@@ -82,12 +86,20 @@ node scripts/migration-rehearsal.mjs --backup backups/data-RRRR-MM-DD \
   --json backups/proba-migracji-RRRR-MM-DD.json
 ```
 
-> **Znane ograniczenie (2026-09-16, analiza kodu, bez próby):** lista tabel, które migracja *może*
-> zmienić (`EXPECTED_TO_CHANGE` w skrypcie), obejmuje zmiany `platform-0002`, ale nie
-> `platform-0003-file-versions`. Ta migracja dodaje kolumny `derived_from_file_id` i `version` do
-> tabeli `files`, a skrypt porównuje odcisk wszystkich kolumn (`SELECT *`). Dla kopii sprzed 0003
-> z niepustą tabelą `files` próba zgłosi więc „tabela files zmieniona nieoczekiwanie”, mimo że dane
-> są zachowane. Uzupełnienie listy wraz z testem jest w `docs/BACKLOG.md`.
+Lista tabel, które migracja *może* zmienić (`EXPECTED_TO_CHANGE` w skrypcie), rozróżnia dwa rodzaje
+zmiany, i to rozróżnienie jest istotne:
+
+- **dodane kolumny** (`platform-0002` → `agent_runs.enqueued_at`, `platform-0003-file-versions` →
+  `files.derived_from_file_id` i `files.version`) — skrypt wymaga, żeby kolumny sprzed migracji
+  trzymały **dokładnie te same wartości**, liczba wierszy się nie zmieniła, a nowe kolumny były
+  wyłącznie tymi wymienionymi. To mocniejsze sprawdzenie niż porównanie całych wierszy, a nie
+  słabsze: samo `SELECT *` nie odróżnia dopisanej kolumny od przepisanego wiersza;
+- **przepisane wiersze** (`schema_migrations`, `messages`) — tu odcisk nic nie powie, więc gwarancję
+  daje sprawdzenie po tożsamości: każda rozmowa, wiadomość użytkownika, karta, plik i artefakt.
+
+Do 2026-09-18 tabeli `files` w tej liście nie było, a próba na kopii z niepustą tabelą `files`
+kończyła się fałszywym „tabela files zmieniona nieoczekiwanie” — czyli dokładnie na danych, które
+miała chronić. Regresja `tests/backup-migration.test.ts` trzyma dziś ten przypadek.
 
 Skrypt kopiuje kopię do katalogu tymczasowego (sama kopia pozostaje nietknięta),
 robi spis treści, uruchamia **prawdziwy** `composeApp` — tę samą ścieżkę co
@@ -95,11 +107,35 @@ robi spis treści, uruchamia **prawdziwy** `composeApp` — tę samą ścieżkę
 wymaga, aby spis był identyczny; to jedyne miejsce, w którym ujawniłoby się
 dublowanie danych przez odtwarzanie aktywności.
 
-Tabele, które **mają** się zmienić, są wymienione w skrypcie z podaniem powodu
-(`schema_migrations`, `agent_runs`, `messages`). Każda inna zmiana to błąd.
-Wiersze widoczne dla użytkownika sprawdzane są **po tożsamości**, nie po liczbie:
-identyfikatory rozmów, treść i przypisanie wiadomości użytkownika, kompozycje
-kart, identyfikatory plików i artefaktów.
+Każda zmiana spoza listy powyżej to błąd. Wiersze widoczne dla użytkownika sprawdzane są **po
+tożsamości**, nie po liczbie: identyfikatory rozmów, treść i przypisanie wiadomości użytkownika,
+kompozycje kart, identyfikatory plików i artefaktów. Na koniec skrypt porównuje sumy SHA-256
+wszystkich plików kopii źródłowej sprzed i po próbie — „próba pracuje na kopii” jest w ten sposób
+zmierzone, a nie tylko wynikające z konstrukcji.
+
+Próba odmawia pracy (kod wyjścia 2), gdy `--backup` albo `--out` wskazuje katalog `data` repozytorium,
+katalog z `APP_DATA_DIR`, albo dowolny katalog zawierający `session.secret` — kopia nigdy go nie
+zawiera, więc jego obecność oznacza katalog danych aplikacji, nawet jeśli nikt go nie nazwał.
+
+### Próba bez danych użytkownika — na danych syntetycznych
+
+Szablon nie zawiera `data/`, a jedyna baza, której do próby użyć nie wolno, to baza użytkownika.
+Dlatego dane do próby się **wytwarza**:
+
+```bash
+node scripts/synthetic-state.mjs --list                   # etapy = migracje platformy
+node scripts/synthetic-state.mjs --out .e2e-bl07/dane --stage platform-0003-file-versions
+node scripts/backup-state.mjs      --data .e2e-bl07/dane --out .e2e-bl07/kopia
+node scripts/migration-rehearsal.mjs --backup .e2e-bl07/kopia --out .e2e-bl07/proba
+```
+
+`--stage <id>` oznacza **stan tuż przed tą migracją**: wszystkie wcześniejsze zastosowane, ta jeszcze
+nie. To jedyny kształt, w którym da się przećwiczyć „ta migracja zachowuje istniejące dane”, i to
+właśnie robi regresja szablonu — po jednym przebiegu na kopii sprzed każdej migracji platformy
+(`tests/backup-migration.test.ts`). Katalog `.e2e-bl07/` jest ignorowany przez git.
+
+Przebieg zapisany w `docs/evidence/z2-bl07/` obejmuje: kopię z zapisem leżącym wyłącznie w WAL,
+weryfikację, próbę migracji na kopii, drugie i trzecie uruchomienie bez skutku oraz odtworzenie.
 
 Wynik historyczny na kopii danych AgenticApp z 2026-09-15 (przed migracją `platform-0003`;
 dowód pozostał lokalnie w AgenticApp):
@@ -124,37 +160,58 @@ nietknięte. Drugie uruchomienie nie zmieniło niczego.
 Aplikacja musi być zatrzymana.
 
 ```bash
-# 1. odłóż obecny stan na bok — nigdy nie nadpisuj go bez tego
-mv data data.przed-odtworzeniem-$(date +%Y%m%d-%H%M%S)
+# najpierw na sucho: nic nie jest dotykane, a wypisane zostaje wszystko,
+# co decyduje o tym, czy odtworzenie jest bezpieczne
+node scripts/restore-state.mjs --backup backups/data-RRRR-MM-DD --data data --check
 
-# 2. odtwórz z kopii
-mkdir -p data
-cp backups/data-RRRR-MM-DD/app.db data/app.db
-cp -r backups/data-RRRR-MM-DD/files data/files
-[ -d backups/data-RRRR-MM-DD/workspaces ] && cp -r backups/data-RRRR-MM-DD/workspaces data/workspaces
+# odtworzenie
+node scripts/restore-state.mjs --backup backups/data-RRRR-MM-DD --data data
 
-# 3. sekret sesji nie jest w kopii — przenieś stary albo pozwol go wygenerowac
-cp data.przed-odtworzeniem-*/session.secret data/session.secret 2>/dev/null || true
-
-# 4. sprawdź, co odtworzono, zanim wstanie aplikacja
-node -e "
-const {createRequire}=require('node:module');
-const {resolve}=require('node:path');
-const D=createRequire(resolve('packages/platform-server/package.json'))('better-sqlite3');
-const db=new D('data/app.db',{readonly:true});
-for (const t of ['conversations','messages','canvas_cards','files'])
-  console.log(t, db.prepare('SELECT COUNT(*) n FROM '+t).get().n);
-console.log('integrity', db.pragma('integrity_check',{simple:true}));
-"
-
-# 5. uruchom
 pnpm build && pnpm start
 ```
 
-W kopii nie ma `app.db-wal` ani `app.db-shm` — WAL został zwinięty do pliku
-głównego, więc odtworzenie to jeden plik. Gdyby ktoś odtwarzał z surowego
-`cp data/*` (nie z tej kopii), musi przenieść **wszystkie trzy** pliki albo
-żadnego; sam `app.db` to cofnięcie się do ostatniego punktu kontrolnego.
+Procedura jest skryptem, a nie listą poleceń do przepisania, bo tylko skrypt daje się wykonać w
+regresji — i bo trzy pytania, które rozstrzygają o bezpieczeństwie odtworzenia, muszą mieć odpowiedź
+**przed** przeniesieniem pierwszego bajtu.
+
+**1. Co dzieje się ze stanem sprzed próby.** Obecny katalog danych jest *przenoszony* do
+`data.przed-odtworzeniem-<znacznik czasu>` — nigdy nadpisywany i nigdy usuwany. Nieudane odtworzenie
+cofa się przez przeniesienie tego katalogu z powrotem. Kopia jest wcześniej sprawdzona (`--verify`);
+kopia, która się nie weryfikuje, jest odrzucana, zanim cokolwiek zostanie przesunięte.
+
+**2. Zgodność wersji kodu.** Skrypt porównuje migracje zapisane w kopii z migracjami, które zna ten
+checkout (czyta je, uruchamiając kompozycję aplikacji na pustym katalogu — więc obejmuje też migracje
+modułu):
+
+- kopia zawiera migrację nieznaną temu buildowi → **odmowa** (kod wyjścia 3). Kopia pochodzi z
+  nowszej wersji kodu, a migracji nie da się cofnąć; trzeba odtworzyć ją na wersji co najmniej tak
+  nowej jak kopia;
+- kopia jest starsza niż kod → skrypt wypisuje, które migracje zastosuje pierwszy start, i odsyła do
+  próby z sekcji 3. Odtworzenie jest dozwolone, ale „gotowość do migracji” to nie to samo co jej
+  wykonanie — próba jest osobnym krokiem i to ona odpowiada, czy dane przeżyją;
+- zestawy są równe → start nie zmieni schematu.
+
+**3. Los sesji aplikacji i transkryptów SDK.**
+
+- *Sesje przeglądarki.* `session.secret` nie jest w kopii (patrz sekcja 2). Skrypt przenosi go z
+  katalogu odłożonego na bok, więc odtworzenie na tej samej maszynie nie wylogowuje nikogo. Przy
+  odtworzeniu na nowej maszynie sekretu nie ma skąd wziąć: zostanie wygenerowany, a wszyscy muszą
+  zalogować się ponownie. Dane pozostają.
+- *Transkrypty Claude Agent SDK.* Leżą poza katalogiem danych aplikacji, nie są kopiowane ani
+  usuwane — nie są nasze. Po odtworzeniu (zwłaszcza na innej maszynie) rozmowa z zapisanym
+  `claude_session_id` może więc nie mieć transkryptu. Aplikacja **nie udaje wtedy, że pamięć
+  wróciła**: pierwsze polecenie w takiej rozmowie kończy się jawnym błędem
+  `session_transcript_lost`, powiązanie z martwą sesją zostaje usunięte, a kolejne polecenie
+  startuje w nowej sesji — świadomie, bez wcześniejszego kontekstu modelu. Historia rozmowy w
+  aplikacji pozostaje nietknięta (kryterium L7.13).
+
+Po skopiowaniu skrypt odczytuje odtworzoną bazę: liczby wierszy porównane z manifestem i
+`PRAGMA integrity_check`. Niezgodność = kod wyjścia 1, jeszcze zanim aplikacja wstanie.
+
+W kopii nie ma `app.db-wal` ani `app.db-shm` — WAL został zwinięty do pliku głównego, więc
+odtworzenie to jeden plik. Gdyby ktoś odtwarzał z surowego `cp data/*` (nie z tej kopii), musi
+przenieść **wszystkie trzy** pliki albo żadnego; sam `app.db` to cofnięcie się do ostatniego punktu
+kontrolnego.
 
 ## 5. Czego ta procedura nie obejmuje
 
@@ -168,3 +225,9 @@ głównego, więc odtworzenie to jeden plik. Gdyby ktoś odtwarzał z surowego
   aplikacji i nie są ani kopiowane, ani usuwane — nie są nasze.
 - **Automatycznego harmonogramu.** Kopia jest wykonywana ręcznie, przed
   migracją. Nic nie robi jej cyklicznie.
+- **Cofania migracji.** Migracje idą tylko w jedną stronę. Dlatego kopia
+  nowsza niż kod jest odrzucana, a nie „naprawiana”.
+- **Wymuszenia próby przed startem.** `pnpm start` stosuje zaległe migracje
+  sam. Rozdział „gotowość” od „wykonania” trzyma się na tym, że próba i
+  odtworzenie są osobnymi poleceniami, które nigdy nie dotykają katalogu
+  danych — nie na blokadzie w starcie aplikacji.
