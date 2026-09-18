@@ -441,12 +441,31 @@ describe('sciezki wokol katalogu danych — trzy ochrony przed skasowaniem', () 
   /* --- ochrona 2: rozwiazywanie dowiazan --- */
 
   it('dowiazanie symboliczne nie obchodzi kontroli', () => {
+    /*
+     * Isolated on purpose, so that it is this protection being tested and not
+     * one of the others standing in for it.
+     *
+     * The configured data directory carries **no** `session.secret` (so the
+     * marker-file rule and the secret rule cannot fire) and the target does not
+     * exist yet (so the "we did not create it" rule cannot fire either). The
+     * only thing that can refuse this is resolving `<link>/nowy` and the
+     * configured path to the same real directory — which is exactly what a
+     * comparison of literal paths fails to do.
+     */
+    const prawdziwe = dir('link-cel-dane');
+    mkdirSync(resolve(prawdziwe, 'files'), { recursive: true });
+    writeFileSync(resolve(prawdziwe, 'app.db'), 'baza\n');
     const link = dir('dowiazanie-do-danych');
-    symlinkSync(dane, link, 'dir');
-    const r = run('synthetic-state.mjs', ['--out', join(link, 'files'), '--stage', 'empty']);
+    symlinkSync(prawdziwe, link, 'dir');
+
+    const r = run(
+      'synthetic-state.mjs',
+      ['--out', join(link, 'nowy'), '--stage', 'empty'],
+      { APP_DATA_DIR: prawdziwe },
+    );
     expect(r.status, r.out).toBe(2);
     expect(r.out).toMatch(/lezy w katalogu danych aplikacji/);
-    nienaruszony();
+    expect(existsSync(resolve(prawdziwe, 'nowy')), 'skrypt wszedl do katalogu danych').toBe(false);
   }, 60_000);
 
   /* --- ochrona 3: nie kasuj katalogu, ktorego te skrypty nie zrobily --- */
