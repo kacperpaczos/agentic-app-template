@@ -1,0 +1,27 @@
+# Stan drzewa po bramkach (G17, G18, G19)
+
+$ git log --oneline -1
+4b67dbd BL-08b: oceny dziesieciu kryteriow L5, opis ograniczen biblioteki i kontraktu CUSTOM, wpis FEEDBACK
+
+$ git merge domkniecie/integracja
+Already up to date.
+  (integracja nie ruszyla sie od 1c9b1e7 — bazy i scalonego drzewa to ten sam commit;
+   typecheck i verify ponizej przebiegly na tym drzewie)
+
+$ pnpm typecheck  -> exit 0
+$ pnpm verify     -> exit 0
+ Test Files  53 passed (53)
+      Tests  816 passed (816)
+
+$ git status --porcelain   # po pnpm verify
+?? docs/evidence/z9-bl08b/
+  (jedyny wpis to niezacommitowany jeszcze katalog dowodow)
+
+$ pnpm build && flock -w 5400 ../.e2e.lock pnpm exec playwright test   -> exit 0
+  196 passed (14.9m)
+
+$ git status --porcelain   # po pelnym przebiegu przegladarkowym
+?? docs/evidence/z9-bl08b/
+  (bez zmian — zaden test nie zapisuje dowodow przy zwyklym przebiegu, G18)
+
+Tury modelu subskrypcyjnego wydane przez ten pakiet: 0.
