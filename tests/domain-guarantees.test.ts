@@ -298,14 +298,75 @@ describe('L9.3 — kazde wejscie walidowane w runtime, z rozpoznawalna przyczyna
     ['wagi kryteriow bez listy', `/api/m/procurement/cases/PLACEHOLDER/criteria`, { method: 'POST', body: JSON.stringify({}) }],
     ['wyszukiwanie z limitem tekstowym', '/api/m/procurement/search?q=abc&limit=duzo', {}],
     ['opis ekranu bez wersji', '/api/ui/snapshot', { method: 'PUT', body: JSON.stringify({ clientId: 'c1' }) }],
-    ['watek bez tresci', '/api/threads/create', { method: 'POST', body: 'to nie jest json' }],
+    ['watek z cialem, ktore nie jest JSON-em', '/api/threads/create', { method: 'POST', body: 'to nie jest json' }],
+    ['watek z tytulem liczba', '/api/threads/create', { method: 'POST', body: JSON.stringify({ title: 7 }) }],
+    ['zmiana watku z cialem, ktore nie jest JSON-em', '/api/threads/update/PLACEHOLDER_CONV', { method: 'PATCH', body: '{' }],
   ];
 
-  it.each(malformed)('%s nie konczy sie kodem internal', async (_name, path, init) => {
-    const out = await http(path.replace('PLACEHOLDER', caseId), init);
-    expect(out.status, `${path} → ${out.status}`).not.toBe(500);
-    expect(out.code, `${path} → ${JSON.stringify(out.body)?.slice(0, 200)}`).not.toBe('internal');
-    if (out.code !== null) expect(APP_ERROR_CODES).toContain(out.code);
+  /*
+   * The assertion is a **refusal**, not merely "not internal".
+   *
+   * It used to be the weaker pair (status ≠ 500, code ≠ `internal`), and on a
+   * route that swallows a broken body and answers 200 both halves pass while
+   * touching nothing: `/api/threads/create` parsed `'to nie jest json'` with
+   * `.catch(() => ({}))`, created a conversation and returned 200, and the row
+   * reported success. A row that cannot fail is not a row. Every entry above is
+   * now required to be refused, with a code from the taxonomy that is not the
+   * catch-all.
+   */
+  it.each(malformed)('%s jest odrzucone z rozpoznawalna przyczyna', async (_name, path, init) => {
+    const conv = h.platform.services.conversations.create({ ownerId: h.ownerId, title: 'Do zmiany' });
+    const url = path.replace('PLACEHOLDER_CONV', conv.id).replace('PLACEHOLDER', caseId);
+    const out = await http(url, init);
+    expect(out.status, `${url} → ${out.status} ${JSON.stringify(out.body)?.slice(0, 160)}`).toBeGreaterThanOrEqual(400);
+    expect(out.status).not.toBe(500);
+    expect(out.code, `${url} → ${JSON.stringify(out.body)?.slice(0, 200)}`).not.toBe('internal');
+    expect(APP_ERROR_CODES).toContain(out.code);
+  });
+
+  it('cialo, ktorego nie da sie sparsowac, nie tworzy rozmowy i nie zmienia istniejacej', async () => {
+    /*
+     * The half the battery cannot see: that the refusal happened *before* the
+     * write. A 400 returned after the conversation was created would satisfy
+     * every row above and still be the defect.
+     */
+    const before = h.platform.services.conversations.list(h.ownerId);
+    const conv = h.platform.services.conversations.create({ ownerId: h.ownerId, title: 'Nazwa poczatkowa' });
+
+    const created = await http('/api/threads/create', { method: 'POST', body: 'to nie jest json' });
+    expect(created.code).toBe('validation_failed');
+    expect(created.body.error.details.reason).toBe('malformed_json');
+
+    const updated = await http(`/api/threads/update/${conv.id}`, { method: 'PATCH', body: 'rowniez nie' });
+    expect(updated.code).toBe('validation_failed');
+
+    // One conversation more than before — the one this test made itself.
+    expect(h.platform.services.conversations.list(h.ownerId)).toHaveLength(before.length + 1);
+    expect(h.platform.services.conversations.get(conv.id, h.ownerId).title).toBe('Nazwa poczatkowa');
+  });
+
+  it('pusty brak ciala nadal zaklada watek — odmowa dotyczy tresci zepsutej, nie nieobecnej', async () => {
+    // The distinction the fix rests on: "said nothing" and "said something
+    // unparseable" are different requests, and only the second is an error.
+    const before = h.platform.services.conversations.list(h.ownerId).length;
+    const out = await http('/api/threads/create', { method: 'POST' });
+    expect(out.status).toBe(200);
+    expect(h.platform.services.conversations.list(h.ownerId)).toHaveLength(before + 1);
+  });
+
+  it('watek nie da sie zwiazac z cudza przestrzenia canvas', async () => {
+    const foreign = h.platform.services.canvas.createSpace({
+      ownerId: h.otherOwnerId,
+      title: 'Cudza przestrzen',
+    });
+    const before = h.platform.services.conversations.list(h.ownerId).length;
+    const out = await http('/api/threads/create', {
+      method: 'POST',
+      body: JSON.stringify({ spaceId: foreign.id }),
+    });
+    expect(out.status).toBe(403);
+    expect(out.code).toBe('forbidden');
+    expect(h.platform.services.conversations.list(h.ownerId)).toHaveLength(before);
   });
 
   it('odmowa niesie liste problemow, nie sam komunikat', async () => {
@@ -607,6 +668,132 @@ describe('L9.7, L9.14 — powtorzenie i jednoczesne ponowienia daja jeden skutek
 
     // The caller is told; the value from the first request is what is stored.
     expect(h.service.repo.getItem(item.id, h.ownerId).item.quantityMilli).toBe(3000);
+  });
+
+  it('powtorzenie BEZ operationId: trzy narzedzia dubluja skutek, cztery sa chronione inaczej', async () => {
+    /*
+     * The open half of L9.7, written as a test rather than as a sentence in a
+     * backlog column.
+     *
+     * Without a key the platform cannot tell a retry from a second request, so
+     * the question is which write tools would actually double something. Three
+     * would; the other four are stopped by a guard they have for another reason
+     * — a version, a missing row, or a merge that finds nothing to change. The
+     * distinction decides where the next package has to look, and a claim about
+     * it that nothing executes is worth exactly as much as a comment.
+     */
+    const conversationId = h.platform.services.conversations.create({
+      ownerId: h.ownerId,
+      title: 'Powtorzenia bez klucza',
+    }).id;
+    const ctx = { conversationId };
+    const space = h.platform.services.canvas.createSpace({ ownerId: h.ownerId, title: 'Bez klucza' });
+    const spec = { kind: 'component' as const, component: 'platform.markdown', props: { markdown: 'x' } };
+    const cardsIn = (spaceId: string) =>
+      h.platform.services.canvas.getState(spaceId, h.ownerId).cards.length;
+
+    /* --- dubluje: canvas_add_card ---------------------------------------- */
+    await callPlatformTool('canvas_add_card', { spaceId: space.id, title: 'K', spec }, ctx);
+    await callPlatformTool('canvas_add_card', { spaceId: space.id, title: 'K', spec }, ctx);
+    expect(cardsIn(space.id), 'canvas_add_card nie zdublowal — opis braku L9.7 jest nieaktualny').toBe(2);
+
+    /* --- chronione: canvas_update_card (wersja) --------------------------- */
+    const card = h.platform.services.canvas.getState(space.id, h.ownerId).cards[0]!;
+    const patch = { cardId: card.id, spec: { ...spec, props: { markdown: 'y' } }, expectedSpecVersion: card.specVersion };
+    await callPlatformTool('canvas_update_card', patch, ctx);
+    await expect(callPlatformTool('canvas_update_card', patch, ctx)).rejects.toMatchObject({
+      code: 'conflict',
+    });
+
+    /* --- chronione: canvas_remove_card (brak wiersza) --------------------- */
+    await callPlatformTool('canvas_remove_card', { cardId: card.id }, ctx);
+    await expect(callPlatformTool('canvas_remove_card', { cardId: card.id }, ctx)).rejects.toMatchObject({
+      code: 'not_found',
+    });
+
+    /* --- dubluje: agent_view_create -------------------------------------- */
+    const source = 'root = TextContent("widok")';
+    const firstView = (await callPlatformTool('agent_view_create', { title: 'W', source }, ctx)) as {
+      cardId: string;
+      spaceId: string;
+    };
+    await callPlatformTool('agent_view_create', { title: 'W', source }, ctx);
+    expect(cardsIn(firstView.spaceId), 'agent_view_create nie zdublowal').toBe(2);
+
+    /* --- chronione: agent_view_update (scalenie bez zmiany) --------------- */
+    const edit = { cardId: firstView.cardId, patch: 'root = TextContent("inny")' };
+    const changed = (await callPlatformTool('agent_view_update', edit, ctx)) as { unchanged: boolean; specVersion: number };
+    const again = (await callPlatformTool('agent_view_update', edit, ctx)) as { unchanged: boolean; specVersion: number };
+    expect(changed.unchanged).toBe(false);
+    expect(again.unchanged, 'powtorzony agent_view_update zapisal drugi raz').toBe(true);
+    expect(again.specVersion).toBe(changed.specVersion);
+
+    /* --- chronione: agent_view_remove (brak wiersza) ---------------------- */
+    await callPlatformTool('agent_view_remove', { cardId: firstView.cardId }, ctx);
+    await expect(
+      callPlatformTool('agent_view_remove', { cardId: firstView.cardId }, ctx),
+    ).rejects.toMatchObject({ code: 'not_found' });
+
+    /* --- dubluje: files_publish_version ---------------------------------- */
+    const workspaceDir = mkdtempSync(join(tmpdir(), 'agentic-workspace-'));
+    tempDirs.push(workspaceDir);
+    mkdirSync(join(workspaceDir, 'output'), { recursive: true });
+    writeFileSync(join(workspaceDir, 'output', 'wersja.csv'), 'a,b\n1,2\n');
+    const original = h.platform.services.files.list(h.ownerId)[0]!;
+    const filesBefore = h.platform.services.files.list(h.ownerId).length;
+    const publish = { path: 'wersja.csv', originalFileId: original.id };
+    await callPlatformTool('files_publish_version', publish, { ...ctx, workspaceDir });
+    await callPlatformTool('files_publish_version', publish, { ...ctx, workspaceDir });
+    expect(
+      h.platform.services.files.list(h.ownerId).length,
+      'files_publish_version nie zdublowal',
+    ).toBe(filesBefore + 2);
+  });
+
+  it('publikacja wersji pliku: ten sam klucz z innym plikiem jest odrzucany, a nie kwitowany', async () => {
+    /*
+     * The write path that was missed when the guard was rebuilt. Without a
+     * fingerprint the second call — a *different* source file under the same
+     * key — was answered with the first publication's id, version and download
+     * link, and reported success: the caller would be told its file was
+     * published while nothing of it was written.
+     */
+    const workspaceDir = mkdtempSync(join(tmpdir(), 'agentic-workspace-'));
+    tempDirs.push(workspaceDir);
+    mkdirSync(join(workspaceDir, 'output'), { recursive: true });
+    writeFileSync(join(workspaceDir, 'output', 'pierwszy.csv'), 'a,b\n1,2\n');
+    writeFileSync(join(workspaceDir, 'output', 'drugi.csv'), 'a,b\n9,9\n');
+
+    const original = h.platform.services.files.list(h.ownerId)[0]!;
+    const operationId = 'op-wersja-pliku-1';
+
+    const first = (await callPlatformTool(
+      'files_publish_version',
+      { path: 'pierwszy.csv', originalFileId: original.id, operationId },
+      { workspaceDir },
+    )) as { fileId: string; version: number };
+    expect(first.fileId).toBeTruthy();
+    const afterFirst = h.platform.services.files.list(h.ownerId).length;
+
+    await expect(
+      callPlatformTool(
+        'files_publish_version',
+        { path: 'drugi.csv', originalFileId: original.id, operationId },
+        { workspaceDir },
+      ),
+    ).rejects.toMatchObject({ code: 'conflict', details: { reason: 'operation_id_reused' } });
+
+    // Nothing was written for the refused call, and nothing was invented for it.
+    expect(h.platform.services.files.list(h.ownerId)).toHaveLength(afterFirst);
+
+    // The identical call under the same key still replays, as it must.
+    const replay = (await callPlatformTool(
+      'files_publish_version',
+      { path: 'pierwszy.csv', originalFileId: original.id, operationId },
+      { workspaceDir },
+    )) as { fileId: string };
+    expect(replay.fileId).toBe(first.fileId);
+    expect(h.platform.services.files.list(h.ownerId)).toHaveLength(afterFirst);
   });
 
   it('klucz jest zarezerwowany, zanim operacja cokolwiek zapisze', async () => {

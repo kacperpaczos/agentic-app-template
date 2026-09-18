@@ -1,4 +1,4 @@
-import { AppError, stableJson } from '@platform/contracts';
+import { AppError, operationFingerprint } from '@platform/contracts';
 import type { PlatformServices } from '@platform/server';
 import { newId, nowIso } from '@platform/server';
 import {
@@ -15,19 +15,6 @@ import {
   type Requirement,
 } from '../shared/index.ts';
 import { ProcurementRepository } from './repository.ts';
-
-/**
- * What a repeat has to match to be a repeat.
- *
- * The key alone says "this is the same operation"; the fingerprint is what
- * makes that claim checkable. Without it the store answers a *different*
- * request with the first one's result and reports success, so the caller
- * believes a change it never made was applied.
- */
-const requestFingerprint = (request: Record<string, unknown>): string => {
-  const { operationId: _ignored, ...rest } = request;
-  return stableJson(rest);
-};
 
 export interface CaseDetail {
   procurementCase: ProcurementCase;
@@ -236,7 +223,7 @@ export class ProcurementService {
         }
         return { item: this.repo.getItem(input.itemId, ownerId).item, changed: true };
       },
-      { fingerprint: requestFingerprint(input) },
+      { fingerprint: operationFingerprint(input) },
     );
     return { ...result, replayed };
   }
@@ -376,7 +363,7 @@ export class ProcurementService {
         };
       },
       {
-        fingerprint: requestFingerprint({
+        fingerprint: operationFingerprint({
           caseId: input.caseId,
           title: input.title ?? null,
           conversationId: input.conversationId,

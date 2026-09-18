@@ -187,11 +187,16 @@ export function procurementTools(service: ProcurementService): ModuleToolDefinit
         'wywolanie nie dubluje zmiany.',
       effect: 'write',
       /*
-       * `expectedVersion` required for the agent's door, optional on the shared
-       * schema the HTTP route uses (the module's own form supplies it from the
-       * record it rendered). A write without a version was compared against the
-       * row it was about to overwrite — no check at all — so an agent working
-       * from an older reading would silently replace the user's newer change.
+       * `expectedVersion` is required by the shared schema itself — on both
+       * doors and in the service — so this is no longer where the requirement
+       * lives. What is added here is the *description* the agent reads: the
+       * shared schema cannot say "take it from `list_offers`", because the HTTP
+       * caller takes it from the record it rendered.
+       *
+       * (It used to be the requirement, back when the shared schema left the
+       * field optional and the service filled the gap with the row's current
+       * version — a comparison of a value with itself. That gap is closed; the
+       * comment is kept so nobody re-opens it thinking this line is the guard.)
        */
       inputSchema: updateOfferItemInput.extend({
         expectedVersion: z

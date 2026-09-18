@@ -178,11 +178,17 @@ export class AgentRuntime {
    * A mismatch resolves nothing and leaves the pending request pending, so the
    * run that asked still waits for its own answer (and still times out into a
    * denial if none comes).
+   *
+   * The argument is required, not optional. An optional one would make the
+   * binding a convention — every caller has to remember it, and a caller that
+   * forgets gets the old, unbound behaviour back without a word from the
+   * compiler. Required, the guarantee is structural: there is no way to answer
+   * a consent request without saying which run is being answered.
    */
-  answerPermission(requestId: string, allow: boolean, runId?: string): boolean {
+  answerPermission(requestId: string, allow: boolean, runId: string): boolean {
     const pending = this.#pendingPermissions.get(requestId);
     if (!pending) return false;
-    if (runId !== undefined && pending.runId !== runId) return false;
+    if (pending.runId !== runId) return false;
     this.#pendingPermissions.delete(requestId);
     pending.resolve(allow);
     return true;

@@ -3,7 +3,7 @@ import { basename, extname } from 'node:path';
 import { z } from 'zod';
 import {
   AppError,
-  stableJson,
+  operationFingerprint,
   type ModuleToolDefinition,
   type ToolCallContext,
 } from '@platform/contracts';
@@ -12,12 +12,6 @@ import { resolveInWorkspace, listWorkspaceOutputs } from '../sandbox.ts';
 import { MEDIA_BY_EXT } from './files.ts';
 
 const OPERATION_ID = z.string().min(8).max(200);
-
-/** Everything the call asks for except the key that names it. */
-const writeFingerprint = (input: Record<string, unknown>): string => {
-  const { operationId: _ignored, ...request } = input;
-  return stableJson(request);
-};
 
 /**
  * Durable artifacts: a snapshot or a live descriptor, and a workspace file
@@ -75,7 +69,7 @@ export function artifactTools(services: PlatformServices): Array<ModuleToolDefin
               rendererType: input.rendererType,
               content: input.content,
             }).meta,
-          { fingerprint: writeFingerprint(input) },
+          { fingerprint: operationFingerprint(input) },
         );
         ctx.emit({ type: 'artifact_created', artifactId: result.id });
         return { artifactId: result.id, version: result.currentVersion };
@@ -170,7 +164,7 @@ export function artifactTools(services: PlatformServices): Array<ModuleToolDefin
               downloadUrl: `/api/files/${stored.id}/content`,
             };
           },
-          { fingerprint: writeFingerprint(input) },
+          { fingerprint: operationFingerprint(input) },
         );
         ctx.emit({ type: 'artifact_created', artifactId: result.artifactId });
         return result;
