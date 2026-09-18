@@ -27,6 +27,7 @@ import {
   neverEndingScript,
 } from './bl09-scenarios.ts';
 import { chatHistoryScript } from './chat-history-scenario.ts';
+import { consentThenWorkScript, liveReconnectScript } from './bl08b-scenarios.ts';
 import { interactionsScript } from './interactions-scenario.ts';
 import { showValueScript } from './show-value-scenario.ts';
 import { scriptedAgent, type CallRecord, type Step } from './scripted-agent.ts';
@@ -116,7 +117,12 @@ const SCENARIOS: Record<string, Step[]> = {
       input: { spaceId: 'sp_scripted' },
       result: '{"cards":[],"marker":"WYNIK-NARZEDZIA-A"}',
     },
-    { kind: 'wait', delayMs: 600 },
+    /*
+     * Long enough for a browser test to open the tool's details and read them
+     * *while the run is still running* — which is the half of L5.3 that the
+     * previous assertions could not distinguish from "shown once it finished".
+     */
+    { kind: 'wait', delayMs: 4000 },
     { kind: 'text', text: 'Odczytalem karty. ', delayMs: 300 },
     { kind: 'text', text: 'ODPOWIEDZ-PO-NARZEDZIU', delayMs: 300 },
   ],
@@ -655,6 +661,9 @@ const CONVERSATION_SCENARIOS: Record<string, (prompt: string) => Step[]> = {
   'bl09-timeout': neverEndingScript,
   'bl09-child': childProcessScript,
   'bl09-files': filesScript,
+  /* BL-08b: coming back to a run that is still going. */
+  'bl08b-live-reconnect': liveReconnectScript,
+  'bl08b-consent-then-work': consentThenWorkScript,
 };
 
 const scenario = process.env.SCRIPT ?? 'tool-then-text';
