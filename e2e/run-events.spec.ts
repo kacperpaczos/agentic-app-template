@@ -232,23 +232,63 @@ test.describe('zdarzenia uruchomienia w czacie', () => {
     await send(page, 'Powiedz cos, potem uzyj narzedzia.');
 
     const PROSE = 'PROZA-PRZED-NARZEDZIEM';
-    const samples = await watch(page, [PROSE]);
+    const TOOL = 'canvas_list_cards';
 
     /*
-     * On screen: the prose was there while no call had been drawn yet. That is
-     * the ordering, observed rather than inferred — and it is a scenario that
-     * could not be written at all until the stand-in learned to announce a tool
-     * call *inside* the stream (`inline`), because the expansion pass fired
-     * every hook before the first delta.
+     * Read inside the ready-made thread, and nowhere else.
+     *
+     * A detection trial insisted on this. The first version of the assertion
+     * looked for a sample of the whole panel in which the prose was present and
+     * no call had been drawn — and it stayed green with the ordering broken,
+     * because this application's own run strip paints a delta the instant it
+     * arrives while the library's timeline paints on its next frame. The panel
+     * therefore shows "prose, no tool" for a moment even when the tool call
+     * reached the runtime first. What the criterion is about is the ready-made
+     * component's presentation, so that is what is measured: the position of the
+     * two things inside `.openui-agent-thread-messages`.
      */
-    const proseBeforeAnyTool = samples.some((s) => s.seen[PROSE]! > 0 && s.toolRows === 0);
-    expect(
-      proseBeforeAnyTool,
-      `probki: ${samples.map((s) => `${s.phase}/${s.seen[PROSE]}/${s.toolRows}`).join(' ')}`,
-    ).toBe(true);
-    // …and the call did arrive afterwards, so this is an ordering and not a
-    // scenario that simply never called a tool.
-    expect(samples.some((s) => s.toolRows > 0)).toBe(true);
+    const threadSample = () =>
+      page.evaluate(
+        ([prose, tool]) => {
+          const el = document.querySelector('.openui-agent-thread-messages') as HTMLElement | null;
+          const text = el?.innerText ?? '';
+          return {
+            phase: document.querySelector('[data-testid="run-state"]')?.getAttribute('data-phase') ?? null,
+            prose: text.indexOf(prose),
+            tool: text.indexOf(tool),
+          };
+        },
+        [PROSE, TOOL] as const,
+      );
+
+    const samples: Array<Awaited<ReturnType<typeof threadSample>>> = [];
+    const deadline = Date.now() + 60_000;
+    for (;;) {
+      const s = await threadSample();
+      samples.push(s);
+      if (s.phase === 'succeeded' || s.phase === 'failed') break;
+      if (Date.now() > deadline) break;
+      await page.waitForTimeout(100);
+    }
+    const trace = samples.map((s) => `${s.phase}/${s.prose}/${s.tool}`).join(' ');
+
+    // The prose was in the thread while the call was not yet anywhere in it.
+    expect(samples.some((s) => s.prose >= 0 && s.tool === -1), `probki: ${trace}`).toBe(true);
+    // The call did arrive afterwards, so this is an ordering rather than a
+    // scenario that never called a tool.
+    expect(samples.some((s) => s.tool >= 0), `probki: ${trace}`).toBe(true);
+    const both = samples.filter((s) => s.prose >= 0 && s.tool >= 0);
+    expect(both.length, `probki: ${trace}`).toBeGreaterThan(0);
+    /*
+     * **What is deliberately not asserted, because it was measured to be
+     * false.** Once the call is drawn, the ready-made thread puts it *above* the
+     * prose that preceded it (measured: prose at 35 with no call, then the call
+     * at 56 with the prose at 88). The component groups a turn's steps its own
+     * way rather than laying them out in arrival order, so the arrival order is
+     * a fact about the stream and about *when* each piece appears — which is
+     * what the two assertions above and the event check below state — and not
+     * about where they sit relative to each other.
+     */
 
     await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'succeeded', {
       timeout: 60_000,
