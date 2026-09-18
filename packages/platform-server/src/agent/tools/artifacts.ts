@@ -80,6 +80,8 @@ export function artifactTools(services: PlatformServices): Array<ModuleToolDefin
             available: listWorkspaceOutputs(ctx.workspaceDir),
           });
         }
+        // Read once, above the guard: see the note in `files_publish_version`.
+        const bytes = readFileSync(abs);
         const { result } = await services.idempotency.once(
           input.operationId,
           ctx.ownerId,
@@ -99,7 +101,7 @@ export function artifactTools(services: PlatformServices): Array<ModuleToolDefin
                 ownerId: ctx.ownerId,
                 filename,
                 mediaType,
-                bytes: readFileSync(abs),
+                bytes,
                 scopeKind: 'artifact',
                 scopeId: ctx.runId,
               },

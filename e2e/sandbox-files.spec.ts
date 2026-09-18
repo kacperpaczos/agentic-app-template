@@ -1,4 +1,5 @@
-import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test } from './support/fixtures.ts';
 import { ScriptedInstance } from './support/scripted.ts';
@@ -289,10 +290,12 @@ test.describe('pliki w sandboxie', () => {
     expect(formula.formula).toBe('B1*2');
     expect(formula.result ?? null, 'zapisana formula ma wartosc, ktorej nikt nie policzyl').toBeNull();
 
-    // The original is exactly what was uploaded.
+    // The original is exactly what was uploaded — the bytes, and the checksum
+    // the store recorded for them. (Comparing the store's checksum with itself
+    // would compare an element with a copy of itself and could never fail.)
     const originalNow = await download(page, original.id);
     expect(Buffer.compare(originalNow, originalBytes), 'oryginal zostal zmieniony').toBe(0);
-    expect(original.sha256).toBe(files.find((f) => f.id === original.id)!.sha256);
+    expect(createHash('sha256').update(originalBytes).digest('hex')).toBe(original.sha256);
 
     /*
      * And the run's scratch directory is gone, so the download above came from
@@ -335,6 +338,19 @@ test.describe('pliki w sandboxie', () => {
   }) => {
     await openApp(page);
 
+    /*
+     * Produces its own subject rather than inheriting one.
+     *
+     * This used to read the artifact made by an earlier test in the file, so it
+     * could not be run on its own — and a test that only passes in company is a
+     * test whose failure is hard to place. Publishing a workbook takes a few
+     * seconds; the assertions below are about what happens to it afterwards.
+     */
+    await page.locator('.pf-chat .openui-icon-button[aria-label="New chat"]').first().click();
+    await attach(page, 'skoroszyt-artefakt.xlsx', XLSX_MEDIA, await multiSheetWorkbook());
+    await send(page, 'Policz wartosci i opublikuj nowa wersje skoroszytu jako artefakt.');
+    await settled(page);
+
     // The conversation that produced the workbook, found by its own artifact.
     const artifacts = await page.evaluate(
       async () =>
@@ -342,7 +358,7 @@ test.describe('pliki w sandboxie', () => {
           await (await fetch('/api/artifacts', { credentials: 'include' })).json()
         ).artifacts as Array<{ id: string; title: string; type: string; threadId: string }>,
     );
-    const artifact = artifacts.find((a) => a.title.includes('oferty-poprawione'))!;
+    const artifact = artifacts.find((a) => a.title.includes('oferty-artefakt'))!;
     expect(artifact, 'opublikowana wersja pliku nie jest artefaktem rozmowy').toBeTruthy();
     expect(artifact.type).toBe('platform.file');
 
@@ -367,20 +383,33 @@ test.describe('pliki w sandboxie', () => {
     await page.getByTestId('chat-tab-artifacts').click();
     const browser = page.locator('.openui-agent-artifact-browser');
     await expect(browser).toBeVisible();
-    await browser.getByRole('button', { name: /oferty-poprawione/ }).click();
+    await browser.getByRole('button', { name: /oferty-artefakt/ }).click();
     const full = page.getByTestId('artifact-full');
     await expect(full).toBeVisible();
     await expect(full).toHaveAttribute('data-artifact-id', artifact.id);
 
-    // A download link, and bytes behind it that still open as a workbook.
+    /*
+     * Downloaded by **clicking**, and checked as a file the browser saved.
+     *
+     * Reading the same bytes with `fetch` would prove the endpoint answers; it
+     * would not prove that what is on screen is a download a person can take.
+     * The click produces a real download event, with the filename the store
+     * gave the result, and the saved file is what is opened below.
+     */
     const link = full.getByRole('link', { name: /Pobierz/ });
     await expect(link).toBeVisible();
     const href = await link.getAttribute('href');
     expect(href).toMatch(/^\/api\/files\/fil_[a-z0-9]+\/content$/);
-    const fileId = href!.split('/')[3]!;
-    const bytes = await download(page, fileId);
-    const wb = await loadWorkbook(bytes);
+
+    const [saved] = await Promise.all([page.waitForEvent('download'), link.click()]);
+    expect(saved.suggestedFilename()).toBe('oferty-artefakt.xlsx');
+    const savedPath = await saved.path();
+    expect(savedPath, 'przegladarka nie zapisala pliku').toBeTruthy();
+    const wb = await loadWorkbook(readFileSync(savedPath!));
     expect(wb.worksheets.map((w) => w.name)).toContain('Podsumowanie');
+    expect(wb.getWorksheet('Podsumowanie')!.getCell('B1').value).toBe(WORKBOOK_TOTAL);
+
+    const fileId = href!.split('/')[3]!;
 
     /* ---------------------- access control, both ends ---------------------- */
 

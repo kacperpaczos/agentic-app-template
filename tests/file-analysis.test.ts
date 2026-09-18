@@ -235,7 +235,8 @@ describe('semantyka zapisu skoroszytu', () => {
     expect(zipEntryNames(saved), 'wykres przetrwal zapis — deklaracja mowi inaczej').not.toContain(
       'xl/charts/chart1.xml',
     );
-    expect(FILE_ANALYSIS.spreadsheet.limits.join(' ')).toMatch(/wykresy/);
+    // The declaration names the very case this test just performed.
+    expect(FILE_ANALYSIS.spreadsheet.limits.join(' ')).toMatch(/wykres/);
   });
 
   it('obrazy i formatowanie komorek przezywaja zapis — stad na liscie zachowywanych', async () => {

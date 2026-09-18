@@ -234,7 +234,15 @@ export const FILE_ANALYSIS = {
      */
     limits: [
       'formuly NIE sa przeliczane — zapis formuly nie jest jej wynikiem',
-      'czesci, ktorych parser nie modeluje (np. wykresy, tabele przestawne), znikaja przy zapisie: ' +
+      /*
+       * Named example first, and only the one that is actually checked: a chart
+       * part put into the archive disappears when the workbook is saved
+       * (`tests/file-analysis.test.ts`). Other unmodelled parts go the same way
+       * for the same reason, but this list does not name what no test has seen —
+       * a declaration that overstates the damage is as misleading as one that
+       * hides it.
+       */
+      'czesci, ktorych parser nie modeluje — sprawdzone na wykresie — znikaja przy zapisie: ' +
         'zapisany skoroszyt powstaje z modelu parsera, a nie z kopii pliku wejsciowego',
       'makra nie sa uruchamiane; pliki .xlsm i .xls nie sa przyjmowane',
       'plik zapisany przez agenta jest NOWA wersja — oryginal pozostaje nienaruszony',

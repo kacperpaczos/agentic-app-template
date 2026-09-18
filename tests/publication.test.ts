@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppError, type ToolCallContext } from '@platform/contracts';
 import {
   collectToolEntries,
@@ -32,6 +32,27 @@ import { dispatchingAgent, newStandInHandle, type Plan, type Step } from './supp
  * way sandboxed code would and calling the real tool handlers. The filesystem,
  * the transaction, the HTTP download and the cleanup are all real.
  */
+
+/**
+ * A seam on `renameSync`, because the rename is the mechanism under test.
+ *
+ * `vi.spyOn` cannot touch an ESM namespace, so the module is mocked with a
+ * pass-through that reports every rename and may be made to fail. Everything
+ * else in `node:fs` is the real thing, including for the server package, which
+ * is what makes the injected failure land inside the real publication path.
+ */
+const fsHooks = vi.hoisted(() => ({
+  onRename: null as null | ((from: string, to: string) => void),
+}));
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  const renameSync = ((from: never, to: never) => {
+    fsHooks.onRename?.(String(from), String(to));
+    return actual.renameSync(from, to);
+  }) as typeof actual.renameSync;
+  return { ...actual, default: { ...actual, renameSync }, renameSync };
+});
 
 let h: Harness;
 let plans: Map<string, Plan>;
@@ -176,20 +197,63 @@ describe('wynik przezywa sprzatniecie workspace', () => {
 
 describe('publikacja jest niepodzielna', () => {
   /*
+   * The mechanism, asserted rather than described: the bytes reach their final
+   * name **through a rename**, from a temporary name in the same directory.
+   *
+   * That is what makes "a reader never sees a half-written file under the final
+   * name" true — `rename` within one filesystem is atomic — and it is the part a
+   * test can check without a concurrent reader. The failure branch of the same
+   * mechanism is the test below, which breaks the rename itself.
+   */
+  it('bajty trafiaja pod nazwe docelowa przez zmiane nazwy, nie zapisem wprost', () => {
+    const renames: Array<[string, string]> = [];
+    fsHooks.onRename = (from, to) => void renames.push([from, to]);
+    try {
+      const stored = h.platform.services.files.store({
+        ownerId: h.ownerId, filename: 'przez-rename.txt', mediaType: 'text/plain', bytes: Buffer.from('abc'),
+      });
+      const finalPath = resolve(h.platform.config.filesDir, `${stored.id}.txt`);
+      const used = renames.find(([, to]) => to === finalPath);
+      expect(used, `zapis nie przeszedl przez zmiane nazwy; renameSync: ${JSON.stringify(renames)}`).toBeTruthy();
+      // From a temporary name beside it, so the final name never held a partial file.
+      expect(used![0].startsWith(`${finalPath}.tmp-`)).toBe(true);
+      expect(readFileSync(finalPath).toString('utf8')).toBe('abc');
+    } finally {
+      fsHooks.onRename = null;
+    }
+  });
+
+  it('awaria przy zmianie nazwy nie zostawia ani nazwy docelowej, ani pliku tymczasowego', () => {
+    const before = filesOnDisk();
+    fsHooks.onRename = () => {
+      throw new Error('awaria zmiany nazwy');
+    };
+    try {
+      expect(() =>
+        h.platform.services.files.store({
+          ownerId: h.ownerId, filename: 'nie-dojdzie.txt', mediaType: 'text/plain', bytes: Buffer.from('abc'),
+        }),
+      ).toThrowError(/awaria zmiany nazwy/);
+    } finally {
+      fsHooks.onRename = null;
+    }
+
+    /*
+     * Neither half of the publication survives the failure: no file under the
+     * final name (nothing was renamed there) and no temporary left behind —
+     * and, because the row is written only after the rename, no row either.
+     */
+    expect(filesOnDisk(), 'po awarii zmiany nazwy cos zostalo w magazynie').toEqual(before);
+    expect(rowCount('files')).toBe(0);
+  });
+
+  /*
    * What this establishes, precisely — and what it does not.
    *
    * It shows that by the time anything could learn the file exists (the row is
    * not committed yet) the final name already carries **all** the bytes, and
-   * that nothing temporary is left behind afterwards. A detection trial
-   * confirmed the second half bites: replacing the rename with a direct write to
-   * the final name fails this test — but on the leftover temporary file, not on
-   * a truncated one.
-   *
-   * The property "the final name never exists half-written" is structural: the
-   * final name comes into being only through `rename`, which is atomic within a
-   * filesystem. Observing its absence would need a reader running *during* the
-   * write, which no deterministic test can arrange here. Said out loud rather
-   * than implied by a test name.
+   * that nothing temporary is left behind afterwards. It does not, on its own,
+   * distinguish a rename from a direct write — the two tests above do that.
    */
   it('plik pod nazwa docelowa jest kompletny, a po zapisie nie zostaje nic tymczasowego', () => {
     const bytes = Buffer.from('x'.repeat(4096), 'utf8');

@@ -1,4 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
+import { ACTIVE_RUN_STATUSES } from '@platform/contracts';
 import { apiGet } from '../api/client.ts';
 import { accessSignal } from '../api/accessContext.ts';
 import { useAppState } from '../state/appState.ts';
@@ -203,6 +204,29 @@ export interface ActiveRun {
 export async function syncActiveRuns(qc: QueryClient): Promise<ActiveRun[]> {
   const { runs } = await apiGet<{ runs: ActiveRun[] }>('/api/runs/active');
   const store = useAppState.getState();
+  /*
+   * First: everything this client was following that the backend no longer
+   * calls active. It **ended while nobody was listening**.
+   *
+   * `GET /api/runs/active` answers "what is still going", and a run that
+   * finished during the outage is not in that answer — so a client that lost its
+   * stream had nothing to re-attach to and nothing to re-read the conversation
+   * for. Coming back online left the thread ending at the command, with the
+   * answer sitting in the database; the only ways out were a reload or a
+   * conversation switch, which is precisely what L11.18 forbids as a substitute
+   * for recovery.
+   *
+   * Re-attaching is the recovery: `GET /api/runs/:id/stream?from=<cursor>`
+   * serves a resolved run from its persisted event log, so the terminal event
+   * arrives exactly as it would have live, and the handler that follows it
+   * re-reads the conversation.
+   */
+  const stillActive = new Set(runs.map((r) => r.id));
+  for (const [conversationId, record] of Object.entries(store.runs)) {
+    if (!record.runId || stillActive.has(record.runId)) continue;
+    if (!(ACTIVE_RUN_STATUSES as readonly string[]).includes(record.phase)) continue;
+    attachToRun(qc, { runId: record.runId, conversationId });
+  }
   for (const run of runs) {
     // Seed the record so the strip shows something before the first event of
     // the replay lands — a task that is queued has produced no events at all.

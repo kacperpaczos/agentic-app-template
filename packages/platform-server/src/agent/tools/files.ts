@@ -104,6 +104,15 @@ export function fileTools(services: PlatformServices): Array<ModuleToolDefinitio
             available: listWorkspaceOutputs(ctx.workspaceDir),
           });
         }
+        /*
+         * Read once, above the guard.
+         *
+         * Whatever the idempotency guard ends up fingerprinting has to be the
+         * same bytes that get published; a second `readFileSync` inside the
+         * closure would fingerprint one read and publish another, and a file
+         * that changed between them would make the two disagree silently.
+         */
+        const bytes = readFileSync(abs);
         const { result } = await services.idempotency.once(
           input.operationId,
           ctx.ownerId,
@@ -127,7 +136,7 @@ export function fileTools(services: PlatformServices): Array<ModuleToolDefinitio
                 originalFileId: input.originalFileId,
                 filename,
                 mediaType: MEDIA_BY_EXT[extname(filename).toLowerCase()],
-                bytes: readFileSync(abs),
+                bytes,
               },
               (produced, source) =>
                 services.artifacts.create({

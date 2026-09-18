@@ -1,4 +1,5 @@
 import { expect, test } from './support/fixtures.ts';
+import { CuttableProxy } from './support/cuttable-proxy.ts';
 import { ScriptedInstance } from './support/scripted.ts';
 import { type BrowserContext, type Page } from '@playwright/test';
 
@@ -35,9 +36,11 @@ const shortLimit = new ScriptedInstance({
 });
 
 const MARKER = 'WYNIK-KONCOWY-A';
+/** The browser reaches the instance through this, so the wire can be cut. */
+const PROXY_PORT = 8796;
 
-async function openApp(page: Page, instance: ScriptedInstance) {
-  await page.goto(`${instance.baseUrl}/`);
+async function openApp(page: Page, baseUrl: string) {
+  await page.goto(`${baseUrl}/`);
   await page.evaluate(() =>
     fetch('/api/auth/session', {
       method: 'POST',
@@ -46,7 +49,7 @@ async function openApp(page: Page, instance: ScriptedInstance) {
       body: '{}',
     }),
   );
-  await page.goto(`${instance.baseUrl}/`);
+  await page.goto(`${baseUrl}/`);
   await expect(page.locator('.openui-agent-thread-composer__input')).toBeVisible();
 }
 
@@ -125,7 +128,7 @@ test.describe('zadanie w tle przezywa odejscie obserwatora', () => {
     context: BrowserContext;
   }) => {
     await long.start('bl09-continuity');
-    await openApp(page, long);
+    await openApp(page, long.baseUrl);
     await send(page, 'Dlugie zadanie w tle.');
     await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'running', {
       timeout: 30_000,
@@ -140,7 +143,7 @@ test.describe('zadanie w tle przezywa odejscie obserwatora', () => {
     ).toMatch(/queued|running/);
 
     const reopened = await context.newPage();
-    await openApp(reopened, long);
+    await openApp(reopened, long.baseUrl);
     await reopened.goto(`${long.baseUrl}/?c=${conversation}`);
     await expect(reopened.locator('.openui-agent-thread-messages')).toContainText(MARKER, {
       timeout: 60_000,
@@ -151,7 +154,23 @@ test.describe('zadanie w tle przezywa odejscie obserwatora', () => {
     await reopened.close();
   });
 
-  test('utrata sieci odlacza obserwacje, a zadanie trwa i wraca bez podwojenia', async ({
+  /**
+   * The network really goes away, and the connection really dies.
+   *
+   * The browser talks to the application through {@link CuttableProxy}, because
+   * `setOffline(true)` alone does **not** tear down an established stream: a
+   * review measured a run's event stream still receiving chunks and its terminal
+   * event after the context had been switched offline, which would have made a
+   * test written on it pass for a reason it does not state. Cutting the proxy
+   * destroys the live connection; `setOffline` is kept alongside only for what it
+   * does do honestly — report the outage to the page and fire the `offline` and
+   * `online` events a real outage fires.
+   *
+   * The run finishes **during** the outage, so the client comes back to a run the
+   * backend no longer lists as active: the case that had no route back to the
+   * answer at all.
+   */
+  test('utrata sieci zrywa strumien, zadanie konczy sie bez obserwatora, a klient wraca do wyniku', async ({
     page,
     context,
   }: {
@@ -159,46 +178,80 @@ test.describe('zadanie w tle przezywa odejscie obserwatora', () => {
     context: BrowserContext;
   }) => {
     await long.start('bl09-continuity');
-    await openApp(page, long);
-    await send(page, 'Dlugie zadanie w tle.');
-    await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'running', {
-      timeout: 30_000,
-    });
-    const conversation = urlConversation(page)!;
+    const proxy = new CuttableProxy(PROXY_PORT, long.baseUrl);
+    await proxy.start();
+    try {
+      await openApp(page, proxy.baseUrl);
+      await send(page, 'Dlugie zadanie w tle.');
+      await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'running', {
+        timeout: 30_000,
+      });
+      const conversation = urlConversation(page)!;
+      // Something has arrived on the stream, so there is a live connection to lose.
+      await expect(page.getByTestId('streaming-answer')).toContainText('Zaczynam prace', {
+        timeout: 30_000,
+      });
 
-    /* --------------------------- the network goes -------------------------- */
+      /* --------------------------- the wire is cut -------------------------- */
 
-    await context.setOffline(true);
-    // Asked of the backend from outside the browser: the work is still the
-    // backend's, whatever the tab can or cannot see.
-    expect((await backendRuns(long, conversation))[0]?.status).toMatch(/queued|running/);
+      proxy.cut();
+      await context.setOffline(true);
 
-    // Long enough for the run to finish while nobody is listening.
-    await new Promise((r) => setTimeout(r, 8000));
-    expect((await backendRuns(long, conversation))[0]?.status).toBe('succeeded');
+      /*
+       * The connection is gone rather than merely unused: from inside the page
+       * every request now fails — asked of `fetch`, which is what a re-attachment
+       * would use.
+       */
+      const reachable = await page.evaluate(async () => {
+        try {
+          return (await fetch('/api/health', { cache: 'no-store' })).ok;
+        } catch {
+          return false;
+        }
+      });
+      expect(reachable, 'siec nie zostala zerwana — strona nadal siega serwera').toBe(false);
 
-    /* -------------------------- and comes back ----------------------------- */
+      // Asked of the backend from outside the browser: the work is still the
+      // backend's, whatever the tab can or cannot see.
+      expect((await backendRuns(long, conversation))[0]?.status).toMatch(/queued|running/);
 
-    /*
-     * Back online — and **without a reload**. The client has to notice by
-     * itself: the dropped stream is gone, the run finished while nobody was
-     * listening, and mounting or switching conversation (the other two moments
-     * that re-sync) never happens when a laptop simply wakes up.
-     */
-    await context.setOffline(false);
-    await expect(page.locator('.openui-agent-thread-messages')).toContainText(MARKER, {
-      timeout: 60_000,
-    });
+      // The run finishes while nobody is listening at all.
+      await expect
+        .poll(async () => (await backendRuns(long, conversation))[0]?.status, { timeout: 30_000 })
+        .toBe('succeeded');
+      // And its answer never reached the page while it was cut off.
+      expect(
+        occurrences(await page.locator('.openui-agent-thread-messages').innerText(), MARKER),
+        'wynik pojawil sie na ekranie mimo zerwanej sieci',
+      ).toBe(0);
 
-    const onScreen = (await page.locator('.openui-agent-thread-messages').innerText()) ?? '';
-    expect(occurrences(onScreen, MARKER), 'odpowiedz pokazana dwa razy').toBe(1);
-    expect(occurrences(await answerText(page, conversation), MARKER)).toBe(1);
-    expect(await runsOf(page, conversation), 'zadanie uruchomilo sie drugi raz').toHaveLength(1);
+      /* -------------------------- and comes back ----------------------------- */
+
+      proxy.restore();
+      await context.setOffline(false);
+
+      /*
+       * **No reload.** The client recovers by itself: mounting and switching
+       * conversation — the other two moments that re-sync — do not happen when a
+       * laptop simply wakes up, and the run it was following is no longer in
+       * `GET /api/runs/active`, because it has already finished.
+       */
+      await expect(page.locator('.openui-agent-thread-messages')).toContainText(MARKER, {
+        timeout: 60_000,
+      });
+
+      const onScreen = await page.locator('.openui-agent-thread-messages').innerText();
+      expect(occurrences(onScreen, MARKER), 'odpowiedz pokazana dwa razy').toBe(1);
+      expect(occurrences(await answerText(page, conversation), MARKER)).toBe(1);
+      expect(await runsOf(page, conversation), 'zadanie uruchomilo sie drugi raz').toHaveLength(1);
+    } finally {
+      await proxy.stop();
+    }
   });
 
   test('przeladowanie w trakcie zadania dokancza odpowiedz bez jej podwojenia', async ({ page }) => {
     await long.start('bl09-continuity');
-    await openApp(page, long);
+    await openApp(page, long.baseUrl);
     await send(page, 'Dlugie zadanie w tle.');
     await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'running', {
       timeout: 30_000,
@@ -229,7 +282,7 @@ test.describe('zadanie w tle przezywa odejscie obserwatora', () => {
   test('twardy limit czasu konczy zadanie bez Stop i mowi o tym w rozmowie', async ({ page }) => {
     shortLimit.prepareDatabase();
     await shortLimit.start('bl09-timeout');
-    await openApp(page, shortLimit);
+    await openApp(page, shortLimit.baseUrl);
     await send(page, 'Zadanie bez konca.');
     await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'running', {
       timeout: 30_000,

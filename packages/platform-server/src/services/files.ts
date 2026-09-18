@@ -269,11 +269,24 @@ export class FileService {
     ).map(toFile);
   }
 
+  /**
+   * Removes the row and the bytes together, or neither.
+   *
+   * The two used to be separate statements with the row first, so anything that
+   * stopped the deletion of the bytes — a refused path, a permission error —
+   * left a row pointing at a file that was still there, or the reverse. Both
+   * happen inside one transaction: a throw from the guarded delete rolls the row
+   * back, and the store stays consistent with the disk.
+   *
+   * `rel_path` comes out of the database, so the path is checked at the deletion
+   * rather than inferred from how the value was produced.
+   */
   delete(id: string, ownerId: string): void {
     const row = this.#row(id, ownerId);
-    this.db.$client.prepare('DELETE FROM files WHERE id = ?').run(id);
-    // `rel_path` comes out of the database, so the check happens here, at the
-    // deletion, rather than being inferred from how the value was produced.
-    removeManagedFile(resolve(this.filesDir, row.rel_path), this.#root);
+    const path = resolve(this.filesDir, row.rel_path);
+    this.db.$client.transaction(() => {
+      this.db.$client.prepare('DELETE FROM files WHERE id = ?').run(id);
+      removeManagedFile(path, this.#root);
+    })();
   }
 }

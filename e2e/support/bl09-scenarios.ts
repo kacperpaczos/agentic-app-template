@@ -149,11 +149,23 @@ const OPEN_WORKBOOK = script(
   "console.log('arkusze=' + wb.worksheets.map((w) => w.name).join('|'));",
 );
 
-/** The workbook this conversation is working on, from the run's own listing. */
+/** Names this scenario publishes under; never an input to work on. */
+const PUBLISHED_NAMES = ['oferty-poprawione.xlsx', 'oferty-artefakt.xlsx'];
+
+/**
+ * The workbook this conversation is working on, from the run's own listing.
+ *
+ * The **newest** attached spreadsheet, which is the one the command carried:
+ * `files_list` answers newest first, and by the time several tests have run the
+ * store also holds their results and their other attachments. Picking "the first
+ * .xlsx that is not a published result" used to mean "some earlier test's file"
+ * once there was more than one.
+ */
 const attachedWorkbook = (calls: CallRecord[]): string => {
   const listed = calls.find((c) => c.name === 'files_list');
   const file = (listed?.result?.files ?? []).find(
-    (f: { filename: string }) => f.filename.endsWith('.xlsx') && !f.filename.includes('poprawione'),
+    (f: { filename: string }) =>
+      f.filename.endsWith('.xlsx') && !PUBLISHED_NAMES.includes(f.filename),
   );
   if (!file) throw new Error('scenariusz: brak skoroszytu w magazynie');
   return file.id as string;
@@ -239,6 +251,13 @@ export const filesScript = (prompt: string): Step[] => {
       { kind: 'text', text: ' Nie zmyslam zawartosci.' },
     ];
   }
+  /*
+   * Two publication names, so a conversation that only wants to *look* at the
+   * published artifact does not have to share a title with an earlier one — an
+   * artifact browser listing two identically named entries cannot be clicked
+   * unambiguously.
+   */
+  const publishedName = prompt.includes('artefakt') ? 'oferty-artefakt.xlsx' : 'oferty-poprawione.xlsx';
   return [
     { kind: 'text', text: 'Otwieram skoroszyt. ', delayMs: 120 },
     { kind: 'call', name: 'files_list', maxChars: 600 },
@@ -254,7 +273,7 @@ export const filesScript = (prompt: string): Step[] => {
           input: (calls: CallRecord[]) => ({
             path: 'oferty-poprawione.xlsx',
             originalFileId: attachedWorkbook(calls),
-            filename: 'oferty-poprawione.xlsx',
+            filename: publishedName,
           }),
           maxChars: 500,
         },
