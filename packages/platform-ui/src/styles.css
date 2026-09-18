@@ -188,9 +188,11 @@ body {
   position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
   z-index: 30; max-width: min(680px, 92%);
   padding: 8px 12px; font-size: 13px;
-  background: #fff8e8; border: 1px solid var(--pf-warn); border-radius: var(--pf-radius);
+  background: var(--pf-panel); color: var(--pf-text);
+  border: 1px solid var(--pf-warn); border-left-width: 4px; border-radius: var(--pf-radius);
   box-shadow: 0 2px 8px rgba(16, 24, 40, .12);
 }
+.pf-draft-conflict > strong { color: var(--pf-warn); }
 .pf-draft-conflict ul { margin: 6px 0; padding-left: 18px; }
 .pf-draft-conflict li { margin-bottom: 4px; }
 .pf-draft-conflict .pf-btn { margin-left: 8px; }

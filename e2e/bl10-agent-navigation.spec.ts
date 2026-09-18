@@ -205,6 +205,13 @@ test.describe('nawigacja zlecona przez agenta', () => {
 
     await settled(page);
     await expect(answer(page)).toContainText('executed=true');
+    /*
+     * And the opening is *reported*, not merely performed: the acknowledgement
+     * carries the change of presentation the client made, so the agent can say
+     * what it opened and the user can close it again. Without this assertion
+     * the test would pass on a client that expanded the section silently.
+     */
+    await expect(answer(page)).toContainText('zmiany=section_expanded');
 
     // Showing it changed the presentation and nothing else: no setting's value
     // moved, and the change of presentation is itself reported.
@@ -237,6 +244,8 @@ test.describe('nawigacja zlecona przez agenta', () => {
 
     await expect(answer(page)).toContainText('executed=false');
     await expect(answer(page)).toContainText('unknown_target');
+    // Nothing was opened on the way, so nothing is reported as opened.
+    await expect(answer(page)).not.toContainText('zmiany=');
     expect(path(page)).toBe('/settings');
     // The refusal changed nothing on screen either: the section stays closed.
     await expect(page.getByTestId('settings-tools-section')).not.toHaveAttribute('open', '');

@@ -457,17 +457,23 @@ test.describe('dostepnosc: etykiety, role, stan i fokus', () => {
         // A control may move its ring to a wrapper it shares with a label.
         wrapperOutlineStyle: ws?.outlineStyle ?? 'none',
         wrapperOutlineWidth: ws ? widthOf(ws.outlineWidth) : 0,
-        shadow: s.boxShadow,
       };
     });
 
-  /** True when something visible marks the focused element. */
+  /**
+   * True when the browser is actually drawing a ring on the focused element.
+   *
+   * An outline with a width, on the control or on the wrapper that stands in
+   * for it — and nothing else. An earlier version also accepted "any non-empty
+   * `box-shadow`", which every card and panel in this application has whether
+   * it is focused or not, so it would have passed on a control with
+   * `outline: none`. That is the exact defect this criterion is about.
+   */
   const ringIsDrawn = (ring: Awaited<ReturnType<typeof focusRing>>) =>
     Boolean(
       ring &&
         ((ring.outlineStyle !== 'none' && ring.outlineWidth >= 1) ||
-          (ring.wrapperOutlineStyle !== 'none' && ring.wrapperOutlineWidth >= 1) ||
-          (ring.shadow !== 'none' && ring.shadow !== '')),
+          (ring.wrapperOutlineStyle !== 'none' && ring.wrapperOutlineWidth >= 1)),
     );
 
   test('nawigacja i sekcje maja role, etykiety i stan w aria', async ({ page }) => {

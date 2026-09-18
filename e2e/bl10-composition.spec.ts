@@ -199,6 +199,51 @@ test.describe('zmiana kompozycji przez agenta', () => {
     await expect(page.getByTestId('draft-conflict')).toHaveCount(0);
   });
 
+  test('niezapisany szkic wraca do formularza zbudowanego od nowa', async ({ page }) => {
+    await scripted.restart('bl10-composition');
+    await openApp(page);
+    const { spaceId, caseId } = await openCaseWorkspace(page);
+    const form = await addFormCard(page, spaceId, caseId);
+    await page.reload();
+    await expect(page.locator(`[data-card="${form.cardId}"]`)).toBeVisible();
+    await fitView(page);
+
+    const quantity = page.locator(`[data-card="${form.cardId}"] input[type="number"]`).first();
+    await quantity.fill('55.5');
+
+    /*
+     * Leaving the canvas unmounts the card and everything in it — the strongest
+     * available way to build the form *again* rather than re-render it. The
+     * other tests in this file change the composition, which re-renders the
+     * card in place (React keeps the node), so they cannot tell a draft that
+     * survived from a component that was never taken apart. This one can: the
+     * card is gone from the document in between.
+     */
+    await page.getByRole('link', { name: 'Ustawienia' }).click();
+    await expect(page.getByTestId('settings-page')).toBeVisible();
+    await expect(page.locator(`[data-card="${form.cardId}"]`)).toHaveCount(0);
+
+    await page.getByRole('link', { name: 'Canvas' }).click();
+    await expect(page.locator(`[data-card="${form.cardId}"]`)).toBeVisible();
+    await expect(quantity, 'szkic nie wrocil do odtworzonego formularza').toHaveValue('55.5');
+    // Still a draft, not a save: the record keeps the value the backend has.
+    await expect(page.locator(`[data-card="${form.cardId}"] .pf-field--dirty`).first()).toBeVisible();
+    const stored = await page.evaluate(async (itemId) => {
+      const { cases } = await (await fetch('/api/m/procurement/cases', { credentials: 'include' })).json();
+      const detail = await (
+        await fetch(`/api/m/procurement/cases/${(cases as Array<{ id: string }>)[0]!.id}`, {
+          credentials: 'include',
+        })
+      ).json();
+      for (const offer of detail.offers) {
+        const item = offer.items.find((i: { id: string }) => i.id === itemId);
+        if (item) return item.quantityMilli as number;
+      }
+      return null;
+    }, form.itemId);
+    expect(stored).not.toBe(55_500);
+  });
+
   test('usuniecie karty ze szkicem nie gubi go po cichu — konflikt jest rozstrzygany jawnie', async ({
     page,
   }) => {
@@ -444,5 +489,25 @@ test.describe('rodzaje odpowiedzi w czacie', () => {
 
     const message = page.getByTestId('assistant-message').last();
     await expect(message).toContainText('Zaczynam opis interfejsu');
+    /*
+     * And it is *told apart* from the other three kinds, which is what the
+     * criterion asks for and what the prose assertion alone cannot show.
+     *
+     * A half-written description parses into a component over a read that does
+     * not exist — the fence was cut mid-identifier — so the data component says
+     * exactly that, by name, and lists the reads there are. Distinct from the
+     * valid case (a table with rows from the backend), from prose (no
+     * composition at all) and from a description naming an unknown component
+     * (nothing drawn, reported with its own source, `data-empty="true"`).
+     */
+    const composed = message.getByTestId('assistant-openui').first();
+    await expect(composed).toHaveAttribute('data-empty', 'false');
+    const failure = composed.getByRole('alert');
+    await expect(failure).toBeVisible();
+    await expect(failure).toContainText('Nie udalo sie wczytac danych');
+    await expect(failure).toContainText('procurement.suppl');
+    // Not a table of made-up rows standing in for the one that was asked for.
+    await expect(composed.locator('table')).toHaveCount(0);
+    await expect(message.getByTestId('assistant-openui-empty')).toHaveCount(0);
   });
 });

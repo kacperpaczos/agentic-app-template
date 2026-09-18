@@ -158,8 +158,13 @@ pnpm seed                                                         # dodaj brakuj
 pnpm reset                                                        # UWAGA: kasuje data/ i zaczyna od nowa
 ```
 
-**Tryb deweloperski** — `pnpm dev` — uruchamia backend na porcie 8791 i Vite na 5173. Proxy Vite
-kieruje zapytania zawsze na port 8791, więc jeśli działa tam inna instancja, trafisz do niej.
+**Tryb deweloperski** — `pnpm dev` — uruchamia backend na porcie **8790** (nie 8791, czyli nie tam,
+gdzie słucha zainstalowana aplikacja) i Vite na 5173. Proxy Vite kieruje `/api` na
+`APP_DEV_API_PORT` (domyślnie 8790) i **przed przekazaniem pierwszego żądania sprawdza, kto tam
+odpowiada**: backend uruchomiony przez `pnpm dev` przedstawia się etykietą `agenticapp-dev` na
+`/api/health`, a odpowiedź bez tej etykiety kończy się czytelną odmową (502), nie przekazaniem
+żądania do cudzej instancji. Inny port: `APP_DEV_API_PORT=8765 pnpm dev` — port zainstalowanej
+aplikacji (8791) i porty zarezerwowane dla testów (8792–8799) są odrzucane z podaniem powodu.
 
 **Docker** — `docker compose build --no-cache`, potem `docker compose up -d`. Dane są w wolumenie, nie
 w obrazie. Poświadczenie Claude nie jest wbudowywane w obraz; żeby agent działał w kontenerze, trzeba
@@ -180,6 +185,8 @@ Zanim to zrobisz, wykonaj kopię i próbę migracji na kopii:
 | `APP_RUN_TIMEOUT_MS` | `300000` | limit czasu jednego uruchomienia agenta |
 | `APP_MAX_UPLOAD_BYTES` | `8388608` | maksymalny rozmiar pliku |
 | `APP_SKIP_BASE_DATA` | — | `1` wyłącza dane przykładowe |
+| `APP_DEV_API_PORT` | `8790` | port backendu w trybie deweloperskim; cel proxy Vite. Odrzuca 8791 i 8792–8799 |
+| `APP_INSTANCE_LABEL` | — | etykieta instancji na `/api/health`; `pnpm dev` ustawia `agenticapp-dev`, testy `agenticapp-test` |
 
 Dostęp do aplikacji chroni lokalna sesja w ciasteczku, niezależna od subskrypcji Claude. Ekran Ustawień
 pokazuje plan i termin ważności logowania — w tym celu aplikacja wczytuje plik

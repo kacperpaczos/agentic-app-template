@@ -1028,3 +1028,29 @@ $ git status --porcelain
 
 # Zaden test z tests/ ani z e2e/bl10-*.spec.ts nie zapisuje do docs/evidence/.
 # Dowody w tym katalogu pochodza z recznych przebiegow przekierowanych do plikow.
+
+# Runda poprawek 1 — stan drzewa
+# commit bazowy: b98a6fc, data: 2026-09-18T13:49:36+02:00
+$ pnpm verify
+ Test Files  34 passed (34)
+      Tests  553 passed (553)
+EXIT=0
+$ git status --porcelain (po verify, przed commitem dowodow)
+ M README.md
+ M apps/server/package.json
+ M apps/web/vite.config.ts
+ M docs/ACCEPTANCE.md
+ M docs/acceptance/assessment.json
+ M docs/evidence/z4-bl10/01-verify.txt
+ M docs/evidence/z4-bl10/02-e2e-pelny-przebieg.txt
+ M docs/evidence/z4-bl10/04-stan-drzewa.txt
+ M e2e/bl10-agent-navigation.spec.ts
+ M e2e/bl10-composition.spec.ts
+ M e2e/bl10-shell-canvas.spec.ts
+ M e2e/support/isolation.ts
+ M e2e/support/scripted-agent.ts
+ M packages/platform-ui/src/canvas/CanvasHost.tsx
+ M packages/platform-ui/src/styles.css
+ M tests/bl10-card-catalog.test.ts
+?? apps/web/src/dev-proxy.ts
+?? tests/dev-proxy.test.ts

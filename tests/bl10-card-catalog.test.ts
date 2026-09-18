@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { PROCUREMENT_CARD_COMPONENTS, PROCUREMENT_CARD_TO_OPENUI } from '@module/procurement/shared';
 import { createProcurementModule } from '@module/procurement/server';
 import { OpenUiServerCatalog } from '@platform/server';
+import { typedCard, type CardComponentProps } from '@platform/ui';
+import { caseSummaryPropsSchema } from '@module/procurement/shared';
 import { createHarness } from './helpers.ts';
 
 /**
@@ -103,6 +105,43 @@ describe('karty modulu w katalogu OpenUI', () => {
     } finally {
       h.dispose();
     }
+  });
+
+  it('karta z niezgodnymi wlasciwosciami renderuje nazwany blad, nie pusta ramke', () => {
+    /*
+     * The other half of `typedCard`: what happens when a stored spec does not
+     * fit the schema — an older card, a hand-edited one, a composition from a
+     * version that has moved on. The renderer must not be reached with values
+     * it would coerce into an empty screen.
+     *
+     * Checked by calling the component and reading the element it returns:
+     * there is no DOM in this suite, and none is needed — the decision, the
+     * branch taken and the message are all in the returned tree. Only the
+     * browser's painting of that tree is left to the browser.
+     */
+    const Body = (_props: CardComponentProps<{ caseId: string }>) => null;
+    const Card = typedCard(caseSummaryPropsSchema, Body) as (
+      p: CardComponentProps,
+    ) => { type: unknown; props: Record<string, any> };
+
+    // Valid: the element describes the renderer, with parsed (not raw) props —
+    // the extra key is gone before the component could ever see it.
+    const ok = Card({ cardId: 'c1', props: { caseId: 'case-1', totalMinor: 999_999 } });
+    expect(ok.type).toBe(Body);
+    expect(ok.props.props).toEqual({ caseId: 'case-1' });
+    expect(ok.props.cardId).toBe('c1');
+
+    // Invalid: the renderer is not reached at all, and the card says why.
+    const bad = Card({ cardId: 'c2', props: { caseId: '' } });
+    expect(bad.type).toBe('div');
+    expect(bad.props['data-testid']).toBe('card-props-invalid');
+    expect(bad.props.role).toBe('alert');
+    expect(JSON.stringify(bad.props.children)).toContain('niezgodne ze swoim schematem');
+    // The failure names the component, so a broken card on a canvas full of
+    // them says which one it is; and the renderer is not in the tree, so it
+    // cannot run with values the schema refused.
+    expect(JSON.stringify(bad.props.children)).toContain('Body');
+    expect(bad.type).not.toBe(Body);
   });
 
   it('widok agenta odmawia kompozycji z wpisanymi liczbami', async () => {

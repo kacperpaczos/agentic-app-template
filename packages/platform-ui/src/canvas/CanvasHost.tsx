@@ -195,7 +195,12 @@ function CanvasInner({
    * from it.
    */
   const seenCards = useRef(new Set<string>());
-  for (const card of data?.cards ?? []) seenCards.current.add(card.id);
+  useEffect(() => {
+    // Recorded in an effect, not while rendering: a render may be discarded or
+    // replayed, and this ref decides whether the user is told their work
+    // disappeared. It must follow what was committed to the screen.
+    for (const card of data?.cards ?? []) seenCards.current.add(card.id);
+  }, [data]);
   const presentCards = new Set((data?.cards ?? []).map((c) => c.id));
   const lostDrafts: DraftRecord[] = Object.values(drafts).filter(
     (d) => d.cardId && seenCards.current.has(d.cardId) && !presentCards.has(d.cardId),
