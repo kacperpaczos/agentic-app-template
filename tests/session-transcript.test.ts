@@ -222,6 +222,9 @@ describe('rozpoznanie komunikatu o braku transkryptu', () => {
     'Claude AI usage limit reached|1758200000',
     'Rekord nie zostal znaleziony',
     'Tool result not found for tool_use_id tu_1',
+    // A failure *during* a session, not a missing one. Matched before the
+    // pattern required the two halves to be adjacent.
+    'unknown error while starting session',
     'run_timeout',
   ])('nie rozpoznaje: %s', (message) => {
     expect(isMissingSessionTranscript(message)).toBe(false);

@@ -27,42 +27,36 @@
  * database: a byte copy of a database being written to can be torn, and the
  * check is what makes the copy trustworthy rather than merely likely.
  */
-import { createHash } from 'node:crypto';
 import {
   copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
   readdirSync,
-  rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
 import { basename, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
+import {
+  Database,
+  assertNobodyHoldsIt,
+  census as censusOf,
+  isWithin,
+  makeArgs,
+  realResolve,
+  refuse,
+  runScript,
+  sha256File as sha256,
+  tidy,
+} from './lib/state-tools.mjs';
 
-/*
- * `better-sqlite3` is a dependency of `@platform/server`, not of the repository
- * root, and it stays that way: adding it to the root manifest so a script can
- * `import` it would declare a dependency the application does not have. This
- * resolves it from the package that legitimately owns it.
- */
-const Database = createRequire(resolve(import.meta.dirname, '../packages/platform-server/package.json'))(
-  'better-sqlite3',
-);
+export { tidy };
 
-const args = process.argv.slice(2);
-const flag = (name, fallback = null) => {
-  const i = args.indexOf(`--${name}`);
-  return i >= 0 && args[i + 1] ? args[i + 1] : fallback;
-};
+const { flag } = makeArgs(process.argv);
 
 const DB_PARTS = ['app.db', 'app.db-wal', 'app.db-shm'];
 const TREES = ['files', 'workspaces'];
-
-const sha256 = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
 
 function walk(dir, base = dir) {
   if (!existsSync(dir)) return [];
@@ -76,115 +70,58 @@ function walk(dir, base = dir) {
 }
 
 /**
- * Row census of every table, plus the applied migrations.
+ * The manifest's census, in the manifest's own shape.
  *
- * Counts alone would miss content that changed without changing shape, so each
- * table also gets a digest over its rows in primary-key order. That is what
- * lets the migration rehearsal say "these conversations are the same
- * conversations" rather than "there are still eleven of them".
+ * The computation is shared (`lib/state-tools.mjs`); only the field names are
+ * this file's, and they are kept as they were because they are **written into
+ * every manifest ever produced**. A backup taken last month is read by
+ * `--verify` and by `restore-state.mjs` today, so renaming a key here would
+ * quietly declare older copies unverifiable.
  */
 export function census(dbFile) {
-  const db = new Database(dbFile, { readonly: true });
-  try {
-    const tables = db
-      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
-      .all()
-      .map((r) => r.name);
-    const tableCounts = {};
-    const tableDigests = {};
-    const tableColumns = {};
-    for (const t of tables) {
-      tableCounts[t] = db.prepare(`SELECT COUNT(*) AS n FROM "${t}"`).get().n;
-      /*
-       * Columns as the schema declares them, not as the rows happen to show
-       * them: an empty table has rows to read no names from, and "which columns
-       * existed before the migration" is exactly what the rehearsal needs in
-       * order to tell an added column from changed data.
-       */
-      tableColumns[t] = db
-        .prepare(`PRAGMA table_info("${t}")`)
-        .all()
-        .map((c) => c.name)
-        .sort();
-      const rows = db.prepare(`SELECT * FROM "${t}"`).all();
-      const canonical = rows
-        .map((r) => JSON.stringify(Object.keys(r).sort().map((k) => [k, r[k]])))
-        .sort();
-      tableDigests[t] = createHash('sha256').update(canonical.join('\n')).digest('hex');
-    }
-    const migrations = tables.includes('schema_migrations')
-      ? db.prepare('SELECT id FROM schema_migrations ORDER BY id').all().map((r) => r.id)
-      : [];
-    const integrity = db.pragma('integrity_check', { simple: true });
-    return { tables, tableCounts, tableDigests, tableColumns, migrations, integrity };
-  } finally {
-    db.close();
-  }
-}
-
-/** Refuses to copy a database some process may be writing to. */
-function assertNobodyHoldsIt(dbFile) {
-  let checked = false;
-  for (const part of DB_PARTS) {
-    const p = resolve(dbFile, '..', part);
-    if (!existsSync(p)) continue;
-    try {
-      const holders = execFileSync('fuser', [p], { stdio: ['ignore', 'pipe', 'ignore'] })
-        .toString()
-        .trim();
-      checked = true;
-      if (holders) {
-        throw new Error(
-          `Plik ${p} jest otwarty przez proces(y): ${holders}.\n` +
-            'Zatrzymaj aplikacje przed wykonaniem kopii — kopia bazy zapisywanej w tle moze byc niespojna.',
-        );
-      }
-    } catch (e) {
-      // `fuser` exits non-zero when nothing holds the file: that is the good case.
-      if (e instanceof Error && /jest otwarty przez proces/.test(e.message)) throw e;
-      /*
-       * Anything else means the check itself did not run — `fuser` missing is
-       * the common one. That is said out loud rather than passed over: a
-       * protection that can silently be absent is worse than none, because the
-       * output would otherwise read exactly like a checked copy.
-       */
-      if (e && e.code === 'ENOENT') {
-        console.warn(
-          '[backup] UWAGA: nie znaleziono narzedzia `fuser` — NIE sprawdzono, czy baza jest otwarta ' +
-            'przez jakis proces. Upewnij sie sam, ze aplikacja jest zatrzymana.',
-        );
-        return;
-      }
-      checked = true;
-    }
-  }
-  if (!checked) return;
+  const c = censusOf(dbFile);
+  return {
+    tables: c.tables,
+    tableCounts: c.counts,
+    tableDigests: c.digests,
+    tableColumns: c.columns,
+    migrations: c.migrations,
+    integrity: c.integrity,
+  };
 }
 
 /**
- * Refuses to write the copy into the directory being copied.
+ * Refuses to write the copy into the directory being copied — or above it.
  *
  * A backup inside `data/` is copied into itself on the next run, grows without
- * bound and — worse — is deleted by the same `rm -rf data` that the recovery
- * procedure tells people to avoid. It also puts the copy on the wrong side of
- * the "never touch the live directory" line this script exists to hold.
+ * bound and is deleted by the same `rm -rf data` that the recovery procedure
+ * tells people to avoid. A backup *containing* the data directory is worse: the
+ * copy and the original share a fate, which is the one thing a copy must not do.
+ *
+ * Both directions, and through symlinks — see `realResolve`.
  */
 function assertSafeOutDir(dataDir, outDir) {
-  const data = resolve(dataDir);
-  const out = resolve(outDir);
-  if (out === data || out.startsWith(data + '/')) {
-    throw new Error(
+  const data = realResolve(dataDir);
+  const out = realResolve(outDir);
+  if (isWithin(out, data)) {
+    refuse(
       `Katalog kopii ${out} lezy wewnatrz katalogu danych ${data}.\n` +
         'Wskaz katalog poza katalogiem danych (--out), inaczej kopia jest czescia tego, co kopiuje.',
+    );
+  }
+  if (isWithin(data, out)) {
+    refuse(
+      `Katalog kopii ${out} zawiera katalog danych ${data}.\n` +
+        'Kopia i oryginal dzielilyby los; wskaz katalog obok (--out).',
     );
   }
 }
 
 export function backup({ dataDir, outDir }) {
   const dbFile = resolve(dataDir, 'app.db');
-  if (!existsSync(dbFile)) throw new Error(`Nie znaleziono bazy: ${dbFile}`);
+  if (!existsSync(dbFile)) refuse(`Nie znaleziono bazy: ${dbFile}`);
   assertSafeOutDir(dataDir, outDir);
-  assertNobodyHoldsIt(dbFile);
+  assertNobodyHoldsIt(dataDir, { label: 'backup' });
 
   mkdirSync(outDir, { recursive: true });
 
@@ -262,7 +199,7 @@ export function backup({ dataDir, outDir }) {
  */
 export function verify(outDir) {
   const manifestPath = resolve(outDir, 'manifest.json');
-  if (!existsSync(manifestPath)) throw new Error(`Brak manifestu: ${manifestPath}`);
+  if (!existsSync(manifestPath)) refuse(`Brak manifestu: ${manifestPath} — to nie wyglada na kopie.`);
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   const problems = [];
 
@@ -294,28 +231,15 @@ export function verify(outDir) {
   return problems;
 }
 
-/*
- * After every read: drop the empty log and the shared-memory index.
- *
- * They are recreated by each `census`/`verify` connection, so clearing them
- * earlier achieves nothing. Removing them at the end leaves the backup as a
- * single `app.db`, which is what makes a restore one copy instead of three —
- * and removes the chance of someone restoring the main file without its log,
- * the exact mistake this script exists to prevent.
- */
-export function tidy(dir) {
-  for (const stray of ['app.db-wal', 'app.db-shm']) {
-    const p = resolve(dir, stray);
-    if (existsSync(p)) rmSync(p);
-  }
-}
-
 /* --------------------------------- main ---------------------------------- */
 
 /**
  * Guarded so the functions above can be imported — by `restore-state.mjs`,
  * which must verify a backup before it touches anything, and by the regression
  * tests. Without the guard, importing this file would run a backup.
+ *
+ * `tidy` (dropping the now-empty log after the last read) is shared, and
+ * re-exported at the top of this file so callers still find it here.
  */
 function main() {
   const verifyOnly = flag('verify');
@@ -367,11 +291,6 @@ function main() {
   console.log(`[backup] kopia to jeden plik app.db — odtworzenie: patrz docs/odzyskiwanie-stanu.md`);
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try {
-    main();
-  } catch (err) {
-    console.error(`[backup] PRZERWANO: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(2);
-  }
+if (process.argv[1] && realResolve(process.argv[1]) === realResolve(fileURLToPath(import.meta.url))) {
+  runScript('backup', main);
 }

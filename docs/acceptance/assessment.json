@@ -1801,7 +1801,11 @@
       "backlog": null,
       "scenarios": [
         "T18"
-      ]
+      ],
+      "historical": {
+        "status": "potwierdzone",
+        "note": "przebieg: kopia i próba migracji na danych AgenticApp sprzed platform-0003, potem migracja za zgodą; dowody poza repozytorium"
+      }
     },
     "L10.3": {
       "status": "potwierdzone",

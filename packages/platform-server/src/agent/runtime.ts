@@ -840,7 +840,9 @@ function errorMessage(err: unknown): string {
 const MISSING_TRANSCRIPT_PATTERNS: RegExp[] = [
   /no conversation found with session id/i,
   /(session|transcript|conversation)[^.\n]{0,60}\b(not found|no longer exists?|does ?n[o']t exist|is missing|has expired)/i,
-  /\b(no such|unknown|missing|expired)\b[^.\n]{0,60}\b(session|transcript)/i,
+  // Adjacent on purpose: "unknown error while starting session" is a failure
+  // *during* a session, not a missing one, and a looser gap matched it.
+  /\b(no such|unknown|missing|expired)\s+(session|transcript|conversation)\b/i,
   /\bENOENT\b[^\n]*\.jsonl/i,
 ];
 

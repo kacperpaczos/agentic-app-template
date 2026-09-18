@@ -9,6 +9,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -333,12 +334,20 @@ describe('kopie i proby odmawiaja pracy na katalogu danych aplikacji', () => {
      * The gap this closes: the refusal used to compare only against the
      * repository's own `data/`, so an installation configured to keep its state
      * anywhere else — which is supported — was unprotected.
+     *
+     * This directory deliberately has **no** `session.secret`, so the only rule
+     * that can catch it is the one reading `APP_DATA_DIR`. Reusing the
+     * directory that has one would let this test pass with that rule deleted.
      */
-    const przed = census(resolve(udawaneDane, 'app.db'));
-    const r = run('migration-rehearsal.mjs', ['--backup', udawaneDane], { APP_DATA_DIR: udawaneDane });
-    expect(r.status).toBe(2);
-    expect(r.out).toMatch(/odmawiam proby na katalogu danych aplikacji/);
-    expect(census(resolve(udawaneDane, 'app.db')), 'proba dotknela bazy').toEqual(przed);
+    const bezSekretu = dir('udawane-bez-sekretu');
+    cpSync(udawaneDane, bezSekretu, { recursive: true });
+    rmSync(resolve(bezSekretu, 'session.secret'));
+    const przed = census(resolve(bezSekretu, 'app.db'));
+
+    const r = run('migration-rehearsal.mjs', ['--backup', bezSekretu], { APP_DATA_DIR: bezSekretu });
+    expect(r.status, r.out).toBe(2);
+    expect(r.out).toMatch(/lezy w katalogu danych aplikacji/);
+    expect(census(resolve(bezSekretu, 'app.db')), 'proba dotknela bazy').toEqual(przed);
   }, 60_000);
 
   it('proba migracji na katalogu z session.secret jest odrzucona, nawet bez APP_DATA_DIR', () => {
@@ -346,8 +355,8 @@ describe('kopie i proby odmawiaja pracy na katalogu danych aplikacji', () => {
     // anywhere. The tell is the secret, which a backup never contains.
     const przed = census(resolve(udawaneDane, 'app.db'));
     const r = run('migration-rehearsal.mjs', ['--backup', udawaneDane]);
-    expect(r.status).toBe(2);
-    expect(r.out).toMatch(/zawiera session\.secret/);
+    expect(r.status, r.out).toBe(2);
+    expect(r.out).toMatch(/session\.secret/);
     expect(census(resolve(udawaneDane, 'app.db'))).toEqual(przed);
   }, 60_000);
 
@@ -355,8 +364,146 @@ describe('kopie i proby odmawiaja pracy na katalogu danych aplikacji', () => {
     // It deletes what it is pointed at, so it gets the same refusal.
     const r = run('synthetic-state.mjs', ['--out', udawaneDane, '--stage', 'current']);
     expect(r.status).toBe(2);
-    expect(r.out).toMatch(/zawiera session\.secret/);
+    expect(r.out).toMatch(/session\.secret/);
     expect(existsSync(resolve(udawaneDane, 'app.db'))).toBe(true);
+  }, 60_000);
+});
+
+/* ========================================================================== */
+/* L10.19 — the three protections around a destructive path                   */
+/* ========================================================================== */
+
+/**
+ * Not "does it refuse the exact path of the data directory" — that was already
+ * true, and it was not enough.
+ *
+ * A review reproduced the real failure: `--out <dane>/files` is not *equal* to
+ * the data directory and has no `session.secret` of its own, so both scripts
+ * accepted it, deleted a directory of the user's files and exited 0. The parent
+ * directory was equally unprotected, and a symlink walked around any comparison
+ * of literal paths.
+ *
+ * Every case below therefore checks two things: the refusal, and that the
+ * user's file is still there afterwards. The second is the one that matters.
+ */
+describe('sciezki wokol katalogu danych — trzy ochrony przed skasowaniem', () => {
+  let dane: string;
+  let plikUzytkownika: string;
+  let kopia: string;
+
+  beforeAll(() => {
+    /*
+     * A real backup, so the rehearsal gets past its `--backup` checks and the
+     * refusal under test is genuinely the one about `--out`.
+     */
+    const zrodlo = dir('ofiara-zrodlo');
+    kopia = dir('ofiara-kopia');
+    expect(run('synthetic-state.mjs', ['--out', zrodlo, '--stage', 'current']).status).toBe(0);
+    expect(run('backup-state.mjs', ['--data', zrodlo, '--out', kopia]).status).toBe(0);
+
+    // A directory indistinguishable from a live one, with something to lose.
+    dane = dir('ofiara-dane');
+    mkdirSync(resolve(dane, 'files', 'local-user'), { recursive: true });
+    writeFileSync(resolve(dane, 'session.secret'), 'sekret-instalacji\n');
+    writeFileSync(resolve(dane, 'app.db'), 'nie-jest-prawdziwa-baza\n');
+    plikUzytkownika = resolve(dane, 'files', 'local-user', 'waznyplik.txt');
+    writeFileSync(plikUzytkownika, 'tresc uzytkownika\n');
+  });
+
+  const nienaruszony = () =>
+    expect(
+      existsSync(plikUzytkownika) && readFileSync(plikUzytkownika, 'utf8'),
+      'plik uzytkownika zostal skasowany',
+    ).toBe('tresc uzytkownika\n');
+
+  /* --- ochrona 1: zawieranie w obie strony, nie rownosc --- */
+
+  it.each([
+    ['synthetic-state.mjs', (p: string) => ['--out', p, '--stage', 'empty']],
+    ['migration-rehearsal.mjs', (p: string) => ['--backup', kopia, '--out', p]],
+  ])('%s odmawia katalogu WEWNATRZ katalogu danych', (script, argv) => {
+    const r = run(script, argv(resolve(dane, 'files')));
+    expect(r.status, r.out).toBe(2);
+    expect(r.out).toMatch(/lezy w katalogu danych aplikacji/);
+    nienaruszony();
+  }, 60_000);
+
+  it.each([
+    ['synthetic-state.mjs', (p: string) => ['--out', p, '--stage', 'empty']],
+    ['migration-rehearsal.mjs', (p: string) => ['--backup', kopia, '--out', p]],
+  ])('%s odmawia katalogu NADRZEDNEGO wobec katalogu danych', (script, argv) => {
+    const r = run(script, argv(dir('ofiara-dane/..')));
+    expect(r.status, r.out).toBe(2);
+    expect(r.out).toMatch(/zawiera katalog danych aplikacji|nie zostal utworzony przez te skrypty/);
+    nienaruszony();
+  }, 60_000);
+
+  /* --- ochrona 2: rozwiazywanie dowiazan --- */
+
+  it('dowiazanie symboliczne nie obchodzi kontroli', () => {
+    const link = dir('dowiazanie-do-danych');
+    symlinkSync(dane, link, 'dir');
+    const r = run('synthetic-state.mjs', ['--out', join(link, 'files'), '--stage', 'empty']);
+    expect(r.status, r.out).toBe(2);
+    expect(r.out).toMatch(/lezy w katalogu danych aplikacji/);
+    nienaruszony();
+  }, 60_000);
+
+  /* --- ochrona 3: nie kasuj katalogu, ktorego te skrypty nie zrobily --- */
+
+  it('odmawia skasowania cudzego niepustego katalogu bez znacznika', () => {
+    /*
+     * The backstop. Even where nothing marks the directory as application data
+     * — no `session.secret`, no configured path — a non-empty directory these
+     * scripts did not create is not theirs to delete.
+     */
+    const cudzy = dir('cudze-zdjecia');
+    mkdirSync(cudzy, { recursive: true });
+    writeFileSync(resolve(cudzy, 'zdjecie.jpg'), 'bajty\n');
+
+    const r = run('synthetic-state.mjs', ['--out', cudzy, '--stage', 'empty']);
+    expect(r.status, r.out).toBe(2);
+    expect(r.out).toMatch(/nie zostal utworzony przez te skrypty/);
+    expect(readFileSync(resolve(cudzy, 'zdjecie.jpg'), 'utf8')).toBe('bajty\n');
+  }, 60_000);
+
+  it('katalog pusty albo wlasny jest uzywany normalnie', () => {
+    // The control: the protection must not make the scripts unusable. An empty
+    // directory is filled, and the directory they made is reused on a re-run.
+    const wlasny = dir('wlasny-katalog');
+    mkdirSync(wlasny, { recursive: true });
+    expect(run('synthetic-state.mjs', ['--out', wlasny, '--stage', 'empty']).status).toBe(0);
+    expect(existsSync(resolve(wlasny, '.katalog-roboczy-agentic'))).toBe(true);
+    expect(run('synthetic-state.mjs', ['--out', wlasny, '--stage', 'current']).status).toBe(0);
+  }, 120_000);
+
+  it('odtworzenie odmawia katalogu --data, ktory nie wyglada na katalog danych', () => {
+    // `restore-state.mjs` renames what it is given. Nothing is deleted, but a
+    // typo must not move somebody's directory aside.
+    const cudzy = dir('cudzy-cel');
+    mkdirSync(cudzy, { recursive: true });
+    writeFileSync(resolve(cudzy, 'notatki.md'), 'tresc\n');
+
+    const r = run('restore-state.mjs', ['--backup', dir('wal-kopia'), '--data', cudzy]);
+    expect(r.status, r.out).toBe(2);
+    expect(r.out).toMatch(/nie wyglada na katalog danych aplikacji/);
+    expect(readFileSync(resolve(cudzy, 'notatki.md'), 'utf8')).toBe('tresc\n');
+  }, 60_000);
+
+  it('awaria skryptu ma inny kod wyjscia niz werdykt proby', () => {
+    /*
+     * A caller has to tell "the rehearsal found problems" (1) from "the
+     * rehearsal fell over" (4). They used to be the same number, which makes
+     * the one verdict nobody may misread indistinguishable from a bug.
+     */
+    const kopia = dir('kopia-do-awarii');
+    mkdirSync(kopia, { recursive: true });
+    // A manifest makes it past the refusals; there is no database behind it,
+    // so the rehearsal crashes rather than reaching a verdict.
+    writeFileSync(resolve(kopia, 'manifest.json'), '{"census":{"migrations":[]}}');
+    const r = run('migration-rehearsal.mjs', ['--backup', kopia, '--out', dir('proba-awaria')]);
+    expect(r.status, r.out).toBe(4);
+    expect(r.out).toMatch(/AWARIA/);
   }, 60_000);
 });
 

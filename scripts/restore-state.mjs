@@ -48,16 +48,20 @@ import {
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { census, tidy, verify } from './backup-state.mjs';
+import { verify } from './backup-state.mjs';
+import {
+  REPO,
+  assertLooksLikeDataDir,
+  assertNobodyHoldsIt,
+  census,
+  makeArgs,
+  realResolve,
+  refuse,
+  runScript,
+  tidy,
+} from './lib/state-tools.mjs';
 
-const REPO = resolve(import.meta.dirname, '..');
-
-const args = process.argv.slice(2);
-const flag = (name, fallback = null) => {
-  const i = args.indexOf(`--${name}`);
-  return i >= 0 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : fallback;
-};
-const has = (name) => args.includes(`--${name}`);
+const { flag, has } = makeArgs(process.argv);
 
 /**
  * Migration ids this checkout would apply, obtained by letting it apply them.
@@ -94,52 +98,27 @@ function knownMigrations() {
   }
 }
 
-/** Refuses to write over a database a process is holding. */
-function assertNobodyHoldsIt(dataDir) {
-  for (const part of ['app.db', 'app.db-wal', 'app.db-shm']) {
-    const p = resolve(dataDir, part);
-    if (!existsSync(p)) continue;
-    try {
-      const holders = execFileSync('fuser', [p], { stdio: ['ignore', 'pipe', 'ignore'] })
-        .toString()
-        .trim();
-      if (holders) {
-        throw new Error(
-          `Plik ${p} jest otwarty przez proces(y): ${holders}. Zatrzymaj aplikacje przed odtworzeniem.`,
-        );
-      }
-    } catch (e) {
-      if (e instanceof Error && /jest otwarty przez proces/.test(e.message)) throw e;
-      if (e && e.code === 'ENOENT') {
-        console.warn(
-          '[odtworzenie] UWAGA: brak narzedzia `fuser` — NIE sprawdzono, czy baza jest w uzyciu.',
-        );
-        return;
-      }
-    }
-  }
-}
-
 /* --------------------------------- main ---------------------------------- */
 
 function main() {
-  const backupDir = resolve(flag('backup') ?? '');
-  const dataDir = resolve(flag('data', resolve(REPO, 'data')));
+  if (!flag('backup')) refuse('podaj --backup <katalog kopii>');
+  const backupDir = realResolve(flag('backup'));
+  /*
+   * The default target is what this installation actually uses: `APP_DATA_DIR`
+   * when it is set, the repository's `data/` otherwise. Defaulting to `data/`
+   * regardless — as this did — meant that on an installation keeping its state
+   * elsewhere, a bare `restore-state.mjs --backup …` restored into a directory
+   * the application does not read.
+   */
+  const dataDir = realResolve(flag('data', process.env.APP_DATA_DIR || resolve(REPO, 'data')));
   const checkOnly = has('check');
 
-  if (!flag('backup')) {
-    console.error('[odtworzenie] podaj --backup <katalog kopii>');
-    process.exit(2);
-  }
   const manifestPath = resolve(backupDir, 'manifest.json');
   if (!existsSync(manifestPath)) {
-    console.error(`[odtworzenie] ${backupDir} nie wyglada na kopie (brak manifest.json).`);
-    process.exit(2);
+    refuse(`${backupDir} nie wyglada na kopie (brak manifest.json).`);
   }
-  if (resolve(backupDir) === dataDir) {
-    console.error('[odtworzenie] kopia i katalog docelowy to ten sam katalog. Odmawiam.');
-    process.exit(2);
-  }
+  if (backupDir === dataDir) refuse('kopia i katalog docelowy to ten sam katalog.');
+
 
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 
@@ -188,10 +167,17 @@ function main() {
       'odlozonego na bok, a bez niego wszyscy musza zalogowac sie ponownie (dane pozostaja)',
   );
   console.log(
-    '[odtworzenie] transkrypty Claude Agent SDK: leza poza katalogiem danych, nie sa kopiowane ani ' +
-      'usuwane. Rozmowa z zapisanym claude_session_id, dla ktorej transkrypt nie istnieje, konczy ' +
-      'polecenie jawnym bledem session_transcript_lost i czysci powiazanie — pamiec modelu NIE wraca ' +
-      'wraz z baza',
+    '[odtworzenie] transkrypty Claude Agent SDK: leza poza katalogiem danych, nie sa kopiowane ani\n' +
+      '              usuwane. Pamiec modelu NIE wraca wraz z baza. Rozmowa z zapisanym\n' +
+      '              claude_session_id, dla ktorej transkrypt nie istnieje, dostaje jawny wynik\n' +
+      '              jedna z dwoch droga, zaleznie od tego, jak zachowa sie SDK:\n' +
+      '                - odmowa wznowienia → polecenie konczy sie bledem session_transcript_lost,\n' +
+      '                  a powiazanie z martwa sesja zostaje wyczyszczone;\n' +
+      '                - wznowienie odpowiadajace z innej sesji → niezgodnosc identyfikatora jest\n' +
+      '                  wykryta, zapisana w zdarzeniach uruchomienia i odnotowana w logu serwera,\n' +
+      '                  a rozmowa zostaje przepieta na sesje, ktora istnieje.\n' +
+      '              Ktora z tych drog zachodzi na prawdziwym SDK — NIE ZOSTALO ZAOBSERWOWANE\n' +
+      '              (kryterium L7.13 jest z tego powodu otwarte, patrz docs/ACCEPTANCE.md).',
   );
 
   if (checkOnly) {
@@ -200,7 +186,19 @@ function main() {
   }
 
   /* ---- 4. put the current state aside, then restore ---- */
-  assertNobodyHoldsIt(dataDir);
+
+  /*
+   * The target is *renamed*, not deleted — but renaming somebody's directory
+   * because of a typo is still a mess to undo, so a non-empty target has to
+   * look like a data directory before it is touched. There used to be no check
+   * here at all: whatever `--data` named got moved.
+   *
+   * Deliberately here and not with the argument parsing: everything above this
+   * point is read-only, and `--check` must be able to answer questions about a
+   * backup without an opinion about where it might one day be restored.
+   */
+  assertLooksLikeDataDir(dataDir, { what: 'Katalog docelowy' });
+  assertNobodyHoldsIt(dataDir, { label: 'odtworzenie' });
 
   let setAside = null;
   if (existsSync(dataDir)) {
@@ -227,31 +225,26 @@ function main() {
   const now = census(resolve(dataDir, 'app.db'));
   tidy(dataDir);
   const mismatches = Object.entries(manifest.census.tableCounts).filter(
-    ([t, n]) => now.tableCounts[t] !== n,
+    ([t, n]) => now.counts[t] !== n,
   );
   if (now.integrity !== 'ok' || mismatches.length) {
     console.error(`[odtworzenie] ODTWORZONY STAN NIE ZGADZA SIE Z KOPIA (integrity=${now.integrity}):`);
-    for (const [t, n] of mismatches) console.error(`  - ${t}: ${now.tableCounts[t]} zamiast ${n}`);
+    for (const [t, n] of mismatches) console.error(`  - ${t}: ${now.counts[t]} zamiast ${n}`);
     process.exit(1);
   }
 
   const shown = ['conversations', 'messages', 'agent_runs', 'canvas_cards', 'files', 'artifacts'];
   console.log(
     `[odtworzenie] odtworzono: ${shown
-      .filter((t) => t in now.tableCounts)
-      .map((t) => `${t}=${now.tableCounts[t]}`)
+      .filter((t) => t in now.counts)
+      .map((t) => `${t}=${now.counts[t]}`)
       .join(' ')}; integrity_check ok`,
   );
   console.log(`[odtworzenie] gotowe — uruchom: pnpm build && pnpm start`);
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try {
-    main();
-  } catch (err) {
-    console.error(`[odtworzenie] PRZERWANO: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(2);
-  }
+if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+  runScript('odtworzenie', main);
 }
 
 export { knownMigrations };

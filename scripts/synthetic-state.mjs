@@ -29,21 +29,20 @@
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
+import {
+  Database,
+  REPO,
+  makeArgs,
+  prepareScratchDir,
+  refuse,
+  runScript,
+} from './lib/state-tools.mjs';
 
-const REPO = resolve(import.meta.dirname, '..');
-const Database = createRequire(resolve(REPO, 'packages/platform-server/package.json'))(
-  'better-sqlite3',
-);
-
-const args = process.argv.slice(2);
-const flag = (name, fallback = null) => {
-  const i = args.indexOf(`--${name}`);
-  return i >= 0 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : fallback;
-};
+const { args, flag, has } = makeArgs(process.argv);
 
 /*
  * Ids and values the platform itself owns. Kept in one place because the
@@ -65,7 +64,7 @@ const USERS = [
  * module so that swapping the business module needs no edit here.
  */
 function migrationLists() {
-  const probe = resolve(REPO, `.e2e-bl07/.probe-${process.pid}`);
+  const probe = mkdtempSync(resolve(tmpdir(), 'agentic-lista-migracji-'));
   const script = `
     import { rmSync } from 'node:fs';
     import { composeApp } from ${JSON.stringify(resolve(REPO, 'apps/server/src/compose.ts'))};
@@ -76,15 +75,18 @@ function migrationLists() {
     rmSync(${JSON.stringify(probe)}, { recursive: true, force: true });
     console.log('LISTS ' + JSON.stringify({ platform: PLATFORM_MIGRATIONS.map((m) => m.id), module: moduleIds }));
   `;
-  mkdirSync(resolve(REPO, '.e2e-bl07'), { recursive: true });
-  const out = execFileSync(
-    process.execPath,
-    ['--experimental-transform-types', '--no-warnings=ExperimentalWarning', '--input-type=module', '-e', script],
-    { cwd: REPO, env: { ...process.env, APP_DATA_DIR: probe }, stdio: ['ignore', 'pipe', 'pipe'] },
-  ).toString();
-  const line = out.split('\n').find((l) => l.startsWith('LISTS '));
-  if (!line) throw new Error(`nie udalo sie odczytac listy migracji:\n${out}`);
-  return JSON.parse(line.slice('LISTS '.length));
+  try {
+    const out = execFileSync(
+      process.execPath,
+      ['--experimental-transform-types', '--no-warnings=ExperimentalWarning', '--input-type=module', '-e', script],
+      { cwd: REPO, env: { ...process.env, APP_DATA_DIR: probe }, stdio: ['ignore', 'pipe', 'pipe'] },
+    ).toString();
+    const line = out.split('\n').find((l) => l.startsWith('LISTS '));
+    if (!line) throw new Error(`nie udalo sie odczytac listy migracji:\n${out}`);
+    return JSON.parse(line.slice('LISTS '.length));
+  } finally {
+    rmSync(probe, { recursive: true, force: true });
+  }
 }
 
 /**
@@ -109,6 +111,9 @@ function applyUpTo(dbFile, stage, lists) {
     return [];
   }
   const platformPrefix = lists.platform.slice(0, cut);
+  // Unique per call: a fixed path meant two concurrent runs (the regression
+  // runs several) shared one directory and raced on deleting it.
+  const modulesProbe = mkdtempSync(resolve(tmpdir(), 'agentic-sonda-modulow-'));
   const script = `
     import { createRequire } from 'node:module';
     import { PLATFORM_MIGRATIONS, runMigrations } from ${JSON.stringify(resolve(REPO, 'packages/platform-server/src/db/migrations.ts'))};
@@ -124,7 +129,7 @@ function applyUpTo(dbFile, stage, lists) {
      * module schema of its day, and a fixture without it would not be an old
      * database but an impossible one.
      */
-    const probeDir = ${JSON.stringify(resolve(REPO, '.e2e-bl07/.probe-mods'))};
+    const probeDir = ${JSON.stringify(modulesProbe)};
     const probe = composeApp({ dataDir: probeDir });
     const moduleMigrations = probe.registry.migrations();
     probe.close();
@@ -142,12 +147,16 @@ function applyUpTo(dbFile, stage, lists) {
     db.close();
     console.log('APPLIED ' + JSON.stringify(applied));
   `;
-  const out = execFileSync(
-    process.execPath,
-    ['--experimental-transform-types', '--no-warnings=ExperimentalWarning', '--input-type=module', '-e', script],
-    { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'] },
-  ).toString();
-  rmSync(resolve(REPO, '.e2e-bl07/.probe-mods'), { recursive: true, force: true });
+  let out;
+  try {
+    out = execFileSync(
+      process.execPath,
+      ['--experimental-transform-types', '--no-warnings=ExperimentalWarning', '--input-type=module', '-e', script],
+      { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'] },
+    ).toString();
+  } finally {
+    rmSync(modulesProbe, { recursive: true, force: true });
+  }
   const line = out.split('\n').find((l) => l.startsWith('APPLIED '));
   if (!line) throw new Error(`nie udalo sie zastosowac migracji:\n${out}`);
   return JSON.parse(line.slice('APPLIED '.length));
@@ -333,39 +342,33 @@ function leaveRowInWal(dataDir) {
 
 function main() {
   const lists = migrationLists();
-  if (args.includes('--list')) {
+  if (has('list')) {
     console.log(`[syntetyk] etapy: empty, ${lists.platform.join(', ')}, current`);
     console.log(`[syntetyk] migracje modulow: ${lists.module.join(', ') || '(brak)'}`);
     return;
   }
 
-  const outDir = resolve(flag('out') ?? '');
   const stage = flag('stage', 'current');
-  if (!flag('out')) {
-    console.error('[syntetyk] podaj --out <katalog>');
-    process.exit(2);
-  }
-  /*
-   * The generator *deletes* what it is pointed at, so it refuses anything that
-   * looks like a real data directory. A fixture builder that can overwrite the
-   * user's state is not a safety feature with a bug in it; it is the accident.
-   */
-  if (existsSync(resolve(outDir, 'session.secret'))) {
-    console.error(`[syntetyk] ${outDir} zawiera session.secret — to katalog danych aplikacji. Odmawiam.`);
-    process.exit(2);
-  }
-  if (outDir === resolve(REPO, 'data') || outDir === resolve(process.env.APP_DATA_DIR ?? '\0')) {
-    console.error(`[syntetyk] ${outDir} to katalog danych aplikacji. Odmawiam.`);
-    process.exit(2);
-  }
+  if (!flag('out')) refuse('podaj --out <katalog>');
 
-  rmSync(outDir, { recursive: true, force: true });
+  /*
+   * The generator *deletes* what it is pointed at. A fixture builder that can
+   * wipe the user's state is not a safety feature with a bug in it; it is the
+   * accident — so the target goes through the shared guard, which refuses a
+   * path at, inside, above or symlinked to a data directory, and refuses to
+   * delete any non-empty directory these scripts did not create.
+   *
+   * The checks this replaced compared the path for equality with two known
+   * directories and looked for `session.secret` only at the top level:
+   * `--out <dane>/files` passed both and deleted the user's files.
+   */
+  const outDir = prepareScratchDir(flag('out'), { what: 'Katalog danych syntetycznych' });
   mkdirSync(resolve(outDir, 'workspaces'), { recursive: true });
   const applied = applyUpTo(resolve(outDir, 'app.db'), stage, lists);
   const result = populate(outDir, applied);
 
   let walRow = null;
-  if (args.includes('--leave-wal') && result.counts) {
+  if (has('leave-wal') && result.counts) {
     walRow = leaveRowInWal(outDir);
   }
 
@@ -386,11 +389,6 @@ function main() {
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try {
-    main();
-  } catch (err) {
-    console.error(`[syntetyk] PRZERWANO: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(2);
-  }
+if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+  runScript('syntetyk', main);
 }
