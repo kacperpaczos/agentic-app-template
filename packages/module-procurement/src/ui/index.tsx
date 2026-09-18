@@ -1,6 +1,6 @@
 import { defineComponent } from '@openuidev/react-lang';
 import type { ConversationStarterContribution, MenuItemContribution } from '@platform/contracts';
-import type { UiModule } from '@platform/ui';
+import type { ModuleScreen, UiModule } from '@platform/ui';
 import { MODULE_ID } from '../shared/index.ts';
 import { PROCUREMENT_OPENUI_COMPONENTS } from '../shared/openui-components.ts';
 import {
@@ -18,6 +18,21 @@ export * from './detailComponents.tsx';
 const menu: MenuItemContribution[] = [
   { id: 'procurement.cases', section: 'records', label: 'Wszystkie sprawy', to: '/cases', order: 10 },
   { id: 'procurement.suppliers', section: 'data', label: 'Dostawcy', to: '/data', order: 10 },
+];
+
+/**
+ * This module's screens, declared for the composition root to mount.
+ *
+ * The paths and their `$segments` are the module's own: no file outside this
+ * package names `/cases/$caseId`, and the pages read those segments through
+ * `useScreenParams()` rather than through the application's route registration,
+ * so this list compiles whether or not the application mounts it.
+ */
+const screens: ModuleScreen[] = [
+  { id: 'procurement.cases', path: '/cases', component: CasesPage },
+  { id: 'procurement.case.detail', path: '/cases/$caseId', component: CaseDetailPage },
+  { id: 'procurement.data', path: '/data', component: DataPage },
+  { id: 'procurement.item.provenance', path: '/items/$itemId', component: ItemProvenancePage },
 ];
 
 const starters: ConversationStarterContribution[] = [
@@ -80,5 +95,6 @@ export const procurementUiModule: UiModule = {
   cardRenderers: procurementCardRenderers,
   openuiComponents,
   menu,
+  screens,
   starters,
 };

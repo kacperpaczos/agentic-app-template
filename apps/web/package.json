@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@module/devkit-probe": "workspace:*",
     "@module/procurement": "workspace:*",
     "@openuidev/react-headless": "0.9.13",
     "@openuidev/react-lang": "0.2.15",

@@ -35,6 +35,32 @@ export interface MenuItemContribution {
 }
 
 /**
+ * A screen this module contributes to the application's router.
+ *
+ * Declared, not hand-mounted. Before this contract existed the application's
+ * `router.tsx` imported each module page by name and wrote a route for it, so
+ * the composition root knew every screen of every module — and swapping the
+ * module meant editing the router. Worse, a module page read its route
+ * parameters with the *application's* registered route id
+ * (`useParams({ from: '/cases/$caseId' })`), which made the module's own types
+ * depend on which modules the application happens to compose: an application
+ * that did not mount that route could not typecheck the module at all.
+ *
+ * So a screen is data here, exactly like a card: `path` may contain `$param`
+ * segments, the composition root turns the list into routes generically, and
+ * the screen reads its parameters through the platform (`useScreenParams()`),
+ * which names no route. Adding, removing or replacing a module therefore
+ * changes no platform file and no router file.
+ */
+export interface ModuleScreenContribution<TComponent = unknown> {
+  /** Stable id, namespaced by the module id; used in conflict reports. */
+  id: string;
+  /** Router path relative to the app root, e.g. `/cases/$caseId`. */
+  path: string;
+  component: TComponent;
+}
+
+/**
  * A suggested opening command for the chat.
  *
  * Contributed by the module, never written into the platform: a starter that
@@ -338,7 +364,7 @@ export interface ServerModule {
  * Everything the browser half of a module contributes. Kept structural (no React
  * types here) so this package stays framework-neutral; `@platform/ui` narrows it.
  */
-export interface ClientModule<TComponentDef = unknown, TElement = unknown, TRoute = unknown> {
+export interface ClientModule<TComponentDef = unknown, TElement = unknown> {
   meta: ModuleMeta;
   /** OpenUI component definitions added to the shared catalog. */
   components: Record<string, TComponentDef>;
@@ -347,5 +373,6 @@ export interface ClientModule<TComponentDef = unknown, TElement = unknown, TRout
   /** Artifact renderers, keyed by `rendererType`. */
   artifactRenderers?: Record<string, TElement>;
   menu: MenuItemContribution[];
-  routes: TRoute[];
+  /** Screens mounted by the composition root. See {@link ModuleScreenContribution}. */
+  screens?: ModuleScreenContribution<TElement>[];
 }

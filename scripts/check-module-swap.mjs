@@ -8,24 +8,25 @@
  * kopii repozytorium, nie na nim samym:
  *
  *   1. kopiuje śledzone i nieignorowane pliki do katalogu tymczasowego,
- *   2. zmienia WYŁĄCZNIE warstwę składania (`apps/server`, `apps/web`):
- *      serwer rejestruje `@module/devkit-probe` zamiast `@module/procurement`,
- *      przeglądarka nie rejestruje modułu przykładowego ani jego ekranów;
- *      usuwa też połówkę przeglądarkową modułu przykładowego (`src/ui` i eksport
- *      `./ui`) — jej typowane linki wskazują trasy zarejestrowane w routerze
- *      aplikacji, więc bez tych tras nie przechodzi typecheck. Połówka serwerowa
- *      zostaje, bo testy platformy używają jej jako danych testowych,
- *   3. dowodzi sumami SHA-256, że `packages/platform-*` są identyczne jak przed zmianą,
+ *   2. zmienia WYŁĄCZNIE dwa pliki warstwy składania — `apps/server/src/compose.ts`
+ *      i `apps/web/src/compose.tsx`: obie połówki rejestrują `@module/devkit-probe`
+ *      zamiast `@module/procurement`. Router aplikacji zostaje bajt w bajt taki
+ *      sam (ekrany modułu montuje kontraktem `UiModule.screens`), a połówka
+ *      przeglądarkowa modułu przykładowego zostaje w kopii nietknięta — to jest
+ *      dowód, że moduł z ekranami przechodzi typecheck niezależnie od tego, czy
+ *      aplikacja go składa,
+ *   3. dowodzi sumami SHA-256, że `packages/platform-*` i `packages/module-procurement`
+ *      są identyczne jak przed zmianą,
  *   4. instaluje zależności z lockfile, uruchamia kontrolę granicy, typecheck i build,
  *   5. startuje zbudowany serwer na wolnym porcie z własnym katalogiem danych i sprawdza:
- *      rejestr modułów, narzędzia, trasę modułu, walidację kompozycji komponentem modułu,
- *      brak tabel modułu przykładowego oraz działanie powłoki w przeglądarce.
+ *      rejestr modułów, narzędzia, trasy modułu, operację odczytu, walidację kompozycji
+ *      komponentem modułu, brak tabel modułu przykładowego, a w przeglądarce —
+ *      kartę modułu kontrolnego wyrenderowaną z katalogu danymi z jego własnej
+ *      trasy, jego ekran z menu i ekran z parametrem trasy.
  *
  *   node scripts/check-module-swap.mjs [--keep] [--json <plik>]
  *
- * Nie dotyka katalogu repozytorium ani żadnej działającej instancji. Moduł
- * kontrolny nie ma połówki przeglądarkowej, więc renderer jego karty nie jest
- * tu sprawdzany — to jawne ograniczenie próby.
+ * Nie dotyka katalogu repozytorium ani żadnej działającej instancji.
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -104,8 +105,18 @@ try {
   }
   record('kopia robocza', true, `${files.length} plików → ${work}`);
 
-  const platformDirs = readdirSync(join(work, 'packages')).filter((d) => d.startsWith('platform-')).sort();
-  const before = Object.fromEntries(platformDirs.map((d) => [d, hashTree(join(work, 'packages', d))]));
+  /*
+   * Hashed before and after: the platform packages, and the example module too.
+   * The example module has to survive the swap untouched — an application that
+   * composes a different module must still be able to typecheck and build the
+   * one it is not composing, or "a module works without changes in the
+   * platform" would only mean "after deleting the other module".
+   */
+  const untouchedDirs = readdirSync(join(work, 'packages'))
+    .filter((d) => d.startsWith('platform-') || d === 'module-procurement')
+    .sort();
+  const platformDirs = untouchedDirs.filter((d) => d.startsWith('platform-'));
+  const before = Object.fromEntries(untouchedDirs.map((d) => [d, hashTree(join(work, 'packages', d))]));
 
   /* 2. zmiana warstwy składania ------------------------------------------- */
   const serverCompose = join(work, 'apps/server/src/compose.ts');
@@ -113,32 +124,26 @@ try {
   replaceOnce(serverCompose, 'modules: (services) => [createProcurementModule(services)],', 'modules: (services) => [createProbeModule(services)],');
 
   const webCompose = join(work, 'apps/web/src/compose.tsx');
-  replaceOnce(webCompose, "import { procurementUiModule } from '@module/procurement/ui';\n", '');
-  replaceOnce(webCompose, 'modules: [procurementUiModule],', 'modules: [],');
+  replaceOnce(webCompose, "import { procurementUiModule } from '@module/procurement/ui';", "import { probeUiModule } from '@module/devkit-probe/ui';");
+  replaceOnce(webCompose, 'modules: [procurementUiModule],', 'modules: [probeUiModule],');
+  record('warstwa składania przełączona na moduł kontrolny', true, 'apps/server/src/compose.ts, apps/web/src/compose.tsx');
 
+  /*
+   * The router is not edited at all — the whole point of `UiModule.screens`.
+   * Asserted rather than assumed: if this file ever went back to importing a
+   * module page by name, the swap would silently need an edit here again.
+   */
   const router = join(work, 'apps/web/src/router.tsx');
-  let routerSrc = readFileSync(router, 'utf8');
-  routerSrc = routerSrc.replace(/^import \{[^}]*\} from '@module\/procurement\/ui';\n/m, '');
-  // Trasy ekranów modułu przykładowego: definicje i ich użycie w drzewie tras.
-  // Blok trasy nie zawiera średników, więc [^;] nie przeskoczy do sąsiedniej definicji.
-  const moduleRoute = /^const (\w+) = createRoute\(\{[^;]*?component: (?:CasesPage|CaseDetailPage|DataPage|ItemProvenancePage),[^;]*?\}\);\n\n?/gm;
-  const moduleRouteNames = [...routerSrc.matchAll(moduleRoute)].map((m) => m[1]);
-  routerSrc = routerSrc.replace(moduleRoute, '');
-  for (const name of moduleRouteNames) routerSrc = routerSrc.replace(new RegExp(`\\s*\\b${name}\\b,?`), '');
-  writeFileSync(router, routerSrc);
-  const leftovers = ['@module/procurement', 'CasesPage', 'CaseDetailPage', 'DataPage', 'ItemProvenancePage'].filter((w) => readFileSync(router, 'utf8').includes(w));
-  const expectedRemoved = ['casesRoute', 'caseDetailRoute', 'dataRoute', 'itemProvenanceRoute'];
-  const platformRoutesKept = ['canvasRoute', 'spacesRoute', 'filesRoute', 'settingsRoute'].every((r) => (routerSrc.match(new RegExp(`\\b${r}\\b`, 'g')) ?? []).length >= 2);
-  record('warstwa składania przełączona na moduł kontrolny', leftovers.length === 0 && platformRoutesKept && JSON.stringify([...moduleRouteNames].sort()) === JSON.stringify([...expectedRemoved].sort()), leftovers.length ? `pozostało: ${leftovers.join(', ')}` : `usunięte trasy: ${moduleRouteNames.join(', ')}`);
+  const routerSrc = readFileSync(router, 'utf8');
+  record(
+    'router aplikacji bez zmian i bez nazwy jakiegokolwiek modułu',
+    readFileSync(join(repo, 'apps/web/src/router.tsx'), 'utf8') === routerSrc && !routerSrc.includes('@module/'),
+    'ekrany modułu montowane z registry.screens',
+  );
 
-  // Połówka przeglądarkowa modułu przykładowego odchodzi razem z jego ekranami (patrz nagłówek).
-  rmSync(join(work, 'packages/module-procurement/src/ui'), { recursive: true, force: true });
-  replaceOnce(join(work, 'packages/module-procurement/package.json'), '"./ui": "./src/ui/index.tsx",\n', '');
-  record('połówka UI modułu przykładowego usunięta z kopii', true, 'packages/module-procurement/src/ui, eksport ./ui');
-
-  const after = Object.fromEntries(platformDirs.map((d) => [d, hashTree(join(work, 'packages', d))]));
-  const changedPlatform = platformDirs.filter((d) => before[d] !== after[d]);
-  record('pakiety platformy bez zmian', changedPlatform.length === 0, changedPlatform.length ? changedPlatform.join(', ') : platformDirs.map((d) => `${d}:${after[d].slice(0, 12)}`).join(' '));
+  const after = Object.fromEntries(untouchedDirs.map((d) => [d, hashTree(join(work, 'packages', d))]));
+  const changedPackages = untouchedDirs.filter((d) => before[d] !== after[d]);
+  record('pakiety platformy i moduł przykładowy bez zmian', changedPackages.length === 0, changedPackages.length ? changedPackages.join(', ') : untouchedDirs.map((d) => `${d}:${after[d].slice(0, 12)}`).join(' '));
 
   const changedFiles = files.filter((f) => {
     try {
@@ -147,11 +152,11 @@ try {
       return true; // usunięty w kopii
     }
   });
-  const allowedChange = (f) => f.startsWith('apps/') || f.startsWith('packages/module-procurement/');
+  const allowedChange = (f) => f === 'apps/server/src/compose.ts' || f === 'apps/web/src/compose.tsx';
   record(
-    'zmienione pliki ograniczone do warstwy składania i modułu przykładowego',
-    changedFiles.length > 0 && changedFiles.every(allowedChange),
-    `${changedFiles.filter((f) => f.startsWith('apps/')).join(', ')}; moduł przykładowy: ${changedFiles.filter((f) => f.startsWith('packages/')).length} plików`,
+    'zmienione pliki ograniczone do dwóch plików warstwy składania',
+    changedFiles.length === 2 && changedFiles.every(allowedChange),
+    changedFiles.join(', '),
   );
 
   /* 3. instalacja, granica, typy, build ------------------------------------ */
@@ -215,9 +220,31 @@ try {
   const notes = await api('/api/m/probe/notes');
   record('trasa modułu /api/m/probe/notes', notes.status === 200 && Array.isArray(notes.body?.notes), `HTTP ${notes.status}`);
 
+  const reads = await api('/api/read/operations');
+  const readNames = (reads.body?.operations ?? []).map((o) => o.name);
+  record(
+    'operacja odczytu modułu zarejestrowana z deskryptorem',
+    readNames.includes('probe.notes') && !readNames.some((n) => n.startsWith('procurement.')),
+    readNames.join(', '),
+  );
+
+  const targets = await api('/api/ui/targets');
+  const targetIds = (targets.body?.targets ?? []).map((t) => t.id);
+  record('cel nawigacji modułu zarejestrowany', targetIds.includes('probe.notes'), targetIds.join(', '));
+
+  const moduleViews = await api('/api/ui/views');
+  const viewIds = (moduleViews.body?.views ?? []).map((v) => v.id);
+  record('ekran modułu jako kompozycja OpenUI', viewIds.includes('probe.notes'), viewIds.join(', '));
+
+  // Dane dla przeglądarki wchodzą tą samą trasą modułu, którą czyta jego karta.
+  const NOTE_TEXT = `notatka wymiany ${Date.now()}`;
+  const created = await api('/api/m/probe/notes', { method: 'POST', body: JSON.stringify({ text: NOTE_TEXT }) });
+  record('zapis przez trasę modułu', created.status === 201 && typeof created.body?.id === 'string', `HTTP ${created.status}`);
+
   const space = await api('/api/canvas/spaces/for-scope', { method: 'POST', body: JSON.stringify({ kind: 'probe', id: 'swap-1', title: 'Próba wymiany' }) });
   const card = space.body?.cards?.[0]?.spec;
-  record('kompozycja domyślna modułu walidowana katalogiem', space.status === 200 && card?.component === 'probe.noteList' && card?.props?.limit === 20, `HTTP ${space.status}, karta=${card?.component}`);
+  const spaceId = space.body?.space?.id;
+  record('kompozycja domyślna modułu walidowana katalogiem', space.status === 200 && card?.component === 'probe.noteList' && card?.props?.limit === 20 && typeof spaceId === 'string', `HTTP ${space.status}, karta=${card?.component}`);
 
   const unknown = await api('/api/canvas/spaces/for-scope', { method: 'POST', body: JSON.stringify({ kind: 'procurement_case', id: 'x', title: 'x' }) });
   record('zakres modułu przykładowego nie daje kart', unknown.status === 200 && (unknown.body?.cards ?? []).length === 0, `HTTP ${unknown.status}, karty=${(unknown.body?.cards ?? []).length}`);
@@ -239,8 +266,58 @@ try {
     await page.goto(`${base}/`);
     await page.getByRole('navigation').first().waitFor({ timeout: 20_000 });
     const nav = (await page.getByRole('navigation').first().textContent()) ?? '';
-    const shellOk = nav.includes('Canvas') && nav.includes('Pliki') && !nav.includes('Wszystkie sprawy') && !nav.includes('Dostawcy');
-    record('powłoka w przeglądarce: menu platformy bez ekranów przykładu', shellOk, nav.replace(/\s+/g, ' ').slice(0, 160));
+    const shellOk =
+      nav.includes('Canvas') &&
+      nav.includes('Pliki') &&
+      nav.includes('Notatki testowe') &&
+      !nav.includes('Wszystkie sprawy') &&
+      !nav.includes('Dostawcy');
+    record(
+      'powłoka w przeglądarce: menu platformy z pozycją modułu kontrolnego, bez ekranów przykładu',
+      shellOk,
+      nav.replace(/\s+/g, ' ').slice(0, 160),
+    );
+
+    /*
+     * Karta modułu kontrolnego na canvasie.
+     *
+     * To jest krok, którego wcześniej nie było: kompozycja domyślna modułu
+     * trafia na ekran przez katalog przeglądarki, a treść notatki pochodzi z
+     * trasy backendu tego modułu — nie z props karty. Brak renderera nie daje
+     * pustej karty, tylko widoczny komunikat „Brak renderera dla komponentu”,
+     * więc obie możliwe porażki (brak renderera, brak danych) są tu widoczne.
+     */
+    await page.goto(`${base}/?s=${spaceId}`);
+    const cardList = page.locator('[data-testid="probe-note-list"]').first();
+    await cardList.waitFor({ timeout: 20_000 });
+    const cardText = (await cardList.textContent()) ?? '';
+    const bodyText = (await page.locator('body').textContent()) ?? '';
+    record(
+      'karta modułu kontrolnego wyrenderowana z katalogu, danymi z trasy modułu',
+      cardText.includes(NOTE_TEXT) && !bodyText.includes('Brak renderera dla komponentu'),
+      cardText.replace(/\s+/g, ' ').slice(0, 120),
+    );
+
+    /* Ekran modułu: trasa zamontowana z kontraktu UiModule.screens. */
+    await page.goto(`${base}/probe-notes`);
+    await page.locator('[data-testid="probe-notes-page"]').waitFor({ timeout: 20_000 });
+    await page.locator('[data-testid="composed-view"][data-view-id="probe.notes"][data-state="ready"]').waitFor({ timeout: 20_000 });
+    // Kompozycja ma dwa źródła: komponent modułu i tabelę platformy na jego operacji odczytu.
+    await page.getByRole('table').first().waitFor({ timeout: 20_000 });
+    const screenText = (await page.locator('[data-testid="probe-notes-page"]').textContent()) ?? '';
+    const tableText = (await page.getByRole('table').first().textContent()) ?? '';
+    record(
+      'ekran modułu zamontowany kontraktem i wypełniony kompozycją OpenUI',
+      screenText.includes(NOTE_TEXT) && tableText.includes(NOTE_TEXT),
+      screenText.replace(/\s+/g, ' ').slice(0, 140),
+    );
+
+    /* Ekran z parametrem trasy: moduł czyta $noteId bez nazywania trasy aplikacji. */
+    await page.goto(`${base}/probe-notes/${created.body.id}`);
+    await page.locator('[data-testid="probe-note-page"]').waitFor({ timeout: 20_000 });
+    const detailText = (await page.locator('[data-testid="probe-note-text"]').textContent()) ?? '';
+    record('ekran modułu z parametrem trasy czyta swój $noteId', detailText.trim() === NOTE_TEXT, detailText.trim().slice(0, 120));
+
     await page.goto(`${base}/files`);
     await page.waitForLoadState('networkidle');
     await page.goto(`${base}/settings`);
