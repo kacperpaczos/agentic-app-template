@@ -229,6 +229,21 @@ function CanvasInner({
   const [localGeometry, setLocalGeometry] = useState<
     Record<string, { x?: number; y?: number; width?: number; height?: number }>
   >({});
+  /**
+   * Which cards the canvas library considers selected.
+   *
+   * Held here because the nodes are controlled: they are derived from the
+   * stored composition on every render, so a `selected` flag the library set on
+   * its own copy is overwritten immediately. Without this the library's
+   * selection never reached a node — which is why the resize control, whose
+   * visibility follows it, could not appear.
+   *
+   * Deliberately separate from `AppState.selection`, which is the user marking
+   * a card *for the agent*: one is "the pointer is on this card", the other is
+   * "include this in the next command", and conflating them would make clicking
+   * a card change what the agent is told.
+   */
+  const [activeNodes, setActiveNodes] = useState<Record<string, boolean>>({});
   const viewportRestored = useRef(false);
 
   useEffect(() => {
@@ -269,7 +284,8 @@ function CanvasInner({
           id: card.id,
           type: 'card',
           position: { x: local?.x ?? card.geometry.x, y: local?.y ?? card.geometry.y },
-          data: { card, selected: false },
+          selected: activeNodes[card.id] ?? false,
+          data: { card, selected: activeNodes[card.id] ?? false },
           width: local?.width ?? card.geometry.width,
           height: local?.height ?? card.geometry.height,
           style: { width: local?.width ?? card.geometry.width, height: local?.height ?? card.geometry.height },
@@ -277,7 +293,7 @@ function CanvasInner({
           dragHandle: '.pf-card__head',
         };
       }),
-    [data, localGeometry],
+    [data, localGeometry, activeNodes],
   );
 
   const onNodesChange = useCallback(
@@ -292,6 +308,8 @@ function CanvasInner({
             y: Math.round(change.position.y),
           });
           if (change.dragging === false) scheduleFlush();
+        } else if (change.type === 'select') {
+          setActiveNodes((prev) => ({ ...prev, [change.id]: change.selected }));
         } else if (change.type === 'dimensions' && change.dimensions) {
           const stored = data?.cards.find((c) => c.id === change.id)?.geometry;
           const width = Math.round(change.dimensions.width);
