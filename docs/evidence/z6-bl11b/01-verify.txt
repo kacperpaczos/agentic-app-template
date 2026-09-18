@@ -1,0 +1,24 @@
+Bramka G17 — pakiet BL-11b (orkiestracja i domena)
+commit: fc26a7f  galaz: domkniecie/z6-bl11b
+data:   2026-09-18T19:02:49+02:00
+
+== pnpm verify ==
+polecenie: cd <worktree> && pnpm verify
+kod wyjscia: 0
+  > agentic-app-template@0.1.0 check:boundaries /home/paczos/Documents/agentic-app-template-wt/z6-bl11b
+  > agentic-app-template@0.1.0 check:acceptance /home/paczos/Documents/agentic-app-template-wt/z6-bl11b
+  > agentic-app-template@0.1.0 check:matrix /home/paczos/Documents/agentic-app-template-wt/z6-bl11b
+  > agentic-app-template@0.1.0 check:closure /home/paczos/Documents/agentic-app-template-wt/z6-bl11b
+  > agentic-app-template@0.1.0 typecheck /home/paczos/Documents/agentic-app-template-wt/z6-bl11b
+  > agentic-app-template@0.1.0 typecheck:src /home/paczos/Documents/agentic-app-template-wt/z6-bl11b
+  > agentic-app-template@0.1.0 typecheck:modules /home/paczos/Documents/agentic-app-template-wt/z6-bl11b
+  > agentic-app-template@0.1.0 typecheck:e2e /home/paczos/Documents/agentic-app-template-wt/z6-bl11b
+  > agentic-app-template@0.1.0 build /home/paczos/Documents/agentic-app-template-wt/z6-bl11b
+  > agentic-app-template@0.1.0 test /home/paczos/Documents/agentic-app-template-wt/z6-bl11b
+   Test Files  43 passed (43)
+        Tests  737 passed (737)
+     Duration  258.95s (tests 62%, import 36%, transform 2%)
+  stan w szablonie: potwierdzone=120, częściowe=74, niespełnione=2, niesprawdzone=4
+
+== git status --porcelain po pnpm verify ==
+  (pusto — drzewo czyste; testy pakietu nie zapisuja plikow dowodowych, G18)
