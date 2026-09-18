@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from 'node:fs';
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -792,6 +793,78 @@ describe('L6.10 — cel operacji i aktualnosc wersji przy zapisie', () => {
       }),
     ).rejects.toMatchObject({ code: 'conflict' });
     expect((h.platform.services.canvas.getCard(card.id, h.ownerId).spec as any).props.markdown).toBe('b');
+  });
+
+  it('kazdy krok scenariusza nazywa wymagane pola narzedzia, ktore wola', () => {
+    /*
+     * The hole this closes, found on integration and not before: making
+     * `expectedSpecVersion` required caught a *scripted scenario* of another
+     * package that had been calling `canvas_update_card` without a version
+     * since before the requirement existed. The call was refused, the card was
+     * never replaced, and the browser test waited sixty seconds for an element
+     * that could not appear — a timeout that says nothing about the cause.
+     *
+     * So the requirement is checked against its callers, here, in
+     * milliseconds. This is a lint over the scenario sources, and it is honest
+     * about being one: it reads the required fields from the real schemas (a
+     * field is required when the schema rejects `undefined`), finds every
+     * scripted `call` step, and demands that the step at least NAME each of
+     * them. It cannot know whether the value is right — the browser run still
+     * answers that — but "the field is not mentioned anywhere in this step" is
+     * exactly the shape of the mistake that got through, and it is cheap to
+     * see. A step that passes a deliberately incomplete input says so with the
+     * marker below.
+     */
+    const OPT_OUT = 'scenariusz-celowo-niepelny';
+    const required = new Map<string, string[]>();
+    for (const entry of tools()) {
+      const shape = (entry.def.inputSchema as any).shape as Record<string, { safeParse: (v: unknown) => { success: boolean } }>;
+      const names = Object.keys(shape).filter((k) => !shape[k]!.safeParse(undefined).success);
+      if (names.length) required.set(entry.localName, names);
+    }
+    expect(required.get('canvas_update_card'), 'wersja karty jest wymagana').toContain('expectedSpecVersion');
+    expect(required.get('procurement_update_offer_item'), 'wersja pozycji jest wymagana').toContain('expectedVersion');
+
+    const roots = ['e2e/support', 'e2e', 'tests/support', 'tests'];
+    const sources: Array<[string, string]> = [];
+    for (const dir of roots) {
+      const full = new URL(`../${dir}/`, import.meta.url);
+      for (const name of readdirSync(full)) {
+        if (!name.endsWith('.ts')) continue;
+        sources.push([`${dir}/${name}`, readFileSync(new URL(name, full), 'utf8')]);
+      }
+    }
+    // A scan that found no scenarios would pass while checking nothing.
+    expect(sources.length).toBeGreaterThan(20);
+
+    /*
+     * Segmented by step, and only `kind: 'call'` steps count: a `kind: 'tool'`
+     * entry is a synthetic stream event in a projection test, whose input never
+     * reaches a schema, and demanding complete input there would be a lint
+     * about nothing.
+     */
+    const stepRe = /\{\s*kind:\s*'(call|text|wait|tool|spawnChild|streamError|startFailure)'/g;
+    const gaps: string[] = [];
+    let checked = 0;
+    for (const [file, src] of sources) {
+      const steps = [...src.matchAll(stepRe)].map((m) => ({ kind: m[1]!, start: m.index! }));
+      for (let i = 0; i < steps.length; i += 1) {
+        if (steps[i]!.kind !== 'call') continue;
+        const raw = src.slice(steps[i]!.start, steps[i + 1]?.start ?? Math.min(src.length, steps[i]!.start + 2000));
+        // Comments do not pass fields. A step that only *talks* about the
+        // version is exactly as broken as one that never mentions it.
+        const step = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+        const name = /name:\s*'([a-z0-9_]+)'/.exec(step)?.[1];
+        const fields = name ? required.get(name) : undefined;
+        if (!fields || raw.includes(OPT_OUT)) continue;
+        checked += 1;
+        for (const field of fields) {
+          if (!step.includes(field)) gaps.push(`${file}: ${name} bez ${field}`);
+        }
+      }
+    }
+    expect(checked, 'scan nie znalazl zadnego kroku wolajacego narzedzie z wymaganymi polami').toBeGreaterThan(3);
+    expect(gaps, 'krok scenariusza nie podaje wymaganego pola narzedzia').toEqual([]);
   });
 });
 
