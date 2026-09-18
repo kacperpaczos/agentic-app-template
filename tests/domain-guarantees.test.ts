@@ -733,6 +733,51 @@ describe('L9.8, L9.15 — wymuszona awaria w polowie wieloetapowego zapisu', () 
     ).toEqual(before);
   });
 
+  it('awaria przy pierwszej wiadomosci nie zostawia rozmowy bez tej wiadomosci', () => {
+    const before = h.platform.services.conversations.list(h.ownerId).length;
+    vi.spyOn(h.platform.services.conversations, 'appendMessage').mockImplementation(() => {
+      throw new Error('awaria zapisu pierwszej wiadomosci');
+    });
+
+    expect(() =>
+      h.platform.services.conversations.create({
+        ownerId: h.ownerId,
+        firstMessage: { content: 'pierwsza wiadomosc' },
+      }),
+    ).toThrowError(/awaria zapisu pierwszej wiadomosci/);
+
+    vi.restoreAllMocks();
+    // A conversation titled after a message the history does not hold would be
+    // a turn the user can see in the list and cannot open.
+    expect(h.platform.services.conversations.list(h.ownerId)).toHaveLength(before);
+  });
+
+  it('awaria przy dotknieciu przestrzeni nie zostawia karty bez zmiany swiezosci przestrzeni', async () => {
+    const space = h.platform.services.canvas.createSpace({ ownerId: h.ownerId, title: 'Atomowosc' });
+    const spec = { kind: 'component' as const, component: 'platform.markdown', props: { markdown: 'a' } };
+    const cardsBefore = h.platform.services.canvas.getState(space.id, h.ownerId).cards.length;
+
+    // The failure lands between the card insert and the space touch, both of
+    // which belong to one write.
+    const prepare = h.platform.services.db.$client.prepare.bind(h.platform.services.db.$client);
+    vi.spyOn(h.platform.services.db.$client, 'prepare').mockImplementation(((sql: string) => {
+      if (sql.includes('UPDATE canvas_spaces SET updated_at')) {
+        throw new Error('awaria po zapisie karty');
+      }
+      return prepare(sql);
+    }) as never);
+
+    await expect(
+      h.platform.services.canvas.addCard({ spaceId: space.id, title: 'K', spec }, h.ownerId),
+    ).rejects.toThrowError(/awaria po zapisie karty/);
+
+    vi.restoreAllMocks();
+    expect(
+      h.platform.services.canvas.getState(space.id, h.ownerId).cards.length,
+      'karta przetrwala awarie w polowie zapisu',
+    ).toBe(cardsBefore);
+  });
+
   it('nieudane utworzenie artefaktu z pliku nie zostawia osieroconego pliku', async () => {
     const workspaceDir = mkdtempSync(join(tmpdir(), 'agentic-workspace-'));
     tempDirs.push(workspaceDir);

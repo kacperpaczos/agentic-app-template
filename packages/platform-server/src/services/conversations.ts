@@ -94,19 +94,27 @@ export class ConversationService {
     const ts = nowIso();
     const title =
       input.title ?? (input.firstMessage ? deriveTitle(input.firstMessage.content) : 'Nowa rozmowa');
-    this.db.$client
-      .prepare(
-        `INSERT INTO conversations (id, owner_id, title, space_id, claude_session_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, NULL, ?, ?)`,
-      )
-      .run(id, input.ownerId, title, input.spaceId ?? null, ts, ts);
-    if (input.firstMessage) {
-      this.appendMessage(id, input.ownerId, {
-        id: input.firstMessage.id,
-        role: 'user',
-        content: input.firstMessage.content,
-      });
-    }
+    /*
+     * One statement or two, it is one act: a conversation created *with* its
+     * first message. Written as two writes in sequence, a failure on the second
+     * left a conversation whose title was derived from a message the history
+     * does not contain — the list shows a turn that cannot be opened (L9.8).
+     */
+    this.db.$client.transaction(() => {
+      this.db.$client
+        .prepare(
+          `INSERT INTO conversations (id, owner_id, title, space_id, claude_session_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, NULL, ?, ?)`,
+        )
+        .run(id, input.ownerId, title, input.spaceId ?? null, ts, ts);
+      if (input.firstMessage) {
+        this.appendMessage(id, input.ownerId, {
+          id: input.firstMessage.id,
+          role: 'user',
+          content: input.firstMessage.content,
+        });
+      }
+    })();
     return toConv(this.#row(id, input.ownerId));
   }
 
