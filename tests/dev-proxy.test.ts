@@ -25,9 +25,21 @@ import {
 
 let running: Server | null = null;
 
+/**
+ * How many times `/api/health` was actually asked.
+ *
+ * Counted, rather than inferred from the answers, because the question "is the
+ * probe shared?" cannot be answered by what the callers got back: a stand-in
+ * that answers correctly answers three concurrent requests just as correctly as
+ * one. Only the count can fail.
+ */
+let probes = 0;
+
 /** A stand-in backend answering `/api/health` with the given label. */
 async function instanceAnswering(label: string | null | 'broken'): Promise<string> {
+  probes = 0;
   const server = createServer((req, res) => {
+    if (req.url === '/api/health') probes += 1;
     if (req.url !== '/api/health') {
       res.statusCode = 404;
       res.end();
@@ -135,9 +147,18 @@ describe('proxy trybu deweloperskiego', () => {
     expect(await cold()).toContain('nie odpowiada');
 
     const warm = devInstanceGate(api);
-    // Concurrent first requests share one probe rather than each sending their
-    // own: the first page load opens several `/api` requests at once.
+    /*
+     * Concurrent first requests share one probe rather than each sending their
+     * own: the first page load opens several `/api` requests at once.
+     *
+     * Measured by counting what reached the stand-in, not by what the callers
+     * got back. Three `null`s are true whether the probe is shared or not, so
+     * that assertion could never fail — which is worse than no assertion,
+     * because a reader takes it for a guard.
+     */
+    const before = probes;
     expect(await Promise.all([warm(), warm(), warm()])).toEqual([null, null, null]);
+    expect(probes - before, 'trzy rownolegle wywolania wyslaly wiecej niz jedna sonde').toBe(1);
     const closing = running;
     running = null;
     await new Promise<void>((done) => closing!.close(() => done()));
