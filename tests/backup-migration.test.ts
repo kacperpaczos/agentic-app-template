@@ -642,6 +642,38 @@ describe('sciezki wokol katalogu danych — trzy ochrony przed skasowaniem', () 
     expect(r.out).toMatch(/lezy w katalogu danych aplikacji/);
   }, 120_000);
 
+  it('skopiowany znacznik nie autoryzuje SKASOWANIA katalogu', () => {
+    /*
+     * The reviewer's third escape, and the one that still destroyed data after
+     * the copied-marker fix: that fix landed in `isOurs`, but the two places
+     * where a marker *authorises a deletion* still asked only whether the file
+     * was present. So `cp -r` of a generated directory, a user's file added to
+     * the copy, no `session.secret` anywhere — and `synthetic-state --out`
+     * deleted it, exit 0.
+     *
+     * Deliberately separate from the test above: that one covers
+     * `backup-state --out`, which *overwrites* through `assertOwnOrEmptyDir`.
+     * This one covers `synthetic-state --out`, which *deletes* through
+     * `prepareScratchDir`. Both gates read the marker, and only one of them had
+     * a test — which is exactly how the escape survived.
+     */
+    const wygenerowany = dir('kasowanie-oryginal');
+    expect(run('synthetic-state.mjs', ['--out', wygenerowany, '--stage', 'current']).status).toBe(0);
+
+    const mojeDane = dir('kasowanie-kopia');
+    cpSync(wygenerowany, mojeDane, { recursive: true });
+    expect(existsSync(resolve(mojeDane, '.katalog-roboczy-agentic'))).toBe(true);
+    writeFileSync(resolve(mojeDane, 'waznyplik.txt'), 'tresc uzytkownika\n');
+
+    const r = run('synthetic-state.mjs', ['--out', mojeDane, '--stage', 'empty']);
+    expect(r.status, r.out).toBe(2);
+    expect(r.out).toMatch(/nie zostal utworzony przez te skrypty/);
+    expect(readFileSync(resolve(mojeDane, 'waznyplik.txt'), 'utf8')).toBe('tresc uzytkownika\n');
+
+    // ...and the directory the generator really made is still reusable.
+    expect(run('synthetic-state.mjs', ['--out', wygenerowany, '--stage', 'empty']).status).toBe(0);
+  }, 240_000);
+
   it('awaria skryptu ma inny kod wyjscia niz werdykt proby', () => {
     /*
      * A caller has to tell "the rehearsal found problems" (1) from "the
