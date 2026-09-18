@@ -1,0 +1,19 @@
+Przebieg przegladarkowy — pakiet BL-11b
+commit: fc26a7f
+
+== przebieg celowany (spece dotkniete zmianami) ==
+polecenie: pnpm build && flock -w 5400 ../.e2e.lock pnpm exec playwright test \
+             e2e/interactions.spec.ts e2e/measurements.spec.ts e2e/background-tasks.spec.ts e2e/composed-views.spec.ts
+kod wyjscia: 0 — 21 testow, 1.9 min
+
+== przebieg pelny (domyslny projekt, bez specow modelowych) ==
+polecenie: flock -w 5400 ../.e2e.lock pnpm exec playwright test
+kod wyjscia: 0
+  potwierdzono instancje testowa pod http://127.0.0.1:8799
+  pominieto spece z prawdziwym modelem: bl01-bl02-model.spec.ts (7), agent-ui.spec.ts (2), files-agent.spec.ts (2). Kosztuja 11 tur subskrypcji na przebieg — uruchamia sie je swiadomie: pnpm test:e2e:model.
+    153 passed (10.2m)
+
+Grant tur modelu dla tego zadania: ZERO. Zaden spec modelowy nie byl uruchomiony
+(bl01-bl02-model.spec.ts, agent-ui.spec.ts, files-agent.spec.ts sa poza projektem domyslnym).
+Dowody pakietu pochodza z testow kontraktowych oraz z symulacji na stand-inie modelu
+na granicy adaptera SDK (tests/support/model-standin.ts) — oznaczone jako symulacja.
