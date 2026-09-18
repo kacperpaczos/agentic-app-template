@@ -174,3 +174,36 @@ P10c [L9.14] packages/platform-server/src/services/idempotency.ts
         - 1
         + 8
     drzewo po przywroceniu: czyste
+
+P15 [L9.8] packages/platform-server/src/services/conversations.ts
+    wycofano       : transakcja wokol dwoch zapisow
+    test           : tests/domain-guarantees.test.ts -t "awaria przy pierwszej wiadomosci"
+    oczekiwano     : oblewa — rozmowa zostaje mimo nieudanej pierwszej wiadomosci
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/domain-guarantees.test.ts > L9.8, L9.15 — wymuszona awaria w polowie wieloetapowego zapisu > awaria przy pierwszej wiadomosci nie zostawia rozmowy bez tej wiadomosci
+        AssertionError: expected [ { …(7) } ] to have a length of +0 but got 1
+        
+        - Expected
+        + Received
+        
+        - 0
+    drzewo po przywroceniu: czyste
+P16 [L9.8] packages/platform-server/src/services/canvas.ts
+    wycofano       : transakcja wokol dwoch zapisow
+    test           : tests/domain-guarantees.test.ts -t "awaria przy dotknieciu przestrzeni"
+    oczekiwano     : oblewa — karta przetrwala awarie w polowie zapisu
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/domain-guarantees.test.ts > L9.8, L9.15 — wymuszona awaria w polowie wieloetapowego zapisu > awaria przy dotknieciu przestrzeni nie zostawia karty bez zmiany swiezosci przestrzeni
+        AssertionError: karta przetrwala awarie w polowie zapisu: expected 1 to be +0 // Object.is equality
+        
+        - Expected
+        + Received
+        
+        - 0
+    drzewo po przywroceniu: czyste
