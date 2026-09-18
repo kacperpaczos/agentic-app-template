@@ -25,6 +25,9 @@ import { type Page } from '@playwright/test';
  */
 
 const scripted = new ScriptedInstance({ port: 8798, dataDirName: '.e2e-scripted-appcontext' });
+
+/** Title of the conversation deliberately created without a workspace. */
+const TITLE_WITHOUT_SPACE = 'Rozmowa bez przestrzeni';
 const BASE = scripted.baseUrl;
 
 async function openApp(page: Page, path = '/') {
@@ -286,7 +289,15 @@ test.describe('kontekst aplikacji dla agenta', () => {
     const caseId = new URL(page.url()).pathname.split('/').pop()!;
     await navigate(page, 'Canvas');
     const cardId = await selectFirstCard(page);
-    const firstConversation = await conversationOnScreen(page).catch(() => null);
+    /*
+     * One command as the first owner, so there *is* a conversation of theirs to
+     * leak. Without it the address never carries `?c=`, `firstConversation`
+     * stays null, and every later assertion about it degenerates into "not
+     * null" — which holds no matter what the next command carries.
+     */
+    await send(page, 'Zapamietaj, na czym pracuje.');
+    await settled(page);
+    const firstConversation = await conversationOnScreen(page);
     const spaceId = await page.evaluate(() => new URL(location.href).searchParams.get('s'));
     expect(spaceId).toBeTruthy();
 
@@ -305,7 +316,10 @@ test.describe('kontekst aplikacji dla agenta', () => {
     const [context] = await toolResults(page, conversationId, 'get_context');
 
     const text = commandHalf(context);
-    for (const leaked of [caseId, cardId, spaceId!, firstConversation].filter(Boolean) as string[]) {
+    // Every one of these is a non-empty id of the first owner's, and the second
+    // owner's command must carry none of them.
+    for (const leaked of [caseId, cardId, spaceId!, firstConversation]) {
+      expect(leaked, 'kazdy identyfikator poprzedniego wlasciciela musi istniec').toBeTruthy();
       expect(text, `wyciek ${leaked}`).not.toContain(leaked);
     }
     expect(context.resource).toBeNull();
@@ -313,6 +327,61 @@ test.describe('kontekst aplikacji dla agenta', () => {
     expect(context.unsavedDrafts).toEqual([]);
     expect(context.conversationId).toBe(conversationId);
     expect(conversationId).not.toBe(firstConversation);
+  });
+
+
+  test('L6.12: przejscie do rozmowy bez przestrzeni nie zabiera ze soba przestrzeni ani zaznaczenia poprzedniej', async ({
+    page,
+  }) => {
+    await scripted.restart('app-context');
+    await openApp(page, '/');
+    /*
+     * A conversation with no workspace of its own — the case the shell used to
+     * skip. Created over HTTP and then the app is loaded once, so it is in the
+     * drawer for the user to pick with the mouse.
+     */
+    const empty = await postJson(page, '/api/threads/create', { title: TITLE_WITHOUT_SPACE });
+    await openApp(page, '/');
+
+    // Conversation A: a workspace, a card selected in it, and a command sent.
+    await navigate(page, 'Wszystkie sprawy');
+    await page.locator('[data-testid^="case-tile-"]').first().click();
+    await expect(page.getByTestId('case-detail-page')).toBeVisible();
+    await navigate(page, 'Canvas');
+    const cardId = await selectFirstCard(page);
+    const spaceA = await page.evaluate(() => new URL(location.href).searchParams.get('s'));
+    expect(spaceA).toBeTruthy();
+    await send(page, 'Co mam teraz w kontekscie?');
+    await settled(page);
+    const conversationA = await conversationOnScreen(page);
+
+    // The precondition, so the assertions below are about a change: A's command
+    // did carry A's workspace and A's selected card.
+    const [inA] = await toolResults(page, conversationA, 'get_context');
+    expect(inA.spaceId).toBe(spaceA);
+    expect(inA.selection).toEqual([{ kind: 'card', id: cardId }]);
+
+    /* The user picks the other conversation from the drawer — with the mouse. */
+    await page.locator('.pf-chat [aria-label="Open sidebar"]').first().click();
+    await page
+      .locator('.openui-agent-sidebar-item', { hasText: TITLE_WITHOUT_SPACE })
+      .first()
+      .click();
+    await expect
+      .poll(() => page.evaluate(() => new URL(location.href).searchParams.get('c')), { timeout: 20_000 })
+      .toBe(empty.id);
+
+    await send(page, 'A teraz co mam w kontekscie?');
+    await settled(page);
+    const [inEmpty] = await toolResults(page, empty.id, 'get_context');
+
+    expect(inEmpty.conversationId).toBe(empty.id);
+    // Neither the workspace of the conversation left behind …
+    expect(inEmpty.spaceId).not.toBe(spaceA);
+    // … nor what was selected inside it.
+    expect(inEmpty.selection).toEqual([]);
+    expect(commandHalf(inEmpty)).not.toContain(cardId);
+    expect(commandHalf(inEmpty)).not.toContain(spaceA);
   });
 
   /* --------------------------------------------------------------- L6.14 -- */

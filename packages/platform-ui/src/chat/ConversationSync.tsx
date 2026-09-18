@@ -65,12 +65,19 @@ export function ConversationSync() {
    * Only when the chat moved — picking a conversation should bring its canvas
    * space with it. When the *URL* moved it already carries the space, and
    * overriding it here would undo a restored or shared address.
+   *
+   * **Including when it belongs to none.** The space is applied whatever it is,
+   * `null` included. Skipping the call for a conversation without a space —
+   * which this did — left the *previous* conversation's workspace in the shell,
+   * and with it the cards selected in that workspace, so the next command sent
+   * in the conversation just opened carried a scope the user had left (L6.12).
+   * `setSpace` clears the selection with the move, so one call covers both.
    */
   const followConversationSpace = useCallback(
     async (threadId: string) => {
       try {
         const conv = await apiGet<{ spaceId: string | null }>(`/api/conversations/${threadId}`);
-        if (conv.spaceId) setSpace(conv.spaceId);
+        setSpace(conv.spaceId);
       } catch {
         // Whether the conversation is reachable at all is decided below, from
         // the chat's own load error; a space lookup is not the place to report.

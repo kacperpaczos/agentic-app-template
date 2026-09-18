@@ -2,7 +2,12 @@ import { z } from 'zod';
 import {
   AGENT_VIEWS_SCOPE_KIND,
   AppError,
+  applyReadWindow,
   DATA_COMPONENTS,
+  READ_WINDOW_DEFAULT_LIMIT,
+  READ_WINDOW_MAX_LIMIT,
+  readWindowInput,
+  readWindowNote,
   type CanvasCard,
   type CanvasSpace,
   type ModuleToolDefinition,
@@ -161,24 +166,30 @@ export function agentViewTools(services: PlatformServices): Array<ModuleToolDefi
       name: 'agent_views_list',
       description:
         'Zwraca widoki agenta tej rozmowy (przestrzen "Widoki agenta"): cardId, tytul, specVersion i kompozycje ' +
-        'OpenUI Lang. Wywolaj przed zmiana lub usunieciem widoku — daje cardId i nazwy instrukcji do patcha.',
+        'OpenUI Lang. Wywolaj przed zmiana lub usunieciem widoku — daje cardId i nazwy instrukcji do patcha. ' +
+        `Odczyt jest stronicowany: domyslnie ${READ_WINDOW_DEFAULT_LIMIT} widokow, najwyzej ${READ_WINDOW_MAX_LIMIT}; ` +
+        'kazdy niesie caly swoj source, wiec window.truncated=true znaczy, ze to nie sa wszystkie widoki rozmowy — ' +
+        'po kolejne wywolaj z window.nextOffset.',
       effect: 'read',
       alwaysLoad: true,
-      inputSchema: z.object({}),
-      handler: async (_input: unknown, ctx: ToolCallContext) => {
+      inputSchema: z.object(readWindowInput),
+      handler: async (input: { limit?: number; offset?: number }, ctx: ToolCallContext) => {
         const conversation = conversationOf(ctx);
         const space = spaceOf(ctx);
         const cards = space ? services.canvas.getState(space.id, ctx.ownerId).cards : [];
+        const { items, window } = applyReadWindow(cards, input);
         return {
           conversationId: conversation.id,
           spaceId: space?.id ?? null,
-          views: cards.map((c) => ({
+          views: items.map((c) => ({
             cardId: c.id,
             title: c.title,
             specVersion: c.specVersion,
             source: c.spec.kind === 'openui' ? c.spec.source : null,
             updatedAt: c.updatedAt,
           })),
+          window,
+          windowNote: readWindowNote(window, 'widokow agenta'),
         };
       },
     },

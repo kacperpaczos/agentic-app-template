@@ -412,17 +412,22 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     await page.getByTestId('switch-access-context').click();
     await expect(owner).not.toHaveText(was);
     /*
-     * The table in the chat is no longer the first owner's.
+     * The table in the chat no longer shows the first owner's rows.
      *
-     * It used to stay `ready` with their rows, because nothing outside the query
-     * cache was reset by a switch and the component was never re-rendered. The
-     * shell state is now cleared on a switch (L6.12), which re-renders it — so
-     * the rows go, and what is left is an empty table under the new identity.
-     * Asserted as "not their rows" rather than as one state name, because the
-     * claim is about the data, not about the wording of a state.
+     * It used to: nothing outside the query cache was reset by a switch and the
+     * component was never re-rendered, so their rows stayed on screen. Asserted
+     * over the row ids captured **before** the switch (`mine`) — reading them
+     * again here would read them as the *second* owner, who owns none, so the
+     * loop would be empty and the assertion would pass without looking at
+     * anything.
+     *
+     * Deliberately no assertion about the table's own state attribute here: two
+     * complementary fixes land on this screen (this package clears the shell
+     * store; the sibling package rebuilds `AgentInterface`), and they leave the
+     * table in different shapes — gone, or present and empty. What both have to
+     * satisfy is below and in the description: none of the first owner's data.
      */
-    await expect(table).not.toHaveAttribute('data-state', 'ready');
-    for (const id of await suppliers(page).then((s) => s.ids)) {
+    for (const id of mine) {
       await expect(table).not.toContainText(id);
     }
 

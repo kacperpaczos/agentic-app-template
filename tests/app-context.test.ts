@@ -262,22 +262,53 @@ describe('L6.7 — wiekszy zbior jest pobierany oknem, nie w calosci', () => {
     expect(new Set([...out.cards, ...rest.cards].map((c: any) => c.id)).size).toBe(cardCount);
   });
 
-  it('kazde listujace narzedzie agenta deklaruje limit i offset', async () => {
-    const listing = [
-      'canvas_list_cards',
-      'files_list',
-      'ui_catalog',
-      'procurement_list_cases',
-      'procurement_get_case',
-      'procurement_list_offers',
-    ];
-    for (const name of listing) {
-      const entry = tools().find((t) => t.localName === name);
-      expect(entry, name).toBeTruthy();
-      const keys = Object.keys((entry!.def.inputSchema as any).shape);
-      expect(keys, name).toContain('limit');
-      expect(keys, name).toContain('offset');
+  it('kazde narzedzie odczytu albo bierze okno, albo jest tu wymienione z powodem', () => {
+    /*
+     * Enumerated from the registry, not written out by hand.
+     *
+     * A hand-written list of the tools that *were* fixed proves only that they
+     * were fixed; it says nothing about the next read tool somebody adds, and it
+     * quietly went on passing while three unwindowed listings sat next to it.
+     * So the rule is stated the other way round: **every** tool with
+     * `effect: 'read'` declares `limit` and `offset`, unless it is named below
+     * with the reason why a window would make it worse. A new read tool fails
+     * this test until somebody decides which of the two it is.
+     */
+    const withoutWindow: Record<string, string> = {
+      // Not listings: one command each, answering with what the browser did.
+      ui_navigate: 'komenda interfejsu, odpowiedz to wynik jednej nawigacji',
+      ui_filter: 'komenda interfejsu, odpowiedz to wynik jednego zawezenia',
+      ui_sort: 'komenda interfejsu, odpowiedz to wynik jednego sortowania',
+      ui_show_value: 'komenda interfejsu, odpowiedz dotyczy jednej wartosci',
+      files_stage: 'dotyczy jednego pliku',
+      procurement_find_price_provenance: 'przejscie po relacjach jednej pozycji',
+      // Bounded by the contract, not by how much the user has.
+      get_context: 'kontekst polecenia ma limity w appContextSchema (zaznaczenie 50, szkice 20)',
+      ui_state: 'jeden opis ekranu, z wlasnymi limitami UI_SNAPSHOT_* i rozmiarem w bajtach',
+      canvas_catalog: 'katalog komponentow deklarowany przez aplikacje, nie przez uzytkownika',
+      // Windowing would change the meaning of the answer, not just its size.
+      procurement_compare_offers:
+        'ranking dotyczy calego zbioru ofert sprawy; ranking strony bylby mylacy, a nie krotszy',
+      procurement_search: 'ma wlasny limit (domyslnie 20, maks. 50) i totals mowiace o calosci',
+    };
+
+    const reads = tools().filter((t) => t.def.effect === 'read');
+    expect(reads.length).toBeGreaterThan(10);
+    const missing: string[] = [];
+    for (const entry of reads) {
+      const keys = Object.keys((entry.def.inputSchema as any).shape);
+      const windowed = keys.includes('limit') && keys.includes('offset');
+      if (windowed) {
+        expect(withoutWindow[entry.localName], `${entry.localName} ma okno i wyjatek naraz`).toBeUndefined();
+        continue;
+      }
+      if (!withoutWindow[entry.localName]) missing.push(entry.localName);
     }
+    expect(missing, 'narzedzia odczytu bez okna i bez uzasadnienia').toEqual([]);
+
+    // The exception list describes tools that exist; a stale entry is a lie too.
+    const names = new Set(reads.map((t) => t.localName));
+    expect(Object.keys(withoutWindow).filter((n) => !names.has(n))).toEqual([]);
   });
 
   it('limit i offset przechodza przez narzedzie modulu, a totals nie klamia', async () => {
@@ -292,7 +323,6 @@ describe('L6.7 — wiekszy zbior jest pobierany oknem, nie w calosci', () => {
     const past: any = await callTool('procurement_list_cases', { offset: all.length });
     expect(past.cases).toHaveLength(0);
     expect(past.window.total).toBe(all.length);
-    expect(past.windowNote).toContain(String(all.length));
   });
 
   it('domyslna odpowiedz listujaca miesci sie w tym, co rozmowa przechowuje', async () => {

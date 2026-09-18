@@ -361,7 +361,9 @@ describe('narzedzia widokow agenta', () => {
     const emitted: ModuleEmittedEvent[] = [];
     const ctx = context(conv.id, h.ownerId, emitted);
     const before = await call('agent_views_list', {}, ctx);
-    expect(before.body).toEqual({ conversationId: conv.id, spaceId: null, views: [] });
+    expect(before.body).toMatchObject({ conversationId: conv.id, spaceId: null, views: [] });
+    // The listing is windowed (L6.7): an empty space is "0 of 0", not a bare list.
+    expect(before.body.window).toMatchObject({ total: 0, returned: 0, truncated: false, nextOffset: null });
 
     const created = await call(
       'agent_view_create',

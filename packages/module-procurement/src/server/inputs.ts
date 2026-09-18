@@ -44,6 +44,9 @@ export const searchInput = z.object({
 export const listOffersInput = z.object({
   caseId: z.string().min(1),
   ...readWindowInput,
+  /** The window inside one offer; separate, so an item past the limit stays reachable. */
+  itemsLimit: readWindowInput.limit.describe('Ile pozycji zwrocic w kazdej ofercie'),
+  itemsOffset: readWindowInput.offset.describe('Od ktorej pozycji zaczac w kazdej ofercie'),
 });
 
 export const saveComparisonInput = z.object({

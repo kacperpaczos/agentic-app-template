@@ -64,13 +64,26 @@ export function procurementTools(service: ProcurementService): ModuleToolDefinit
       name: 'get_case',
       description:
         'Zwraca szczegoly sprawy zakupowej: podstawe porownania, wymagane pozycje, oferty i ich pozycje. ' +
-        `Listy wymagan i ofert sa stronicowane: domyslnie ${READ_WINDOW_DEFAULT_LIMIT}, najwyzej ${READ_WINDOW_MAX_LIMIT}. ` +
+        `Obie listy sa stronicowane osobno: limit/offset dotycza OFERT, requirementsLimit/requirementsOffset ` +
+        `wymaganych pozycji (domyslnie ${READ_WINDOW_DEFAULT_LIMIT}, najwyzej ${READ_WINDOW_MAX_LIMIT}). ` +
+        'Osobno, bo sprawa z trzema wymaganiami i setka ofert nie ma powodu chowac wymagan razem z oferta nr 26. ' +
         'requirementsWindow.truncated / offersWindow.truncated=true znaczy, ze to nie jest cala lista.',
       effect: 'read',
-      inputSchema: z.object({ caseId: z.string(), ...readWindowInput }),
-      handler: async (i: { caseId: string; limit?: number; offset?: number }, ctx: ToolCallContext) => {
+      inputSchema: z.object({
+        caseId: z.string(),
+        ...readWindowInput,
+        requirementsLimit: readWindowInput.limit.describe('Ile wymaganych pozycji zwrocic'),
+        requirementsOffset: readWindowInput.offset.describe('Od ktorej wymaganej pozycji zaczac'),
+      }),
+      handler: async (
+        i: { caseId: string; limit?: number; offset?: number; requirementsLimit?: number; requirementsOffset?: number },
+        ctx: ToolCallContext,
+      ) => {
         const d = service.getCaseDetail(i.caseId, ctx.ownerId);
-        const requirements = applyReadWindow(d.requirements, i);
+        const requirements = applyReadWindow(d.requirements, {
+          ...(i.requirementsLimit !== undefined ? { limit: i.requirementsLimit } : {}),
+          ...(i.requirementsOffset !== undefined ? { offset: i.requirementsOffset } : {}),
+        });
         const offers = applyReadWindow(d.offers, i);
         return {
           case: d.procurementCase,
@@ -105,17 +118,25 @@ export function procurementTools(service: ProcurementService): ModuleToolDefinit
       name: 'list_offers',
       description:
         'Wypisuje oferty w sprawie wraz z pozycjami i cenami jednostkowymi. ' +
-        `Odczyt jest stronicowany: domyslnie ${READ_WINDOW_DEFAULT_LIMIT} ofert, najwyzej ${READ_WINDOW_MAX_LIMIT}; ` +
-        'pozycje kazdej oferty tez maja limit (itemsWindow przy ofercie). ' +
-        'window.truncated=true znaczy, ze to nie sa wszystkie oferty.',
+        `Odczyt jest stronicowany: limit/offset dotycza OFERT (domyslnie ${READ_WINDOW_DEFAULT_LIMIT}, najwyzej ` +
+        `${READ_WINDOW_MAX_LIMIT}), a itemsLimit/itemsOffset pozycji wewnatrz kazdej oferty — z wlasnym offsetem, ` +
+        'bo bez niego pozycje poza limitem bylyby tym narzedziem nieosiagalne. ' +
+        'window.truncated=true znaczy, ze to nie sa wszystkie oferty; itemsWindow pojawia sie przy ofercie, ' +
+        'ktorej pozycje zostaly przyciete.',
       effect: 'read',
       inputSchema: listOffersInput,
-      handler: async (i: { caseId: string; limit?: number; offset?: number }, ctx: ToolCallContext) => {
+      handler: async (
+        i: { caseId: string; limit?: number; offset?: number; itemsLimit?: number; itemsOffset?: number },
+        ctx: ToolCallContext,
+      ) => {
         const d = service.getCaseDetail(i.caseId, ctx.ownerId);
         const { items: offers, window } = applyReadWindow(d.offers, i);
         return {
           offers: offers.map((o) => {
-            const items = applyReadWindow(o.items, { limit: i.limit ?? READ_WINDOW_DEFAULT_LIMIT });
+            const items = applyReadWindow(o.items, {
+              ...(i.itemsLimit !== undefined ? { limit: i.itemsLimit } : {}),
+              ...(i.itemsOffset !== undefined ? { offset: i.itemsOffset } : {}),
+            });
             return {
               id: o.offer.id,
               supplier: o.supplierName,
