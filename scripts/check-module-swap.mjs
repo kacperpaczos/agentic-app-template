@@ -289,13 +289,18 @@ try {
      */
     await page.goto(`${base}/?s=${spaceId}`);
     const cardList = page.locator('[data-testid="probe-note-list"]').first();
-    await cardList.waitFor({ timeout: 20_000 });
-    const cardText = (await cardList.textContent()) ?? '';
+    // Bez renderera karta pokazuje komunikat katalogu, a nie pustkę — więc brak
+    // listy jest odnotowany razem z tym, co naprawdę stanęło na jej miejscu.
+    const rendered = await cardList
+      .waitFor({ timeout: 20_000 })
+      .then(() => true)
+      .catch(() => false);
+    const cardText = rendered ? ((await cardList.textContent()) ?? '') : '';
     const bodyText = (await page.locator('body').textContent()) ?? '';
     record(
       'karta modułu kontrolnego wyrenderowana z katalogu, danymi z trasy modułu',
-      cardText.includes(NOTE_TEXT) && !bodyText.includes('Brak renderera dla komponentu'),
-      cardText.replace(/\s+/g, ' ').slice(0, 120),
+      rendered && cardText.includes(NOTE_TEXT) && !bodyText.includes('Brak renderera dla komponentu'),
+      rendered ? cardText.replace(/\s+/g, ' ').slice(0, 120) : `brak listy na canvasie; strona: ${bodyText.replace(/\s+/g, ' ').slice(0, 200)}`,
     );
 
     /* Ekran modułu: trasa zamontowana z kontraktu UiModule.screens. */
