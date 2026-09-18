@@ -1,0 +1,303 @@
+Proby zdolnosci wykrycia (G16) — pakiet Z8 / BL-08a
+===================================================
+
+Procedura kazdej proby: commit najpierw, proba na czystym drzewie, wycofanie
+JEDNEJ linii, uruchomienie wskazanego testu, `git checkout -- <plik>`, kontrola
+`git status --porcelain` (pusta linia ponizej = drzewo czyste).
+
+Runda 1 — proby kontraktowe (bez przegladarki)
+=================================================================
+PROBA P4 (L4.6) — brak odczytu klucza idempotencji
+plik: packages/platform-server/src/http/app.ts
+wycofana linia: const recorded = services.idempotency.get<RecordedRun>(clientRunId, ownerId, AGUI_RUN_SCOPE);
+zamieniona na : const recorded = null as RecordedRun | null;
+polecenie     : pnpm exec vitest run tests/chat-history.test.ts -t 'ten sam runId' 2>&1 | grep -E 'AssertionError|expected|✓|×|Tests ' | head -20
+wycofano linie w packages/platform-server/src/http/app.ts
+     × ten sam runId: jedno uruchomienie, jedna odpowiedz, jedna rozmowa 72ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected 500 to be 200 // Object.is equality
+      Tests  1 failed | 9 skipped (10)
+kod wyjscia testu: 0
+przywrocono; git status --porcelain:
+
+=================================================================
+PROBA P5c (L4.7) — usuniecie nie anuluje trwajacych uruchomien
+plik: packages/platform-server/src/services/conversations.ts
+wycofana linia: .filter((r) => r.status === 'queued' || r.status === 'running');
+zamieniona na : .filter(() => false);
+polecenie     : pnpm exec vitest run tests/chat-history.test.ts -t 'zatrzymuje trwajace zadanie' 2>&1 | grep -E 'AssertionError|cancelledRuns|✓|×|Tests ' | head -20
+wycofano linie w packages/platform-server/src/services/conversations.ts
+     × zatrzymuje trwajace zadanie, odlacza artefakt, kasuje historie i przestrzen widokow 117ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected { …(4) } to match object { …(4) }
+-   "cancelledRuns": 1,
++   "cancelledRuns": 0,
+      Tests  1 failed | 9 skipped (10)
+kod wyjscia testu: 0
+przywrocono; git status --porcelain:
+
+=================================================================
+PROBA P10 (L4.13) — identyfikator narzedzia bez przestrzeni nazw wykonania
+plik: packages/platform-server/src/agent/runtime.ts
+wycofana linia: const scopeToolId = (raw: unknown): string => `${runId}~${String(raw)}`;
+zamieniona na : const scopeToolId = (raw: unknown): string => String(raw);
+polecenie     : pnpm exec vitest run tests/chat-history.test.ts -t 'dwa wykonania z tym samym tool_use_id' 2>&1 | grep -E 'AssertionError|expected|✓|×|Tests ' | head -20
+wycofano linie w packages/platform-server/src/agent/runtime.ts
+     × dwa wykonania z tym samym tool_use_id: kazdy wynik zostaje przy swoim wywolaniu 79ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected 1 to be 2 // Object.is equality
+      Tests  1 failed | 9 skipped (10)
+kod wyjscia testu: 0
+przywrocono; git status --porcelain:
+
+=================================================================
+PROBA P2 (L4.3) — PATCH przestaje zmieniac tytul
+plik: packages/platform-server/src/http/app.ts
+wycofana linia: conv = services.conversations.rename(id, ownerId, body.title.trim().slice(0, 120));
+zamieniona na : conv = services.conversations.get(id, ownerId);
+polecenie     : pnpm exec vitest run tests/chat-history.test.ts -t 'PATCH zmienia tytul' 2>&1 | grep -E 'AssertionError|expected|✓|×|Tests ' | head -20
+wycofano linie w packages/platform-server/src/http/app.ts
+     × PATCH zmienia tytul, przycina go i nie przyjmuje pustego 53ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected 'Pierwsza wiadomosc rozmowy' to be 'Zestawienie ofert — marzec' // Object.is equality
+      Tests  1 failed | 9 skipped (10)
+kod wyjscia testu: 0
+przywrocono; git status --porcelain:
+
+
+Runda 1 — proba P4 powtorzona z pelnym miejscem bledu (patrz uwaga nizej)
+
+UWAGA / ZNALEZISKO. P4 oblala o jedna linie wczesniej, niz zakladano: na
+`expect(second.status).toBe(200)` (tests/chat-history.test.ts:299), a nie na
+`expect(second.replayed)`. Przyczyna jest sama w sobie znaleziskiem: bez
+idempotencji powtorzone zadanie BEZ threadId zaklada druga rozmowe, a potem
+probuje wstawic te sama wiadomosc uzytkownika po raz drugi — `messages.id` jest
+kluczem glownym calej tabeli, wiec zadanie konczy sie kodem 500 PO zalozeniu
+osieroconej rozmowy. Backlog opisywal ten przypadek jako „powstaje druga
+rozmowa”; w rzeczywistosci powstaje druga rozmowa i blad 500, ktory zaslania
+podwojona odpowiedz. Dlatego dopisano osobny test dla powtorzenia w ISTNIEJACEJ
+rozmowie (commit 9cdd7f8) — tam przed poprawka powstaje druga odpowiedz
+asystenta, czyli dokladnie to, czego zakazuje L4.6.
+
+Runda 2 — proba P4b dla dopisanego testu
+=================================================================
+PROBA P4b (L4.6) — brak odczytu klucza idempotencji, powtorzenie w ISTNIEJACEJ rozmowie
+wycofano linie w packages/platform-server/src/http/app.ts
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/chat-history.test.ts:363:29
+    361|     const second = await command(body);
+    362|     expect(second.status).toBe(200);
+    363|     expect(second.replayed).toBe(true);
+       |                             ^
+    364|     expect(second.runId).toBe(first.runId);
+    365|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+przywrocono; git status --porcelain:
+
+Runda 3 — proby przegladarkowe
+
+=================================================================
+PROBA P1 (L4.3) — kontrolka nie wysyla zmiany tytulu
+plik: packages/platform-ui/src/chat/ConversationTitle.tsx
+wycofana linia: updateThread({ ...thread, title: next });
+zamieniona na : void next;
+test          : playwright --grep "L4.3: tytul"
+wycofano linie w packages/platform-ui/src/chat/ConversationTitle.tsx
+  ✘  1 [chromium] › e2e/chat-history.spec.ts:135:3 › czat i historia rozmowy › L4.3: tytul z pierwszej wiadomosci, a uzytkownik moze go zmienic (21.9s)
+    Error: expect(locator).toHaveText(expected) failed
+           - unexpected value "Podsumuj krotko stan sprawy zakupowej"
+    > 156 |     await expect(strip).toHaveText(renamed);
+        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:156:25
+    test-results/chat-history-czat-i-histor-0d5c3--uzytkownik-moze-go-zmienic-chromium/test-failed-1.png
+    Error Context: test-results/chat-history-czat-i-histor-0d5c3--uzytkownik-moze-go-zmienic-chromium/error-context.md
+    Error Context: test-results/chat-history-czat-i-histor-0d5c3--uzytkownik-moze-go-zmienic-chromium/error-context.md
+  1 failed
+przywrocono; git status --porcelain:
+
+=================================================================
+PROBA P3 (L4.5) — pasek stanu czyta uruchomienie globalnie, nie per rozmowa
+plik: packages/platform-ui/src/chat/ChatPanel.tsx
+wycofana linia: const run = useAppState((s) => (conversationId ? s.runs[conversationId] : undefined));
+zamieniona na : const run = useAppState((s) => Object.values(s.runs)[0]);
+test          : playwright --grep "L4.5: praca"
+wycofano linie w packages/platform-ui/src/chat/ChatPanel.tsx
+  ✘  1 [chromium] › e2e/chat-history.spec.ts:520:3 › czat i historia rozmowy › L4.5: praca w drugiej rozmowie w trakcie zadania pierwszej nie miesza niczego (34.2s)
+    Error: expect(locator).toHaveAttribute(expected) failed
+           - unexpected value "succeeded"
+    > 538 |     await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'running', {
+        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:538:49
+    test-results/chat-history-czat-i-histor-03e43-ierwszej-nie-miesza-niczego-chromium/test-failed-1.png
+    Error Context: test-results/chat-history-czat-i-histor-03e43-ierwszej-nie-miesza-niczego-chromium/error-context.md
+    Error Context: test-results/chat-history-czat-i-histor-03e43-ierwszej-nie-miesza-niczego-chromium/error-context.md
+  1 failed
+przywrocono; git status --porcelain:
+
+=================================================================
+PROBA P5g (L4.7) — usuniecie nie anuluje trwajacego zadania (dowod GUI)
+plik: packages/platform-server/src/services/conversations.ts
+wycofana linia: .filter((r) => r.status === 'queued' || r.status === 'running');
+zamieniona na : .filter(() => false);
+test          : playwright --grep "L4.7: usuniecie"
+wycofano linie w packages/platform-server/src/services/conversations.ts
+  ✓  1 [chromium] › e2e/chat-history.spec.ts:601:3 › czat i historia rozmowy › L4.7: usuniecie rozmowy z trwajacym zadaniem zatrzymuje to zadanie (3.5s)
+  1 passed (22.7s)
+przywrocono; git status --porcelain:
+
+=================================================================
+PROBA P6 (L4.8) — deklaracja na ekranie przestaje odpowiadac kontraktowi
+plik: packages/platform-ui/src/shell/SettingsPage.tsx
+wycofana linia: data-available={value ? 'true' : 'false'}
+zamieniona na : data-available="true"
+test          : playwright --grep "L4.8: zadeklarowany"
+wycofano linie w packages/platform-ui/src/shell/SettingsPage.tsx
+  ✘  1 [chromium] › e2e/chat-history.spec.ts:183:3 › czat i historia rozmowy › L4.8: zadeklarowany zakres obslugi rozmow zgadza sie z tym, co interfejs oferuje (2.0s)
+    Error: expect(received).toEqual(expected) // deep equality
+    > 204 |     expect(declared).toEqual(fromApi);
+      205 |     expect(Object.keys(declared).length).toBeGreaterThan(3);
+        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:204:22
+    test-results/chat-history-czat-i-histor-3d905--z-tym-co-interfejs-oferuje-chromium/test-failed-1.png
+    Error Context: test-results/chat-history-czat-i-histor-3d905--z-tym-co-interfejs-oferuje-chromium/error-context.md
+    Error Context: test-results/chat-history-czat-i-histor-3d905--z-tym-co-interfejs-oferuje-chromium/error-context.md
+  1 failed
+przywrocono; git status --porcelain:
+
+=================================================================
+PROBA P7 (L4.9) — odpowiedz z kompozycja przestaje byc dzielona na prozę i kompozycje
+plik: packages/platform-ui/src/chat/AssistantMessage.tsx
+wycofana linia: if (!content.includes('```openui-lang')) {
+zamieniona na : if (true) {
+test          : playwright --grep "L4.9: proza"
+wycofano linie w packages/platform-ui/src/chat/AssistantMessage.tsx
+  ✘  1 [chromium] › e2e/chat-history.spec.ts:245:3 › czat i historia rozmowy › L4.9: proza z formatowaniem, kompozycja OpenUI i odpowiedz po narzedziu sa widoczne (19.4s)
+    Error: expect(locator).toContainText(expected) failed
+    Error: element(s) not found
+    > 272 |     await expect(message.getByTestId('assistant-prose').first()).toContainText(
+      275 |     await expect(message.getByTestId('assistant-prose').last()).toContainText(
+        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:272:66
+    test-results/chat-history-czat-i-histor-4c7f5-dz-po-narzedziu-sa-widoczne-chromium/test-failed-1.png
+    Error Context: test-results/chat-history-czat-i-histor-4c7f5-dz-po-narzedziu-sa-widoczne-chromium/error-context.md
+    Error Context: test-results/chat-history-czat-i-histor-4c7f5-dz-po-narzedziu-sa-widoczne-chromium/error-context.md
+  1 failed
+przywrocono; git status --porcelain:
+
+=================================================================
+PROBA P8 (L4.9) — tekst po narzedziu nie otwiera nowego segmentu tury
+plik: packages/platform-server/src/agent/projection.ts
+wycofana linia: if (this.#current.toolCalls.length > 0) this.#startNewSegment();
+zamieniona na : void 0;
+test          : playwright --grep "L4.9: tekst"
+wycofano linie w packages/platform-server/src/agent/projection.ts
+  ✘  1 [chromium] › e2e/chat-history.spec.ts:313:3 › czat i historia rozmowy › L4.9: tekst wypowiedziany PRZED wywolaniem narzedzia nie ginie — jest krokiem osi (2.3s)
+    Error: expect(received).toBeGreaterThan(expected)
+    > 325 |     expect(assistant.length).toBeGreaterThan(1);
+      326 |     expect(assistant[0]!.content).toContain('Zanim odpowiem, sprawdzam katalog');
+      327 |     expect(assistant[0]!.toolCalls).toHaveLength(1);
+      328 |     expect(assistant.at(-1)!.content).toContain('to jest koncowa odpowiedz');
+        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:325:30
+    test-results/chat-history-czat-i-histor-e899c-ie-ginie-—-jest-krokiem-osi-chromium/test-failed-1.png
+    Error Context: test-results/chat-history-czat-i-histor-e899c-ie-ginie-—-jest-krokiem-osi-chromium/error-context.md
+    Error Context: test-results/chat-history-czat-i-histor-e899c-ie-ginie-—-jest-krokiem-osi-chromium/error-context.md
+  1 failed
+przywrocono; git status --porcelain:
+
+=================================================================
+PROBA P9 (L4.11) — argumenty wywolania nie trafiaja do strumienia
+plik: packages/platform-server/src/agent/runtime.ts
+wycofana linia: stream.toolArgs(id, JSON.stringify(input.tool_input ?? {}));
+zamieniona na : stream.toolArgs(id, JSON.stringify({}));
+test          : playwright --grep "L4.11: wywolanie"
+wycofano linie w packages/platform-server/src/agent/runtime.ts
+  ✓  1 [chromium] › e2e/chat-history.spec.ts:362:3 › czat i historia rozmowy › L4.11: wywolanie, argumenty i wynik widoczne w trakcie, po przeladowaniu i po restarcie (6.0s)
+  1 passed (17.9s)
+przywrocono; git status --porcelain:
+
+=================================================================
+PROBA P11 (L4.15) — renderer artefaktu nie jest indeksowany po nazwie narzedzia
+plik: packages/platform-ui/src/chat/ChatPanel.tsx
+wycofana linia: toolName: ARTIFACT_PRODUCING_TOOLS.map(mcpToolName),
+zamieniona na : toolName: 'platform.brak-takiego-narzedzia',
+test          : playwright --grep "L4.15: artefakt"
+wycofano linie w packages/platform-ui/src/chat/ChatPanel.tsx
+  ✘  1 [chromium] › e2e/chat-history.spec.ts:472:3 › czat i historia rozmowy › L4.15: artefakt ma podglad w wiadomosci i pelny widok, a os narzedzi i odpowiedz zostaja (32.0s)
+    Error: expect(locator).toBeVisible() failed
+    Error: element(s) not found
+    > 485 |     await expect(preview).toBeVisible({ timeout: 30_000 });
+      486 |     await expect(preview).toHaveAttribute('data-artifact-id', /^art_/);
+        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:485:27
+    test-results/chat-history-czat-i-histor-ef386-arzedzi-i-odpowiedz-zostaja-chromium/test-failed-1.png
+    Error Context: test-results/chat-history-czat-i-histor-ef386-arzedzi-i-odpowiedz-zostaja-chromium/error-context.md
+    Error Context: test-results/chat-history-czat-i-histor-ef386-arzedzi-i-odpowiedz-zostaja-chromium/error-context.md
+  1 failed
+przywrocono; git status --porcelain:
+
+DONE
+
+
+ZNALEZISKA RUNDY 3 — dwie proby wyszly ZIELONE, czyli zlapaly TEST, nie kod
+==========================================================================
+
+P5g (L4.7). Po usunieciu anulowania test GUI nadal przechodzil. Powod: jedyna
+asercja o zatrzymaniu zadania czytala `/api/runs/active`, ktore czyta tabele
+`agent_runs` — a te wiersze i tak znikaja kaskadowo razem z rozmowa. „Zadania
+nie ma juz na liscie” bylo wiec prawda niezaleznie od tego, czy zostalo
+zatrzymane, czy pracuje dalej przeciwko nieistniejacej rozmowie. Asercja nie
+mogla oblac. Poprawka: test czyta `activeRuns` z `/api/status` (licznik uchwytow
+anulowania w procesie, niezalezny od wiersza) — 1 przed usunieciem, 0 w ciagu
+8 s po nim; scenariusz ma w tym momencie ponad 10 s pracy przed soba.
+
+P9 (L4.11). Po wyzerowaniu argumentow wywolania test GUI nadal przechodzil.
+Powod: asercja czytala CALY blok karty narzedzia jednym `textContent()`, a
+zadanie i odpowiedz sa w nim obok siebie — slowo `limit` i wartosc 3 wystepuja
+takze w ODPOWIEDZI `ui_catalog` (w opisie okna odczytu). Test sprawdzal wiec
+wlasna odpowiedz, nie argumenty. Poprawka: zadanie i wynik czytane osobno
+(pierwszy i drugi element `code` w bloku).
+
+Obie poprawki sa w commicie c231f03; ich proby powtorzono nizej.
+
+Runda 4 — powtorzone proby P5g i P9 po poprawce asercji
+=================================================================
+PROBA P5g-2 (L4.7) — usuniecie nie anuluje trwajacego zadania (po poprawce asercji)
+plik: packages/platform-server/src/services/conversations.ts
+wycofana linia: .filter((r) => r.status === 'queued' || r.status === 'running');
+zamieniona na : .filter(() => false);
+wycofano linie w packages/platform-server/src/services/conversations.ts
+  ✘  1 [chromium] › e2e/chat-history.spec.ts:617:3 › czat i historia rozmowy › L4.7: usuniecie rozmowy z trwajacym zadaniem zatrzymuje to zadanie (10.4s)
+    Error: expect(received).toBe(expected) // Object.is equality
+      661 |     await expect
+    > 663 |       .toBe(0);
+      664 |     expect((await getJson(page, `/api/threads/get/${conversationId}`)).error?.code).toBe('not_found');
+        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:663:8
+    test-results/chat-history-czat-i-histor-d0450-aniem-zatrzymuje-to-zadanie-chromium/test-failed-1.png
+    Error Context: test-results/chat-history-czat-i-histor-d0450-aniem-zatrzymuje-to-zadanie-chromium/error-context.md
+    Error Context: test-results/chat-history-czat-i-histor-d0450-aniem-zatrzymuje-to-zadanie-chromium/error-context.md
+  1 failed
+przywrocono; git status --porcelain:
+
+=================================================================
+PROBA P9-2 (L4.11) — argumenty wywolania nie trafiaja do strumienia (po poprawce asercji)
+plik: packages/platform-server/src/agent/runtime.ts
+wycofana linia: stream.toolArgs(id, JSON.stringify(input.tool_input ?? {}));
+zamieniona na : stream.toolArgs(id, JSON.stringify({}));
+wycofano linie w packages/platform-server/src/agent/runtime.ts
+  ✘  1 [chromium] › e2e/chat-history.spec.ts:374:3 › czat i historia rozmowy › L4.11: wywolanie, argumenty i wynik widoczne w trakcie, po przeladowaniu i po restarcie (2.3s)
+    Error: argumenty wywolania nie sa widoczne
+    expect(received).toContain(expected) // indexOf
+    > 419 |     expect(live.request, 'argumenty wywolania nie sa widoczne').toContain('limit');
+      420 |     expect(live.request, 'wartosc argumentu nie jest widoczna').toMatch(/limit"?\s*:\s*3/);
+      422 |     expect(live.result, 'tresc udanego wyniku nie jest widoczna').toContain('platform.canvas');
+        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:419:65
+    test-results/chat-history-czat-i-histor-44c34-rzeladowaniu-i-po-restarcie-chromium/test-failed-1.png
+    Error Context: test-results/chat-history-czat-i-histor-44c34-rzeladowaniu-i-po-restarcie-chromium/error-context.md
+    Error Context: test-results/chat-history-czat-i-histor-44c34-rzeladowaniu-i-po-restarcie-chromium/error-context.md
+  1 failed
+przywrocono; git status --porcelain:
+
+DONE
