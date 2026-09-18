@@ -225,3 +225,56 @@ P17 [L7.8 / pomiar] packages/platform-server/src/agent/runtime.ts
                |                                           ^
             214|       expect(s.queuedMs! + s.durationMs!).toBeGreaterThanOrEqual(total…
     drzewo po przywroceniu: czyste
+
+== Runda poprawek 1 ==
+
+P18 [L9.3] packages/platform-server/src/http/app.ts
+    wycofano       : const body = threadWriteSchema.parse(await optionalJsonBody(c));
+    test           : tests/domain-guarantees.test.ts -t "watek z cialem, ktore nie jest JSON-em"
+    oczekiwano     : oblewa — trasa polyka zepsute cialo i zwraca 200 zamiast odmowy
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/domain-guarantees.test.ts > L9.3 — kazde wejscie walidowane w runtime, z rozpoznawalna przyczyna > watek z cialem, ktore nie jest JSON-em jest odrzucone z rozpoznawalna przyczyna
+        AssertionError: /api/threads/create → 200 {"id":"cnv_1d506d5e253146c68414","title":"Nowa rozmowa","createdAt":"2026-09-18T17:42:10.942Z"}: expected 200 to be greater than or equal to 400
+         ❯ tests/domain-guarantees.test.ts:321:93
+            319|     const url = path.replace('PLACEHOLDER_CONV', conv.id).replace('PLA…
+            320|     const out = await http(url, init);
+            321|     expect(out.status, `${url} → ${out.status} ${JSON.stringify(out.bo…
+               |                                                 
+    drzewo po przywroceniu: czyste
+P18b [L9.3] packages/platform-server/src/http/app.ts
+    wycofano       : const body = threadWriteSchema.parse(await optionalJsonBody(c));
+    test           : tests/domain-guarantees.test.ts -t "cialo, ktorego nie da sie sparsowac, nie tworzy rozmowy"
+    oczekiwano     : oblewa — rozmowa powstaje mimo ciala, ktorego nie da sie sparsowac
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/domain-guarantees.test.ts > L9.3 — kazde wejscie walidowane w runtime, z rozpoznawalna przyczyna > cialo, ktorego nie da sie sparsowac, nie tworzy rozmowy i nie zmienia istniejacej
+        AssertionError: expected null to be 'validation_failed' // Object.is equality
+        
+        - Expected:
+        "validation_failed"
+        
+        + Received:
+        null
+    drzewo po przywroceniu: czyste
+P19 [L9.14] packages/platform-server/src/agent/tools/files.ts
+    wycofano       : { fingerprint: operationFingerprint(input) },
+    test           : tests/domain-guarantees.test.ts -t "publikacja wersji pliku: ten sam klucz z innym plikiem"
+    oczekiwano     : oblewa — inny plik pod tym samym kluczem dostaje wynik pierwszej publikacji
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/domain-guarantees.test.ts > L9.7, L9.14 — powtorzenie i jednoczesne ponowienia daja jeden skutek > publikacja wersji pliku: ten sam klucz z innym plikiem jest odrzucany, a nie kwitowany
+        AssertionError: promise resolved "{ …(7) }" instead of rejecting
+        
+        - Expected
+        + Received
+        
+        - Error {
+        -   "message": "rejected promise",
+    drzewo po przywroceniu: czyste
