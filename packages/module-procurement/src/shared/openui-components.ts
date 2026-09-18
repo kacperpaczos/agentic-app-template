@@ -44,16 +44,66 @@ export const itemProvenancePropsSchema = z.object({
 });
 export type ItemProvenanceProps = z.infer<typeof itemProvenancePropsSchema>;
 
+export const caseSummaryPropsSchema = z.object({
+  caseId: z.string().min(1).max(128).describe('Identyfikator sprawy zakupowej'),
+});
+export type CaseSummaryProps = z.infer<typeof caseSummaryPropsSchema>;
+
+export const offerListPropsSchema = z.object({
+  caseId: z.string().min(1).max(128).describe('Identyfikator sprawy zakupowej'),
+});
+export type OfferListProps = z.infer<typeof offerListPropsSchema>;
+
+export const deliveryTermsPropsSchema = z.object({
+  caseId: z.string().min(1).max(128).describe('Identyfikator sprawy zakupowej'),
+});
+export type DeliveryTermsProps = z.infer<typeof deliveryTermsPropsSchema>;
+
+export const offerItemFormPropsSchema = z.object({
+  offerId: z.string().min(1).max(128).describe('Identyfikator oferty'),
+  itemId: z.string().max(128).optional().describe('Identyfikator pozycji do wybrania na starcie'),
+});
+export type OfferItemFormProps = z.infer<typeof offerItemFormPropsSchema>;
+
 export const offerComparisonPropsSchema = z.object({
   caseId: z.string().describe('Identyfikator sprawy zakupowej'),
   showExcluded: z.boolean().optional().describe('Czy pokazac oferty wykluczone z rankingu'),
 });
 
+export type OfferComparisonProps = z.infer<typeof offerComparisonPropsSchema>;
+
 export const offerCostChartPropsSchema = z.object({
   caseId: z.string().describe('Identyfikator sprawy zakupowej'),
 });
+export type OfferCostChartProps = z.infer<typeof offerCostChartPropsSchema>;
 
 export const PROCUREMENT_OPENUI_COMPONENTS = {
+  CaseSummary: {
+    name: 'CaseSummary',
+    description:
+      'Podsumowanie sprawy zakupowej: podstawa porownania, liczba ofert i pozycji. ' +
+      'Podaj wylacznie identyfikator sprawy.',
+    propsSchema: caseSummaryPropsSchema,
+  },
+  OfferList: {
+    name: 'OfferList',
+    description:
+      'Lista ofert w sprawie z dostawca, referencja i liczba pozycji. Podaj wylacznie identyfikator sprawy.',
+    propsSchema: offerListPropsSchema,
+  },
+  DeliveryTerms: {
+    name: 'DeliveryTerms',
+    description:
+      'Zestawienie warunkow dostawy i waznosci ofert w sprawie. Podaj wylacznie identyfikator sprawy.',
+    propsSchema: deliveryTermsPropsSchema,
+  },
+  OfferItemForm: {
+    name: 'OfferItemForm',
+    description:
+      'Formularz edycji pozycji oferty (ilosc, cena jednostkowa). Zapis idzie przez akcje domenowa; ' +
+      'podaj identyfikator oferty i opcjonalnie pozycji.',
+    propsSchema: offerItemFormPropsSchema,
+  },
   SectionHeading: {
     name: 'SectionHeading',
     description: 'Naglowek sekcji ekranu (poziom h2) o podanej, stalej tresci — nie wartosc rekordu.',

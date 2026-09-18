@@ -74,6 +74,16 @@ export const PLATFORM_UI_TARGETS: UiTarget[] = [
     selector: '[data-testid="settings-auth"]',
   },
   {
+    id: 'platform.settings.tools',
+    kind: 'setting',
+    label: 'Lista narzedzi agenta',
+    description:
+      'Zwinieta sekcja Ustawien z lista narzedzi platformy i modulow oraz ich skutkiem. ' +
+      'Pokazanie jej rozwija sekcje i niczego nie zmienia.',
+    to: '/settings',
+    selector: '[data-testid="settings-tools"]',
+  },
+  {
     id: 'platform.settings.chat',
     kind: 'setting',
     label: 'Mozliwosci czatu',

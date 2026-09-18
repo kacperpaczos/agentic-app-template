@@ -8,8 +8,12 @@ import type { ModuleScreen, UiModule } from '@platform/ui';
 import { MODULE_ID } from '../shared/index.ts';
 import { PROCUREMENT_OPENUI_COMPONENTS } from '../shared/openui-components.ts';
 import {
+  CaseSummaryCard,
   ComparisonTableCard,
   CostChartCard,
+  DeliveryTermsCard,
+  OfferItemFormCard,
+  OfferListCard,
   procurementCardRenderers,
 } from './cards.tsx';
 import { procurementDetailOpenuiComponents } from './detailComponents.tsx';
@@ -74,9 +78,55 @@ const starters: ConversationStarterContribution[] = [
  * `shared/openui-components.ts`, which the server half declares too — see there
  * for why.
  */
-const { OfferComparison, OfferCostChart } = PROCUREMENT_OPENUI_COMPONENTS;
+const { CaseSummary, DeliveryTerms, OfferComparison, OfferCostChart, OfferItemForm, OfferList } =
+  PROCUREMENT_OPENUI_COMPONENTS;
 const openuiComponents = [
   ...procurementDetailOpenuiComponents,
+  /*
+   * Every canvas card of this module is also a catalog component.
+   *
+   * Four of them (`caseSummary`, `offerList`, `deliveryTerms`, `offerItemForm`)
+   * used to exist only in the card catalog, so they could be put on the canvas
+   * and nowhere else — not in an agent's view, not in an answer — and their
+   * renderers took untyped props. Declared here from the same schemas as the
+   * card, they are one component with one contract, wherever it is composed;
+   * `shared/cards.ts` holds the binding and the catalog tests check it.
+   */
+  defineComponent({
+    name: CaseSummary.name,
+    description: CaseSummary.description,
+    props: CaseSummary.propsSchema,
+    component: ({ props }) => (
+      <CaseSummaryCard cardId={`openui-summary-${String(props.caseId)}`} props={{ caseId: props.caseId }} />
+    ),
+  }),
+  defineComponent({
+    name: OfferList.name,
+    description: OfferList.description,
+    props: OfferList.propsSchema,
+    component: ({ props }) => (
+      <OfferListCard cardId={`openui-offers-${String(props.caseId)}`} props={{ caseId: props.caseId }} />
+    ),
+  }),
+  defineComponent({
+    name: DeliveryTerms.name,
+    description: DeliveryTerms.description,
+    props: DeliveryTerms.propsSchema,
+    component: ({ props }) => (
+      <DeliveryTermsCard cardId={`openui-delivery-${String(props.caseId)}`} props={{ caseId: props.caseId }} />
+    ),
+  }),
+  defineComponent({
+    name: OfferItemForm.name,
+    description: OfferItemForm.description,
+    props: OfferItemForm.propsSchema,
+    component: ({ props }) => (
+      <OfferItemFormCard
+        cardId={`openui-item-form-${String(props.offerId)}`}
+        props={{ offerId: props.offerId, itemId: props.itemId }}
+      />
+    ),
+  }),
   defineComponent({
     name: OfferComparison.name,
     description: OfferComparison.description,

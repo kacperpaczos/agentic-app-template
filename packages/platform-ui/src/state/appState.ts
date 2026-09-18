@@ -138,6 +138,16 @@ export interface DraftRecord {
   dirtyFields: string[];
   /** Raw values, kept client-side only; never sent as if they were stored data. */
   values: Record<string, unknown>;
+  /**
+   * The canvas card the form is drawn in, when it is drawn in one.
+   *
+   * The platform does not know what the form is for and does not need to — but
+   * it does need to know which card's disappearance would take it off screen.
+   * A composition change that removes that card is a conflict with unsaved
+   * work, and a conflict has to be put to the user rather than resolved by the
+   * data quietly vanishing (`CanvasHost`, the draft notice).
+   */
+  cardId?: string | null;
 }
 
 interface AppState {

@@ -17,6 +17,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { collectToolEntries, platformTools, type PlatformInstance } from '@platform/server';
 import { composeApp } from '../../apps/server/src/compose.ts';
 import { agentViewsScript } from './agent-views-scenario.ts';
+import { compositionScript, messageKindsScript } from './bl10-scenarios.ts';
 import { interactionsScript } from './interactions-scenario.ts';
 import { showValueScript } from './show-value-scenario.ts';
 import { scriptedAgent, type CallRecord, type Step } from './scripted-agent.ts';
@@ -108,6 +109,44 @@ const SCENARIOS: Record<string, Step[]> = {
     { kind: 'wait', delayMs: 150 },
     { kind: 'ui', targetId: 'platform.settings.auth', label: 'ustawienie' },
     { kind: 'text', text: 'Pokazalem sekcje logowania.' },
+  ],
+  /*
+   * A setting inside a section that is closed: the element is in the document
+   * and nothing of it is on screen. Showing it has to open the section first
+   * and say that it did.
+   */
+  'ui-open-tools': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'ui', targetId: 'platform.settings.tools', label: 'narzedzia' },
+    { kind: 'text', text: 'Pokazalem liste narzedzi.' },
+  ],
+  /*
+   * One command that moves the screen and then reads it: the description the
+   * next turn would be given has to describe where the user now is, not where
+   * they were when the command started.
+   */
+  'ui-navigate-then-context': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'ui', targetId: 'platform.files', label: 'pliki' },
+    {
+      kind: 'call',
+      name: 'ui_state',
+      input: { minVersion: '$last.uiVersion', clientId: '$last.uiClientId' },
+      // Long enough for the description's target to be in the echo the chat shows.
+      maxChars: 700,
+    },
+    { kind: 'text', text: 'Otworzylem pliki i odczytalem ekran.' },
+  ],
+  /*
+   * Navigates early and keeps running, so the run is still open when the tab
+   * reloads and the backend replays its events from the start. The replayed
+   * navigation must not happen a second time.
+   */
+  'ui-navigate-then-wait': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'ui', targetId: 'platform.files', label: 'pliki' },
+    { kind: 'wait', delayMs: 12_000 },
+    { kind: 'text', text: 'Koniec dlugiej pracy.' },
   ],
   /* A target that is not in the catalog: the answer must be a refusal. */
   'ui-unknown': [
@@ -429,6 +468,8 @@ const stopMeasurementScript = (prompt: string): Step[] =>
  */
 const CONVERSATION_SCENARIOS: Record<string, (prompt: string) => Step[]> = {
   'agent-views': agentViewsScript,
+  'bl10-messages': messageKindsScript,
+  'bl10-composition': compositionScript,
   interactions: interactionsScript,
   'show-value': showValueScript,
   'stop-measurement': stopMeasurementScript,

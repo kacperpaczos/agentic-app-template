@@ -982,7 +982,12 @@ describe('kontrakt polecenia i potwierdzenia', () => {
       adjustments: [{ kind: 'page_changed', detail: 'strona 1 → 2', from: 1, to: 2 }],
     });
     expect(ack.adjustments![0]!.kind).toBe('page_changed');
-    expect(UI_REVEAL_ADJUSTMENT_KINDS).toEqual(['filter_cleared', 'page_changed', 'card_focused']);
+    expect(UI_REVEAL_ADJUSTMENT_KINDS).toEqual([
+      'filter_cleared',
+      'page_changed',
+      'card_focused',
+      'section_expanded',
+    ]);
 
     // A presentation must name a place; an adjustment must be one of the kinds.
     expect(() =>

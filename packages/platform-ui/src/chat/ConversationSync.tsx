@@ -70,6 +70,17 @@ export function ConversationSync() {
     async (threadId: string) => {
       try {
         const conv = await apiGet<{ spaceId: string | null }>(`/api/conversations/${threadId}`);
+        /*
+         * A late answer must not undo a newer choice.
+         *
+         * This lookup is one request behind the click that started it. Pick
+         * conversation A and then B before A's answer arrives, and this used to
+         * move the workspace to A's space — over the one B had already put on
+         * screen, with nothing on screen saying why. The conversation selected
+         * *now* is the only one whose workspace may be adopted; anything else
+         * is an answer about a choice the user has already left.
+         */
+        if (useAppState.getState().conversationId !== threadId) return;
         if (conv.spaceId) setSpace(conv.spaceId);
       } catch {
         // Whether the conversation is reachable at all is decided below, from

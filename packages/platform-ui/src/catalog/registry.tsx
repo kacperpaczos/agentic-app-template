@@ -38,13 +38,62 @@ export const NEUTRAL_MENU_SECTION_LABELS: Record<MenuSection, string> = {
 type AnyDefinedComponent = DefinedComponent<any>;
 export type AnyLibrary = Library;
 
-/** Props every card component receives. */
-export interface CardComponentProps {
+/**
+ * Props every card component receives.
+ *
+ * Generic in the card's own props so a component can declare what it takes
+ * instead of reading an untyped bag. The untyped form is still the registry's
+ * type — the registry holds cards of many shapes — and `typedCard` is the one
+ * bridge between the two: it parses before it renders, so the only code that
+ * ever sees `Record<string, unknown>` is the parser.
+ */
+export interface CardComponentProps<P = Record<string, unknown>> {
   cardId: string;
-  props: Record<string, unknown>;
+  props: P;
 }
 
-export type CardComponent = ComponentType<CardComponentProps>;
+export type CardComponent<P = Record<string, unknown>> = ComponentType<CardComponentProps<P>>;
+
+/**
+ * A card component with declared, validated props.
+ *
+ * Card specs are data: they come from a composition an agent wrote, from a
+ * module's default layout, or from whatever was stored months ago under an
+ * older version of the component. Until now every renderer received them as
+ * `Record<string, unknown>` and coerced each field itself (`String(props.caseId
+ * ?? '')`), which means a missing or wrong-typed property became an empty
+ * string and then an empty card — a silent wrong answer.
+ *
+ * `typedCard` takes the same schema the server validates the composition with
+ * and parses the props once, at the boundary. What renders is typed; what does
+ * not parse is a readable failure naming the component, not a blank.
+ *
+ * The schema is taken structurally (`{ parse }`) rather than as a Zod type:
+ * the browser package has no reason to depend on the validator a module happens
+ * to use.
+ */
+export function typedCard<P>(
+  schema: { parse: (value: unknown) => P },
+  Render: ComponentType<CardComponentProps<P>>,
+): CardComponent {
+  const name = Render.displayName ?? Render.name ?? 'Card';
+  const Typed: CardComponent = ({ cardId, props }) => {
+    let parsed: P;
+    try {
+      parsed = schema.parse(props);
+    } catch (e) {
+      return (
+        <div className="pf-state pf-state--error" role="alert" data-testid="card-props-invalid">
+          Karta <code>{name}</code> dostala wlasciwosci niezgodne ze swoim schematem:{' '}
+          {(e as Error).message}
+        </div>
+      );
+    }
+    return <Render cardId={cardId} props={parsed} />;
+  };
+  Typed.displayName = `typedCard(${name})`;
+  return Typed;
+}
 
 export interface ArtifactRendererProps {
   artifactId: string;

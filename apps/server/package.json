@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --watch --experimental-transform-types --no-warnings=ExperimentalWarning --env-file-if-exists=../../.env src/main.ts",
+    "dev": "PORT=${APP_DEV_API_PORT:-8790} APP_INSTANCE_LABEL=agenticapp-dev node --watch --experimental-transform-types --no-warnings=ExperimentalWarning --env-file-if-exists=../../.env src/main.ts",
     "start": "node dist/server.js",
     "build": "node build.mjs",
     "migrate": "node --experimental-transform-types --no-warnings=ExperimentalWarning src/cli/migrate.ts",

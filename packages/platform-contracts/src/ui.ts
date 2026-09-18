@@ -404,9 +404,18 @@ export type UiReveal = z.infer<typeof uiRevealSchema>;
  *  - `filter_cleared` — the address bar's narrowing hid the record; the
  *    predicates on the fields that excluded it were removed (others stay);
  *  - `page_changed` — the record was on another page;
- *  - `card_focused` — the canvas was moved to bring the agent view card in view.
+ *  - `card_focused` — the canvas was moved to bring the agent view card in view;
+ *  - `section_expanded` — a collapsed part of the screen (a `<details>` section,
+ *    an accordion panel, a tab that was not the open one) held the target, so it
+ *    was opened. A presentation change like the others: nothing it opens holds a
+ *    value that changes by being looked at, and the user can close it again.
  */
-export const UI_REVEAL_ADJUSTMENT_KINDS = ['filter_cleared', 'page_changed', 'card_focused'] as const;
+export const UI_REVEAL_ADJUSTMENT_KINDS = [
+  'filter_cleared',
+  'page_changed',
+  'card_focused',
+  'section_expanded',
+] as const;
 export type UiRevealAdjustmentKind = (typeof UI_REVEAL_ADJUSTMENT_KINDS)[number];
 
 export const uiRevealAdjustmentSchema = z.object({

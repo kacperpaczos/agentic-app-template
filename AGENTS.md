@@ -63,7 +63,10 @@ Mapa wszystkich dokumentów: [`docs/DOCUMENTATION-MAP.md`](docs/DOCUMENTATION-MA
   cudzych danych bez wyraźnej zgody — najpierw kopia i próba (`docs/odzyskiwanie-stanu.md`).
 - `pnpm acceptance` i `scripts/run-agent.mjs` zapisują dane w instancji pod `APP_BASE` (domyślnie
   port 8791) i nie sprawdzają etykiety instancji testowej — kieruj je wyłącznie na własną instancję
-  z osobnym katalogiem danych. `pnpm dev` ma proxy na stały port 8791.
+  z osobnym katalogiem danych. `pnpm dev` uruchamia backend na porcie z `APP_DEV_API_PORT`
+  (domyślnie 8790, nigdy 8791 ani portu testowego), a proxy Vite sprawdza etykietę instancji na
+  `/api/health`, zanim cokolwiek do niej wyśle — odpowiedź bez etykiety `agenticapp-dev` kończy się
+  odmową, nie przekazaniem żądania.
 - Zależności instaluj z lockfile (`pnpm install --frozen-lockfile`). Aktualizacja zależności to
   zmiana wymagająca regresji, nie skutek uboczny.
 - Nie wyłączaj kontroli (`check:*`, testów, asercji), żeby przeszedł build. Jeśli kontrola jest

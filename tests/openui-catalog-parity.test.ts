@@ -51,7 +51,19 @@ describe('zgodnosc katalogu OpenUI przegladarki i serwera', () => {
         expect(serverDefs[name], name).toEqual(def);
       }
       // Every procurement module component is on both sides, declared in one place.
-      const moduleNames = ['SectionHeading', 'CaseHeader', 'CaseOfferSources', 'ItemProvenance', 'OfferComparison', 'OfferCostChart'];
+      const moduleNames = [
+        'SectionHeading',
+        'CaseHeader',
+        'CaseOfferSources',
+        'ItemProvenance',
+        'OfferComparison',
+        'OfferCostChart',
+        // Every canvas card is a catalog component too — see `shared/cards.ts`.
+        'CaseSummary',
+        'OfferList',
+        'DeliveryTerms',
+        'OfferItemForm',
+      ];
       expect([...server.moduleComponents].sort()).toEqual([...moduleNames].sort());
       expect(Object.keys(browserDefs)).toEqual(expect.arrayContaining([...moduleNames, 'DataTable']));
       // And the platform's live catalog is built from the same declarations.
