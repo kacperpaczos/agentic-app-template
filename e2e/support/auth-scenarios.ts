@@ -24,12 +24,30 @@ import type { CallRecord, Step } from './scripted-agent.ts';
  * credential, so an expiry these tests need is an expiry in a temporary file.
  */
 
-/** The failure texts, named so a scenario reads as the case it stands for. */
+/**
+ * The failure texts, named so a scenario reads as the case it stands for.
+ *
+ * `refreshRefused` is **the text SDK 0.3.270 really produces** — taken from a recorded run against
+ * the real SDK (`docs/evidence/z12-bl04/refresh-refused-*.json`, `pnpm probe:auth-refusal`), not
+ * invented. It used to be `OAuth token refresh failed: invalid_grant`, which was a guess, and a
+ * wrong one; the classifier happened to reach the right verdict anyway, which is exactly the kind of
+ * accident a simulation should not be built on.
+ *
+ * The other three are **not** confirmed and are labelled as such wherever they are reported. That
+ * matters most for `revoked`: the same recorded runs showed that the SDK gives the *same* text for a
+ * revoked login as for a refused refresh, so a real revocation probably never reads like this. The
+ * scenario is kept because the application must still handle a source that does say so outright
+ * (an HTTP 401, a message naming `/login`) — but it stands for that, not for what the SDK emits.
+ */
 export const SIMULATED_FAILURES = {
+  /* Not confirmed: a real exhausted limit has never been observed (L8.11). */
   usageLimit: 'Claude usage limit reached. Your limit will reset at 3pm.',
+  /* Not confirmed for the SDK; stands for a source that names the revocation outright. */
   revoked: 'Authentication error: OAuth token revoked, please run /login',
-  refreshRefused: 'OAuth token refresh failed: invalid_grant',
-  /* Neither a limit nor a login: the third thing L8.11 says must stay apart. */
+  /* CONFIRMED on a real SDK 0.3.270 failure — see the note above. */
+  refreshRefused:
+    'Claude Code returned an error result: Failed to authenticate: OAuth session expired and could not be refreshed',
+  /* Neither a limit nor a login: the third thing L8.11 says must stay apart. Not confirmed. */
   network: 'socket hang up',
 } as const;
 

@@ -248,6 +248,15 @@ Co jest sprawdzalne i sprawdzane:
 
 Testy negatywne dotyczące logowania **nie dotykają logowania użytkownika**: pracują na syntetycznym
 poświadczeniu w katalogu tymczasowym wskazanym przez `CLAUDE_CONFIG_DIR`.
+`tests/credential-guard.test.ts` bierze rozmiar i czas modyfikacji prawdziwego pliku przed suitą
+i porównuje po niej, więc ta własność jest mierzona, a nie tylko zamierzona.
+
+**Skan wycieku wymaga poświadczenia.** `tests/durability.test.ts` szuka prawdziwej wartości tokena
+w buildzie, bazie, logach, artefaktach i śladach Playwright. Na maszynie **bez logowania Claude** nie
+ma czego szukać, więc test **oblewa z komunikatem**, co zrobić — bo pusty skan przechodzący na zielono
+jest gorszy niż czerwony: wygląda jak dowód, a nim nie jest. Dwie drogi: zalogować się (`claude`,
+`/login`) albo zadeklarować brak logowania zmienną `APP_ALLOW_NO_CREDENTIAL=1`. To jest konfiguracja
+środowiska, nie regres.
 
 **Sprawdzenie sesji SDK.** Przycisk „Sprawdź sesję SDK” w Ustawieniach pyta sam Claude Agent SDK,
 w jaki sposób jest uwierzytelniony — żądaniem sterującym `accountInfo()`, które **nie wydaje tury
@@ -263,7 +272,21 @@ pnpm test:e2e        # testy w przeglądarce na zbudowanej aplikacji; bez testó
 pnpm test:e2e:model  # tylko testy z prawdziwym modelem — kosztują 11 tur subskrypcji na przebieg
 pnpm check:module-swap   # próba podmiany modułu przykładowego na kontrolny, na kopii repozytorium
 pnpm probe:sdk-session   # pyta SDK, jak jest uwierzytelniony; NIE wydaje tury modelu
+pnpm probe:auth-refusal  # odtwarza odmowę uwierzytelnienia na kopii; NIE wydaje tury modelu
 ```
+
+`pnpm probe:auth-refusal` (oraz `--revoked`) kieruje **prawdziwy** Claude Agent SDK na **kopię**
+poświadczenia z celowo zepsutymi oboma tokenami i zapisuje, co SDK naprawdę odpowiada. Przebieg nie
+przechodzi uwierzytelnienia, więc nie dociera do modelu i nie kosztuje tury. `--rehearsal` robi próbę
+generalną bez SDK i bez sieci.
+
+> **Ostrzeżenie, ustalone obserwacyjnie.** Przy odmowie odnowienia Claude CLI **kasuje plik
+> poświadczenia**, na który je skierowano (`accessToken` i `refreshToken` puste, `expiresAt` zerowane).
+> Każda próba dotycząca uwierzytelnienia musi więc iść na **kopii** w osobnym `CLAUDE_CONFIG_DIR` —
+> wycelowana w `~/.claude` wylogowałaby użytkownika natychmiast. Z tego samego powodu w szablonie
+> **nie ma** próby ze *skutecznym* odświeżeniem: zapis odświeżonego poświadczenia jest
+> compare-and-swap po refresh tokenie, więc odświeżenie wykonane z kopii zostawiłoby w pliku
+> użytkownika token poprzedniej generacji.
 
 `pnpm probe:sdk-session` otwiera sesję Claude Agent SDK, której strumień wejściowy nie emituje żadnej
 wiadomości, zadaje dwa **żądania sterujące** (`accountInfo()` oraz odczyt limitów planu) i zamyka ją.
