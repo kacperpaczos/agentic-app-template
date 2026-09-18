@@ -974,6 +974,21 @@ export class AgentRuntime {
         }, this.services.config.consentTimeoutMs);
       });
       this.services.runs.markConsentAnswered(run.runId);
+      /*
+       * The answer, in the log, next to the question.
+       *
+       * Every way out of the await above reaches this line — the user's
+       * decision, the expiry, and the refusal issued when the run is stopped —
+       * so there is no path that leaves a question looking open for ever. A
+       * client replaying this run's events therefore ends up where the run is,
+       * instead of showing a prompt that was settled minutes ago and that
+       * `answerPermission` would refuse without telling anyone (L5.6, L5.14).
+       */
+      stream.custom(PLATFORM_CUSTOM_EVENTS.permissionResolved, {
+        requestId,
+        runId: stream.runId,
+        allowed,
+      });
 
       return allowed
         ? { behavior: 'allow', updatedInput: input }
