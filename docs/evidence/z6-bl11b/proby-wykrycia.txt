@@ -94,3 +94,18 @@ P13 [L9.15] packages/platform-server/src/agent/tools/artifacts.ts
     drzewo po przywroceniu: czyste
 
 Wynik zbiorczy: UWAGA — co najmniej jedna proba nie wykryla
+
+P8b [L9.6] packages/module-procurement/src/server/services.ts
+    wycofano       : if (input.expectedVersion === undefined) {; const expected = input.expectedVersion;
+    test           : tests/domain-guarantees.test.ts -t "zapis pozycji bez wersji jest odrzucany takze w serwisie"
+    oczekiwano     : oblewa na — brak odmowy validation_failed (stan sprzed poprawki)
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: promise resolved "{ item: { …(10) }, changed: true, …(1) }" instead of rejecting
+    drzewo po przywroceniu: czyste
+P14 [L9.6] packages/platform-server/src/services/canvas.ts
+    wycofano       : if (input.expectedSpecVersion === undefined) {
+    test           : tests/domain-guarantees.test.ts -t "zmiana tresci karty bez wersji"
+    oczekiwano     : oblewa na — brak odmowy validation_failed dla karty
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: expected AppError: Card content changed since it w… { …(2) } to match object { code: 'validation_failed' }
+    drzewo po przywroceniu: czyste
