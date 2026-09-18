@@ -502,7 +502,7 @@
       "evidence": "gui",
       "origin": "szablon",
       "proof": "Cztery rodzaje odpowiedzi sa rozroznialne i zadna nie jest niewidoczna. Tresc wiadomosci jest dzielona na proze i kompozycje (splitMessage w AssistantMessage.tsx): proza obok poprawnego OpenUI i obok wyniku narzedzia jest widoczna w jednej wiadomosci — wczesniej jeden blok OpenUI oddawal cala odpowiedz rendererowi GenUI i zdania wokol niego znikaly bez sladu. Kazdy rodzaj ma inny, sprawdzony skutek na ekranie: sama proza nie tworzy zadnej kompozycji; poprawny opis rysuje tabele z wartosciami z odczytu; opis czesciowy (urwany plot) rysuje komponent nad nieistniejacym odczytem, ktory nazywa go wprost i wypisuje dostepne odczyty; opis nazywajacy nieznany komponent nie rysuje nic i jest zglaszany wraz z trescia opisu (data-empty=\"true\"). Opis czesciowy i bledny jest odrzucany przy zapisie przez walidator serwera. Dowod: e2e/bl10-composition.spec.ts (4 przypadki), e2e/agent-views.spec.ts, tests/agent-views.test.ts.",
-      "gap": "Tekst, ktory agent wypowiada PRZED wywolaniem narzedzia, nie jest renderowany przez gotowy czat (osobna wiadomosc asystenta w historii, brak jej w panelu) — defekt skladania tury w czacie, poza tym pakietem (BL-08).",
+      "gap": "Tekst wypowiedziany PRZED wywolaniem narzedzia nie trafia do banki odpowiedzi: gotowy czat (@openuidev/react-ui 0.13.10) uznaje za odpowiedz wylacznie ostatni segment tury, a wczesniejsze wklada jako kroki osi „Behind the scenes”. Zmierzone, nie domniemane: w trakcie tury proza jest w panelu widoczna (i to podwojnie — razem z paskiem podgladu), po zakonczeniu tury os jest zwinieta i jej kroki nie istnieja w DOM, ale sa o jedno klikniecie i sa w historii. Przypiete dwukierunkowo: e2e/chat-history.spec.ts (po turze) i e2e/run-events.spec.ts „proza w turze z narzedziem…” (w trakcie). Zapisane jako jawnie niespelnione wymaganie przy L5.15 (BL-08 zamkniety) i opisane w docs/NEW-APPLICATION.md §7.",
       "scenarios": [
         "T04"
       ]
@@ -781,12 +781,11 @@
       }
     },
     "L5.2": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "tests/agui-stream.test.ts „sukces: kolejka → wykonywanie → zakonczone”, „blad niesie kod i komunikat, nie tylko fakt porazki”, „anulowanie nie zostaje nadpisane przez blad, ktory po nim nastepuje”, „stan konczy sie na zdarzeniu koncowym, nie na pojawieniu sie tekstu” (reduktor UI na adapterze biblioteki). GUI: e2e/background-tasks.spec.ts (data-phase running), e2e/tool-activity.spec.ts „blad wykonania jest widoczny w aplikacji wraz z kodem, a praca nie znika” (failed i rate_limited), succeeded w wielu testach.",
-      "gap": "Anulowanie nie jest sprawdzane w GUI: e2e/background-tasks.spec.ts „jawne Stop konczy wskazane wykonanie” i e2e/measurements.spec.ts „zatrzymanie z interfejsu konczy wykonanie i nie zostawia zapisow” sprawdzają tylko status w backendzie. Analiza kodu: stop w kompozytorze (chat/useComposerStop.ts) wywołuje stopRun, ale biblioteka w tym samym kliknięciu przerywa fetch (cancelMessage → abort), więc platform.run_cancelled nie dociera tym strumieniem i pasek może pozostać w fazie running.",
-      "backlog": "BL-08",
+      "proof": "GUI, anulowanie: e2e/run-events.spec.ts „L5.2: zatrzymanie z kompozytora konczy wykonanie i zakladka to pokazuje” — klikniecie kontrolki kompozytora w trakcie tury konczy wykonanie i zakladka pokazuje faze cancelled (data-phase), backend potwierdza status cancelled przy jednym uruchomieniu, a run-error nie pojawia sie: anulowanie i blad zostaja rozroznione. Naprawiona przyczyna: biblioteka przerywa fetch w tym samym klinieciu, wiec platform.run_cancelled i RUN_ERROR trafialy na strumien, ktorego nikt juz nie czytal — chat/platformAdapter.ts podlacza sie ponownie od kursora, gdy strumien wyslania skonczyl sie przed uruchomieniem. Start i zakonczenie: e2e/run-events.spec.ts (running -> succeeded), e2e/background-tasks.spec.ts; blad: e2e/tool-activity.spec.ts „blad wykonania jest widoczny w aplikacji wraz z kodem”; reduktor: tests/agui-stream.test.ts (15). Proba wykrycia T1: wylaczenie ponownego podlaczenia -> test oblewa na asercji fazy.",
+      "gap": "",
       "scenarios": [
         "T16",
         "T22"
@@ -797,12 +796,11 @@
       }
     },
     "L5.3": {
-      "status": "czesciowe",
-      "evidence": "model",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "Powiązanie: tests/projection.test.ts (reduktor biblioteki na 6 scenariuszach), tests/run-lifecycle.test.ts „wywolanie, argumenty i wynik sa zapisane w wiadomosciach”. Widoczność: e2e/tool-activity.spec.ts „wywolanie, jego wynik i odpowiedz sa widoczne w czacie” oraz „aktywnosc przezywa przeladowanie, przelaczenie rozmowy i restart backendu”; e2e/agent-ui.spec.ts (model): oś widoczna i po reload, historia sparowana po toolCallId.",
-      "gap": "Asercje nie wiążą widoczności osi z trwającym wykonaniem (czekają na widoczność bez odczytu data-phase), więc oś pokazana dopiero po zakończeniu też przejdzie; treść udanego wyniku narzędzia nie jest sprawdzana w GUI (tylko komunikat błędu po rozwinięciu). Skutek: „podczas wykonania” i „wyniki widoczne” nie mają ostrego dowodu.",
-      "backlog": "BL-08",
+      "proof": "GUI: e2e/run-events.spec.ts „L5.3: wywolanie, argumenty i tresc udanego wyniku sa widoczne w trakcie wykonania i po odtworzeniu” — faza i zawartosc czytane w tej samej ewaluacji, wiec wymagana jest probka, w ktorej wykonanie JESZCZE TRWA, a na ekranie sa jednoczesnie wywolanie, jego argumenty i tresc udanego wyniku (znacznik scenariusza, nie etykieta). Po przeladowaniu ta sama tresc jest osiagalna z historii, przy dokladnie jednym wierszu wywolania. Powiazanie: tests/projection.test.ts (reduktor biblioteki, 6 scenariuszy), tests/run-lifecycle.test.ts; trwalosc: e2e/tool-activity.spec.ts „aktywnosc przezywa przeladowanie, przelaczenie rozmowy i restart backendu”. Proba wykrycia T5: wyciszenie emisji TOOL_CALL_RESULT -> zero probek z trescia. ZMIANA RODZAJU DOWODU: wczesniej „rzeczywisty model”, teraz „test GUI bez modelu” — nie dlatego, ze przebieg modelowy przestal obowiazywac, tylko dlatego, ze powtarzalnym dowodem w regresji szablonu jest teraz test przegladarkowy. Przebieg modelowy zostaje jako potwierdzenie obok: e2e/agent-ui.spec.ts (prawdziwy model subskrypcyjny) — os narzedzi widoczna w czacie i po przeladowaniu, historia sparowana po toolCallId.",
+      "gap": "",
       "scenarios": [
         "T06"
       ],
@@ -812,12 +810,11 @@
       }
     },
     "L5.4": {
-      "status": "czesciowe",
-      "evidence": "model",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "tests/agui-stream.test.ts „zmiana kompozycji uniewaznia przestrzen, ktorej dotyczy”, „zmiana danych uniewaznia odczyty modulu, canvas i otwarte artefakty”, „nowy artefakt uniewaznia liste i otwarty podglad”; e2e/agent-ui.spec.ts (model): karta wykresu pojawia się na canvasie bez przeładowania po narzędziu; tests/live-artifacts.test.ts (odczyt artefaktu live po stronie serwera).",
-      "gap": "Brak testu, w którym dane artefaktu trafiają do renderera artefaktu w czacie lub widoku artefaktu (artifactRenderers w ChatPanel.tsx, components/LiveArtifact.tsx); sprawdzane jest tylko unieważnianie kluczy cache. Skutek: błędne przypisanie typu artefaktu do renderera nie zostanie wykryte.",
-      "backlog": "BL-08",
+      "proof": "GUI: e2e/artifact-renderers.spec.ts — jedno uruchomienie tworzy trzy artefakty o trzech typach przez prawdziwe handlery (procurement.comparison przez artifact_create w trybie live, platform.file przez artifact_publish_file, oraz typ, ktorego nikt nie rejestruje). Kazdy podglad w czacie ma dokladnie jedna sygnature renderera (testid modulu / link do pobrania / dane surowe), typ czytany jest z backendu, a widok artefaktu pokazuje ten sam renderer i te sama wersje. Zmiany UI: karty renderuja sie po komponencie (e2e/bl10-shell-canvas.spec.ts: card-case-summary, card-item-form); unieważnienia: tests/agui-stream.test.ts, tests/live-artifacts.test.ts. Proba wykrycia T6: renderer wybierany na sztywno zamiast po typie -> artefakt bez renderera narysowany jako nic. ZMIANA RODZAJU DOWODU: wczesniej „rzeczywisty model”, teraz „test GUI bez modelu” — nie dlatego, ze przebieg modelowy przestal obowiazywac, tylko dlatego, ze powtarzalnym dowodem w regresji szablonu jest teraz test przegladarkowy. Przebieg modelowy zostaje jako potwierdzenie obok: e2e/agent-ui.spec.ts (prawdziwy model) — karta wykresu pojawia sie na canvasie bez przeladowania po wywolaniu narzedzia.",
+      "gap": "",
       "scenarios": [
         "T07"
       ],
@@ -827,12 +824,11 @@
       }
     },
     "L5.5": {
-      "status": "czesciowe",
-      "evidence": "model",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/files-agent.spec.ts „agent zmienia skoroszyt w sandboxie, a oryginal zostaje nietkniety” (prawdziwy model): prośba o zgodę na Bash pojawia się w GUI (permission-prompt), kliknięcie „Zgoda” i wynik wykonania (nowa wersja pliku) potwierdzają powrót odpowiedzi do wykonania; asercja wymaga użycia bramki. tests/agui-stream.test.ts „prosba o zgode trafia do rozmowy zadania, nie do ogladanej”, „prosba o zgode wstrzymuje wykonanie w odroznialnym stanie”. Drugi kanał (polecenie UI z potwierdzeniem): tests/ui-navigation.test.ts.",
-      "gap": "Brak testu odmowy (brak skutku), braku odpowiedzi (timeout 120 s jako odmowa) oraz ponowionej i spóźnionej odpowiedzi; runtime.answerPermission dopasowuje tylko requestId, a /api/runs/:id/permission nie sprawdza, że requestId należy do wskazanego wykonania. Dowód pozytywny zależy od tego, czy model poprosi o Bash.",
-      "backlog": "BL-08",
+      "proof": "GUI: e2e/consent-runs.spec.ts — prosba dociera do interfejsu, odmowa nie wykonuje operacji, zgoda wykonuje ja dokladnie raz, powtorzona odpowiedz nie wykonuje jej drugi raz, odpowiedz z requestId innego uruchomienia nie rozstrzyga niczego, a brak odpowiedzi przy zamknietym panelu konczy sie odmowa. e2e/reconnect-live.spec.ts „L5.14: prosba o zgode rozstrzygnieta przed przeladowaniem nie wraca na ekran” — odpowiedz wraca do tego wykonania i nie jest oferowana ponownie. Kontrakt: tests/consent.test.ts (spozniona odpowiedz po wygasnieciu daje answered=false, operacja pozostaje niewykonana), packages/platform-server/src/http/app.ts + runtime.answerPermission (runId i wlasciciel wymagane). Korelacja przy dwoch przebiegach naraz: tests/run-correlation.test.ts „zgoda jednego uruchomienia nie zwalnia bramki drugiego” (z odpowiedzia pod cudzym adresem). Proba wykrycia T9: usuniecie zwiazania z uruchomieniem -> oblewaja tests/consent.test.ts i run-correlation. ZMIANA RODZAJU DOWODU: wczesniej „rzeczywisty model”, teraz „test GUI bez modelu” — nie dlatego, ze przebieg modelowy przestal obowiazywac, tylko dlatego, ze powtarzalnym dowodem w regresji szablonu jest teraz test przegladarkowy. Przebieg modelowy zostaje jako potwierdzenie obok: e2e/files-agent.spec.ts (prawdziwy model) — jedyny zapis, ze prawdziwy model dotarl do bramki zgod: prosba o zgode na Bash pojawia sie w GUI, klikniecie „Zgoda” wznawia wlasciwe wykonanie, a nowa wersja pliku potwierdza skutek.",
+      "gap": "",
       "scenarios": [
         "T15"
       ],
@@ -842,12 +838,11 @@
       }
     },
     "L5.6": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "tests/runtime.test.ts „odtwarza od podanego numeru — reconnect nie powiela zdarzen”; tests/background-runs.test.ts „ponowne podlaczenie od numeru sekwencyjnego nie powtarza zdarzen”, „/api/runs/:id/stream odtwarza zakonczone uruchomienie od kursora”; tests/agui-stream.test.ts „strumien z wyslania zajmuje przebieg, wiec podlaczenie w tle go pomija”, „ponowne odtworzenie tego samego strumienia nie zmienia stanu koncowego”; e2e/background-tasks.spec.ts „powrot do rozmowy pokazuje wynik bez ponownego uruchamiania”; tests/contracts.test.ts „powtorzona operacja z tym samym operationId nie dubluje skutku”.",
-      "gap": "Po reload klient traci lastSeq i zbiór obsłużonych commandId (useRef w shell/UiCommandRunner.tsx), więc ponowne podłączenie do trwającego wykonania odtwarza zdarzenia od 0: ui_command może zostać wykonane drugi raz (zależnie od kolejności efektów), a platform.permission_request ponownie pokazuje prośbę już rozstrzygniętą, bo żadne zdarzenie nie oznacza odpowiedzi. Brak testu GUI reconnectu w trakcie wykonania z poleceniem UI lub zgodą.",
-      "backlog": "BL-08",
+      "proof": "GUI, powrot do wykonania ktore WCIAZ TRWA (luka nazwana wczesniej w T06/T22): e2e/reconnect-live.spec.ts — siec zrywana posrednikiem (e2e/support/cuttable-proxy.ts), backend potwierdza status queued/running w chwili powrotu, po powrocie reszta odpowiedzi dochodzi, a znaczniki poczatku i konca wystepuja na ekranie i w historii dokladnie raz przy jednym uruchomieniu; polecenie interfejsu wykonane przed zerwaniem nie powtarza sie (ekran uzytkownika zostaje, files-page nie wraca, agent poprosil raz); prosba o zgode rozstrzygnieta przed przeladowaniem nie wraca na ekran i faza nie cofa sie do awaiting_consent. Do tego potrzebne bylo nowe zdarzenie platform.permission_resolved — dziennik nie mial czym zamknac prosby. Kontrakt: tests/run-reconnect.test.ts (kursor oddaje tylko to, czego klient nie ma; rozstrzygniecie zapisane takze przy wygasnieciu i przy Stop), tests/runtime.test.ts, tests/background-runs.test.ts, tests/contracts.test.ts (idempotencja skutkow). ZAKRES: odzyskiwanie wyzwalaja montowanie, zmiana rozmowy, zdarzenie online oraz zakonczenie strumienia wyslania; polaczenie, ktore umiera bez zdarzenia online, nie jest ponawiane — ograniczenie opisane w shell/BackgroundTasks.tsx. Proby wykrycia T2b, T1.",
+      "gap": "",
       "scenarios": [
         "T06",
         "T22",
@@ -909,59 +904,54 @@
       ]
     },
     "L5.11": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "tests/projection.test.ts uruchamia processStreamedMessage z @openuidev/react-headless 0.9.13 na bajtach SSE platformy i porównuje wynik z projekcją backendu (6 scenariuszy, w tym fragmentacja argumentów i błąd narzędzia, z ochroną przed pustym porównaniem); tests/agui-stream.test.ts „zdarzenie rozbite miedzy pakiety sieciowe jest skladane w calosc” (agUIAdapter biblioteki); tests/runtime.test.ts „koduje zdarzenia dokladnie tak, jak oczekuje agUIAdapter”.",
-      "gap": "Zgodność jest sprawdzana wobec parsera OpenUI, nie wobec schematów protokołu AG-UI: @ag-ui/core 0.0.53 jest tylko zależnością tranzytywną, żaden test nie waliduje RUN_STARTED, RUN_FINISHED (z dodatkowym durationMs), RUN_ERROR ani CUSTOM, które parser OpenUI ignoruje; ładunki CUSTOM poza platform.ui_command nie mają schematu ani wersji (packages/platform-contracts/src/agui.ts).",
-      "backlog": "BL-08",
+      "proof": "tests/agui-conformance.test.ts — zdarzenia PRAWDZIWEGO przebiegu (bajty z POST /api/agui/run oraz z encodeSse) parsowane schematami @ag-ui/core 0.0.53 **rozwiazanymi przez sama biblioteke czatu**, wiec odniesieniem jest wersja, ktora te strumien parsuje; osobno schematy platformy (packages/platform-contracts/src/agui-payloads.ts) dla ladunkow CUSTOM i dla wlasnych rozszerzen (RUN_FINISHED.durationMs, RUN_ERROR.code, TOOL_CALL_RESULT.isError). Zachowanie, nie tylko ksztalt: jeden RUN_STARTED na poczatku, dokladnie jeden status koncowy na koncu, brak zdarzen po nim, brak tekstu poza otwarta wiadomoscia, brak wyniku narzedzia bez TOOL_CALL_START, wynik nieuzywajacy messageId segmentu asystenta. Mapa schematow jest totalna wzgledem PLATFORM_CUSTOM_EVENTS (nowe zdarzenie bez schematu to blad kompilacji), a kazdy ladunek niesie wersje ksztaltu stemplowana w jednym miejscu (RunEventStream.custom). Kontrola negatywna w tym samym pliku: osiem recznie zepsutych strumieni, kazdy zglaszany na swojej pozycji i ze swoja regula. Przebieg jest symulacja na granicy adaptera; sprawdzane sa bajty aplikacji. Zgodnosc wobec parsera OpenUI pozostaje w tests/projection.test.ts. Proba wykrycia T3: usuniecie stempla wersji -> custom_payload.",
+      "gap": "",
       "scenarios": [
         "T06"
       ]
     },
     "L5.12": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "symulacja",
       "origin": "szablon",
-      "proof": "packages/platform-server/src/agent/runtime.ts: serwer MCP i ToolCallContext budowane per wykonanie, hooki i messageId am_<runId> w zamknięciu wykonania, zdarzenia modułu przez ctx.emit do strumienia tego wykonania (analiza kodu). tests/background-runs.test.ts „zadanie w A trwa, gdy uzytkownik pracuje w B, i wyniki sie nie mieszaja” (symulacja); tests/agui-stream.test.ts „strumien rozmowy B nie dotyka stanu rozmowy A” (klient); e2e/ui-navigation.spec.ts „zadanie w tle nie przejmuje widoku innej rozmowy” (korelacja polecenia z rozmową).",
-      "gap": "Test równoległych wykonań używa dwóch osobnych instancji AgentRuntime i samego tekstu, więc współdzielony stan jednej instancji (#pendingPermissions, #pendingUiCommands, #conversationQueue) oraz korelacja hooków narzędzi i zdarzeń domeny przy równoległych przebiegach nie są sprawdzone.",
-      "backlog": "BL-08",
+      "proof": "tests/run-correlation.test.ts (symulacja na granicy adaptera; JEDEN AgentRuntime, wiec jedna kolejka, jedna mapa oczekujacych zgod i jedna mapa polecen interfejsu): dwa uruchomienia naraz w dwoch rozmowach — hooki narzedzi trafiaja do strumienia swojego uruchomienia, identyfikatory wywolan roznia sie tylko przestrzenia nazw runId (test pokazuje, ze goly identyfikator jest u obu ten sam), zdarzenia domeny i artefakty zostaja przy swoim runId i rozmowie, tekst i messageId nie mieszaja sie; dwa polecenia interfejsu potwierdzone w ODWROTNEJ kolejnosci wracaja kazde do swojego uruchomienia, a potwierdzenie nieznanego commandId nic nie rozstrzyga; zgoda jednego uruchomienia nie zwalnia bramki drugiego, a odpowiedz pod cudzym adresem nie rozstrzyga niczego. Uzupelnia to tests/orchestration.test.ts (kolejka, kontekst narzedzi, dwoch wlascicieli) i e2e/ui-navigation.spec.ts. Proby wykrycia T7 (usuniecie przestrzeni nazw runId) i T9 (usuniecie zwiazania zgody) — obie oblewaja.",
+      "gap": "",
       "scenarios": [
         "T07",
         "T22"
       ]
     },
     "L5.13": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "tests/projection.test.ts: „narzedzie przed tekstem (najczestszy przypadek)”, „tekst przed narzedziem”, „samo narzedzie, bez tekstu”, „wiele narzedzi w jednej turze” zgodne z reduktorem biblioteki; tests/run-lifecycle.test.ts: status i firstTokenMs dla narzędzie→tekst, tekst→narzędzie i braku tekstu (symulacja). GUI (serwer skryptowany): e2e/tool-activity.spec.ts (narzędzie→tekst), e2e/streaming.spec.ts „wiadomosc uzytkownika i podpowiedzi nie zaliczaja asercji strumieniowania” (narzędzie bez tekstu, oś widoczna), „tekst dociera fragmentami...” (sam tekst).",
-      "gap": "Kolejności tekst→narzędzie i wielu narzędzi nie renderuje żaden test GUI: e2e/support/scripted-server.ts wywołuje wszystkie hooki narzędzi przed pierwszym fragmentem tekstu, więc nie potrafi odtworzyć tekstu przed narzędziem; scenariusz bez tekstu akceptuje fazę succeeded lub failed. Prezentacja tych kolejności jest dowiedziona tylko na poziomie reduktora.",
-      "backlog": "BL-08",
+      "proof": "GUI (serwer skryptowany): e2e/run-events.spec.ts — „tekst przed narzedziem” (proza widoczna w watku biblioteki, zanim wywolanie w nim jest, i TEXT_MESSAGE_CONTENT przed TOOL_CALL_START w dzienniku), „wiele narzedzi w jednej turze” (dwa wiersze osi, dwa wyniki, dwa identyfikatory sparowane z wynikami), „tura bez tekstu” (faza dokladnie succeeded — nie „succeeded albo failed”, brak banki odpowiedzi, brak TEXT_MESSAGE_CONTENT, dokladnie jedno RUN_FINISHED). Kolejnosc narzedzie->tekst: e2e/tool-activity.spec.ts. Zbudowane do tego: krok 'tool' z inline:true w e2e/support/scripted-agent.ts oglasza wywolanie W STRUMIENIU — wczesniej wszystkie hooki narzedzi szly przed pierwszym fragmentem tekstu, wiec kolejnosci tekst->narzedzie nie dalo sie odtworzyc. Reduktor: tests/projection.test.ts; status i firstTokenMs: tests/run-lifecycle.test.ts. ZAKRES: gotowy watek stawia narysowane wywolanie NAD poprzedzajaca je proza, wiec kolejnosc dowodzona jest czasem pojawienia sie i dziennikiem, nie pozycja w DOM (opisane w docs/NEW-APPLICATION.md §7). Proba wykrycia T4: inline traktowany jak zwykly krok -> test oblewa.",
+      "gap": "",
       "scenarios": [
         "T05",
         "T06"
       ]
     },
     "L5.14": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "tests/run-lifecycle.test.ts „czytelnik podlaczony po zamknieciu strumienia dostaje wszystko i konczy” (zakleszczenie N-3); tests/agui-stream.test.ts „anulowanie nie zostaje nadpisane przez blad, ktory po nim nastepuje”; tests/runtime.test.ts „kazde uruchomienie ma dokladnie jeden rozstrzygajacy status koncowy”, „restart oznacza przerwane zadania zamiast udawac kontynuacje”, „zatrzymanie serwera przerywa wszystkie uruchomienia”; e2e/background-tasks.spec.ts: reload w trakcie nie anuluje, Stop daje cancelled i pustą listę aktywnych.",
-      "gap": "Nie sprawdzono stanu UI po stopie z kompozytora (analiza: lokalny abort przerywa strumień przed platform.run_cancelled, pasek może zostać w running), reconnectu do wykonania przerwanego restartem (gałąź /api/runs/:id/stream syntetyzująca zdarzenie końcowe ze statusu nie ma testu) ani ponownie pokazanej prośby o zgodę po reload, dla której brak zdarzenia rozstrzygnięcia.",
-      "backlog": "BL-08",
+      "proof": "GUI: e2e/reconnect-live.spec.ts — (1) powrot do trwajacego wykonania nie tworzy drugiego uruchomienia ani podwojonego tekstu; (2) prosba o zgode rozstrzygnieta przed przeladowaniem nie wraca, a faza nie cofa sie do awaiting_consent (25 probek), operacja wykonuje sie raz; (3) wykonanie przerwane RESTARTEM backendu konczy sie jednoznacznie — status failed, zakladka nie zostaje w running ani queued (asercja przez negacje, w oknie), czesciowy tekst zachowany, kompozytor znow uzywalny. e2e/run-events.spec.ts „L5.2: zatrzymanie z kompozytora…” zamyka stan paska po stopie z kompozytora. Kontrakt: tests/run-reconnect.test.ts (galaz /api/runs/:id/stream syntetyzujaca zdarzenie koncowe ze statusu — dziennik bez konca dostaje dokladnie jedno RUN_ERROR z przyczyna, a dziennik zakonczony poprawnie nie dostaje drugiego), tests/run-lifecycle.test.ts (czytelnik podlaczony po zamknieciu strumienia konczy), tests/runtime.test.ts (jeden status koncowy), tests/agui-stream.test.ts (anulowanie nie zostaje nadpisane przez blad). Proby wykrycia T2b i T1.",
+      "gap": "",
       "scenarios": [
         "T16",
         "T22"
       ]
     },
     "L5.15": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "Ograniczenia potwierdzone analizą zainstalowanych wersji: processStreamedMessage w @openuidev/react-headless 0.9.13 nie obsługuje CUSTOM, RUN_STARTED ani RUN_FINISHED; InterleavedTurn w @openuidev/react-ui 0.13.10 (Thread.js) wstrzymuje prozę do końca tury (answer = !turnLive lub hasLangSyntax), a ścieżka GenUI nie renderuje prozy. Obsługa adapterami: chat/platformAdapter.ts (tests/agui-stream.test.ts „zdarzenia platformy trafiaja do wlasciwych odbiorcow”), podgląd RunState (e2e/streaming.spec.ts), chat/AssistantMessage.tsx (proza w e2e/streaming.spec.ts). Opis: docs/NEW-APPLICATION.md §7 (CUSTOM), raport archiwalny §7 punkt 1, FEEDBACK P5.",
-      "gap": "Ograniczenia nie są przypięte testem do wersji: aktualizacja biblioteki renderująca prozę w trakcie tury da podwójną odpowiedź niewykrytą przez sondę (czyta podgląd, gdy istnieje). Wstrzymanie prozy i brak prozy w GenUI nie są w bieżącej dokumentacji (NEW-APPLICATION §7 wymienia tylko CUSTOM). W turze z narzędziem biblioteka wstawia prozę trwającej tury do kroków osi (Thread.js steps) równolegle z podglądem — możliwe podwójne wyświetlenie w trakcie, nieopisane i niesprawdzone.",
-      "backlog": "BL-08",
+      "proof": "Ograniczenia PRZYPIETE DO WERSJI przez wykonanie bibliotek, nie przez opis. tests/library-limits.test.ts: wersje 0.9.13 i 0.13.10 sprawdzane wprost; processStreamedMessage nie produkuje niczego z CUSTOM, RUN_STARTED ani RUN_FINISHED (dolozenie ich do zwyklej tury nie zmienia wyniku reduktora), a tekst i narzedzia obsluguje — wiec adapter chat/platformAdapter.ts moze te sekwencje wylacznie PODSLUCHIWAC, nigdy reduce'owac. GUI: e2e/run-events.spec.ts „proza w turze z narzedziem jest w trakcie pokazana dwukrotnie, a po turze wcale” — zmierzone i przypiete dwukierunkowo, z opisem w komentarzu, ktory kolor czerwieni co znaczy. NIESPELNIONE JAWNIE, nie obejsciem: w turze z narzedziem to samo zdanie jest w trakcie na ekranie dwa razy (os biblioteki + pasek podgladu), bo biblioteka renderuje proze trwajacej tury w krokach osi, a pasek istnieje dlatego, ze w turze BEZ narzedzia nie renderuje jej wcale (L5.1, L5.9). Usuniecie paska w turach z narzedziem zabiera jedyny podglad strumienia dla tych tur i dowody innych pakietow; podmiana Messages jest wykluczona przez AGENTS.md. Opis: docs/NEW-APPLICATION.md §7 i §7.1. Po zakonczeniu tury proza sprzed narzedzia nie jest w bance odpowiedzi (zgodne z przypieciem L4.9 w e2e/chat-history.spec.ts) i nie ginie — jest w historii. Proba wykrycia T8: usuniecie podgladu -> test oblewa na probkach podwojenia.",
+      "gap": "Jawnie niespelnione i przypiete testem: w turze Z NARZEDZIEM to samo zdanie jest w trakcie na ekranie dwa razy (os biblioteki + pasek podgladu), a proza sprzed narzedzia nie trafia po turze do banki odpowiedzi. Nieobchodzone swiadomie — usuniecie paska zostawia resztkowa duble po stronie samej biblioteki (zmierzone w probie T8: 0/2), zabiera jedyny podglad strumienia w turach z narzedziem i uniewaznia platne dowody L5.1/L5.9 (e2e/agent-ui.spec.ts czyta ten pasek); podmiana Messages jest wykluczona przez AGENTS.md. Opis: docs/NEW-APPLICATION.md §7.",
       "scenarios": [
         "T05"
       ]
@@ -2481,8 +2471,8 @@
     },
     "T04": {
       "status": "czesciowe",
-      "proof": "pierwsza odpowiedz po nadaniu ID pozostaje widoczna (L4.10); proza i wynik narzedzia w czacie (e2e/tool-activity.spec.ts, e2e/agent-ui.spec.ts); e2e/bl10-composition.spec.ts: proza, poprawny OpenUI i wynik narzedzia obok siebie w jednej wiadomosci, sama proza, opis czesciowy i opis nazywajacy nieznany komponent — kazdy z wlasnym, widocznym rezultatem.",
-      "gap": "Odpowiedz bez tekstu sprawdzona tylko dla strumieniowania. Tekst wypowiedziany przed wywolaniem narzedzia nie jest renderowany przez gotowy czat — zapisany w historii, niewidoczny w panelu (defekt skladania tury, BL-08)."
+      "proof": "pierwsza odpowiedz po nadaniu ID pozostaje widoczna (L4.10); proza i wynik narzedzia w czacie (e2e/tool-activity.spec.ts, e2e/agent-ui.spec.ts); e2e/bl10-composition.spec.ts: proza, poprawny OpenUI i wynik narzedzia obok siebie w jednej wiadomosci, sama proza, opis czesciowy i opis nazywajacy nieznany komponent — kazdy z wlasnym, widocznym rezultatem. Odpowiedz bez tekstu ma dowod poza strumieniowaniem: e2e/run-events.spec.ts „tura bez tekstu konczy sie sukcesem i nie udaje odpowiedzi” (faza dokladnie succeeded, brak banki odpowiedzi, dokladnie jedno RUN_FINISHED).",
+      "gap": "Tekst wypowiedziany PRZED wywolaniem narzedzia nie trafia do banki odpowiedzi: gotowy czat (@openuidev/react-ui 0.13.10) uznaje za odpowiedz wylacznie ostatni segment tury, a wczesniejsze wklada jako kroki osi „Behind the scenes”. Zmierzone, nie domniemane: w trakcie tury proza jest w panelu widoczna (i to podwojnie — razem z paskiem podgladu), po zakonczeniu tury os jest zwinieta i jej kroki nie istnieja w DOM, ale sa o jedno klikniecie i sa w historii. Przypiete dwukierunkowo: e2e/chat-history.spec.ts (po turze) i e2e/run-events.spec.ts „proza w turze z narzedziem…” (w trakcie). Zapisane jako jawnie niespelnione wymaganie przy L5.15 (BL-08 zamkniety) i opisane w docs/NEW-APPLICATION.md §7."
     },
     "T05": {
       "status": "potwierdzone",
@@ -2618,12 +2608,6 @@
       "title": "Trwałość, kopia i migracje",
       "summary": "Pozostaje jedno pytanie, na które nie da się odpowiedzieć bez tury modelu: którą z dwóch reakcji daje prawdziwy SDK, gdy transkrypt wznawianej sesji nie istnieje. Obie ścieżki są obsłużone i sprawdzone stand-inem na granicy adaptera; kopia z WAL, próba migracji sprzed każdej migracji platformy i odtworzenie są przećwiczone w szablonie na danych syntetycznych (Z2, 2026-09-18).",
       "done": "jedna próba na prawdziwym modelu: rozmowa z sesją, usunięcie jej transkryptu, kolejne polecenie — zapisany komunikat SDK rozstrzyga, która ścieżka zachodzi, i potwierdza albo uzupełnia wzorce rozpoznawania w isMissingSessionTranscript."
-    },
-    {
-      "id": "BL-08",
-      "title": "Czat, zdarzenia i historia",
-      "summary": "Braki w dowodzie lub implementacji po stronie gotowego czatu, AG-UI i projekcji historii, które nie należą do innych pakietów.",
-      "done": "każde kryterium pakietu ma test GUI lub test kontraktu w regresji szablonu, a ograniczenia biblioteki są potwierdzone dla użytej wersji i obsłużone albo jawnie niespełnione."
     },
     {
       "id": "BL-09",

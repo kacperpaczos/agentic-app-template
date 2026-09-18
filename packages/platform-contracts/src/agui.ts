@@ -32,6 +32,19 @@ export const PLATFORM_CUSTOM_EVENTS = {
   artifactCreated: 'platform.artifact_created',
   runCancelled: 'platform.run_cancelled',
   permissionRequest: 'platform.permission_request',
+  /**
+   * The decision on a permission request, whichever way it went — allowed,
+   * refused, expired, or released because the run was stopped.
+   *
+   * **Why a question needs an answer event.** The request is in the run's
+   * event log for ever, and a client that re-attaches replays the log: a reload
+   * during a run whose question had already been answered showed the question
+   * again, with nothing in the stream to say it was settled. The stale prompt
+   * was answerable, and answering it did nothing at all — the gate resolves
+   * once — so the interface asked for a decision it could not use. This event
+   * is what a replay needs to arrive at the state the run is actually in.
+   */
+  permissionResolved: 'platform.permission_resolved',
   sessionBound: 'platform.session_bound',
   /**
    * The stored Claude session could not be resumed because its transcript is

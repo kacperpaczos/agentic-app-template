@@ -3,7 +3,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { accessEpoch } from '../api/accessContext.ts';
 import { useAppState } from '../state/appState.ts';
 import { applyRunEvent } from './runEvents.ts';
-import { claimRunStream, releaseRunStream } from './runStreams.ts';
+import { attachToRun, claimRunStream, releaseRunStream } from './runStreams.ts';
 
 /**
  * Stream adapter for the chat.
@@ -75,6 +75,14 @@ export function platformAguiAdapter(qc: QueryClient): StreamProtocolAdapter {
        * `UiCommandRunner`, which is why it was harmless).
        */
       let applied = 0;
+      /**
+       * Whether this stream carried the run to its end.
+       *
+       * The difference between "the run finished" and "this connection ended"
+       * is the whole of the block below: only the first of them means there is
+       * nothing left to watch.
+       */
+      let resolved = false;
       try {
         for await (const event of inner.parse(response)) {
           // Nothing of the previous identity's is applied, and nothing of it is
@@ -88,10 +96,46 @@ export function platformAguiAdapter(qc: QueryClient): StreamProtocolAdapter {
             applied += 1;
             useAppState.getState().patchRun(conversationId, { lastSeq: applied });
           }
+          const type = (event as { type?: unknown }).type;
+          if (type === 'RUN_FINISHED' || type === 'RUN_ERROR') resolved = true;
           yield event;
         }
       } finally {
         if (runId) releaseRunStream(runId);
+        /*
+         * The send path's stream ended before the run did: pick the run back up
+         * from the cursor, exactly as a reload would.
+         *
+         * **The defect this closes.** The ready-made composer's submit control
+         * becomes a stop button while a turn is open, and pressing it makes the
+         * library abort *this* fetch (`cancelMessage`). `useComposerStop` adds
+         * the other half — the backend is told to cancel — but the events that
+         * say so (`platform.run_cancelled`, then `RUN_ERROR`) are written to a
+         * stream nobody is reading any more. The run really was cancelled; the
+         * tab went on showing `running` until something else happened to
+         * re-sync (a conversation switch, a reload, an `online` event), which
+         * on an idle tab is never. Measured at roughly thirty seconds, and in
+         * principle unbounded.
+         *
+         * Deliberately **not** patching the phase from the cancel response:
+         * that response is sent the moment the abort is signalled, before the
+         * run has settled, so it would be this client deciding how the run
+         * ended rather than being told. The terminal event is the backend's
+         * statement, and re-attaching is how it arrives.
+         *
+         * General on purpose, not special-cased to the stop button. Every other
+         * way this stream can end early — a conversation switch, a dropped
+         * socket, a closed laptop — leaves the same hole, and each of them is
+         * equally well served by resuming from the cursor. Exactly one consumer
+         * still: the claim above is released first, and `attachToRun` ignores a
+         * run it is already following.
+         *
+         * Not after an identity switch: that run belongs to the previous owner
+         * and nothing of it may be applied here.
+         */
+        if (runId && conversationId && !resolved && accessEpoch() === issuedAt) {
+          attachToRun(qc, { runId, conversationId });
+        }
       }
     },
   };

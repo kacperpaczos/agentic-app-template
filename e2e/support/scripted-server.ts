@@ -27,6 +27,7 @@ import {
   neverEndingScript,
 } from './bl09-scenarios.ts';
 import { chatHistoryScript } from './chat-history-scenario.ts';
+import { consentThenWorkScript, liveReconnectScript } from './bl08b-scenarios.ts';
 import { interactionsScript } from './interactions-scenario.ts';
 import { showValueScript } from './show-value-scenario.ts';
 import { scriptedAgent, type CallRecord, type Step } from './scripted-agent.ts';
@@ -60,6 +61,70 @@ const SCENARIOS: Record<string, Step[]> = {
     { kind: 'text', text: 'Widac na niej ', delayMs: 300 },
     { kind: 'text', text: 'podsumowanie ', delayMs: 300 },
     { kind: 'text', text: 'sprawy.', delayMs: 300 },
+  ],
+  /*
+   * Text **before** the tool call, which no scenario could produce until the
+   * `inline` announcement existed: the expansion pass fired every tool hook
+   * before the stream opened, so "tool, then answer" was the only ordering the
+   * browser could ever be shown.
+   *
+   * The markers are the scenario's own words, not the shell's, so the assertions
+   * that read them do not break when a platform label is renamed.
+   */
+  'text-then-tool': [
+    { kind: 'text', text: 'PROZA-PRZED-NARZEDZIEM ', delayMs: 250 },
+    { kind: 'wait', delayMs: 400 },
+    {
+      kind: 'tool',
+      inline: true,
+      name: 'mcp__app__canvas_list_cards',
+      input: { spaceId: 'sp_scripted' },
+      result: '{"cards":[],"marker":"WYNIK-NARZEDZIA-A"}',
+    },
+    { kind: 'wait', delayMs: 900 },
+    { kind: 'text', text: 'ODPOWIEDZ-PO-NARZEDZIU', delayMs: 250 },
+  ],
+  /* Two tools in one turn, with text between them — the other missing ordering. */
+  'many-tools': [
+    { kind: 'text', text: 'PROZA-PIERWSZA ', delayMs: 250 },
+    {
+      kind: 'tool',
+      inline: true,
+      name: 'mcp__app__canvas_list_cards',
+      input: { spaceId: 'sp_scripted' },
+      result: '{"cards":[],"marker":"WYNIK-NARZEDZIA-A"}',
+    },
+    { kind: 'text', text: 'PROZA-MIEDZY ', delayMs: 250 },
+    {
+      kind: 'tool',
+      inline: true,
+      name: 'mcp__app__ui_catalog',
+      input: {},
+      result: '{"targets":[],"marker":"WYNIK-NARZEDZIA-B"}',
+    },
+    { kind: 'wait', delayMs: 900 },
+    { kind: 'text', text: 'ODPOWIEDZ-PO-NARZEDZIU', delayMs: 250 },
+  ],
+  /*
+   * One announced tool whose successful answer carries a marker, then a short
+   * reply. Separate from `tool-then-text` so that asserting on the *result*
+   * cannot accidentally match the card title of somebody else's scenario.
+   */
+  'tool-result-visible': [
+    {
+      kind: 'tool',
+      name: 'mcp__app__canvas_list_cards',
+      input: { spaceId: 'sp_scripted' },
+      result: '{"cards":[],"marker":"WYNIK-NARZEDZIA-A"}',
+    },
+    /*
+     * Long enough for a browser test to open the tool's details and read them
+     * *while the run is still running* — which is the half of L5.3 that the
+     * previous assertions could not distinguish from "shown once it finished".
+     */
+    { kind: 'wait', delayMs: 4000 },
+    { kind: 'text', text: 'Odczytalem karty. ', delayMs: 300 },
+    { kind: 'text', text: 'ODPOWIEDZ-PO-NARZEDZIU', delayMs: 300 },
   ],
   'text-only': [
     { kind: 'text', text: 'Pierwsze zdanie odpowiedzi. ', delayMs: 300 },
@@ -473,6 +538,55 @@ const SCENARIOS: Record<string, Step[]> = {
     },
     { kind: 'text', text: 'Zapisalem zestawienie i wersje na zywo.' },
   ],
+  /*
+   * Three artifacts of one run, each asking for a *different* renderer, made by
+   * the real handlers.
+   *
+   * The point is the routing, so the three have to be distinguishable on screen
+   * by what draws them and by nothing else: a module renderer, the platform's
+   * file renderer, and a type nothing registers — which the pane shows as its
+   * content, plainly, rather than as an empty box. A preview wired by position,
+   * by tool name or by order of creation would draw all three the same way.
+   */
+  'artifact-renderer-routing': [
+    { kind: 'wait', delayMs: 150 },
+    { kind: 'call', name: 'procurement_list_cases', maxChars: 200 },
+    {
+      kind: 'call',
+      name: 'artifact_create',
+      input: (calls: CallRecord[]) => ({
+        title: 'Zestawienie renderowane przez modul',
+        kind: 'table',
+        mode: 'live',
+        rendererType: 'procurement.comparison',
+        content: { operation: 'procurement.comparison', input: { caseId: firstCaseId(calls) } },
+        operationId: `e2e-renderer-modul-${Date.now()}`,
+      }),
+      maxChars: 200,
+    },
+    {
+      kind: 'call',
+      name: 'artifact_create',
+      input: {
+        title: 'Artefakt bez zarejestrowanego renderera',
+        kind: 'report',
+        mode: 'snapshot',
+        /* Deliberately not in the catalog; the pane must say so by showing the data. */
+        rendererType: 'platform.nie-ma-takiego-renderera',
+        content: { text: 'ZNACZNIK-BEZ-RENDERERA' },
+        operationId: `e2e-renderer-brak-${Date.now()}`,
+      },
+      maxChars: 200,
+    },
+    { kind: 'writeOutput', path: 'wynik-renderera.txt', content: 'ZNACZNIK-PLIKU' },
+    {
+      kind: 'call',
+      name: 'artifact_publish_file',
+      input: { path: 'wynik-renderera.txt', title: 'Plik opublikowany z workspace', operationId: `e2e-renderer-plik-${Date.now()}` },
+      maxChars: 200,
+    },
+    { kind: 'text', text: 'Zapisalem trzy artefakty.' },
+  ],
   'tool-error': [
     {
       kind: 'tool',
@@ -547,6 +661,9 @@ const CONVERSATION_SCENARIOS: Record<string, (prompt: string) => Step[]> = {
   'bl09-timeout': neverEndingScript,
   'bl09-child': childProcessScript,
   'bl09-files': filesScript,
+  /* BL-08b: coming back to a run that is still going. */
+  'bl08b-live-reconnect': liveReconnectScript,
+  'bl08b-consent-then-work': consentThenWorkScript,
 };
 
 const scenario = process.env.SCRIPT ?? 'tool-then-text';
