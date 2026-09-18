@@ -207,3 +207,21 @@ P16 [L9.8] packages/platform-server/src/services/canvas.ts
         
         - 0
     drzewo po przywroceniu: czyste
+
+P17 [L7.8 / pomiar] packages/platform-server/src/agent/runtime.ts
+    wycofano       : durationMs liczone od startu wykonania -> od zakolejkowania
+    test           : tests/measurements.test.ts -t "kolejka, start wykonania" (okno SEAM_MS = 25 ms)
+    oczekiwano     : oblewa — suma kolejka+wykonanie przekracza caly odcinek o czas oczekiwania
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/measurements.test.ts > pomiary rozdzielone na punkty, zapisane z warunkami i wersja kodu > kolejka, start wykonania, pierwszy tekst i zakonczenie sa osobnymi punktami; brak tekstu daje brak metryki
+        AssertionError: expected 326 to be less than or equal to 223
+         ❯ tests/measurements.test.ts:213:43
+            211|       const total = Date.parse(s.finishedAt!) - Date.parse(s.enqueuedA…
+            212|       expect(s.queuedMs).toBeGreaterThan(50);
+            213|       expect(s.queuedMs! + s.durationMs!).toBeLessThanOrEqual(total + …
+               |                                           ^
+            214|       expect(s.queuedMs! + s.durationMs!).toBeGreaterThanOrEqual(total…
+    drzewo po przywroceniu: czyste
