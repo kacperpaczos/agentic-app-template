@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { FILE_ANALYSIS, FILE_LIMITS, type StoredFile } from '@platform/contracts';
+import { FILE_ANALYSIS, FILE_LIMITS, type StoredFileWithUse } from '@platform/contracts';
 import { accessFetch, requestFailureMessage } from '../api/client.ts';
 import { qk, useFiles } from '../api/queries.ts';
 import { useAppState } from '../state/appState.ts';
@@ -125,7 +125,7 @@ export function ComposerAttachments() {
   const chipsHost = useComposerHost('.openui-agent-thread-composer__input-wrapper', 'pf-attach-chips-host');
 
   const byId = new Map((files.data?.files ?? []).map((f) => [f.id, f] as const));
-  const attached = attachments.map((id) => byId.get(id)).filter((f): f is StoredFile => Boolean(f));
+  const attached = attachments.map((id) => byId.get(id)).filter((f): f is StoredFileWithUse => Boolean(f));
   const available = (files.data?.files ?? []).filter((f) => !attachments.includes(f.id));
 
   const upload = async (file: File) => {
@@ -144,7 +144,7 @@ export function ComposerAttachments() {
         const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
         throw new Error(body.error?.message ?? `HTTP ${res.status}`);
       }
-      const stored = (await res.json()) as StoredFile;
+      const stored = (await res.json()) as StoredFileWithUse;
       await qc.invalidateQueries({ queryKey: qk.files() });
       setAttachments([...attachments, stored.id]);
     } catch (e) {

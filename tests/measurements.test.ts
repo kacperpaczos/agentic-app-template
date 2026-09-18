@@ -67,6 +67,7 @@ async function startRun(conversationId: string, script: Step[]) {
     childExitedAt: null,
     childPid: null,
     performed: [],
+    gate: [],
     dispose: () => {},
   };
   plans.set(prompt, { script, handle });

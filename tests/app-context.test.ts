@@ -1037,6 +1037,7 @@ const emptyHandle = (): StandInHandle => ({
   childExitedAt: null,
   childPid: null,
   performed: [],
+  gate: [],
   dispose: () => {},
 });
 

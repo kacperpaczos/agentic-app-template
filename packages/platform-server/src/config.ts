@@ -19,6 +19,16 @@ export interface PlatformConfig {
   model: string;
   /** Hard ceiling for a single agent run. */
   runTimeoutMs: number;
+  /**
+   * How long a permission request waits for the user before it is **refused**.
+   *
+   * A documented termination condition, not an implementation detail: together
+   * with `runTimeoutMs` it is the complete list of ways a run ends without an
+   * explicit Stop (see README, "Co konczy wykonanie bez Stop"). Configurable so
+   * the regression can reach the expiry branch without waiting two minutes —
+   * the branch that must deny, never allow.
+   */
+  consentTimeoutMs: number;
   maxUploadBytes: number;
   /**
    * Set by automated tests (`APP_INSTANCE_LABEL`), never in production.
@@ -105,6 +115,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PlatformConfig
     webDistDir: env.APP_WEB_DIST ? resolve(env.APP_WEB_DIST) : null,
     model: env.APP_MODEL ?? 'claude-sonnet-4-5',
     runTimeoutMs: int(env.APP_RUN_TIMEOUT_MS, 300_000),
+    consentTimeoutMs: int(env.APP_CONSENT_TIMEOUT_MS, 120_000),
     maxUploadBytes: int(env.APP_MAX_UPLOAD_BYTES, 8 * 1024 * 1024),
     instanceLabel: env.APP_INSTANCE_LABEL ?? null,
   };

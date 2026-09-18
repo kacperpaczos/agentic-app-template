@@ -1,4 +1,10 @@
-import { AGENT_VIEWS_SCOPE_KIND, AppError, type Conversation, type StoredMessage } from '@platform/contracts';
+import {
+  AGENT_VIEWS_SCOPE_KIND,
+  AppError,
+  type AttachedCommand,
+  type Conversation,
+  type StoredMessage,
+} from '@platform/contracts';
 import type { Db } from '../db/client.ts';
 import { newId, nowIso } from '../util/id.ts';
 
@@ -190,6 +196,92 @@ export class ConversationService {
       return spaces.changes;
     })();
     return { deleted: id, detachedArtifacts: artifacts.n, removedViewSpaces };
+  }
+
+  /**
+   * Records which files a command was sent with.
+   *
+   * Called when the files are actually staged into the run's workspace, so the
+   * link describes what the execution received rather than what the request
+   * asked for. Idempotent by (message, file): a replayed request re-links the
+   * same pair instead of duplicating it.
+   */
+  linkAttachments(input: {
+    conversationId: string;
+    ownerId: string;
+    messageId: string;
+    runId: string | null;
+    fileIds: readonly string[];
+  }): number {
+    if (input.fileIds.length === 0) return 0;
+    this.#row(input.conversationId, input.ownerId);
+    const ts = nowIso();
+    const stmt = this.db.$client.prepare(
+      `INSERT INTO message_attachments (message_id, conversation_id, file_id, run_id, owner_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(message_id, file_id) DO NOTHING`,
+    );
+    const tx = this.db.$client.transaction(() => {
+      let n = 0;
+      for (const fileId of input.fileIds) {
+        n += stmt.run(
+          input.messageId,
+          input.conversationId,
+          fileId,
+          input.runId,
+          input.ownerId,
+          ts,
+        ).changes;
+      }
+      return n;
+    });
+    return tx();
+  }
+
+  /** The files one message was sent with, in the order they were linked. */
+  attachmentsOfMessage(messageId: string, ownerId: string): Array<{ fileId: string; filename: string }> {
+    return this.db.$client
+      .prepare(
+        `SELECT a.file_id AS fileId, f.filename AS filename
+           FROM message_attachments a JOIN files f ON f.id = a.file_id
+          WHERE a.message_id = ? AND a.owner_id = ?
+          ORDER BY a.created_at, a.file_id`,
+      )
+      .all(messageId, ownerId) as Array<{ fileId: string; filename: string }>;
+  }
+
+  /**
+   * For each of the owner's files, the commands it was attached to.
+   *
+   * The reverse direction, which is the one a person asks on the files screen:
+   * "what did I send this with?". The command's own text comes along, shortened,
+   * because a conversation title alone does not identify which message.
+   */
+  attachmentsByFile(ownerId: string): Record<string, Array<AttachedCommand>> {
+    const rows = this.db.$client
+      .prepare(
+        `SELECT a.file_id AS fileId, a.message_id AS messageId, a.conversation_id AS conversationId,
+                a.run_id AS runId, a.created_at AS at, c.title AS conversationTitle,
+                m.content AS prompt
+           FROM message_attachments a
+           JOIN conversations c ON c.id = a.conversation_id
+           LEFT JOIN messages m ON m.id = a.message_id AND m.conversation_id = a.conversation_id
+          WHERE a.owner_id = ?
+          ORDER BY a.created_at DESC`,
+      )
+      .all(ownerId) as Array<AttachedCommand & { fileId: string; prompt: string | null }>;
+    const byFile: Record<string, AttachedCommand[]> = {};
+    for (const r of rows) {
+      (byFile[r.fileId] ??= []).push({
+        messageId: r.messageId,
+        conversationId: r.conversationId,
+        conversationTitle: r.conversationTitle,
+        runId: r.runId,
+        at: r.at,
+        prompt: (r.prompt ?? '').slice(0, 160),
+      });
+    }
+    return byFile;
   }
 
   messages(id: string, ownerId: string): StoredMessage[] {

@@ -87,36 +87,47 @@ export function artifactTools(services: PlatformServices): Array<ModuleToolDefin
           async () => {
             const filename = basename(abs);
             const mediaType = MEDIA_BY_EXT[extname(filename).toLowerCase()] ?? 'text/plain';
-            const stored = services.files.store({
-              ownerId: ctx.ownerId,
-              filename,
-              mediaType,
-              bytes: readFileSync(abs),
-              scopeKind: 'artifact',
-              scopeId: ctx.runId,
-            });
-            const created = services.artifacts.create({
-              ownerId: ctx.ownerId,
-              conversationId: ctx.conversationId,
-              runId: ctx.runId,
-              kind: input.kind ?? 'file',
-              mode: 'snapshot',
-              title: input.title,
-              rendererType: input.rendererType ?? 'platform.file',
-              content: {
-                fileId: stored.id,
-                filename: stored.filename,
-                mediaType: stored.mediaType,
-                byteSize: stored.byteSize,
-                sha256: stored.sha256,
+            /*
+             * One publication, not two steps. The bytes are renamed into place
+             * before anything is written, and the file row and the artifact that
+             * points at it are inserted in the same transaction — so an
+             * interrupted publication leaves neither an orphaned file nor an
+             * artifact whose content is missing.
+             */
+            const { file: stored, result: created } = services.files.storeWith(
+              {
+                ownerId: ctx.ownerId,
+                filename,
+                mediaType,
+                bytes: readFileSync(abs),
+                scopeKind: 'artifact',
+                scopeId: ctx.runId,
               },
-              fileId: stored.id,
-            });
+              (file) =>
+                services.artifacts.create({
+                  ownerId: ctx.ownerId,
+                  conversationId: ctx.conversationId,
+                  runId: ctx.runId,
+                  kind: input.kind ?? 'file',
+                  mode: 'snapshot',
+                  title: input.title,
+                  rendererType: input.rendererType ?? 'platform.file',
+                  content: {
+                    fileId: file.id,
+                    filename: file.filename,
+                    mediaType: file.mediaType,
+                    byteSize: file.byteSize,
+                    sha256: file.sha256,
+                  },
+                  fileId: file.id,
+                }),
+            );
             return {
               artifactId: created.meta.id,
               fileId: stored.id,
               filename: stored.filename,
               byteSize: stored.byteSize,
+              sha256: stored.sha256,
               downloadUrl: `/api/files/${stored.id}/content`,
             };
           },

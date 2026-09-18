@@ -58,6 +58,17 @@ export class ScriptedInstance {
     return this.config.baseUrl;
   }
 
+  /**
+   * The pid of the server this object started, or null when nothing is running.
+   *
+   * Exposed for one purpose: counting the server's **descendant processes**.
+   * "Stop ended the work" is otherwise answered from the database, which cannot
+   * see a process the run left behind.
+   */
+  get pid(): number | null {
+    return this.#process?.pid ?? null;
+  }
+
   /** Rebuilds this instance's database from scratch. Nothing is running yet. */
   prepareDatabase(): void {
     if (existsSync(this.config.dataDir)) {

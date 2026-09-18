@@ -325,6 +325,7 @@ describe('migracja istniejacej bazy', () => {
       'platform-0002-run-measurement-points',
       'platform-0003-file-versions',
       'platform-0004-artifact-run-link',
+      'platform-0005-message-attachments',
       'procurement-0001-init',
     ]);
   });

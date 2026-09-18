@@ -1,7 +1,17 @@
-import { rmSync } from 'node:fs';
-import { AppError, type AgentRun, type AppContext, type RunStatus } from '@platform/contracts';
+import {
+  ACTIVE_RUN_STATUSES,
+  AppError,
+  type AgentRun,
+  type AppContext,
+  type RunStatus,
+  type TerminalRunStatus,
+} from '@platform/contracts';
 import type { Db } from '../db/client.ts';
+import { removeManagedTree } from '../util/managed-fs.ts';
 import { newId, nowIso } from '../util/id.ts';
+
+/** `'queued','running','awaiting_consent'` as an SQL list, from the one contract. */
+const ACTIVE_SQL_LIST = ACTIVE_RUN_STATUSES.map((s) => `'${s}'`).join(',');
 
 interface RunRow {
   id: string;
@@ -54,7 +64,17 @@ export class RunRegistry {
   /** In-process cancel handles. Intentionally not persisted: a killed process cannot be cancelled. */
   readonly #aborts = new Map<string, AbortController>();
 
-  constructor(private readonly db: Db) {}
+  /**
+   * `workspacesDir` is not used to *build* any path — the workspace directory of
+   * a run is read from its row. It is the root every deletion here is checked
+   * against at the moment of the call (`managed-fs.ts`), so a `workspace_dir`
+   * that is empty, relative, or written by an older version cannot become an
+   * `rm -rf` of something else.
+   */
+  constructor(
+    private readonly db: Db,
+    private readonly workspacesDir: string,
+  ) {}
 
   start(input: {
     conversationId: string;
@@ -114,7 +134,7 @@ export class RunRegistry {
       this.db.$client
         .prepare(
           `SELECT * FROM agent_runs
-            WHERE owner_id = ? AND status IN ('queued','running','awaiting_consent')
+            WHERE owner_id = ? AND status IN (${ACTIVE_SQL_LIST})
             ORDER BY enqueued_at, started_at`,
         )
         .all(ownerId) as RunRow[]
@@ -148,6 +168,28 @@ export class RunRegistry {
       .run(nowIso(), id);
   }
 
+  /**
+   * The run stopped at the consent gate and is waiting for a person.
+   *
+   * Written to the row, not only emitted, because the client that needs to know
+   * is the one that is *not* watching this conversation. `running` is the only
+   * status it may replace: a run cancelled or timed out while the question was
+   * open has already resolved, and must not be dragged back into an active
+   * status by an answer arriving afterwards.
+   */
+  markAwaitingConsent(id: string): void {
+    this.db.$client
+      .prepare("UPDATE agent_runs SET status = 'awaiting_consent' WHERE id = ? AND status = 'running'")
+      .run(id);
+  }
+
+  /** The question was answered (or expired): back to ordinary execution. */
+  markConsentAnswered(id: string): void {
+    this.db.$client
+      .prepare("UPDATE agent_runs SET status = 'running' WHERE id = ? AND status = 'awaiting_consent'")
+      .run(id);
+  }
+
   markFirstToken(id: string, ms: number): void {
     this.db.$client
       .prepare('UPDATE agent_runs SET first_token_ms = COALESCE(first_token_ms, ?) WHERE id = ?')
@@ -157,14 +199,14 @@ export class RunRegistry {
   /** Exactly one resolving terminal status per run; later calls are ignored. */
   finish(
     id: string,
-    status: Exclude<RunStatus, 'queued' | 'running'>,
+    status: TerminalRunStatus,
     opts: { errorCode?: string; errorMessage?: string; durationMs?: number } = {},
   ): AgentRun {
     this.db.$client
       .prepare(
         `UPDATE agent_runs
             SET status = ?, finished_at = ?, error_code = ?, error_message = ?, duration_ms = ?
-          WHERE id = ? AND status IN ('queued', 'running')`,
+          WHERE id = ? AND status IN (${ACTIVE_SQL_LIST})`,
       )
       .run(
         status,
@@ -182,9 +224,14 @@ export class RunRegistry {
     const row = this.#row(id);
     if (row.owner_id !== ownerId) throw new AppError('forbidden', 'Cudze uruchomienie.');
     const ac = this.#aborts.get(id);
-    // A run still waiting in the queue is cancellable too: the user pressed
-    // stop before it ever reached the model, and it must not run afterwards.
-    if (!ac || (row.status !== 'running' && row.status !== 'queued')) {
+    /*
+     * Every active status is cancellable, and that includes `awaiting_consent`.
+     * A run still in the queue never reached the model and must not run
+     * afterwards; a run parked on a question is the case the user is most
+     * likely to want to end — Stop has to be an answer to "something is waiting
+     * for me and I do not want it to happen", not only to "this is taking long".
+     */
+    if (!ac || !(ACTIVE_RUN_STATUSES as readonly string[]).includes(row.status)) {
       return { cancelled: false, run: toRun(row) };
     }
     ac.abort(new Error('cancelled_by_user'));
@@ -212,7 +259,7 @@ export class RunRegistry {
    */
   reconcileOnBoot(): number {
     const stale = this.db.$client
-      .prepare("SELECT id, workspace_dir FROM agent_runs WHERE status IN ('queued', 'running')")
+      .prepare(`SELECT id, workspace_dir FROM agent_runs WHERE status IN (${ACTIVE_SQL_LIST})`)
       .all() as Array<{ id: string; workspace_dir: string | null }>;
     for (const r of stale) {
       this.db.$client
@@ -223,7 +270,25 @@ export class RunRegistry {
             WHERE id = ?`,
         )
         .run(nowIso(), r.id);
-      if (r.workspace_dir) rmSync(r.workspace_dir, { recursive: true, force: true });
+      /*
+       * The path comes out of the database, so it is checked at the call rather
+       * than trusted for having been stored. A boot must not be able to delete
+       * anything outside the workspaces directory, whatever a row happens to
+       * contain — and a row that fails the check leaves its directory alone
+       * instead of taking the boot down with it.
+       */
+      if (r.workspace_dir) {
+        try {
+          removeManagedTree(r.workspace_dir, {
+            root: this.workspacesDir,
+            what: 'workspace uruchomien',
+          });
+        } catch (err) {
+          console.warn(
+            `[runs] nie usunieto workspace uruchomienia ${r.id}: ${(err as Error).message}`,
+          );
+        }
+      }
     }
     return stale.length;
   }

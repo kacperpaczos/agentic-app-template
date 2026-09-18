@@ -284,14 +284,16 @@ instancji ani katalogu danych użytkownika; kontrola negatywna musi umieć obla�
 |---|---|---|
 | `z.record()` w schemacie narzędzia | SDK usuwa **cały** serwer MCP, agent „nie widzi narzędzi” | `assertMcpCompatibleShape` przy starcie; `z.looseObject({})` zamiast `z.record()` |
 | `.default()` w schemacie narzędzia | pole staje się wymagane dla modelu | `.optional()` + wartość domyślna w handlerze |
-| `allowedTools` w SDK | nazwa na liście omija `canUseTool` (bramkę zgody) | narzędzia modułu są operacjami domenowymi za regułami backendu; powłoka idzie przez zgodę |
+| `allowedTools` w SDK | nazwa na liście zatwierdza narzędzie **przed** `canUseTool`, więc bramka zgody staje się martwym kodem | macierz w `agent/permissions.ts`: `Bash` celowo nie jest na liście; `sandbox.autoAllowBashIfSandboxed` pozostaje `false`, bo zatwierdza polecenia powłoki jeszcze wcześniej |
+| narzędzia sieciowe SDK (`WebFetch`, `WebSearch`) | działają w procesie SDK, **poza** sandboxem poleceń, więc pusta lista domen ich nie ogranicza; bez kategorii „zabronione” trafiały do pytania, na które użytkownik mógł odpowiedzieć „tak” | kategoria `forbidden` w macierzy → `disallowedTools` w SDK **oraz** odmowa w bramce (obrona w dwóch miejscach) |
+| odpowiedź na zgodę bez powiązania z wykonaniem | odpowiedź wysłana pod adres jednego uruchomienia z `requestId` innego rozstrzygała to drugie | `answerPermission` porównuje `runId` i właściciela; powtórzona i spóźniona odpowiedź zwraca `answered: false` |
 | `@mastra/claude` 0.3.1 przekazuje tylko tekst | brak zdarzeń narzędzi i `session_id` w strumieniu Mastry | most hooków SDK w `platform-server/src/agent/runtime.ts`; przy aktualizacji adaptera sprawdzić, czy zdarzenia nie zaczną się dublować |
 | SDK odracza narzędzia, gdy jest ich dużo (`ToolSearch`) | model nie ma w kontekście narzędzia, które prompt każe mu wywołać (zaobserwowane: `ui_navigate` za `ToolSearch`, agent odpowiadał tekstem zamiast przenieść ekran) | `alwaysLoad: true` dla nielicznych narzędzi sterujących; gdy model „nie słucha instrukcji”, najpierw sprawdź w zdarzeniach uruchomienia, czy narzędzie było dostępne |
 | wyszukiwanie z `LIKE '%*%'` | „pokaż wszystko” zwracało pustą listę, a model mówił, że aplikacja jest pusta | w przykładzie `*` znaczy „wszystko”, a odpowiedź niesie `totals`; ta sama zasada dotyczy własnych narzędzi wyszukiwania |
 | gotowy czat ignoruje zdarzenia `CUSTOM` | kanał platformy (unieważnienia, zgody) niewidoczny | `platformAdapter.ts` obsługuje je równolegle |
 | dziecko `AgentInterface` bez roli slotu | renderuje się jako kolumna obok wątku | kontrolki kompozytora wstawiane portalem; test geometrii `e2e/chat-layout.spec.ts` |
 | selektor celu UI w module | zmiana markupu psuje nawigację dopiero w działaniu | test przeglądarkowy celu |
-| XLSX | formuły nie są przeliczane; wykresy i formatowanie warunkowe nie są zachowywane przy zapisie; `.xlsm`/`.xls` odrzucane | zakres jawny w `FILE_ANALYSIS` (kontrakty) |
+| XLSX | formuły nie są przeliczane (formuła zapisana przez agenta nie niesie żadnej wartości); części, których parser nie modeluje — wykresy, tabele przestawne — znikają przy zapisie, bo skoroszyt powstaje z modelu parsera; obrazy i formatowanie komórek **przetrwają**; `.xlsm`/`.xls` odrzucane | zakres jawny w `FILE_ANALYSIS` (kontrakty), sprawdzany w `tests/file-analysis.test.ts` (część wstrzykiwana do archiwum i szukana po zapisie) |
 
 Historia tych ustaleń: [`archive/agenticapp-2026-09/FEEDBACK.md`](archive/agenticapp-2026-09/FEEDBACK.md)
 (wpisy #15, #17, #18, #23, #39, #40, #41 oraz sekcje 6–8).

@@ -236,6 +236,8 @@ export interface MeasurementRecord {
 export function writeMeasurementRecord(
   fileName: string,
   record: Omit<MeasurementRecord, 'wersjaKodu'> & { wersjaKodu?: CodeVersion },
+  /** The task's own evidence directory; defaults to this module's. */
+  dir: string = EVIDENCE_DIR,
 ): EvidenceResult {
   const wersjaKodu = record.wersjaKodu ?? codeVersion();
   const body = {
@@ -259,7 +261,7 @@ export function writeMeasurementRecord(
       Object.entries(record.pomiary).map(([k, m]) => [k, { ...m, podsumowanie: summarise(m.probkiMs) }]),
     ),
   };
-  return emit(fileName, `${JSON.stringify(body, null, 2)}\n`);
+  return emit(fileName, `${JSON.stringify(body, null, 2)}\n`, dir);
 }
 
 /** Writes a non-measurement proof (correlation, error classes, secret scan). */

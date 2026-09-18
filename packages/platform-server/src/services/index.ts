@@ -61,7 +61,7 @@ export function createPlatformServices(input: {
     conversations: new ConversationService(input.db),
     artifacts: new ArtifactService(input.db),
     files: new FileService(input.db, input.config.filesDir, input.config.maxUploadBytes),
-    runs: new RunRegistry(input.db),
+    runs: new RunRegistry(input.db, input.config.workspacesDir),
     uiSnapshots: new UiSnapshotStore(),
   };
 }

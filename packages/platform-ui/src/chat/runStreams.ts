@@ -60,6 +60,24 @@ export const releaseRunStream = (runId: string): void => {
   claimed.delete(runId);
 };
 
+/**
+ * Told when a run this client **re-attached to** reaches its end.
+ *
+ * The distinction is the whole point. A run whose stream came back through the
+ * `POST /api/agui/run` response is parsed by the ready-made chat, which commits
+ * the finished answer into its thread itself. A run picked up by re-attachment
+ * — after a reload, after the network came back, after the panel was reopened —
+ * is parsed by *this* module: the reducer learns the run finished, but the
+ * chat's own message list was never fed and still shows the conversation as it
+ * was when the page loaded. The answer is in the database and not on screen
+ * until something re-reads it, which is what this callback triggers.
+ */
+let reattachedRunResolved: ((conversationId: string) => void) | null = null;
+
+export function setReattachedRunHandler(handler: ((conversationId: string) => void) | null): void {
+  reattachedRunResolved = handler;
+}
+
 /** Runs currently being followed. Exposed for assertions and diagnostics. */
 export const attachedRunIds = (): string[] => [...attached.keys()];
 
@@ -109,6 +127,9 @@ async function pump(
         qc: ctx.qc,
         isActive: () => useAppState.getState().conversationId === conversationId,
       });
+      if (event.type === 'RUN_FINISHED' || event.type === 'RUN_ERROR') {
+        reattachedRunResolved?.(conversationId);
+      }
       if (seq !== null) onSeq(seq);
     }
   }

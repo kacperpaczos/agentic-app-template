@@ -217,6 +217,40 @@ export const PLATFORM_MIGRATIONS: ModuleMigration[] = [
       CREATE INDEX IF NOT EXISTS idx_artifacts_run ON artifacts(run_id);
     `,
   },
+  {
+    /**
+     * Which command a file was attached to.
+     *
+     * The link existed only for the duration of the run: `attachFileIds` arrived
+     * with the request, the files were copied into the workspace, and nothing
+     * was written down. Afterwards — a reload later, or in the files screen —
+     * there was no way to say which message a file had been sent with, which is
+     * half of "an attachment is tied to the answer".
+     *
+     * A table rather than a field in `messages.meta`, because the question is
+     * asked from both ends: the conversation wants its message's attachments and
+     * the files screen wants a file's commands. The run is recorded too, so the
+     * chain conversation → message → file → run stays walkable.
+     *
+     * Rows are written when the file is actually staged into the workspace, so
+     * the record describes what the run received, not what the request asked
+     * for. Deleting a conversation or a file takes its links with it.
+     */
+    id: 'platform-0005-message-attachments',
+    sql: /* sql */ `
+      CREATE TABLE IF NOT EXISTS message_attachments (
+        message_id      TEXT NOT NULL,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        file_id         TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+        run_id          TEXT,
+        owner_id        TEXT NOT NULL,
+        created_at      TEXT NOT NULL,
+        PRIMARY KEY (message_id, file_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_attachments_file ON message_attachments(file_id);
+      CREATE INDEX IF NOT EXISTS idx_attachments_conv ON message_attachments(conversation_id);
+    `,
+  },
 ];
 
 /** Applies every not-yet-applied migration inside one transaction each. */

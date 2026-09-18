@@ -57,7 +57,7 @@ const EMPTY_CONTEXT = {
 async function runScript(conversationId: string, script: Step[]) {
   promptSeq += 1;
   const prompt = `polecenie diagnostyczne ${promptSeq}`;
-  const handle: StandInHandle = { childExitedAt: null, childPid: null, performed: [], dispose: () => {} };
+  const handle: StandInHandle = { childExitedAt: null, childPid: null, performed: [], gate: [], dispose: () => {} };
   plans.set(prompt, { script, handle });
   const started = await runtime.start({
     ownerId: h.ownerId,

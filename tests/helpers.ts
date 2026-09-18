@@ -1,7 +1,13 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createPlatform, DEFAULT_USER_ID, SECOND_USER_ID, type PlatformInstance } from '@platform/server';
+import {
+  createPlatform,
+  DEFAULT_USER_ID,
+  SECOND_USER_ID,
+  type ModelAgentLike,
+  type PlatformInstance,
+} from '@platform/server';
 import { createProcurementModule, type ProcurementService } from '@module/procurement/server';
 import { ProcurementService as Service } from '@module/procurement/server';
 
@@ -16,7 +22,21 @@ export interface Harness {
 
 /** Fresh platform + module on a throw-away database. No network, no model. */
 export async function createHarness(
-  options: { withModule?: boolean; seed?: boolean } = {},
+  options: {
+    withModule?: boolean;
+    seed?: boolean;
+    /**
+     * Replaces the model at the adapter boundary **for the platform's own
+     * runtime** — the one `platform.app` routes to.
+     *
+     * A test that drives the HTTP API through a run needs this: building a
+     * second `AgentRuntime` beside the platform gives the stand-in a runtime the
+     * routes know nothing about, so a request answered over HTTP (a permission
+     * decision, a cancellation) reaches the wrong object and quietly does
+     * nothing.
+     */
+    modelAgent?: ModelAgentLike | null;
+  } = {},
 ): Promise<Harness> {
   const dataDir = mkdtempSync(join(tmpdir(), 'agentic-test-'));
   const env = { ...process.env, APP_DATA_DIR: dataDir };
@@ -25,6 +45,7 @@ export async function createHarness(
   const platform = createPlatform({
     modules: withModule ? (services) => [createProcurementModule(services)] : [],
     env,
+    modelAgent: options.modelAgent ?? null,
   });
 
   const service = new Service(platform.services);

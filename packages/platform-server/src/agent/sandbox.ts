@@ -1,6 +1,7 @@
-import { mkdirSync, rmSync, existsSync, readdirSync, statSync, symlinkSync } from 'node:fs';
+import { mkdirSync, existsSync, readdirSync, statSync, symlinkSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import { AppError } from '@platform/contracts';
+import { removeManagedTree } from '../util/managed-fs.ts';
 import type { ToolkitEntry } from './toolkit.ts';
 
 export interface RunWorkspace {
@@ -64,7 +65,14 @@ export function createRunWorkspace(
     inputDir,
     outputDir,
     toolkit: linked,
-    dispose: () => rmSync(dir, { recursive: true, force: true }),
+    /*
+     * Checked at the call, like every other destructive operation in the
+     * server: `dispose` runs from a `finally` on a path this function built,
+     * and the check costs nothing while making the guarantee independent of
+     * who calls it and with what.
+     */
+    dispose: () =>
+      removeManagedTree(dir, { root: workspacesRoot, what: 'workspace uruchomien' }),
   };
 }
 
