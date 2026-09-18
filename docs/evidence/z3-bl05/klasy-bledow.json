@@ -1,0 +1,50 @@
+{
+  "opis": "Rozroznialnosc klas bledow w zapisanych danych: blad modelu, blad integracji, odmowa sandboxa, limit dostepu i odmowa reguly domenowej. Kazdy ma inny kod i inne miejsce zapisu.",
+  "zrodlo": "pnpm test → tests/diagnostics.test.ts (regresja szablonu)",
+  "warunki": "stand-in modelu na granicy adaptera; komunikaty bledow w brzmieniu, jakie produkuje SDK; blad integracji to odrzucone wywolanie adaptera, blad modelu to strumien, ktory zglosil awarie",
+  "wersjaKodu": {
+    "commit": "d3427778fef4662d60fa1748b3803de15fc3aac9",
+    "brudneDrzewo": false,
+    "node": "24.19.0",
+    "pakiety": {
+      "node": "24.19.0",
+      "hono": "4.13.7",
+      "drizzle": "0.45.2",
+      "mastraCore": "1.66.0",
+      "mastraClaude": "0.3.1",
+      "claudeAgentSdk": "0.3.270",
+      "zod": "4.6.5"
+    }
+  },
+  "klasy": {
+    "model": {
+      "kodWRekordzie": "model_failed",
+      "kodWZdarzeniuRUN_ERROR": "model_failed",
+      "komunikat": "overloaded_error: model is overloaded",
+      "gdzieZapisane": "agent_runs.error_code + run_events RUN_ERROR"
+    },
+    "integracja": {
+      "kodWRekordzie": "integration_failed",
+      "kodWZdarzeniuRUN_ERROR": "integration_failed",
+      "komunikat": "spawn claude ENOENT",
+      "gdzieZapisane": "agent_runs.error_code + run_events RUN_ERROR"
+    },
+    "sandbox": {
+      "kodWRekordzie": "sandbox_denied",
+      "kodWZdarzeniuRUN_ERROR": "sandbox_denied",
+      "komunikat": "Sandbox unavailable: sandbox-exec not found",
+      "gdzieZapisane": "agent_runs.error_code + run_events RUN_ERROR"
+    },
+    "dostep": {
+      "kodWRekordzie": "rate_limited",
+      "kodWZdarzeniuRUN_ERROR": "rate_limited",
+      "komunikat": "Claude usage limit reached",
+      "gdzieZapisane": "agent_runs.error_code + run_events RUN_ERROR"
+    },
+    "domena": {
+      "statusUruchomienia": "succeeded",
+      "kodWWiadomosciNarzedzia": "domain_rule_violated",
+      "gdzieZapisane": "messages(role=tool).content + meta.isError"
+    }
+  }
+}

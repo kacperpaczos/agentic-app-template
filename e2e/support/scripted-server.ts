@@ -384,6 +384,46 @@ const SCENARIOS: Record<string, Step[]> = {
 };
 
 /**
+ * A long run that would change domain data *after* the part the user sees.
+ *
+ * Written for the Stop measurement: cancelling a run that was only going to
+ * keep talking proves nothing about "no further mutations after the end". Here
+ * the step waiting behind the stream is a real write through the real handler,
+ * so the claim can fail.
+ *
+ * The second command of the conversation ("krotko") gets a short answer, which
+ * is how the same instance can show that the queue still works after a Stop
+ * without replaying the long script.
+ */
+const stopMeasurementScript = (prompt: string): Step[] =>
+  prompt.includes('krotko')
+    ? [
+        { kind: 'text', text: 'Krotka odpowiedz ', delayMs: 120 },
+        { kind: 'text', text: 'po zatrzymaniu.', delayMs: 120 },
+      ]
+    : [
+        { kind: 'call', name: 'procurement_list_cases', maxChars: 200 },
+        { kind: 'text', text: 'Zaczynam dluga odpowiedz. ', delayMs: 150 },
+        ...Array.from({ length: 40 }, (_, i) => ({
+          kind: 'text' as const,
+          text: `fragment ${i + 1} `,
+          delayMs: 150,
+        })),
+        {
+          kind: 'call',
+          name: 'procurement_set_criteria_weights',
+          input: (calls: CallRecord[]) => {
+            const listed = calls.find((c) => c.name === 'procurement_list_cases');
+            const found = listed?.result?.cases?.[0];
+            if (!found) throw new Error('scenariusz: brak sprawy do zmiany wag');
+            return { caseId: found.id, weights: [{ key: 'total_cost', weight: 97 }] };
+          },
+          maxChars: 300,
+        },
+        { kind: 'text', text: 'Zmienilem wagi kryteriow.' },
+      ];
+
+/**
  * Scenarios whose steps depend on the user's message — a whole conversation
  * played by one server instance.
  */
@@ -391,6 +431,7 @@ const CONVERSATION_SCENARIOS: Record<string, (prompt: string) => Step[]> = {
   'agent-views': agentViewsScript,
   interactions: interactionsScript,
   'show-value': showValueScript,
+  'stop-measurement': stopMeasurementScript,
 };
 
 const scenario = process.env.SCRIPT ?? 'tool-then-text';

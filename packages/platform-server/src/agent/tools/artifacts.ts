@@ -47,6 +47,7 @@ export function artifactTools(services: PlatformServices): Array<ModuleToolDefin
             services.artifacts.create({
               ownerId: ctx.ownerId,
               conversationId: ctx.conversationId,
+              runId: ctx.runId,
               kind: input.kind,
               mode,
               title: input.title,
@@ -97,6 +98,7 @@ export function artifactTools(services: PlatformServices): Array<ModuleToolDefin
             const created = services.artifacts.create({
               ownerId: ctx.ownerId,
               conversationId: ctx.conversationId,
+              runId: ctx.runId,
               kind: input.kind ?? 'file',
               mode: 'snapshot',
               title: input.title,

@@ -51,6 +51,17 @@ export const artifactSchema = z.object({
   id: z.string(),
   ownerId: z.string(),
   conversationId: z.string().nullable(),
+  /**
+   * The run that produced it, when a run did.
+   *
+   * `conversationId` alone answers "which conversation is this from", which is
+   * not the question diagnostics ask: a conversation has many runs, and the one
+   * that wrote this artifact is the only one whose tool calls, arguments and
+   * timings explain it. Without this column the link back to a run exists only
+   * as a `platform.artifact_created` event inside `run_events`, so the chain is
+   * walkable forwards and not backwards. Null for artifacts a person created.
+   */
+  runId: z.string().nullable(),
   kind: artifactKindSchema,
   mode: artifactModeSchema,
   title: z.string(),

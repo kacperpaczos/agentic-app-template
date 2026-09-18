@@ -1,0 +1,39 @@
+{
+  "opis": "Wartosc poswiadczenia umieszczona w srodowisku procesu serwera nie wystepuje w zadnej powierzchni diagnostycznej aplikacji ani w plikach dowodow tego zadania.",
+  "zrodlo": "pnpm test → tests/diagnostics.test.ts (regresja szablonu)",
+  "warunki": "kanarki ustawione w ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN i APP_TAJNY_KANAREK przed utworzeniem instancji; przebieg udany i przebieg zakonczony bledem; console.* przechwycone na czas przebiegu; skan po tresci, nie po nazwie zmiennej",
+  "wersjaKodu": {
+    "commit": "d3427778fef4662d60fa1748b3803de15fc3aac9",
+    "brudneDrzewo": false,
+    "node": "24.19.0",
+    "pakiety": {
+      "node": "24.19.0",
+      "hono": "4.13.7",
+      "drizzle": "0.45.2",
+      "mastraCore": "1.66.0",
+      "mastraClaude": "0.3.1",
+      "claudeAgentSdk": "0.3.270",
+      "zod": "4.6.5"
+    }
+  },
+  "przeskanowanePowierzchnieZnakow": {
+    "logi serwera (console.*)": 0,
+    "agent_runs": 1340,
+    "run_events": 3603,
+    "messages": 1390,
+    "odpowiedz /api/status": 5737,
+    "plik bazy app.db": 4096,
+    "plik bazy -wal": 1557392,
+    "plik bazy -shm": 32768,
+    "dowod klasy-bledow.json": 1976,
+    "dowod log-serwera-scenariuszowego.txt": 672,
+    "dowod pomiary-backend.json": 3418,
+    "dowod pomiary-przegladarka.json": 4001,
+    "dowod pomiary-stop.json": 4643,
+    "dowod powiazanie-diagnostyczne.json": 1670,
+    "dowod sekrety-w-diagnostyce.json": 2050
+  },
+  "kontrolaNegatywna": "ten sam skan nad spreparowanym tekstem zawierajacym kanarka znajduje go — asercja potrafi oblac",
+  "uwagaOLogach": "Zerowa dlugosc „logi serwera (console.*)” znaczy, ze aplikacja nie wypisala w tych przebiegach niczego — to wynik, nie brak pomiaru. Skan niepustego logu serwera produkcyjnego z pelnej tury jest osobno: e2e/measurements.spec.ts i docs/evidence/z3-bl05/log-serwera-scenariuszowego.txt.",
+  "uwaga": "APP_TAJNY_KANAREK jest przekazywany do srodowiska procesu agenta, bo nie jest przelacznikiem dostawcy; dowodem jest brak jego wartosci w logach i w zapisanych danych, nie brak zmiennej."
+}

@@ -196,6 +196,27 @@ export const PLATFORM_MIGRATIONS: ModuleMigration[] = [
       CREATE INDEX IF NOT EXISTS idx_files_derived ON files(derived_from_file_id);
     `,
   },
+  {
+    /**
+     * Closes the diagnostic chain in both directions.
+     *
+     * Conversation → run → tool call → mutation → artifact was walkable forwards
+     * only: `run_events` carries a `platform.artifact_created` event, so the
+     * answer to "what did this run produce" needed a scan of every run's event
+     * log, and the answer to "which run produced this artifact" was not stored
+     * at all — `conversation_id` names a conversation that may hold dozens of
+     * runs.
+     *
+     * Existing rows keep `NULL`, which is exact: for an artifact written before
+     * this column existed the producing run is not recoverable, and guessing the
+     * conversation's latest run would invent a link.
+     */
+    id: 'platform-0004-artifact-run-link',
+    sql: /* sql */ `
+      ALTER TABLE artifacts ADD COLUMN run_id TEXT;
+      CREATE INDEX IF NOT EXISTS idx_artifacts_run ON artifacts(run_id);
+    `,
+  },
 ];
 
 /** Applies every not-yet-applied migration inside one transaction each. */

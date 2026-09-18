@@ -1,6 +1,6 @@
 # Obserwowalność i eksport telemetrii
 
-Stan na 2026-09-15. Wersje: `@mastra/core` 1.66.0, `@mastra/claude` 0.3.1,
+Stan na 2026-09-18. Wersje: `@mastra/core` 1.66.0, `@mastra/claude` 0.3.1,
 `@anthropic-ai/claude-agent-sdk` 0.3.270.
 
 ## Co aplikacja rejestruje sama
@@ -13,7 +13,7 @@ trwały ślad w bazie aplikacji:
 | `agent_runs` | rozmowa, właściciel, status, `claude_session_id`, `enqueued_at`, `started_at`, `finished_at`, `first_token_ms`, `duration_ms`, kod i treść błędu | powiązanie rozmowy z wykonaniem i pomiary czasu |
 | `run_events` | pełna, ponumerowana sekwencja zdarzeń AG-UI jednego uruchomienia | odtworzenie przebiegu co do zdarzenia, także po restarcie |
 | `messages` | wiadomości rozmowy, w tym `toolCalls` i wyniki narzędzi (`role: "tool"`) | powiązanie rozmowy z narzędziem i jego wynikiem |
-| `artifacts`, `artifact_versions` | artefakty i ich wersje, z `conversation_id` | powiązanie rozmowy z artefaktem |
+| `artifacts`, `artifact_versions` | artefakty i ich wersje, z `conversation_id` i `run_id` | powiązanie rozmowy i **wykonania** z artefaktem |
 
 Punkty pomiaru są rozdzielone świadomie i opisane w kontrakcie `agentRunSchema`:
 **zakolejkowanie** (`enqueuedAt`), **start wykonania** (`startedAt`, po zwolnieniu
@@ -21,6 +21,64 @@ kolejki rozmowy), **pierwszy tekst** (`firstTokenMs`, liczony od startu wykonani
 **koniec** (`finishedAt`, `durationMs`). Czas oczekiwania w kolejce (`queuedMs`)
 jest raportowany osobno, więc uruchomienie czekające za innym nie jest obciążane
 cudzym czasem.
+
+### Brak metryki to nie zero
+
+`firstTokenMs` jest `null`, kiedy uruchomienie nie wypowiedziało ani słowa —
+na przykład wykonało narzędzie i skończyło. Zero znaczyłoby „natychmiast”, więc
+podstawienie go zamieniłoby brak pomiaru w pomiar wyjątkowo dobry. Reguła
+obowiązuje też w zapisie dowodu: `null` przechodzi do pliku jako `null` i jest
+liczony osobno (`brakMetryki`).
+
+## Powiązanie rozmowy z tym, co się wydarzyło
+
+Łańcuch **rozmowa → wykonanie → narzędzie → mutacja → artefakt** da się przejść
+w obie strony, wyłącznie po danych zapisanych:
+
+1. `agent_runs.conversation_id` — rozmowa i jej wykonania;
+2. `run_events` (`TOOL_CALL_START` / `TOOL_CALL_ARGS` / `TOOL_CALL_RESULT`) —
+   które narzędzie, z jakimi argumentami i z jakim wynikiem;
+3. wynik narzędzia niesie **identyfikator rekordu i jego wersję**, a zdarzenie
+   `platform.data_changed` — listę zmienionych zasobów;
+4. `platform.artifact_created` oraz `artifacts.run_id` — który przebieg
+   wytworzył artefakt. Artefakt zapisany poza wykonaniem ma `run_id = NULL`:
+   powiązanie jest zapisywane, nigdy domyślane.
+
+## Klasy błędów
+
+Zapisane dane rozróżniają pięć rzeczy, bo każda znaczy co innego dla następnego
+kroku — i piąta z nich nie jest zapisana tam, gdzie pozostałe:
+
+| Kod | Kiedy | Gdzie widać |
+|---|---|---|
+| `model_failed` | strumień modelu istniał i zgłosił awarię | `agent_runs.error_code`, zdarzenie `RUN_ERROR` |
+| `integration_failed` | wywołanie adaptera nie dało strumienia, albo minął limit czasu przebiegu | jw. |
+| `sandbox_denied` | izolacja odmówiła albo była niedostępna | jw. |
+| `rate_limited` / `unauthenticated` | limit subskrypcji albo zerwane logowanie | jw. + ekran Ustawień |
+| `domain_rule_violated` | reguła domeny odmówiła — to **nie** jest awaria przebiegu | wiadomość `role: "tool"` z `meta.isError`; uruchomienie kończy się jako `succeeded` |
+
+Sam komunikat nie wystarcza do rozdzielenia dwóch pierwszych: „connection
+reset” brzmi tak samo, gdy strumień nigdy nie powstał i gdy padł w trakcie.
+Dlatego awarię ze strumienia opakowuje `ModelStreamError`, a klasyfikację robi
+jedna funkcja — `classifyRunFailure` w `agent/runtime.ts`.
+
+## Pomiary w regresji
+
+Pomiary wytwarza regresja szablonu, nie ręczny przebieg:
+`tests/measurements.test.ts` (`pnpm test`) i `e2e/measurements.spec.ts`
+(`pnpm test:e2e`) zapisują wyniki do `docs/evidence/z3-bl05/`. Każdy pomiar
+niesie zdanie „co”, zdarzenie **od**, zdarzenie **do**, warunki niezależne od
+maszyny i liczbę próbek, a cały rekord — wersję kodu (commit, czystość drzewa,
+wersje Node, Mastry i SDK). Milisekundy zależą od maszyny; powtarzalne jest to,
+co asertuje regresja: kolejność punktów, ich rozdzielenie i obecność albo brak
+metryki.
+
+Stop jest mierzony jako **osobne momenty**, nie jako jedna liczba: potwierdzenie
+żądania (`POST /api/runs/:id/cancel`), zakończenie strumienia (faza końcowa w
+karcie użytkownika) i zakończenie procesów uruchomienia (zniknięty katalog
+`workspace`, uruchomienie poza `/api/runs/active`, zakończony proces potomny).
+Jedna liczba musiałaby znaczyć albo „backend cię usłyszał”, albo „praca
+stanęła”, a to są różne chwile.
 
 ## Langfuse — stan faktyczny
 
@@ -73,5 +131,10 @@ zmian w reszcie aplikacji.
    logach aplikacji: żadna wartość poświadczenia nie może trafić do eksportu.
    `tests/durability.test.ts` sprawdza brak wartości tokena w zbudowanym
    backendzie, zbudowanym frontendzie, bazie danych i wyjściu diagnostycznym;
-   dla eksportu zewnętrznego analogicznej kontroli **nie wykonano**, bo nie ma
-   czego kontrolować przy wyłączonym eksporcie.
+   `tests/diagnostics.test.ts` dokłada kanarka wstawionego do środowiska procesu
+   i szuka go w przechwyconych logach, w `agent_runs`, `run_events`, `messages`,
+   w odpowiedzi `/api/status`, w plikach bazy (razem z dziennikiem WAL) i w
+   plikach dowodów; `e2e/measurements.spec.ts` skanuje wyjście serwera
+   produkcyjnego po pełnej turze. Dla eksportu zewnętrznego analogicznej
+   kontroli **nie wykonano**, bo nie ma czego kontrolować przy wyłączonym
+   eksporcie.

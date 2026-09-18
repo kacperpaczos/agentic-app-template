@@ -22,6 +22,7 @@ interface ArtRow {
   id: string;
   owner_id: string;
   conversation_id: string | null;
+  run_id: string | null;
   kind: string;
   mode: string;
   title: string;
@@ -43,6 +44,9 @@ const toArt = (r: ArtRow): ArtifactMeta => ({
   id: r.id,
   ownerId: r.owner_id,
   conversationId: r.conversation_id,
+  // Rows written before the column existed carry null, which is the honest
+  // answer: their producing run is not recoverable.
+  runId: r.run_id ?? null,
   kind: r.kind as ArtifactKind,
   mode: r.mode as ArtifactMode,
   title: r.title,
@@ -185,6 +189,8 @@ export class ArtifactService {
   create(input: {
     ownerId: string;
     conversationId?: string | null;
+    /** The agent run that produced it; null when a person did. */
+    runId?: string | null;
     kind: ArtifactKind;
     mode: ArtifactMode;
     title: string;
@@ -197,13 +203,14 @@ export class ArtifactService {
     const tx = this.db.$client.transaction(() => {
       this.db.$client
         .prepare(
-          `INSERT INTO artifacts (id, owner_id, conversation_id, kind, mode, title, renderer_type, current_version, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+          `INSERT INTO artifacts (id, owner_id, conversation_id, run_id, kind, mode, title, renderer_type, current_version, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
         )
         .run(
           id,
           input.ownerId,
           input.conversationId ?? null,
+          input.runId ?? null,
           input.kind,
           input.mode,
           input.title,

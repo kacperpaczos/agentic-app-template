@@ -2208,12 +2208,10 @@
       ]
     },
     "L11.14": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/measurements.spec.ts „zatrzymanie z interfejsu konczy wykonanie i nie zostawia zapisow” (skryptowany serwer): czas od kliknięcia do stanu końcowego w backendzie z warunkami i liczbą zdarzeń przed i po, asercja że dziennik zdarzeń nie rośnie po zakończeniu. tests/runtime.test.ts „anulowanie dociera do wykonania i jest mierzalne” (sygnał przerwania synchronicznie, poniżej 50 ms) i „uruchomienie czekajace w kolejce mozna anulowac zanim ruszy”.",
-      "gap": "Pomiar nie rozdziela potwierdzenia żądania Stop, zakończenia strumienia SSE i zakończenia procesów (jedna liczba do statusu w backendzie, na stand-inie); nie sprawdza braku mutacji domeny po anulowaniu (tylko liczbę zdarzeń) ani tego, że kolejne polecenie w tej samej rozmowie wykonuje się po Stop.",
-      "backlog": "BL-05",
+      "proof": "e2e/measurements.spec.ts „zatrzymanie z interfejsu: potwierdzenie, koniec strumienia i koniec procesow to trzy momenty” (serwer scenariuszowy, build produkcyjny): Stop klikniety w przegladarce mierzony jako trzy osobne momenty — odpowiedz POST /api/runs/:id/cancel, faza koncowa pokazana w karcie (zdarzenie konca ze strumienia AG-UI) i zakonczenie procesow uruchomienia (katalog workspace zniknal z dysku, uruchomienie zniklo z /api/runs/active); w momencie potwierdzenia workspace jeszcze istnieje — asertowane, wiec rozdzielenie nie jest zalozeniem. Brak dalszych mutacji sprawdzony na domenie: anulowany scenariusz mial za strumieniem prawdziwy zapis (procurement_set_criteria_weights), ktory sie nie wykonal — kryteria sprawy identyczne, zero zdarzen platform.data_changed, dziennik zdarzen nie rosnie. Kolejka po Stop: kolejne polecenie w tej samej rozmowie konczy sie statusem succeeded, anulowane zostaje cancelled. tests/measurements.test.ts (symulacja) mierzy to samo w backendzie na 3 probkach, z prawdziwym procesem potomnym zwiazanym z sygnalem przerwania: w momencie potwierdzenia proces jeszcze zyje, przed koncem uruchomienia jest zakonczony; uruchomienie zakolejkowane za anulowanym wykonuje sie poprawnie. Pomiary w docs/evidence/z3-bl05/pomiary-stop-runda3.json i pomiary-przegladarka.json (warunki, wersja kodu, liczba probek). Nie obejmuje: zakonczenia procesu potomnego samego Claude Agent SDK — proces w probie jest jego stand-inem na granicy adaptera, bez grantu tur modelu.",
       "scenarios": [
         "T16"
       ]
@@ -2330,12 +2328,10 @@
       ]
     },
     "L12.1": {
-      "status": "czesciowe",
-      "evidence": "model",
+      "status": "potwierdzone",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "e2e/agent-ui.spec.ts (prawdziwy model): rozmowa ma claudeSessionId, /api/conversations/:id/runs zwraca uruchomienie, /api/runs/:id/events zawiera TOOL_CALL_START i TOOL_CALL_RESULT narzędzia mcp__app__, historia wiąże toolCalls z wiadomością tool po toolCallId. Analiza kodu: zdarzenia CUSTOM canvas_changed, data_changed i artifact_created (z artifactId) zapisywane w run_events przed emisją (agent/events.ts), artifacts.conversation_id.",
-      "gap": "Żaden test nie odczytuje z danych diagnostycznych powiązania rozmowa–wykonanie–mutacja–artefakt; artefakt ma conversation_id, ale nie run_id, a mutacja domenowa jest identyfikowalna tylko z argumentów i wyniku narzędzia oraz zdarzenia data_changed bez identyfikatorów i wersji rekordów.",
-      "backlog": "BL-05",
+      "proof": "Nowy dowod pochodzi od zastepnika modelu na granicy adaptera (ModelAgentLike), nie od prawdziwego modelu — runtime, narzedzia MCP, serwisy domenowe i baza sa prawdziwe; dowod na prawdziwym modelu jest wymieniony osobno na koncu. tests/diagnostics.test.ts „lancuch da sie przejsc w danych diagnostycznych w obie strony”: jedno uruchomienie ze zmiana rekordu domenowego i zapisem artefaktu, przejsty wylacznie po danych zapisanych — rozmowa → agent_runs (listForConversation) → run_events (TOOL_CALL_START/ARGS/RESULT z nazwa narzedzia i toolCallId) → mutacja (identyfikator rekordu i wersja przed/po z zapisanego wyniku narzedzia, zasoby ze zdarzenia platform.data_changed) → artefakt (platform.artifact_created, a w wierszu artifacts zarowno conversation_id, jak i nowe run_id) i z powrotem: artefakt → uruchomienie → rozmowa. Historia rozmowy wiaze to samo wywolanie: wiadomosc asystenta z toolCalls i wiadomosc role=\"tool\" z tym samym toolCallId, obie z meta.runId. Kolumna artifacts.run_id dodana migracja platform-0004-artifact-run-link (istniejace wiersze zostaja z NULL — producent nie jest odtwarzalny i nie jest zgadywany). Kontrola negatywna: artefakt utworzony poza uruchomieniem ma runId = null, wiec powiazanie jest zapisywane, nie domyslane. Osobno, na prawdziwym modelu: e2e/agent-ui.spec.ts — rozmowa ma claudeSessionId, /api/conversations/:id/runs zwraca uruchomienie, /api/runs/:id/events zawiera TOOL_CALL_START i TOOL_CALL_RESULT narzedzia mcp__app__, a historia wiaze toolCalls z wiadomoscia tool po toolCallId. Dowod: docs/evidence/z3-bl05/powiazanie-diagnostyczne-runda3.json.",
       "scenarios": [
         "T21"
       ],
@@ -2345,12 +2341,10 @@
       }
     },
     "L12.2": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "tests/contracts.test.ts (validation_failed, domain_rule_violated, conflict, forbidden, 401), tests/auth.test.ts (klasy błędów dostępu, „limit uzycia nie jest mylony z zepsutym logowaniem”), tests/run-lifecycle.test.ts „blad modelu konczy sie dokladnie jednym stanem koncowym i zapisuje przyczyne” (rate_limited). Sekrety: tests/durability.test.ts „zbudowany frontend nie zawiera wartosci tokena”, „zbudowany backend nie zawiera wartosci tokena”, „baza danych aplikacji nie zawiera wartosci tokena”, „diagnostyka uruchomieniowa nie wypisuje tokena” (wyjście pnpm migrate); tests/contracts.test.ts „nie ujawnia sekretow w statusie”. Testy wycieku tokena są pomijane, gdy na maszynie brak poświadczenia.",
-      "gap": "Kod model_failed nie jest nigdzie emitowany: ogólny błąd modelu i błąd integracji dostają ten sam kod integration_failed; sandbox_denied z przebiegu wynika tylko z dopasowania słowa sandbox w komunikacie i nie ma testu; logi serwera podczas przebiegu z modelem nie są skanowane na obecność sekretów.",
-      "backlog": "BL-05",
+      "proof": "Wszystkie przebiegi tego dowodu pochodza od zastepnika modelu na granicy adaptera (ModelAgentLike), nie od prawdziwego modelu — runtime, narzedzia MCP, serwisy domenowe i baza sa prawdziwe. tests/diagnostics.test.ts: „taksonomia rozdziela integracje, model, sandbox i dostep” sprawdza classifyRunFailure na komunikatach w brzmieniu SDK — blad zgloszony przez strumien modelu daje model_failed, ten sam komunikat bez strumienia daje integration_failed, komunikat sandboxa i AppError(sandbox_denied) daja sandbox_denied, limit i odebrany login daja rate_limited i unauthenticated. „zapisane uruchomienia niosa rozne kody dla modelu, integracji i sandboxu” dowodzi tego na zapisanych uruchomieniach: kod w agent_runs.error_code i w zdarzeniu RUN_ERROR jest ten sam. Blad domeny jest rozroznialny inaczej i tam, gdzie powinien: odmowa reguly zostaje wiadomoscia narzedzia z meta.isError i kodem domain_rule_violated, uruchomienie konczy sie jako succeeded, a wersja rekordu sie nie zmienia. Kod model_failed jest odtad emitowany (ModelStreamError w agent/runtime.ts). Sekrety: „nie wystepuje w logach, bledach, zapisanych uruchomieniach ani w dowodach” umieszcza wartosci kanarkow w srodowisku procesu, prowadzi przebieg udany i przebieg zakonczony bledem, a potem skanuje przechwycone console.*, agent_runs, run_events, messages, odpowiedz /api/status, pliki bazy razem z dziennikiem WAL i wszystkie pliki dowodow tego zadania; wymagane powierzchnie musza istniec i byc niepuste, wiec zniknieta powierzchnia nie uchodzi za czysty wynik. Kontrola pozytywna na prawdziwej powierzchni: wartosc wpisana do wiadomosci rozmowy przez serwis aplikacji zostaje przez ten sam skan — wywolany ponownie, z ponownym pobraniem /api/status — znaleziona w messages i w pliku bazy, a nie w odpowiedzi /api/status. Srodowisko procesu agenta jest sprawdzane osobno: przelaczniki dostawcy (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN) sa z niego usuniete, a zmienna spoza tej listy (APP_TAJNY_KANAREK) jest przekazywana dalej — wiec brak wartosci poswiadczenia jest decyzja, a nie pustym srodowiskiem. e2e/measurements.spec.ts „log serwera z pelnego przebiegu nie zawiera wartosci poswiadczenia” robi to samo nad przechwyconym stdout/stderr serwera produkcyjnego po calej turze. Dowody: docs/evidence/z3-bl05/klasy-bledow-runda3.json, sekrety-w-diagnostyce-runda3.json, log-serwera-scenariuszowego.txt. Nie obejmuje: skanu logow z przebiegu na prawdziwym modelu (brak grantu tur).",
       "scenarios": [
         "T21"
       ],
@@ -2360,12 +2354,10 @@
       }
     },
     "L12.3": {
-      "status": "czesciowe",
-      "evidence": "model",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/measurements.spec.ts „zmiana pozycji oferty jest widoczna w zestawieniu bez przeladowania” i „zatrzymanie z interfejsu konczy wykonanie i nie zostawia zapisow”: czasy odświeżenia i anulowania zapisane z opisem od–do i warunkami (build produkcyjny, Chromium, jeden worker, stand-in przy anulowaniu). e2e/agent-ui.spec.ts (prawdziwy model): firstTokenMs większy od 0 i nie większy od durationMs, queuedMs nieujemny. tests/run-lifecycle.test.ts (symulacja) dla kolejności narzędzie–tekst.",
-      "gap": "Czas pierwszej odpowiedzi i wykonania na prawdziwym modelu jest tylko asertowany, nie raportowany jako pomiar z warunkami; anulowanie mierzone na stand-inie, bez procesu SDK; wyniki trafiają do katalogu o historycznej nazwie docs/evidence/closure-2026-09-15 bez wersji kodu.",
-      "backlog": "BL-05",
+      "proof": "Pomiary produkowane przez regresje szablonu i zapisywane z warunkami oraz wersja kodu (commit, czystosc drzewa, wersje Node/Mastry/SDK) w docs/evidence/z3-bl05/: pomiary-backend-runda3.json (czas kolejki — 5 probek bez oczekiwania i 3 z oczekiwaniem za innym uruchomieniem, czas do pierwszego tekstu, czas wykonania), pomiary-stop-runda3.json (Stop na 3 probkach, cztery momenty) i pomiary-przegladarka.json (widoczne odswiezenie po mutacji przez formularz oraz Stop z przegladarki). Kazdy pomiar niesie zdanie „co”, zdarzenie „od”, zdarzenie „do”, warunki niezalezne od maszyny i liczbe probek; rekord mowi wprost, ze milisekundy zaleza od maszyny, a powtarzalna jest kolejnosc punktow i obecnosc metryki. Zrodla: tests/measurements.test.ts (pnpm test) i e2e/measurements.spec.ts (pnpm test:e2e). Katalog dowodow nosi nazwe zadania, nie dawnej pracy. Nie obejmuje: pomiaru na prawdziwym modelu (brak grantu tur) — model jest zastapiony stand-inem na granicy adaptera i jest to zapisane w warunkach kazdego pomiaru.",
       "scenarios": [
         "T21"
       ],
@@ -2487,12 +2479,10 @@
       ]
     },
     "L12.13": {
-      "status": "czesciowe",
-      "evidence": "model",
+      "status": "potwierdzone",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "tests/run-lifecycle.test.ts (symulacja): „narzedzie przed tekstem — czas pierwszego tekstu jest zapisany”, „tekst przed narzedziem — czas pierwszego tekstu jest zapisany”, „odpowiedz bez tekstu — brak czasu pierwszego tekstu jest poprawny, nie podstawiony”, „czas pierwszego tekstu liczy sie od startu wykonania, nie od zakolejkowania”; tests/runtime.test.ts „start wykonania jest osobnym, mierzalnym punktem wzgledem zakolejkowania” (queuedMs); e2e/measurements.spec.ts: widoczny refetch po mutacji i czas do stanu końcowego po Stop; e2e/agent-ui.spec.ts (model): firstTokenMs większy od 0 w kolejności narzędzie–tekst.",
-      "gap": "Faktyczne anulowanie nie jest mierzone: pomiar kończy się na statusie w backendzie na stand-inie, bez zakończenia strumienia i procesów SDK; punkty kolejki, startu, pierwszego tekstu i końca z przebiegu na modelu są tylko w rekordzie uruchomienia, bez raportu pomiaru.",
-      "backlog": "BL-05",
+      "proof": "Zaden przebieg w tym dowodzie nie uzywa prawdziwego modelu: tam, gdzie uruchomienie agenta wystepuje, model zastepuje stand-in na granicy adaptera (ModelAgentLike), a widoczny refetch po mutacji mierzy zmiane wprowadzona formularzem, wiec modelu nie ma tam wcale. Runtime, narzedzia MCP, serwisy domenowe i baza sa prawdziwe. To zastrzezenie dotyczy zwlaszcza czasu pierwszego tekstu: liczba pochodzi ze skryptu zastepnika, ktory czeka 15 ms przed pierwszym przyrostem i opoznia sam przyrost o 10 ms, wiec ok. 25 ms kazdego wyniku jest wymuszone przez sam skrypt — w zapisanym przebiegu zmierzono 27-29 ms (mediana 28), czyli w przewazajacej czesci ten sen. Pomiar mowi o rozdzieleniu punktu pomiaru, nie o szybkosci odpowiadania modelu; dokladne probki kazdego przebiegu sa w pliku dowodu, nie w tym opisie; warunki w pliku dowodu mowia to wprost. tests/measurements.test.ts „kolejka, start wykonania, pierwszy tekst i zakonczenie sa osobnymi punktami; brak tekstu daje brak metryki”: czas kolejki mierzony osobno od czasu wykonania (uruchomienie czekajace za innym raportuje oczekiwanie 122-123 ms w queuedMs, a suma queuedMs i durationMs odpowiada calemu odcinkowi od zakolejkowania do konca, wiec oczekiwanie jest policzone raz, po stronie kolejki), czas do pierwszego tekstu liczony od startu wykonania, zakonczenie osobno. Uruchomienie, ktore wykonalo narzedzie i nie powiedzialo ani slowa, ma firstTokenMs rowne null — nie zero; asercja sprawdza obie rzeczy, a takze to, ze null przezyl zapis do pliku dowodu i zostal policzony jako brakMetryki=1 przy zMetryka=5. „trzy instanty sa osobne…” mierzy faktyczne anulowanie jako cztery momenty (potwierdzenie, koniec strumienia, wyjscie procesu potomnego, koniec procesow uruchomienia). Widoczny refetch mierzy e2e/measurements.spec.ts (do zmiany sum na ekranie, bez przeladowania). Dowody: docs/evidence/z3-bl05/pomiary-backend-runda3.json, pomiary-stop-runda3.json, pomiary-przegladarka.json.",
       "scenarios": [
         "T21",
         "T05"
@@ -2612,8 +2602,8 @@
     },
     "T16": {
       "status": "czesciowe",
-      "proof": "e2e/measurements.spec.ts: Stop z interfejsu kończy wykonanie bez dalszych zapisów (959 ms, scenariusz bez modelu); e2e/background-tasks.spec.ts: jawne Stop; tests/run-lifecycle.test.ts: restart oznacza przerwane zadania.",
-      "gap": "Zakończenie procesów potomnych i kolejka po Stop nie są mierzone na prawdziwym SDK (L11.7, L11.14); brak wykrywania utraty transkryptu SDK — wznowienie po cichu zaczyna nową sesję (L7.13)."
+      "proof": "e2e/measurements.spec.ts: Stop z interfejsu mierzony jako trzy momenty (potwierdzenie zadania, faza koncowa w karcie, zakonczenie procesow uruchomienia), bez dalszych mutacji domeny i z dzialajaca kolejka — kolejne polecenie w tej samej rozmowie konczy sie sukcesem; tests/measurements.test.ts (symulacja): te same momenty w backendzie na 3 probkach, z prawdziwym procesem potomnym zwiazanym z sygnalem przerwania; e2e/background-tasks.spec.ts: jawne Stop; tests/run-lifecycle.test.ts: restart oznacza przerwane zadania.",
+      "gap": "Zakonczenie procesu potomnego samego Claude Agent SDK nie jest mierzone (L11.7) — proces w probie jest jego stand-inem na granicy adaptera; brak wykrywania utraty transkryptu SDK — wznowienie po cichu zaczyna nowa sesje (L7.13)."
     },
     "T17": {
       "status": "czesciowe",
@@ -2637,8 +2627,8 @@
     },
     "T21": {
       "status": "czesciowe",
-      "proof": "agent_runs i run_events wiążą rozmowę, wykonanie i zdarzenia; aplikacja działa bez eksportera (tests/observability.test.ts); pomiary pierwszego tekstu liczone od startu wykonania.",
-      "gap": "Brak odrębnego kodu błędu modelu (model_failed nie jest emitowany); metryki dla kolejności tekst–narzędzie i narzędzie–tekst nie są zbierane w regresji; brak skanu sekretów w diagnostyce po prawdziwym przebiegu."
+      "proof": "agent_runs i run_events wiaza rozmowe, wykonanie i zdarzenia; aplikacja dziala bez eksportera (tests/observability.test.ts); tests/diagnostics.test.ts przechodzi lancuch rozmowa → wykonanie → narzedzie → mutacja → artefakt w obie strony i rozdziela klasy bledow (model_failed, integration_failed, sandbox_denied, rate_limited, domain_rule_violated) w zapisanych danych; tests/measurements.test.ts i e2e/measurements.spec.ts zbieraja pomiary z warunkami i wersja kodu do docs/evidence/z3-bl05/, w tym kolejnosc narzedzie–tekst i przebieg bez tekstu (brak metryki, nie zero); skan sekretow w logach serwera, bazie, zapisanych uruchomieniach i dowodach.",
+      "gap": "Kontrolowane wadliwe warianty krytycznych napraw nie sa powtarzalne w szablonie (L12.12); skan sekretow i pomiary wykonano na stand-inie modelu, nie na przebiegu z prawdziwym modelem (brak grantu tur w tym zadaniu)."
     },
     "T22": {
       "status": "czesciowe",
@@ -2683,12 +2673,6 @@
       "title": "Uwierzytelnienie subskrypcyjne i limity — próby graniczne",
       "summary": "Zachowanie przy wygaśnięciu i odświeżeniu tokena, odrzuconym odświeżeniu, odwołanym logowaniu i limicie użycia, sprawdzone na granicy adaptera aż do widocznego UI, bez niszczenia poświadczeń użytkownika i bez przedstawiania symulacji jako rzeczywistego limitu.",
       "done": "kontrolowane stand-iny na granicy adaptera SDK dają rozróżnialne stany w UI i zachowują historię bez powtórki mutacji; dowód oznaczony jako symulacja; opis odczytu poświadczeń zgodny z kodem."
-    },
-    {
-      "id": "BL-05",
-      "title": "Pomiary i obserwowalność",
-      "summary": "Rozdzielone i powtarzalne pomiary czasu kolejki, startu, pierwszego tekstu, zakończenia, odświeżenia po mutacji i faktycznego anulowania (z zakończeniem procesów potomnych), z warunkami pomiaru; opcjonalny eksport telemetrii z dowodem odbioru śladu, jeśli zostanie włączony.",
-      "done": "pomiary zapisywane przez regresję szablonu w katalogu dowodów o nazwie niezależnej od dawnych prac, z warunkami i wersją kodu; Stop mierzony do zakończenia procesów; brak tekstu daje brak metryki."
     },
     {
       "id": "BL-06",
