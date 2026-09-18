@@ -1,7 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
-import { AccessContextChanged } from '../api/accessContext.ts';
-import { accessFetch } from '../api/client.ts';
+import { accessFetch, requestFailureMessage } from '../api/client.ts';
 import { useArtifacts, useFiles, qk } from '../api/queries.ts';
 
 /**
@@ -35,17 +34,10 @@ export function FilesPage() {
       }
       await qc.invalidateQueries({ queryKey: qk.files() });
     } catch (e) {
-      /*
-       * A request abandoned because the identity changed is nobody's failure.
-       *
-       * This state is local to the component and no reset reaches it, so the
-       * message would sit there for the *next* owner to read — a small leak of
-       * exactly the kind this package closes. `AccessContextChanged` means the
-       * upload belonged to someone who is no longer signed in; there is nothing
-       * to tell the person who is.
-       */
-      if (e instanceof AccessContextChanged) return;
-      setUploadError(e instanceof Error ? e.message : String(e));
+      // `null` when the upload was abandoned because the identity changed —
+      // see `requestFailureMessage`.
+      const message = requestFailureMessage(e);
+      if (message) setUploadError(message);
     } finally {
       setBusy(false);
       if (inputRef.current) inputRef.current.value = '';

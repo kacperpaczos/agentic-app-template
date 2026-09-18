@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { FILE_ANALYSIS, FILE_LIMITS, type StoredFile } from '@platform/contracts';
-import { AccessContextChanged } from '../api/accessContext.ts';
-import { accessFetch } from '../api/client.ts';
+import { accessFetch, requestFailureMessage } from '../api/client.ts';
 import { qk, useFiles } from '../api/queries.ts';
 import { useAppState } from '../state/appState.ts';
 import { useChatSlots } from './chatSlots.ts';
@@ -149,17 +148,10 @@ export function ComposerAttachments() {
       await qc.invalidateQueries({ queryKey: qk.files() });
       setAttachments([...attachments, stored.id]);
     } catch (e) {
-      /*
-       * A request abandoned because the identity changed is nobody's failure.
-       *
-       * This state is local to the component and no reset reaches it, so the
-       * message would sit there for the *next* owner to read — a small leak of
-       * exactly the kind this package closes. `AccessContextChanged` means the
-       * upload belonged to someone who is no longer signed in; there is nothing
-       * to tell the person who is.
-       */
-      if (e instanceof AccessContextChanged) return;
-      setError(e instanceof Error ? e.message : String(e));
+      // `null` when the upload was abandoned because the identity changed —
+      // see `requestFailureMessage`.
+      const message = requestFailureMessage(e);
+      if (message) setError(message);
     } finally {
       setBusy(false);
       if (inputRef.current) inputRef.current.value = '';

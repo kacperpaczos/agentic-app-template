@@ -86,6 +86,24 @@ export async function accessFetch(input: string | URL | Request, init: RequestIn
   return res;
 }
 
+/**
+ * What to tell the user about a failed request — or that there is nothing to
+ * tell them.
+ *
+ * `null` for a request abandoned because the identity changed. That failure
+ * belongs to somebody who is no longer signed in, and the state it would be
+ * written into (a local `useState` in an upload control) is not reached by any
+ * reset — so the message would sit there for the *next* owner to read. Small,
+ * and the same family of leak as the rows and the conversation.
+ *
+ * Shared by the two upload controls because they had the same three lines each
+ * and would otherwise have to grow this rule twice.
+ */
+export function requestFailureMessage(error: unknown): string | null {
+  if (error instanceof AccessContextChanged) return null;
+  return error instanceof Error ? error.message : String(error);
+}
+
 export const apiGet = <T>(path: string) => api<T>(path);
 export const apiPost = <T>(path: string, body?: unknown) =>
   api<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) });

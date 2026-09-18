@@ -4,6 +4,7 @@ import { AGUI_EVENTS } from '@platform/contracts';
 import {
   AccessContextChanged,
   accessFetch,
+  requestFailureMessage,
   createChatStorage,
   platformAguiAdapter,
   qk,
@@ -112,6 +113,25 @@ describe('accessFetch wiaze z kontekstem dostepu to, co nie przechodzi przez api
     const res = await settled;
     expect(res.ok).toBe(true);
     expect(await res.json()).toEqual({ threads: [] });
+  });
+});
+
+describe('przerwane zadanie nie zostawia komunikatu dla nastepnego wlasciciela', () => {
+  /*
+   * The upload controls keep their failure in a local `useState` that no reset
+   * reaches, so a message written there outlives the identity it belonged to.
+   * The rule is one function precisely so it cannot be applied in one control
+   * and forgotten in the other.
+   */
+  it('AccessContextChanged nie ma nic do powiedzenia nowemu wlascicielowi', () => {
+    expect(requestFailureMessage(new AccessContextChanged())).toBeNull();
+  });
+
+  it('kazdy inny blad zachowuje swoja tresc — komunikat backendu nie jest zastepowany naszym', () => {
+    expect(requestFailureMessage(new Error('Plik przekracza limit 8 MB.'))).toBe(
+      'Plik przekracza limit 8 MB.',
+    );
+    expect(requestFailureMessage('HTTP 500')).toBe('HTTP 500');
   });
 });
 
