@@ -1964,7 +1964,7 @@
     },
     "L10.15": {
       "status": "potwierdzone",
-      "evidence": "test",
+      "evidence": "gui",
       "origin": "szablon",
       "proof": "tests/live-artifacts.test.ts \"wersja definicji i stan zrodla sa rozroznione\": dwa odczyty bez zmiany zrodla daja rozne resolvedAt i ten sam sourceFingerprint, a odczyt po zmianie zrodla — te sama definitionVersion i inny sourceFingerprint; snapshot nie ma rozstrzygniecia live, a nieudane rozstrzygniecie ma sourceFingerprint null (nie skrot z null). e2e/artifact-views.spec.ts (test GUI bez modelu): podglad i pelny widok pokazuja te sama wersje definicji i ten sam odcisk stanu zrodla, a oba wypisuja je w odznace LiveBadge (\"live . dane aktualne (godzina) . def N . zrodlo XXXXXXXX\"), wiec rozbieznosc bylaby oznaczona na ekranie. tests/cache-evidence.test.ts zapisuje probke na zadanie (pnpm evidence).",
       "gap": "sourceFingerprint to skrot rekordow zwroconych przez zarejestrowany odczyt, nie monotoniczna wersja rekordow: odpowiada na pytanie \"ten sam stan zrodla czy inny\", nie porzadkuje stanow i nie wskazuje, ktory jest nowszy. Odczyt bez zadeklarowanego deskryptora wyniku ma skrot z calej koperty, wiec wlasny znacznik czasu w wyniku takiego odczytu zmienialby go przy kazdym czytaniu.",

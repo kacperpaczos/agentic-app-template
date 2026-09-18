@@ -97,18 +97,76 @@ describe('dowod pakietu BL-11c', () => {
     const stop = registerAccessContextReset();
     setAccessContext(qc, 'local-user');
     qc.setQueryData(qk.artifact(meta.id), { id: meta.id });
-    useAppState.setState({
-      conversationId: 'cnv_x',
-      spaceId: 'spc_x',
+
+    /*
+     * Every scoped field is dirtied first, and that is the whole point of this
+     * block.
+     *
+     * An earlier version set five fields and then counted how many of the
+     * fifteen *matched their default* after the switch. Ten of them matched
+     * because they had never been touched, so the evidence file listed them as
+     * "cleared" for free and would have gone on listing them if the reset had
+     * missed one. Here each field is given a value that is **not** the default,
+     * the completeness of that list is checked against `scopedAppState()`, and
+     * only then is "cleared" a statement about the reset.
+     */
+    const dirty: Record<string, unknown> = {
+      spaceId: 'spc_poprzedniego',
+      conversationId: 'cnv_poprzedniego',
       resource: { kind: 'case', id: caseId },
       selection: [{ kind: 'offer', id: offer.offer.id }],
-      attachments: ['file_x'],
+      filters: { 'procurement.data': { poprzedni: true } },
+      viewport: { x: 12, y: 34, zoom: 2 },
       drafts: {
-        f1: { formId: 'f1', entity: 'offer_item', entityId: item.id, dirtyFields: ['quantity'], values: {} },
+        f1: { formId: 'f1', entity: 'offer_item', entityId: item.id, dirtyFields: ['quantity'], values: { quantity: '9' } },
       },
-    });
+      cardState: { card_poprzedniego: { showExcluded: false } },
+      lastRunId: 'run_poprzedniego',
+      attachments: ['file_poprzedniego'],
+      agentFilterKey: 'klucz_poprzedniego',
+      filterOutcome: { targetId: 'procurement.data', matched: 3, total: 4 },
+      viewStates: {
+        'procurement.data': {
+          targetId: 'procurement.data',
+          instanceId: 'inst_poprzedniego',
+          address: '/data?country=PL',
+          predicates: [],
+          sort: null,
+          sortLabel: null,
+          sortFromAddress: false,
+          rejectedSort: null,
+          page: null,
+          clampedFrom: null,
+          matched: 3,
+          total: 4,
+        },
+      },
+      revealNotice: {
+        address: '/data',
+        shown: true,
+        recordKind: 'supplier',
+        recordId: 'sup_poprzedniego',
+        recordTitle: null,
+        field: 'country',
+        fieldLabel: null,
+        adjustments: [],
+      },
+      runs: { cnv_poprzedniego: { ...useAppState.getState().runFor(null), phase: 'running', runId: 'run_poprzedniego' } },
+    };
+    const scopedKeys = Object.keys(scopedAppState()).sort();
+    expect(Object.keys(dirty).sort(), 'nie kazde pole zakresu zostalo zabrudzone').toEqual(scopedKeys);
+    useAppState.setState(dirty as never);
+    // None of them is its default any more — otherwise "cleared" below would be
+    // true of a field nobody ever touched.
+    for (const key of scopedKeys) {
+      expect(
+        JSON.stringify((useAppState.getState() as unknown as Record<string, unknown>)[key]),
+        `pole ${key} nie zostalo zabrudzone`,
+      ).not.toBe(JSON.stringify((scopedAppState() as Record<string, unknown>)[key]));
+    }
+
     setAccessContext(qc, 'other-user');
-    const cleared = Object.keys(scopedAppState()).filter((key) => {
+    const cleared = scopedKeys.filter((key) => {
       const now = (useAppState.getState() as unknown as Record<string, unknown>)[key];
       return JSON.stringify(now) === JSON.stringify((scopedAppState() as Record<string, unknown>)[key]);
     });
@@ -118,7 +176,7 @@ describe('dowod pakietu BL-11c', () => {
     resetAccessContext();
 
     expect(cacheEntries).toBe(0);
-    expect(cleared.sort()).toEqual(Object.keys(scopedAppState()).sort());
+    expect(cleared.sort()).toEqual(scopedKeys);
 
     /* ------------------------------- the record ---------------------------- */
 
@@ -138,6 +196,10 @@ describe('dowod pakietu BL-11c', () => {
           'sie wylacznie wtedy, gdy zmienily sie rekordy zwrocone przez zarejestrowany odczyt.',
       },
       zmianaWlasciciela: {
+        metoda:
+          'kazde pole zakresu (scopedAppState) zostaje przed przelaczeniem ustawione na wartosc ' +
+          'INNA niz domyslna i to jest sprawdzane osobno; dopiero potem "wyczyszczone" znaczy, ze ' +
+          'zrobil to reset, a nie ze pola nikt nie dotknal.',
         wpisyCachePoPrzelaczeniu: cacheEntries,
         wyczyszczonePolaStanuKlienta: cleared.sort(),
         niewyczyszczone: ['navOpen — wlasciwosc okna, nie tozsamosci'],

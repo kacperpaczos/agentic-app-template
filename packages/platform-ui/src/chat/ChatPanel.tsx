@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AgentInterface, artifactListPath } from '@openuidev/react-ui';
+import { defineArtifactRenderer, type ArtifactRendererControls } from '@openuidev/react-headless';
 import '@openuidev/react-ui/index.css';
 import { useQueryClient } from '@tanstack/react-query';
 import { ARTIFACT_PRODUCING_TOOLS, mcpToolName } from '@platform/contracts';
@@ -12,7 +13,13 @@ import { makeAssistantMessage } from './AssistantMessage.tsx';
 import { ChatSlotsContext } from './chatSlots.ts';
 import { ComposerAttachments } from './ComposerAttachments.tsx';
 import { ConversationSync } from './ConversationSync.tsx';
-import { artifactReferenceOf, createChatLlm, createChatStorage, stopRun } from './chatWiring.ts';
+import {
+  artifactReferenceOf,
+  createChatLlm,
+  createChatStorage,
+  stopRun,
+  type ArtifactReference,
+} from './chatWiring.ts';
 import { useComposerStop } from './useComposerStop.ts';
 
 /**
@@ -334,37 +341,44 @@ export function ChatPanel() {
    * preview and full view are the same rendering of the same cache entry.
    */
   const artifactRenderers = useMemo(() => {
-    const parser = (raw: { args: unknown; response: unknown }) => {
-      const ref = artifactReferenceOf(raw.response);
-      // Null skips: while a call is still streaming there is no result yet, and
-      // the library then shows its own tool card instead of an empty artifact.
-      return ref ? { props: ref, meta: null } : null;
+    /*
+     * Built through `defineArtifactRenderer` — the library's own identity helper
+     * — and passed **without a cast**. The cast is the reason this section
+     * exists: `as never` silenced the compiler on a shape that had neither
+     * `toolName` nor `parser`, so both defects above shipped invisibly.
+     * Fixing the shape and leaving the cast would have fixed the symptom and
+     * kept the cause. With the helper, the props type is inferred from
+     * `parser`'s return value and a renderer that forgets a field is a build
+     * error rather than a blank panel.
+     */
+    const shared = {
+      parser: (raw: { args: unknown; response: unknown }) => {
+        const ref = artifactReferenceOf(raw.response);
+        // Null skips: while a call is still streaming there is no result yet,
+        // and the library then shows its own tool card instead of an empty
+        // artifact.
+        return ref ? { props: ref, meta: null } : null;
+      },
+      preview: (props: ArtifactReference, controls: ArtifactRendererControls) => (
+        <ArtifactPane artifactId={props.artifactId} where="preview" onOpen={controls.open} />
+      ),
+      actual: (props: ArtifactReference) => (
+        <ArtifactPane artifactId={props.artifactId} where="full" />
+      ),
     };
-    const preview = (props: { artifactId: string }, controls: { open: () => void }) => (
-      <ArtifactPane artifactId={props.artifactId} where="preview" onOpen={controls.open} />
-    );
-    const actual = (props: { artifactId: string }) => (
-      <ArtifactPane artifactId={props.artifactId} where="full" />
-    );
 
     return [
       // By type, for the artifact browser. The tool name is a placeholder that
       // no tool can have; matching by name is the next entry's job.
-      ...Object.keys(registry.artifactRenderers).map((type) => ({
-        type,
-        toolName: `platform.artifact.type:${type}`,
-        parser,
-        preview,
-        actual,
-      })),
+      ...Object.keys(registry.artifactRenderers).map((type) =>
+        defineArtifactRenderer({ type, toolName: `platform.artifact.type:${type}`, ...shared }),
+      ),
       // By tool name, for the preview inside the message.
-      {
+      defineArtifactRenderer({
         type: 'platform.artifact-ref',
         toolName: ARTIFACT_PRODUCING_TOOLS.map(mcpToolName),
-        parser,
-        preview,
-        actual,
-      },
+        ...shared,
+      }),
     ];
   }, [registry.artifactRenderers]);
 
@@ -416,7 +430,7 @@ export function ChatPanel() {
             componentLibrary={registry.library}
             components={{ AssistantMessage: assistantMessage as never }}
             agentName="Agent aplikacji"
-            artifactRenderers={artifactRenderers as never}
+            artifactRenderers={artifactRenderers}
             starters={starters}
             /*
               Every label the component exposes. Its artifact browser also has

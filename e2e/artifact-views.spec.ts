@@ -280,8 +280,19 @@ test.describe('podglad i pelny widok artefaktu', () => {
     expect(after.snapshot, 'snapshot zmienil sie po restarcie').toBe(before.snapshot);
     expect(after.liveState).toBe('fresh');
     expect(after.liveRows).toBeGreaterThan(0);
-    // The source has not moved since the last read, so the live answer is the
-    // same state of it — recomputed, not remembered.
+    /*
+     * The source has not moved since the last read, so the live answer is the
+     * same state of it.
+     *
+     * Deliberately not read as "recomputed rather than remembered": an equal
+     * fingerprint is consistent with both, and this test cannot tell them
+     * apart. What shows that a live artifact stores no data is
+     * `tests/live-artifacts.test.ts` ("artefakt live nigdy nie przechowuje
+     * danych, tylko pytanie": the stored version *is* the descriptor), and what
+     * shows the answer follows the source is the fingerprint moving when the
+     * source moves. Here the point is narrower and still worth having: a
+     * restart changed neither.
+     */
     expect(after.liveFingerprint).toBe(before.live);
 
     /* ---------------------- the file, downloaded after the restart ---------- */

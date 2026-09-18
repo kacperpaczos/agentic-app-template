@@ -447,6 +447,23 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     expect(new URL(page.url()).searchParams.get('s')).not.toBe(heldSpace);
     const onCanvas = await published(page, (s) => s.target?.id === 'platform.canvas');
     expect(onCanvas).toMatchObject({ cardsState: 'none', cards: [] });
+    /*
+     * `spaceId` and `cardsSpaceId` used to be asserted as `null`, and that is a
+     * **weakening**, stated here rather than left to be noticed.
+     *
+     * `null` was true for one reason only: the shell went on holding the
+     * previous owner's space, the address went on carrying it, and the
+     * description source refused to name what it was holding. With the shell
+     * cleared (BL-11c) the canvas has no space to hold, so it opens one of the
+     * *new* owner's — and the ids are legitimately that owner's, not null.
+     *
+     * What the two fields were guarding is unchanged and asserted below by
+     * name: neither may ever be the space of the identity we switched away
+     * from. Nothing about the previous owner is admitted; only the claim
+     * "no space at all" is gone, because it is no longer the truth.
+     */
+    expect(onCanvas.spaceId).not.toBe(heldSpace);
+    expect(onCanvas.cardsSpaceId).not.toBe(heldSpace);
     expect(JSON.stringify(onCanvas)).not.toContain(heldSpace);
   });
 
