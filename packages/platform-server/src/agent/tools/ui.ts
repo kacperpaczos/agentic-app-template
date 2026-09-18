@@ -47,42 +47,42 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
           input,
         );
         return {
-        targets: targets.items.map((t) => ({
-          id: t.id,
-          kind: t.kind,
-          label: t.label,
-          description: t.description,
-          /*
-           * Present only for a view that declares it. Listing the properties
-           * here is what makes `ui_filter` usable without guessing: the agent
-           * picks a name it has been shown, instead of one that sounds right.
-           */
-          filterableFields: t.filter?.fields.map((f) => ({
-            field: f.field,
-            label: f.label,
-            values: f.values,
+          targets: targets.items.map((t) => ({
+            id: t.id,
+            kind: t.kind,
+            label: t.label,
+            description: t.description,
+            /*
+             * Present only for a view that declares it. Listing the properties
+             * here is what makes `ui_filter` usable without guessing: the agent
+             * picks a name it has been shown, instead of one that sounds right.
+             */
+            filterableFields: t.filter?.fields.map((f) => ({
+              field: f.field,
+              label: f.label,
+              values: f.values,
+            })),
+            /*
+             * Present only for a view whose records can be ordered: the declared,
+             * sortable fields of its primary read. `ui_sort` refuses anything else.
+             */
+            sortableFields: sortableFieldsOfTarget(services.modules, t.id)?.map((f) => ({
+              field: f.field,
+              label: f.label,
+              type: f.type,
+            })),
           })),
-          /*
-           * Present only for a view whose records can be ordered: the declared,
-           * sortable fields of its primary read. `ui_sort` refuses anything else.
-           */
-          sortableFields: sortableFieldsOfTarget(services.modules, t.id)?.map((f) => ({
-            field: f.field,
-            label: f.label,
-            type: f.type,
+          targetsWindow: targets.window,
+          spaces: spaces.items.map((sp) => ({
+            spaceId: sp.id,
+            title: sp.title,
+            scopeKind: sp.scopeKind,
+            scopeId: sp.scopeId,
+            current: sp.id === ctx.appContext.spaceId,
           })),
-        })),
-        targetsWindow: targets.window,
-        spaces: spaces.items.map((sp) => ({
-          spaceId: sp.id,
-          title: sp.title,
-          scopeKind: sp.scopeKind,
-          scopeId: sp.scopeId,
-          current: sp.id === ctx.appContext.spaceId,
-        })),
-        spacesWindow: spaces.window,
-        windowNote: `${readWindowNote(targets.window, 'celow interfejsu')} ${readWindowNote(spaces.window, 'przestrzeni')}`,
-        currentSpaceId: ctx.appContext.spaceId,
+          spacesWindow: spaces.window,
+          windowNote: `${readWindowNote(targets.window, 'celow interfejsu')} ${readWindowNote(spaces.window, 'przestrzeni')}`,
+          currentSpaceId: ctx.appContext.spaceId,
         };
       },
     },
