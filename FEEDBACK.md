@@ -566,3 +566,61 @@ modelu, prawdziwe wszystko inne — bramka zgody, narzędzia, workspace, publika
   zbudowana jako obrona w dwóch miejscach, a nie jako dowód kolejności.
 - **L11.23** — nie sprawdzono na modelu, że odpowiedź agenta nie podaje zapisanej wartości formuły
   jako wyniku; w szablonie wykazano, że plik nie daje takiej możliwości (formuła bez wartości).
+
+---
+
+## T6 — 2026-09-18 — BL-08b: zdarzenia i strumień (L5.2, L5.3, L5.4, L5.5, L5.6, L5.11, L5.12, L5.13, L5.14, L5.15)
+
+Ostatni pakiet fali. Dziesięć kryteriów warstwy L5, wszystkie zamknięte; wszystkie dowody bez tury
+modelu (stand-in na granicy adaptera SDK, oznaczony jako symulacja).
+
+### Zbudowane
+
+- **Schematy i wersja zdarzeń `CUSTOM`** (`packages/platform-contracts/src/agui-payloads.ts`). AG-UI
+  nie opisuje, co jest w środku `CUSTOM`, więc dotąd nie opisywało tego nic. Mapa schematów jest
+  **totalna** względem `PLATFORM_CUSTOM_EVENTS` (nowe zdarzenie bez schematu to błąd kompilacji), a
+  `RunEventStream.custom` stempluje wersję kształtu w jednym miejscu.
+- **`platform.permission_resolved`**. Prośba o zgodę zostaje w dzienniku na zawsze; klient, który
+  odtwarzał dziennik po przeładowaniu, pokazywał zamkniętą już prośbę jako otwartą — i jej przyciski
+  nic nie robiły, bo bramka rozstrzyga raz. Rozstrzygnięcie emituje teraz **każde** wyjście z bramki:
+  decyzja, wygaśnięcie i odmowa wydana przy zatrzymaniu uruchomienia.
+- **Powrót do strumienia po lokalnym przerwaniu** (`chat/platformAdapter.ts`). Kontrolka kompozytora
+  w trakcie tury jest przyciskiem stop: biblioteka przerywa wtedy `fetch`, a `useComposerStop` mówi
+  backendowi „anuluj”. Odpowiedź na to (`platform.run_cancelled`, potem `RUN_ERROR`) szła na strumień,
+  którego nikt już nie czytał, więc zakładka zostawała w fazie `running` — zmierzone ~30 s, w zasadzie
+  bez końca. Strumień wysłania, który skończył się **przed** uruchomieniem, podłącza się teraz ponownie
+  od kursora. Świadomie nie łatane odpowiedzią z `/cancel`: ta wraca, zanim uruchomienie się rozliczy,
+  więc byłaby deklaracją klienta zamiast statusu backendu.
+- **Krok `tool` z `inline: true`** w skryptowanym stand-inie. Dotąd wszystkie hooki narzędzi szły przed
+  pierwszym fragmentem tekstu, więc kolejności tekst→narzędzie **nie dało się odtworzyć** w
+  przeglądarce. Flaga, nie zmiana domyślnego zachowania: na dotychczasowym opierają się pomiary innych
+  pakietów.
+
+### Zmierzone i opisane, nie obejściem
+
+W turze **z narzędziem** to samo zdanie jest w trakcie na ekranie dwa razy — w osi „Behind the scenes”
+biblioteki i w pasku podglądu tej aplikacji (przez moment nawet trzy: sama biblioteka rysuje je
+chwilowo podwójnie). Pasek istnieje dlatego, że w turze **bez** narzędzia biblioteka nie renderuje
+prozy wcale. Usunięcie paska dla tur z narzędziem zabrałoby jedyny podgląd strumienia dla tych tur
+i dowody innych pakietów; podmiana `Messages` jest wykluczona przez `AGENTS.md`. Zachowanie jest więc
+przypięte dwukierunkowo testem i opisane w `docs/NEW-APPLICATION.md` §7. Przy okazji zmierzone: gotowy
+wątek stawia narysowane wywołanie **nad** poprzedzającą je prozą, więc kolejność wolno dowodzić czasem
+pojawienia się i dziennikiem, nigdy pozycją w DOM.
+
+### Dwie próby wykrycia złapały test, nie kod
+
+- **T4** — asercja „proza przed narzędziem” przechodziła przy zepsutej kolejności: pasek tej aplikacji
+  maluje fragment natychmiast, a oś biblioteki dopiero w następnej klatce, więc cały panel przez chwilę
+  pokazuje „proza bez narzędzia” także wtedy, gdy wywołanie dotarło pierwsze. Pomiar przeniesiony do
+  `.openui-agent-thread-messages`.
+- **T9** — usunięcie związania zgody z uruchomieniem zostawiało test korelacji zielonym: przy dwóch
+  różnych `requestId`, każdym odpowiedzianym pod własnym adresem, związanie nie było w ogóle
+  wykonywane. Test odpowiada teraz najpierw pod cudzym adresem.
+
+### Stale w opisie braków
+
+Cztery zdania z kolumny „brak” opisywały stan sprzed wcześniejszych pakietów: wiązanie odpowiedzi na
+zgodę z uruchomieniem, spóźniona odpowiedź, odmowa bez skutku i brak odpowiedzi jako odmowa były już
+zrobione i pokryte (BL-09, `tests/consent.test.ts`, `e2e/consent-runs.spec.ts`); podobnie odmowa
+powtórzonego polecenia interfejsu po przeładowaniu (`sessionStorage` w `UiCommandRunner`). Zostało to
+sprawdzone w kodzie przed pisaniem czegokolwiek nowego.
