@@ -324,17 +324,24 @@ function main() {
     /*
      * Reading the copy makes SQLite create its side files there. This records
      * what was present first, so that afterwards exactly what this run added
-     * can be removed — and the copy really is the one file it was, which is
-     * what the last line of this branch tells the user.
+     * can be removed — on both exits, the clean one and the failed one.
      */
     const przedOdczytem = sideFilesPresent(resolve(verifyOnly));
     const problems = verify(resolve(verifyOnly));
+    /*
+     * Before the verdict, not after it. This used to sit below the early exit,
+     * so a copy that failed verification kept the side files this run had
+     * created in it — the one path where "leaves no trace" was false, and the
+     * only one no test covered, because the tests all checked a copy that
+     * verified. A directory belonging to someone else is put back the way it
+     * was whatever the answer turns out to be.
+     */
+    removeSideFilesWeCreated(resolve(verifyOnly), przedOdczytem);
     if (problems.length) {
       console.error(`[backup] KOPIA NIEPOPRAWNA (${problems.length}):`);
       for (const p of problems) console.error(`  - ${p}`);
       process.exit(1);
     }
-    removeSideFilesWeCreated(resolve(verifyOnly), przedOdczytem);
     console.log(`[backup] kopia ${resolve(verifyOnly)} sprawdzona: bez zastrzezen`);
     process.exit(0);
   }

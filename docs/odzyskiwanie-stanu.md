@@ -198,7 +198,11 @@ które SQLite odtwarza przy samym czytaniu).
    `app.db-wal` i `app.db-shm` obok czytanej bazy, a procesy potomne uruchamiane przez `execFileSync`
    piszą w katalogach, które dostaną. Te zapisy **nie przechodzą** przez bramkę. Tam, gdzie chodzi o
    cudzy katalog — `--verify` i `restore --check` — skrypt zapamiętuje, które pliki pomocnicze
-   zastał, i po odczycie usuwa dokładnie te, które sam utworzył; pliku, który tam był, nie rusza.
+   zastał, i po odczycie usuwa dokładnie te, które sam utworzył.
+6. **Treści pliku pomocniczego, który już tam był.** Ochrona z punktu 5 dotyczy **usunięcia**, nie
+   zawartości: plik `app.db-wal` albo `app.db-shm` zastany w cudzym katalogu zostaje na miejscu, ale
+   SQLite może po cichu nadpisać jego bajty przy odczycie bazy. Zdanie „plik, który tam był, zostaje
+   nietknięty” jest więc prawdziwe o istnieniu pliku i **nieprawdziwe o jego treści**.
 
 Kody wyjścia wszystkich czterech skryptów: **0** zrobione, **1** werdykt negatywny (kopia się nie
 weryfikuje, próba znalazła problemy, odtworzony stan nie zgadza się z manifestem), **2** odmowa,

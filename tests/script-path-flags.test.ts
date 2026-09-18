@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { createRequire } from 'node:module';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 /**
@@ -38,7 +39,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  *     `new Database(...)` creates SQLite's side files next to the database it
  *     opens, and child processes write wherever they are pointed. Those do not
  *     pass the gate; where it is somebody else's directory the script removes
- *     exactly the side files it created and leaves any that were there.
+ *     exactly the side files it created and leaves any that were there;
+ *   - the *contents* of a side file that was already there. The rule above is
+ *     about whether the file survives, not about its bytes, which SQLite may
+ *     rewrite during a read.
  *
  * **The invariant** that makes the kinds more than labels: no flag may modify
  * the directory it is pointed at. It is checked by fingerprinting that
@@ -90,6 +94,13 @@ function stateScripts(): string[] {
 }
 
 const SCRIPTS = stateScripts();
+
+const Database = createRequire(resolve(REPO, 'packages/platform-server/package.json'))(
+  'better-sqlite3',
+) as new (file: string) => {
+  prepare: (sql: string) => { run: (...p: unknown[]) => unknown };
+  close: () => void;
+};
 
 const ODMOWA_DANYCH = /lezy w katalogu danych aplikacji|zawiera katalog danych aplikacji/;
 
@@ -464,6 +475,30 @@ describe('kazda flaga skryptow stanu ma rozstrzygniecie sprawdzone zachowaniem',
     const c = run('restore-state.mjs', ['--backup', cudzaKopia, '--data', swiezy('slad-cel'), '--check']);
     expect(c.status, c.out).toBe(0);
     expect(pelnyOdcisk(), 'restore --check zostawilo pliki w kopii').toBe(przed);
+
+    /*
+     * And the path that was missed: a copy that does **not** verify.
+     *
+     * The cleanup used to sit after the early exit, so a failed verification
+     * left the side files behind — the one case where "leaves no trace" was
+     * untrue, and the one the tests above could not see, because they all
+     * checked a copy that verified. Somebody else's directory is put back the
+     * way it was whatever the verdict is.
+     */
+    const db = new Database(resolve(cudzaKopia, 'app.db'));
+    db.prepare('DELETE FROM messages').run();
+    db.close();
+    rmSync(resolve(cudzaKopia, 'app.db-wal'), { force: true });
+    rmSync(resolve(cudzaKopia, 'app.db-shm'), { force: true });
+    const przedNieudana = readdirSync(cudzaKopia).sort().join(',');
+
+    const zla = run('backup-state.mjs', ['--verify', cudzaKopia]);
+    expect(zla.status, zla.out).toBe(1);
+    expect(zla.out).toMatch(/KOPIA NIEPOPRAWNA/);
+    expect(
+      readdirSync(cudzaKopia).sort().join(','),
+      'nieudana weryfikacja zostawila pliki w sprawdzanej kopii',
+    ).toBe(przedNieudana);
   }, 240_000);
 
   it('approveOwnTemp nie zatwierdza katalogu, ktorego nie utworzylismy', async () => {

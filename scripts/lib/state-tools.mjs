@@ -799,6 +799,11 @@ export function sideFilesPresent(dir) {
  * was already there is left alone — it may hold committed transactions, and
  * that is exactly the thing never to delete on a hunch.
  *
+ * The limit of that promise, stated because it is easy to read more into it:
+ * this is about the file's **existence**, not its contents. SQLite may rewrite
+ * the bytes of a `-shm` or `-wal` that was already there while the database is
+ * being read, and nothing here prevents or detects it.
+ *
  * The alternative was to leave everything and weaken the message instead. That
  * would mean `--verify` telling the user their copy is untouched while having
  * added files to it, which is the failure this whole package is about.
