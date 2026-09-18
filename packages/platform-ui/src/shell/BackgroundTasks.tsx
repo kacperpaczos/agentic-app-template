@@ -57,6 +57,24 @@ export function BackgroundTasks() {
     void sync();
   }, [sync, activeConversation]);
 
+  /*
+   * The network coming back is the third moment this client's picture can be
+   * stale, and it used to be the one nobody handled.
+   *
+   * A dropped connection kills the re-attachment's `fetch`; the run carries on
+   * in the backend and the tab has nothing left listening to it. Mounting and
+   * switching conversation are the other two moments — neither of which happens
+   * when a laptop wakes up on the same screen — so without this the only way
+   * back to a finished task was to reload the page by hand. `syncActiveRuns` is
+   * idempotent (`attachToRun` ignores a run already followed), so a spurious
+   * `online` event costs one request.
+   */
+  useEffect(() => {
+    const onOnline = () => void sync();
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [sync]);
+
   /* Opening a conversation is what marks its result as seen. */
   useEffect(() => {
     if (activeConversation && runs[activeConversation]?.unseenResult) {

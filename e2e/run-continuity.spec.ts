@@ -179,8 +179,13 @@ test.describe('zadanie w tle przezywa odejscie obserwatora', () => {
 
     /* -------------------------- and comes back ----------------------------- */
 
+    /*
+     * Back online — and **without a reload**. The client has to notice by
+     * itself: the dropped stream is gone, the run finished while nobody was
+     * listening, and mounting or switching conversation (the other two moments
+     * that re-sync) never happens when a laptop simply wakes up.
+     */
     await context.setOffline(false);
-    await page.reload();
     await expect(page.locator('.openui-agent-thread-messages')).toContainText(MARKER, {
       timeout: 60_000,
     });

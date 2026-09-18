@@ -175,7 +175,23 @@ describe('wynik przezywa sprzatniecie workspace', () => {
 /* ------------------------- one step, or none of it ------------------------ */
 
 describe('publikacja jest niepodzielna', () => {
-  it('nazwa docelowa pojawia sie dopiero z kompletem bajtow', () => {
+  /*
+   * What this establishes, precisely — and what it does not.
+   *
+   * It shows that by the time anything could learn the file exists (the row is
+   * not committed yet) the final name already carries **all** the bytes, and
+   * that nothing temporary is left behind afterwards. A detection trial
+   * confirmed the second half bites: replacing the rename with a direct write to
+   * the final name fails this test — but on the leftover temporary file, not on
+   * a truncated one.
+   *
+   * The property "the final name never exists half-written" is structural: the
+   * final name comes into being only through `rename`, which is atomic within a
+   * filesystem. Observing its absence would need a reader running *during* the
+   * write, which no deterministic test can arrange here. Said out loud rather
+   * than implied by a test name.
+   */
+  it('plik pod nazwa docelowa jest kompletny, a po zapisie nie zostaje nic tymczasowego', () => {
     const bytes = Buffer.from('x'.repeat(4096), 'utf8');
     let seenInsideTransaction: string | null = null;
     const { file } = h.platform.services.files.storeWith(

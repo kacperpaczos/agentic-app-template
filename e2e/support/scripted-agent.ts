@@ -369,9 +369,20 @@ export function scriptedAgent(
              * way the SDK binds its own — so "the run's processes ended" is
              * something an outside observer can count, not a flag.
              */
-            const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
-              stdio: 'ignore',
-            });
+            /*
+             * Long-lived, but not immortal: it exits by itself after five
+             * minutes. A run's child is supposed to die with the run, and it
+             * does — but a *broken* version of that binding (which is exactly
+             * what a detection trial installs) would otherwise leave a process
+             * spinning on the machine for ever once the test server is gone.
+             * Five minutes is far longer than any assertion here waits, so it
+             * weakens nothing and bounds the damage of a failing trial.
+             */
+            const child = spawn(
+              process.execPath,
+              ['-e', 'setTimeout(() => process.exit(0), 300000)'],
+              { stdio: 'ignore' },
+            );
             const kill = () => {
               if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
             };

@@ -186,6 +186,22 @@ test.describe('pliki w sandboxie', () => {
 
     /* ------------- the attachment is tied to the command afterwards -------- */
 
+    // The message itself carries what it was sent with, so the link travels
+    // with the conversation and not only with the files screen.
+    const userMessage = await page.evaluate(async (id) => {
+      const messages = (await (
+        await fetch(`/api/threads/get/${id}`, { credentials: 'include' })
+      ).json()) as Array<{ role: string; attachments?: Array<{ fileId: string; filename: string }> }>;
+      return messages.find((m) => m.role === 'user' && m.attachments?.length) ?? null;
+    }, conversation);
+    expect(userMessage?.attachments?.map((a) => a.filename).sort()).toEqual([
+      'notatka.txt',
+      'oferty.xlsx',
+      'pasy.jpg',
+      'pasy.png',
+      'pozycje.csv',
+    ]);
+
     await page.goto(`${BASE}/files`);
     await expect(page.getByTestId('files-page')).toBeVisible();
     const files = await listFiles(page);
@@ -305,9 +321,13 @@ test.describe('pliki w sandboxie', () => {
     // The failure is reported as a failure — not as an empty workbook.
     expect(said).toContain('blad=');
     expect(said).not.toContain('arkusze=');
-    // Nothing new was published out of a file that could not be read.
-    expect((await listFiles(page)).length).toBe(before + 1); // only the upload itself
-    expect((await listFiles(page)).filter((f) => f.derivedFromFileId !== null)).toHaveLength(1);
+    // Nothing new was published out of a file that could not be read: the store
+    // grew by the upload alone, and nothing derives from the broken workbook.
+    const after = await listFiles(page);
+    expect(after.length).toBe(before + 1);
+    const corrupt = after.find((f) => f.filename === 'uszkodzony.xlsx')!;
+    expect(corrupt).toBeTruthy();
+    expect(after.filter((f) => f.derivedFromFileId === corrupt.id)).toHaveLength(0);
   });
 
   test('wynik jest artefaktem z podgladem i pobraniem, takze po zmianie rozmowy i restarcie', async ({
