@@ -28,3 +28,8 @@ Grant tur modelu dla tego zadania: ZERO. Zaden spec modelowy nie byl uruchomiony
 (bl01-bl02-model.spec.ts, agent-ui.spec.ts, files-agent.spec.ts sa poza projektem domyslnym).
 Dowody pakietu pochodza z testow kontraktowych oraz z symulacji na stand-inie modelu
 na granicy adaptera SDK (tests/support/model-standin.ts) — oznaczone jako symulacja.
+
+== runda poprawek 2 ==
+  Zmiana ruszyla POST /api/auth/session, czyli trase, ktora loguje kazdy spec przegladarkowy,
+  wiec pelny przebieg powtorzony: 153 testy, 11.1 min, kod wyjscia 0.
+  Proby wykrycia rundy: P20 (odcisk bez tresci pliku), P21 (sesja polyka zepsute cialo).
