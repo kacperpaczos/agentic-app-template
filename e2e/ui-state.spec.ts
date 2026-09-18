@@ -395,7 +395,16 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     await settled(page);
     const table = page.locator('.pf-chat [data-ui-instance][data-component="DataTable"]');
     await expect(table).toHaveAttribute('data-state', 'ready');
-    const { ids: mine } = await suppliers(page);
+    const { ids: mine, all: mineRows } = await suppliers(page);
+    /*
+     * The names, because the names are what the table puts on screen. The
+     * composition asks for `["name", "country"]`, and a record's id reaches the
+     * DOM only as the `data-record-id` attribute — which `toContainText` never
+     * looks at. An assertion over the ids would be empty of content, not just
+     * of rows, and would pass whatever the chat shows.
+     */
+    const mineNames = mineRows.map((r) => r.name);
+    expect(mineNames.length).toBeGreaterThan(0);
     const conversationId = await conversationOnScreen(page);
     const clientId = await clientIdOf(page);
 
@@ -411,7 +420,30 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     const was = (await owner.textContent())?.trim() ?? '';
     await page.getByTestId('switch-access-context').click();
     await expect(owner).not.toHaveText(was);
-    await expect(table).toHaveAttribute('data-state', 'ready'); // not re-rendered: still the first owner's rows
+    /*
+     * The table in the chat no longer shows the first owner's rows.
+     *
+     * It used to: nothing outside the query cache was reset by a switch and the
+     * component was never re-rendered, so their rows stayed on screen. Asserted
+     * over the row ids captured **before** the switch (`mine`) — reading them
+     * again here would read them as the *second* owner, who owns none, so the
+     * loop would be empty and the assertion would pass without looking at
+     * anything.
+     *
+     * Deliberately no assertion about the table's own state attribute here, and
+     * deliberately over the **panel** rather than the table: two complementary
+     * fixes land on this screen (this package clears the shell store; the
+     * sibling package rebuilds `AgentInterface`), and they leave the table in
+     * different shapes — present and empty, or gone. A negated matcher on a
+     * locator that resolves to nothing fails rather than passes, so asserting
+     * over the table would make the test depend on which of the two happened.
+     * The panel is there either way, and "none of the first owner's rows are in
+     * the chat" is the claim that matters.
+     */
+    const chat = page.locator('.pf-chat');
+    for (const name of mineNames) {
+      await expect(chat).not.toContainText(name);
+    }
 
     // What the new owner's backend holds for this tab (the page's session is now the new owner's).
     const after = await published(page, (s) => s.target?.id === 'platform.settings');
@@ -425,10 +457,15 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     expect(after.instances.some((i: any) => i.state === 'ready' && i.matched === mine.length)).toBe(false);
     expect(text).not.toContain(heldSpace);
 
-    // Then the canvas, inside the app: it renders the space the shell still holds from before the switch.
+    /*
+     * Then the canvas, inside the app. The space the shell held before the
+     * switch is gone from the store and from the address with it (L6.12), so
+     * the canvas opens on no space at all — where it used to open on the
+     * previous owner's and show a refusal.
+     */
     await page.locator('.pf-nav__link', { hasText: 'Canvas' }).click();
     await expect.poll(() => new URL(page.url()).pathname).toBe('/');
-    expect(new URL(page.url()).searchParams.get('s')).toBe(heldSpace); // the precondition: still held
+    expect(new URL(page.url()).searchParams.get('s')).not.toBe(heldSpace);
     const onCanvas = await published(page, (s) => s.target?.id === 'platform.canvas');
     expect(onCanvas).toMatchObject({ spaceId: null, cardsSpaceId: null, cardsState: 'none', cards: [] });
     expect(JSON.stringify(onCanvas)).not.toContain(heldSpace);

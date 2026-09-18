@@ -1026,12 +1026,11 @@
       }
     },
     "L6.3": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "Narzedzie ui_state zwraca aktualny, wersjonowany opis ekranu w trakcie wykonania (packages/platform-server/src/agent/tools/ui-state.ts) i rozroznia opis nieaktualny; prompt kaze go odczytac po kazdej komendzie UI. Dowod: e2e/ui-state.spec.ts, tests/ui-snapshot.test.ts.",
-      "gap": "get_context nadal zwraca snapshot z chwili startu wykonania: zmiana zaznaczenia, zasobu albo szkicu w trakcie dlugiego zadania jest dla agenta niewidoczna (ui_state opisuje ekran, nie zaznaczenie i szkice).",
-      "backlog": "BL-11",
+      "proof": "get_context zwraca dwie czesci: commandContext (kontekst polecenia, niezmienny przez cale wykonanie) i currentContext — to, co karta przegladarki pokazujaca TE rozmowe trzyma teraz: zasob, zaznaczenie i szkice, z wersja opisu, stale/reason i lista changedSinceCommand (packages/platform-server/src/agent/tools/context.ts). Kanalem jest ten sam wersjonowany, przypisany do karty i do rozmowy opis ekranu co ui_state, rozszerzony o blok context (platform-contracts/src/ui-snapshot.ts, platform-ui/src/state/uiSnapshot.ts, shell/UiSnapshotPublisher.tsx). Dowod: e2e/app-context.spec.ts „L6.3 i L6.9: zaznaczenie zmienione w trakcie dlugiego zadania jest widoczne i odroznione od startowego” (uzytkownik klika kafel karty w trakcie dzialajacego zadania; symulacja modelu na granicy adaptera, reszta prawdziwa) oraz tests/app-context.test.ts „zmiana zaznaczenia i szkicu W TRAKCIE wykonania jest widoczna i nazwana” i „bez opisu karty biezacy kontekst jest NIEZNANY, a nie rowny startowemu”. Nie obejmuje: przebiegu z prawdziwym modelem (brak grantu tur).",
+      "gap": "—",
       "scenarios": [
         "T08"
       ],
@@ -1041,12 +1040,11 @@
       }
     },
     "L6.4": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "appContextSchema nie ma pola właściciela; ownerId pochodzi z sesji (http/app.ts, c.get('ownerId')), serwisy sprawdzają właściciela (conversations #row, canvas.getState). tests/contracts.test.ts „drugi uzytkownik nie widzi cudzej sprawy — mimo poprawnego identyfikatora”, „identyfikator wlasciciela z ciala zadania nie daje dostepu” (w praktyce: cudze ciasteczko daje 403 na zasób modułu); tests/ui-navigation.test.ts „cudza przestrzen pracy jest odrzucona przed dotknieciem interfejsu”.",
-      "gap": "Żaden test nie wysyła do /api/agui/run sfałszowanego lub niepoprawnego appContext (cudzy spaceId, resource, conversationId). Niepoprawny kontekst kończy się ZodError zamapowanym na 500 internal zamiast validation_failed, a spaceId z kontekstu jest zapisywany do rozmowy (create, bindSpace) bez sprawdzenia właściciela przestrzeni — nie daje odczytu, ale tworzy niespójne powiązanie.",
-      "backlog": "BL-11",
+      "proof": "appContextSchema nie ma pola wlasciciela; ownerId pochodzi z sesji. Kontekst niezgodny z kontraktem konczy sie teraz validation_failed z lista pol (reason: invalid_app_context) zamiast 500 internal, a spaceId z kontekstu jest sprawdzany na wlasnosc (canvas.getSpace) zanim trafi do rozmowy — http/app.ts /api/agui/run. Dowod: tests/app-context.test.ts „kontekst niezgodny z kontraktem to validation_failed z polami, nie internal 500”, „cudza przestrzen z kontekstu nie zostaje zapisana w rozmowie: forbidden, wiazanie nietkniete” (rozmowa zostaje przy swojej przestrzeni, zadne uruchomienie nie startuje), „cudzy zasob w kontekscie nie daje odczytu: opis mowi forbidden, a nie tresc rekordu”, „kontekst nie ma pola wlasciciela, a podstawiony ownerId nie zmienia wlasciciela wykonania”; wczesniejsze tests/contracts.test.ts i tests/ui-navigation.test.ts bez zmian.",
+      "gap": "—",
       "scenarios": [
         "T12",
         "T09"
@@ -1087,12 +1085,11 @@
       }
     },
     "L6.7": {
-      "status": "czesciowe",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "agent/prompt.ts zawiera identyfikatory kontekstu i jednozdaniowy opis zasobu, bez danych biznesowych (analiza kodu). Limity: procurement_search (domyślnie 20, maks. 50 w services.ts), procurement_list_offers (limit 25). tests/contracts.test.ts „wyszukiwanie znajduje rekordy po fragmencie nazwy” wywołuje search z limitem, ale nie sprawdza jego egzekwowania.",
-      "gap": "procurement_list_cases, procurement_get_case, canvas_list_cards, files_list i ui_catalog zwracają pełne zbiory bez paginacji ani limitu; list_offers przycina dopiero po pobraniu całej sprawy. Brak testu limitu odczytu.",
-      "backlog": "BL-11",
+      "proof": "Wspolne okno odczytu dla narzedzi agenta (platform-contracts/src/read-window.ts): limit i offset w schemacie, domyslnie 25, najwyzej 100, a odpowiedz niesie window {total, returned, offset, limit, truncated, nextOffset} i zdanie windowNote. Objete: procurement_list_cases, procurement_get_case (oferty przez limit/offset, wymagania przez wlasne requirementsLimit/requirementsOffset), procurement_list_offers (okno ofert przed budowaniem odpowiedzi, pozycje przez itemsLimit/itemsOffset), canvas_list_cards, files_list, files_versions, workspace_outputs, ui_catalog, agent_views_list. prompt.ts nadal nie niesie danych biznesowych poza opisem zasobu. Dowod: tests/app-context.test.ts „bez limitu odczyt zwraca domyslne okno i mowi, ze to nie caly zbior” (30 kart, zwrocone 25, druga strona uzupelnia zbior), „kazde narzedzie odczytu albo bierze okno, albo jest tu wymienione z powodem” (test wylicza WSZYSTKIE narzedzia effect=read z rejestru i wymaga limit+offset albo wpisu w mapie wyjatkow z uzasadnieniem — komenda interfejsu, zbior ograniczony kontraktem, albo okno zmieniajace sens odpowiedzi jak ranking ofert; nowe narzedzie odczytu oblewa ten test), „limit i offset przechodza przez narzedzie modulu, a totals nie klamia”, „limit poza zakresem schematu jest odrzucany”, „kazdy windowany odczyt miesci sie w tym, co rozmowa przechowuje” (takze wyliczane z rejestru, z furtka na ui_catalog, ktorego rozmiar pochodzi z deklaracji aplikacji, nie z danych uzytkownika) oraz „odpowiedz get_context miesci sie w tym, co rozmowa przechowuje” (get_context nie bierze okna, bo nie jest strona wiekszego zbioru, ale rosnie z tym, co uzytkownik zaznaczyl i wpisal — test trzyma go pod TOOL_RESULT_STORED_CHARS przy ciezkim kontekscie: tuzin zaznaczonych wierszy, zawezony i uporzadkowany widok, piec brudnych formularzy). Granica zapisana wprost: kontekst na maksimum schematu (50 zaznaczen o identyfikatorach maksymalnej dlugosci, 20 formularzy po 60 pol) nie miesci sie w zapisie wyniku narzedzia — to limit przechowywanej projekcji, nie okna.",
+      "gap": "—",
       "scenarios": [
         "T09"
       ],
@@ -1102,44 +1099,41 @@
       }
     },
     "L6.8": {
-      "status": "niesprawdzone",
-      "evidence": "brak",
-      "origin": "brak",
-      "proof": "chat/chatWiring.ts createChatLlm: obiekt llm tworzony raz (useMemo w ChatPanel.tsx), ale send odczytuje useAppState.getState().toAppContext() przy każdym wysłaniu — analiza kodu wskazuje odczyt w chwili wysłania. Brak testu, który zmienia kontekst po zamontowaniu czatu i sprawdza kontekst odebrany przez backend.",
-      "gap": "Brak wykonywanego dowodu; e2e/agent-ui.spec.ts przeładowuje stronę przed poleceniem, więc kontekst przy montowaniu i przy wysłaniu jest ten sam i nie rozróżnia obu wariantów.",
-      "backlog": "BL-11",
+      "status": "potwierdzone",
+      "evidence": "gui",
+      "origin": "szablon",
+      "proof": "chat/chatWiring.ts send odczytuje useAppState.getState().toAppContext() przy kazdym wyslaniu. Dowod wykonywany: e2e/app-context.spec.ts „L6.8: kontekst polecenia jest odczytany w chwili wyslania, nie przy montowaniu czatu” — czat montuje sie na ekranie bez rekordu (opis karty publikuje context.resource = null), uzytkownik przechodzi klikajac (bez przeladowania) na ekran sprawy, a kontekst odebrany przez backend w get_context ma resource tej sprawy i znacznik ekranu z jej adresu. Wariant „utrwalony przy montowaniu” dalby resource null. Symulacja modelu na granicy adaptera; przegladarka, runtime i handlery prawdziwe.",
+      "gap": "—",
       "scenarios": [
         "T08"
       ]
     },
     "L6.9": {
-      "status": "niespelnione",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "Jak L6.3: toolCtx.appContext w agent/runtime.ts jest niezmienny przez całe wykonanie, brak endpointu aktualizacji kontekstu; żaden test nie zmienia zaznaczenia ani szkicu w trakcie wykonania.",
-      "gap": "Agent nie ma kanału odczytu nowszego kontekstu, więc nie może go odróżnić od startowego; próba zmiany zaznaczenia lub szkicu podczas pracy (T08) jest niewykonalna w obecnym kodzie.",
-      "backlog": "BL-11",
+      "proof": "Kanal z L6.3 plus rozroznienie: currentContext.changedSinceCommand wymienia, co rozni sie od kontekstu polecenia (resource, selection, drafts, spaceId), a get_context ma waitForChange — czekanie na opis nowszy niz ten, z ktorym przyszlo polecenie. Dowod: e2e/app-context.spec.ts „L6.3 i L6.9…” — pierwszy odczyt w zadaniu widzi puste zaznaczenie, uzytkownik zaznacza karte mysza w trakcie wykonania, drugi odczyt widzi ja z wyzsza wersja opisu, a commandContext.selection pozostaje puste; tests/app-context.test.ts „zmiana zaznaczenia i szkicu W TRAKCIE wykonania jest widoczna i nazwana” (publikacja nowej wersji dokladnie miedzy dwoma odczytami, bez uspienia).",
+      "gap": "—",
       "scenarios": [
         "T08"
       ]
     },
     "L6.10": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "Cel operacji: toolCtx.appContext ustalony przy starcie (agent/runtime.ts), więc późniejsza nawigacja nie zmienia celu z konstrukcji (analiza kodu). Wersja przy zapisie: tests/contracts.test.ts „nie nadpisuje nowszych danych przy nieaktualnej wersji”, „konflikt kompozycji karty nie niszczy ostatniego poprawnego ukladu”.",
-      "gap": "expectedVersion w procurement_update_offer_item i expectedSpecVersion w canvas_update_card są opcjonalne (services.ts: expected = input.expectedVersion ?? item.version), więc zapis agenta bez wersji nie sprawdza aktualności. Brak testu, że nawigacja w trakcie wykonania nie przenosi mutacji na inny rekord.",
-      "backlog": "BL-11",
+      "proof": "Cel: toolCtx.appContext ustalony przy starcie, a od teraz rozroznialny od biezacego kontekstu, wiec da sie wykazac, ze agent widzi nawigacje i mimo to pisze do celu ze startu. Wersja: expectedVersion w procurement_update_offer_item i expectedSpecVersion w canvas_update_card sa WYMAGANE w narzedziach agenta (akcja rekordu podaje wersje odczytanego rekordu, $record.version). Dowod: tests/app-context.test.ts „nawigacja w trakcie wykonania nie przenosi mutacji na inny rekord” (agent czyta zmiane zasobu na inna sprawe, zapis ladny w pozycji ze startu, wersja +1), „zapis narzedziem bez wersji jest odrzucony, a z nieaktualna wersja daje conflict bez nadpisania”, „kompozycja karty: zapis bez wersji odrzucony, z nieaktualna wersja conflict”; przeplyw uzytkownika w e2e/app-context.spec.ts „L6.14…” (nawigacja do innej przestrzeni w trakcie zadania nie przenosi zapisu). Wczesniejsze tests/contracts.test.ts bez zmian.",
+      "gap": "—",
       "scenarios": [
         "T08"
       ]
     },
     "L6.11": {
       "status": "czesciowe",
-      "evidence": "gui",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "e2e/access-context.spec.ts „po przelaczeniu zaden wiersz poprzedniej tozsamosci nie jest widoczny” (access-denied z kodem forbidden/not_found, odróżniony od pustej listy); tests/live-artifacts.test.ts „brak dostepu nie jest przedstawiany jako swieze dane”; e2e/app.spec.ts „brakujace dane sa oznaczone jako brakujace”; narzędzia zgłaszają AppError not_found/forbidden. Od d142b85: procurement_search zwraca totals (liczby spraw, dostawców, pozycji niezależnie od zapytania), a \"*\" zwraca wszystko — „0 pasujących z N” jest odróżnione od pustej aplikacji (tests/view-filter.test.ts, test kontraktu).",
-      "gap": "describeResource modułu (module-procurement/src/server/index.ts) zwraca null przy każdym błędzie, więc get_context i prompt nie odróżniają usuniętego, cudzego i nieopisanego zasobu. Zachowanie agenta (brak zmyślania przy braku danych) nie ma testu z modelem w szablonie.",
+      "proof": "describeResource rozroznia piec stanow zamiast jednego null: none (brak zasobu w kontekscie), described, not_found (rekordu nie ma), forbidden (cudzy), not_described (zadnego modulu nie opisuje tego rodzaju) — registry/modules.ts, kontrakt ResourceDescription w platform-contracts/src/module.ts; modul nie polyka juz bledow serwisu. get_context niesie resourceState i zdanie o tym, czego NIE wolno uzupelniac, a prompt pisze „opis zasobu: BRAK (not_found)” zamiast milczec po identyfikatorze. Dowod: tests/app-context.test.ts „opis zasobu rozroznia brak kontekstu, opisany rekord, usuniety, cudzy i nieopisany rodzaj”, „get_context i prompt mowia wprost, ze rekordu nie ma”, „pusty wynik odczytu to zero rekordow z totals, a brak rekordu to blad — nie to samo”; wczesniejsze dowody (access-context, live-artifacts, view-filter totals) bez zmian.",
+      "gap": "Zachowanie agenta — ze nie uzupelnia brakow wymyslonymi danymi — nadal nie ma proby z prawdziwym modelem w szablonie. Platforma podaje juz rozroznialne stany i wprost zakazuje zmyslania, ale czy model sie do tego stosuje, moze wykazac tylko przebieg modelowy (Z5 mial grant zero tur).",
       "backlog": "BL-11",
       "scenarios": [
         "T09",
@@ -1147,12 +1141,11 @@
       ]
     },
     "L6.12": {
-      "status": "niespelnione",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "Zmiana tożsamości: api/queries.ts switchAccessContext → api/accessContext.ts setAccessContext czyści cache i przerywa żądania (e2e/access-context.spec.ts), ale nie zeruje useAppState. Zmiana przestrzeni: appState.setSpace nie czyści selection (czyści ją tylko setResource). Zmiana rozmowy: ConversationSync ustawia conversationId i przestrzeń rozmowy.",
-      "gap": "Po przełączeniu tożsamości bez przeładowania kolejne polecenie niesie resource, spaceId, selection, drafts i conversationId poprzedniego właściciela; po zmianie przestrzeni zaznaczone karty poprzedniej przestrzeni trafiają do następnego polecenia. Backend odrzuca cudze zasoby, ale kontekst poprzedniego zakresu trafia do promptu. Brak testu kontekstu następnego polecenia po którymkolwiek przełączeniu.",
-      "backlog": "BL-11",
+      "proof": "Trzy przelaczenia, kazde z dowodem. (1) Wlasciciel: useAppState.clearScopedContext() wpiety w onAccessContextChange czysci rozmowe, przestrzen, zasob, zaznaczenie, filtry, viewport, szkice, stan kart, zalaczniki, stany widokow i uruchomienia poprzedniego wlasciciela (platform-ui/src/state/appState.ts). (2) Przestrzen: setSpace czysci zaznaczenie, viewport i powiadomienia poprzedniej przestrzeni; ustawienie tej samej przestrzeni nic nie czysci. (3) Rozmowa: ConversationSync.followConversationSpace stosuje przestrzen rozmowy TAKZE gdy jest null, ale tylko gdy czat opuszcza inna rozmowe (leavesAnotherConversation w chat/sessionRestore.ts) — wczesniejszy warunek if (conv.spaceId) zostawial przestrzen i zaznaczenie rozmowy poprzedniej, a warunek bez zadnego ograniczenia kasowal przestrzen rozmowie tworzonej dla wysylanego polecenia. Zasob przestaje byc czescia kontekstu, gdy jego ekran znika (CaseDetailPage czysci resource przy odmontowaniu) — to jedyne miejsce, ktore go ustawia; dowod: e2e/app-context.spec.ts „L6.12: wyjscie z ekranu rekordu zdejmuje rekord z kontekstu nastepnego polecenia” (ta sama rozmowa, ten sam wlasciciel, bez przeladowania). Skutek uboczny przyjety swiadomie: ekran pochodzenia wartosci (/items/:itemId/provenance) nie niesie juz zadnego rekordu — wczesniej dziedziczyl sprawe po ekranie, z ktorego przyszedl, choc jej nie pokazuje; agent poznaje ten ekran z opisu interfejsu (ui_state: adres i widok), a nie z odziedziczonego identyfikatora. Dowod: e2e/app-context.spec.ts „L6.12: zmiana przestrzeni nie przenosi zaznaczonych kart do nastepnego polecenia”, „L6.12: po zmianie wlasciciela bez przeladowania kolejne polecenie nie niesie niczego poprzedniego” (ta sama karta przegladarki, bez reloadu; pierwszy wlasciciel wysyla polecenie, wiec jest co wyniesc, a wektorami przeciekow sa trzy rzeczy, ktore naprawde przezywaja wedrowke po aplikacji: przestrzen, zaznaczona w niej karta i nieposlany szkic formularza wpisany z klawiatury — warunek wstepny sprawdza, ze polecenie pierwszego wlasciciela nioslo wszystkie trzy; identyfikator sprawy nie jest juz wektorem, bo zeszedl z kontekstu razem ze swoim ekranem, i to ma osobny dowod) i „L6.12: przejscie do rozmowy bez przestrzeni nie zabiera ze soba przestrzeni ani zaznaczenia poprzedniej” (rozmowa wybrana z szuflady mysza, z ekranu modulu — canvas ma swiadomy fallback na ostatnia przestrzen; warunek wstepny: polecenie w rozmowie A nioslo przestrzen A i zaznaczona w niej karte); tests/app-context.test.ts: dwa testy sklepu stanu i test reguly leavesAnotherConversation. Nie obejmuje: (a) przecieku identyfikatora rozmowy przez ADRES po zmianie wlasciciela — test zaczyna wtedy nowa rozmowe (obejscie defektu panelu czatu, ktory trzyma rozmowe poprzedniego wlasciciela), co zdejmuje ?c= z adresu; ten wektor pokrywa e2e/ui-state.spec.ts „przelaczenie tozsamosci na Ustawieniach”; (b) wyboru rozmowy BEZ wlasnej przestrzeni w chwili, gdy czat nie jest na zadnej rozmowie (lastSynced === null). To nie tylko swieze wczytanie bez ?c=: decideRestore zwraca 'new' i zeruje lastSynced za kazdym razem, gdy ?c= znika z adresu w trakcie sesji — przycisk nowej rozmowy w panelu czatu, Wstecz na wpis sprzed rozmowy, zdjecie parametru po powiadomieniu. Nastepny wybor rozmowy bez przestrzeni zostawia wtedy przestrzen i zaznaczenie rozmowy, ktora uzytkownik przed chwila porzucil. Swiadome i takie zostaje: bez zapamietanej rozmowy nie ma zakresu, ktory uzytkownik opuszcza, a kasowanie zabieraloby mu przestrzen, na ktora patrzy, gdy pisal polecenie. Testy tego przypadku nie obejmuja, stad ten zapis.",
+      "gap": "—",
       "scenarios": [
         "T12",
         "T22"
@@ -1169,12 +1162,11 @@
       ]
     },
     "L6.14": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/ui-navigation.spec.ts „zadanie w tle nie przejmuje widoku innej rozmowy” (ścieżka bez zmian, inactive_conversation w historii właściwej rozmowy); shell/UiCommandRunner.tsx odmawia polecenia z nieoglądanej rozmowy; tests/agui-stream.test.ts „zakonczenie poza ogladana rozmowa jest oznaczone jako niezobaczone” (bez zmiany conversationId); shell/BackgroundTasks.tsx: przejście do zadania tylko kliknięciem.",
-      "gap": "Brak testu, że zadanie A po zmianie przez użytkownika zaznaczenia lub przestrzeni nadal operuje na przestrzeni i zaznaczeniu ze startu — wynika to tylko z niezmiennego snapshotu kontekstu (analiza kodu), bez próby T22 z nowym zaznaczeniem.",
-      "backlog": "BL-11",
+      "proof": "Kontekst polecenia jest niezmienny, a nowy kanal biezacego kontekstu jest przypisany do rozmowy wykonania, wiec zadanie rozmowy A nie dostaje nawet opisu karty pokazujacej B (reason other_conversation). Dowod: e2e/app-context.spec.ts „L6.14: zadanie rozmowy A nie przejmuje przestrzeni ani zaznaczenia wybranego pozniej” — w trakcie zadania uzytkownik przechodzi do innej przestrzeni i zaznacza w niej karte; kontekst zadania nadal ma przestrzen ze startu i puste zaznaczenie, a karta dopisana przez zadanie trafia do przestrzeni A (dokladnie jedna nowa) i nie ma jej w B; tests/app-context.test.ts „opis karty pokazujacej INNA rozmowe nie jest podany jako biezacy kontekst” (zadnego identyfikatora drugiej rozmowy w odpowiedzi). Wczesniejsze e2e/ui-navigation.spec.ts i tests/agui-stream.test.ts bez zmian.",
+      "gap": "—",
       "scenarios": [
         "T22",
         "T27"

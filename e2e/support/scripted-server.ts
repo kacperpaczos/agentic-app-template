@@ -18,6 +18,7 @@ import { collectToolEntries, platformTools, type PlatformInstance } from '@platf
 import { composeApp } from '../../apps/server/src/compose.ts';
 import { agentViewsScript } from './agent-views-scenario.ts';
 import { compositionScript, messageKindsScript } from './bl10-scenarios.ts';
+import { appContextScript } from './app-context-scenario.ts';
 import { interactionsScript } from './interactions-scenario.ts';
 import { showValueScript } from './show-value-scenario.ts';
 import { scriptedAgent, type CallRecord, type Step } from './scripted-agent.ts';
@@ -470,6 +471,7 @@ const CONVERSATION_SCENARIOS: Record<string, (prompt: string) => Step[]> = {
   'agent-views': agentViewsScript,
   'bl10-messages': messageKindsScript,
   'bl10-composition': compositionScript,
+  'app-context': appContextScript,
   interactions: interactionsScript,
   'show-value': showValueScript,
   'stop-measurement': stopMeasurementScript,

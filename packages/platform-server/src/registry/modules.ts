@@ -3,6 +3,7 @@ import type {
   ModuleReadOperation,
   ModuleToolDefinition,
   PlatformRouteHandler,
+  ResourceDescription,
   RouteRegistrar,
   ServerModule,
   ToolCallContext,
@@ -216,21 +217,68 @@ export class ServerModuleRegistry {
       .join('\n\n');
   }
 
+  /**
+   * What became of the resource the command's context named.
+   *
+   * Never collapses a failure into "no description". A module is asked in turn;
+   * the first that answers wins. A module that *raises* — a record that is gone
+   * (`not_found`), one belonging to another owner (`forbidden`), anything else —
+   * ends the search with that verdict, because a failure is an answer about this
+   * resource and the next module has nothing better to say about it. Only when
+   * every module returns `null` is the resource genuinely undescribed.
+   *
+   * A run is never broken by this: each state is reported, none is thrown on.
+   */
   async describeResource(
     resource: { kind: string; id: string } | null,
     ownerId: string,
-  ): Promise<string | null> {
-    if (!resource) return null;
+  ): Promise<ResourceDescription> {
+    if (!resource) {
+      return {
+        state: 'none',
+        resource: null,
+        summary: null,
+        errorCode: null,
+        note: 'Polecenie nie wskazuje zadnego rekordu — uzytkownik nie jest na ekranie rekordu.',
+      };
+    }
     for (const m of this.#modules) {
       if (!m.describeResource) continue;
       try {
         const d = await m.describeResource(resource, ownerId);
-        if (d) return d;
-      } catch {
-        /* a module that cannot describe a resource must not break the run */
+        if (d) {
+          return { state: 'described', resource, summary: d, errorCode: null, note: 'Opis pochodzi z modulu.' };
+        }
+      } catch (err) {
+        const appErr = AppError.from(err);
+        const state =
+          appErr.code === 'not_found' ? 'not_found' : appErr.code === 'forbidden' ? 'forbidden' : 'failed';
+        return {
+          state,
+          resource,
+          summary: null,
+          errorCode: appErr.code,
+          note:
+            state === 'not_found'
+              ? `Rekordu ${resource.kind} ${resource.id} juz nie ma (albo nigdy nie bylo). To NIE jest pusty wynik — ` +
+                'nie opisuj tego rekordu i nie uzupelniaj go wlasnymi danymi.'
+              : state === 'forbidden'
+                ? `Rekord ${resource.kind} ${resource.id} nalezy do innego wlasciciela — nie masz do niego dostepu. ` +
+                  'To NIE jest pusty wynik ani brak danych w aplikacji.'
+                : `Nie udalo sie opisac rekordu ${resource.kind} ${resource.id} (${appErr.code}). ` +
+                  'Nie wiadomo, co on zawiera — nie zmyslaj tresci.',
+        };
       }
     }
-    return null;
+    return {
+      state: 'not_described',
+      resource,
+      summary: null,
+      errorCode: null,
+      note:
+        `Zaden modul nie opisuje rekordow rodzaju "${resource.kind}". O tym rekordzie nic nie wiadomo — ` +
+        'odczytaj go narzedziem albo powiedz, ze go nie znasz.',
+    };
   }
 
   defaultComposition(scope: { kind: string; id: string }) {

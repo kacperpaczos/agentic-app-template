@@ -247,6 +247,57 @@ export type ModuleEmittedEvent =
   | { type: 'artifact_created'; artifactId: string };
 
 /* -------------------------------------------------------------------------- */
+/*  What became of the resource the user is on                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Why the agent has, or has not, a description of the resource in the context.
+ *
+ *  - `none` — the command carried no resource; the user is not on a record;
+ *  - `described` — `summary` is the module's description of it;
+ *  - `not_described` — the resource exists as far as this is concerned, but no
+ *    module describes this `kind`. Nothing is known about it, and nothing about
+ *    it may be assumed;
+ *  - `not_found` — the record named by the context is not there (deleted, or
+ *    never existed under this id);
+ *  - `forbidden` — it exists and belongs to somebody else; the signed-in owner
+ *    may not read it;
+ *  - `failed` — describing it broke for another reason. Also not a licence to
+ *    invent one.
+ *
+ * The four last states used to be one `null`, which read as "no description" and
+ * was indistinguishable from "no resource". That is precisely the confusion
+ * L6.11 is about: a missing record, a record of another owner and an empty
+ * result are three different answers.
+ */
+export const RESOURCE_DESCRIPTION_STATES = [
+  'none',
+  'described',
+  'not_described',
+  'not_found',
+  'forbidden',
+  'failed',
+] as const;
+export type ResourceDescriptionState = (typeof RESOURCE_DESCRIPTION_STATES)[number];
+
+/** The resource of a command's context, as far as the platform could resolve it. */
+export interface ResourceDescription {
+  state: ResourceDescriptionState;
+  /** The resource the context named, verbatim; null when it named none. */
+  resource: { kind: string; id: string } | null;
+  /** The module's description — only ever present with `state: 'described'`. */
+  summary: string | null;
+  /** The error code a failure arrived with, for `not_found` / `forbidden` / `failed`. */
+  errorCode: string | null;
+  /** One sentence saying what this state means, addressed to the agent. */
+  note: string;
+}
+
+/** True when the description is an honest statement that nothing is known. */
+export const resourceIsUnknown = (d: ResourceDescription): boolean =>
+  d.state === 'not_described' || d.state === 'not_found' || d.state === 'forbidden' || d.state === 'failed';
+
+/* -------------------------------------------------------------------------- */
 /*  Server-side module contract                                               */
 /* -------------------------------------------------------------------------- */
 
@@ -351,6 +402,15 @@ export interface ServerModule {
   /**
    * Resolves the opaque `resource` of an AppContext into a short, human readable
    * summary the agent can use without loading the database.
+   *
+   * **Answer only about a resource you can describe.** `null` means "not a kind
+   * this module describes" — it is *not* the answer for a record that is gone or
+   * belongs to somebody else. Those are failures, and the module raises them
+   * (`AppError` with `not_found` / `forbidden`, which the services already
+   * throw); the platform turns them into the matching {@link ResourceDescription}
+   * state. Swallowing them into `null` is what makes a deleted record, another
+   * owner's record and an undescribed kind indistinguishable — and a context the
+   * agent then fills in from imagination.
    */
   describeResource?: (
     resource: { kind: string; id: string },

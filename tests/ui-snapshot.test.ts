@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AGUI_EVENTS,
   AppError,
+  EMPTY_UI_SNAPSHOT_CONTEXT,
   PLATFORM_CUSTOM_EVENTS,
   UI_CLIENT_INACTIVE_AFTER_MS,
   UI_COMMAND_ACK_MARGIN_MS,
@@ -151,6 +152,7 @@ function snapshot(over: Partial<UiSnapshot> = {}): UiSnapshot {
     instances: [instance('DataTable-a')],
     instancesOmitted: 0,
     actions: ['navigate', 'filter', 'sort'],
+    context: EMPTY_UI_SNAPSHOT_CONTEXT,
     ...over,
   };
 }

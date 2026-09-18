@@ -1,6 +1,7 @@
 import {
   AGENT_VIEWS_SCOPE_KIND,
   AppError,
+  EMPTY_UI_SNAPSHOT_CONTEXT,
   UI_CLIENT_HEARTBEAT_MS,
   UI_SNAPSHOT_CARDS_LIMIT,
   UI_SNAPSHOT_INSTANCES_LIMIT,
@@ -13,6 +14,7 @@ import {
   type SemanticInstance,
   type UiCardsState,
   type UiSnapshot,
+  type UiSnapshotContext,
   type UiTarget,
   type ViewDefinition,
 } from '@platform/contracts';
@@ -50,6 +52,14 @@ export interface UiSnapshotInput {
   pathname: string;
   conversationId: string | null;
   spaceId: string | null;
+  /**
+   * The live part of the command context — the record the user is on, what they
+   * have selected and which forms are dirty. Published with the screen so a run
+   * of *this* conversation can read it while it works (`get_context`), and never
+   * reaches a run of another conversation. Omitted means nothing selected and
+   * nothing being typed.
+   */
+  context?: UiSnapshotContext;
   instances: readonly SemanticInstance[];
   /** The catalog, when loaded. */
   targets: readonly UiTarget[] | undefined;
@@ -163,6 +173,7 @@ export function buildUiSnapshotContent(input: UiSnapshotInput): UiSnapshotConten
       ...(target?.filter ? ['filter'] : []),
       ...(targetView?.primaryOperation ? ['sort'] : []),
     ],
+    context: input.context ?? EMPTY_UI_SNAPSHOT_CONTEXT,
   });
 
   let built = content();

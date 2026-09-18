@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import type { ModuleToolDefinition, ToolCallContext } from '@platform/contracts';
 import {
+  applyReadWindow,
+  READ_WINDOW_DEFAULT_LIMIT,
+  READ_WINDOW_MAX_LIMIT,
+  readWindowInput,
+  readWindowNote,
+} from '@platform/contracts';
+import {
   caseIdInput,
   listOffersInput,
   criteriaWeightsInput,
@@ -41,24 +48,49 @@ export function procurementTools(service: ProcurementService): ModuleToolDefinit
   const defs: Array<ModuleToolDefinition<any>> = [
     {
       name: 'list_cases',
-      description: 'Wypisuje sprawy zakupowe uzytkownika wraz z liczba ofert i pozycji.',
+      description:
+        'Wypisuje sprawy zakupowe uzytkownika wraz z liczba ofert i pozycji. ' +
+        `Odczyt jest stronicowany: domyslnie ${READ_WINDOW_DEFAULT_LIMIT} spraw, najwyzej ${READ_WINDOW_MAX_LIMIT}. ` +
+        'window.truncated=true znaczy, ze to nie sa wszystkie sprawy — po kolejne wywolaj z window.nextOffset. ' +
+        'Pusta lista przy window.total > 0 to skutek offsetu, a nie brak spraw.',
       effect: 'read',
-      inputSchema: z.object({}),
-      handler: async (_i: unknown, ctx: ToolCallContext) => ({
-        cases: service.listCases(ctx.ownerId),
-      }),
+      inputSchema: z.object(readWindowInput),
+      handler: async (i: { limit?: number; offset?: number }, ctx: ToolCallContext) => {
+        const { items, window } = applyReadWindow(service.listCases(ctx.ownerId), i);
+        return { cases: items, window, windowNote: readWindowNote(window, 'spraw') };
+      },
     },
     {
       name: 'get_case',
       description:
-        'Zwraca szczegoly sprawy zakupowej: podstawe porownania, wymagane pozycje, oferty i ich pozycje.',
+        'Zwraca szczegoly sprawy zakupowej: podstawe porownania, wymagane pozycje, oferty i ich pozycje. ' +
+        `Obie listy sa stronicowane osobno: limit/offset dotycza OFERT, requirementsLimit/requirementsOffset ` +
+        `wymaganych pozycji (domyslnie ${READ_WINDOW_DEFAULT_LIMIT}, najwyzej ${READ_WINDOW_MAX_LIMIT}). ` +
+        'Osobno, bo sprawa z trzema wymaganiami i setka ofert nie ma powodu chowac wymagan razem z oferta nr 26. ' +
+        'requirementsWindow.truncated / offersWindow.truncated=true znaczy, ze to nie jest cala lista.',
       effect: 'read',
-      inputSchema: z.object({ caseId: z.string() }),
-      handler: async (i: { caseId: string }, ctx: ToolCallContext) => {
+      inputSchema: z.object({
+        caseId: z.string(),
+        ...readWindowInput,
+        requirementsLimit: readWindowInput.limit.describe('Ile wymaganych pozycji zwrocic'),
+        requirementsOffset: readWindowInput.offset.describe('Od ktorej wymaganej pozycji zaczac'),
+      }),
+      handler: async (
+        i: { caseId: string; limit?: number; offset?: number; requirementsLimit?: number; requirementsOffset?: number },
+        ctx: ToolCallContext,
+      ) => {
         const d = service.getCaseDetail(i.caseId, ctx.ownerId);
+        const requirements = applyReadWindow(d.requirements, {
+          ...(i.requirementsLimit !== undefined ? { limit: i.requirementsLimit } : {}),
+          ...(i.requirementsOffset !== undefined ? { offset: i.requirementsOffset } : {}),
+        });
+        const offers = applyReadWindow(d.offers, i);
         return {
           case: d.procurementCase,
-          requirements: d.requirements.map((r) => ({
+          requirementsWindow: requirements.window,
+          offersWindow: offers.window,
+          windowNote: `${readWindowNote(requirements.window, 'wymagan')} ${readWindowNote(offers.window, 'ofert')}`,
+          requirements: requirements.items.map((r) => ({
             id: r.id,
             position: r.position,
             name: r.name,
@@ -66,7 +98,7 @@ export function procurementTools(service: ProcurementService): ModuleToolDefinit
             quantity: formatQuantity(r.quantityMilli),
             spec: r.spec,
           })),
-          offers: d.offers.map((o) => ({
+          offers: offers.items.map((o) => ({
             id: o.offer.id,
             supplier: o.supplierName,
             reference: o.offer.reference,
@@ -84,30 +116,55 @@ export function procurementTools(service: ProcurementService): ModuleToolDefinit
     },
     {
       name: 'list_offers',
-      description: 'Wypisuje oferty w sprawie wraz z pozycjami i cenami jednostkowymi.',
+      description:
+        'Wypisuje oferty w sprawie wraz z pozycjami i cenami jednostkowymi. ' +
+        `Odczyt jest stronicowany: limit/offset dotycza OFERT (domyslnie ${READ_WINDOW_DEFAULT_LIMIT}, najwyzej ` +
+        `${READ_WINDOW_MAX_LIMIT}), a itemsLimit/itemsOffset pozycji wewnatrz kazdej oferty — z wlasnym offsetem, ` +
+        'bo bez niego pozycje poza limitem bylyby tym narzedziem nieosiagalne. ' +
+        'window.truncated=true znaczy, ze to nie sa wszystkie oferty; itemsWindow pojawia sie przy ofercie, ' +
+        'ktorej pozycje zostaly przyciete.',
       effect: 'read',
       inputSchema: listOffersInput,
-      handler: async (i: { caseId: string; limit?: number }, ctx: ToolCallContext) => {
+      handler: async (
+        i: { caseId: string; limit?: number; offset?: number; itemsLimit?: number; itemsOffset?: number },
+        ctx: ToolCallContext,
+      ) => {
         const d = service.getCaseDetail(i.caseId, ctx.ownerId);
+        const { items: offers, window } = applyReadWindow(d.offers, i);
         return {
-          offers: d.offers.slice(0, i.limit ?? 25).map((o) => ({
-            id: o.offer.id,
-            supplier: o.supplierName,
-            reference: o.offer.reference,
-            currency: o.offer.currency,
-            priceBasis: o.offer.priceBasis,
-            items: o.items.map((it) => ({
-              id: it.id,
-              requirementId: it.requirementId,
-              name: it.name,
-              unit: it.unit,
-              quantity: formatQuantity(it.quantityMilli),
-              unitPriceMinor: it.unitPriceMinor,
-              unitPrice:
-                it.unitPriceMinor === null ? null : formatMinor(it.unitPriceMinor, o.offer.currency),
-              version: it.version,
-            })),
-          })),
+          offers: offers.map((o) => {
+            const items = applyReadWindow(o.items, {
+              ...(i.itemsLimit !== undefined ? { limit: i.itemsLimit } : {}),
+              ...(i.itemsOffset !== undefined ? { offset: i.itemsOffset } : {}),
+            });
+            return {
+              id: o.offer.id,
+              supplier: o.supplierName,
+              reference: o.offer.reference,
+              currency: o.offer.currency,
+              priceBasis: o.offer.priceBasis,
+              items: items.items.map((it) => ({
+                id: it.id,
+                requirementId: it.requirementId,
+                name: it.name,
+                unit: it.unit,
+                quantity: formatQuantity(it.quantityMilli),
+                unitPriceMinor: it.unitPriceMinor,
+                unitPrice:
+                  it.unitPriceMinor === null ? null : formatMinor(it.unitPriceMinor, o.offer.currency),
+                version: it.version,
+              })),
+              /*
+               * Only when something was left out. A window that covers the
+               * whole list says nothing the list does not already say, and a
+               * tool answer is context the model pays for — the top-level
+               * `window` and `windowNote` carry the general statement.
+               */
+              ...(items.window.truncated ? { itemsWindow: items.window } : {}),
+            };
+          }),
+          window,
+          windowNote: readWindowNote(window, 'ofert'),
           total: d.offers.length,
         };
       },
@@ -124,9 +181,25 @@ export function procurementTools(service: ProcurementService): ModuleToolDefinit
     {
       name: 'update_offer_item',
       description:
-        'Zmienia ilosc, cene jednostkowa, jednostke lub notatke pozycji oferty. Przekaz expectedVersion, zeby nie nadpisac nowszych danych, i operationId, zeby powtorzone wywolanie nie zdublowalo zmiany.',
+        'Zmienia ilosc, cene jednostkowa, jednostke lub notatke pozycji oferty. expectedVersion jest wymagane: ' +
+        'podaj version pozycji z list_offers albo z akcji rekordu. Jesli ktos zmienil pozycje w miedzyczasie, ' +
+        'dostaniesz conflict zamiast cichego nadpisania jego zmiany. operationId sprawia, ze powtorzone ' +
+        'wywolanie nie dubluje zmiany.',
       effect: 'write',
-      inputSchema: updateOfferItemInput,
+      /*
+       * `expectedVersion` required for the agent's door, optional on the shared
+       * schema the HTTP route uses (the module's own form supplies it from the
+       * record it rendered). A write without a version was compared against the
+       * row it was about to overwrite — no check at all — so an agent working
+       * from an older reading would silently replace the user's newer change.
+       */
+      inputSchema: updateOfferItemInput.extend({
+        expectedVersion: z
+          .number()
+          .int()
+          .nonnegative()
+          .describe('version pozycji, na ktorej pracujesz (z list_offers)'),
+      }),
       handler: async (i: any, ctx: ToolCallContext) => {
         const res = await service.updateOfferItem(i, ctx.ownerId);
         const { offer } = service.repo.getItem(i.itemId, ctx.ownerId);

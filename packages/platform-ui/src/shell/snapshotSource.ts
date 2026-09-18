@@ -1,5 +1,12 @@
 import type { QueryClient } from '@tanstack/react-query';
-import type { CanvasState, SemanticInstance, UiTarget, ViewDefinition } from '@platform/contracts';
+import {
+  EMPTY_UI_SNAPSHOT_CONTEXT,
+  type CanvasState,
+  type SemanticInstance,
+  type UiSnapshotContext,
+  type UiTarget,
+  type ViewDefinition,
+} from '@platform/contracts';
 import { accessScope, onAccessContextChange } from '../api/accessContext.ts';
 import { qk } from '../api/queries.ts';
 import type { DisplayedCanvas } from '../state/displayedCanvas.ts';
@@ -9,7 +16,12 @@ export interface ShellSnapshotDeps {
   qc: QueryClient;
   /** The address as the browser shows it. */
   location: () => { pathname: string; search: string };
-  shell: () => { conversationId: string | null; spaceId: string | null };
+  shell: () => {
+    conversationId: string | null;
+    spaceId: string | null;
+    /** The live command context of this tab (`UiSnapshotContext`); absent means empty. */
+    context?: UiSnapshotContext;
+  };
   /** Descriptions recorded under the identity signed in now (`listInstances`). */
   instances: () => SemanticInstance[];
   /** The space on screen, under the identity signed in now (`displayedCanvas`). */
@@ -56,15 +68,33 @@ export function createShellSnapshotSource(deps: ShellSnapshotDeps): ShellSnapsho
   } = { scope: scope() };
   /* Shell ids held when the identity last changed; `undefined` — no longer filtered. */
   const heldAtSwitch: { conversationId?: string | null; spaceId?: string | null } = {};
+  /*
+   * The ids this source last described, which is what the previous identity had.
+   *
+   * Deliberately not `deps.shell()` read inside the listener: the shell store
+   * also clears itself on a switch (L6.12) and, being a module-level subscriber,
+   * it may well run first — in which case reading the store here would answer
+   * `null` and nothing would be filtered, letting the previous identity's
+   * conversation id go out in the address of the next description. What this
+   * source last *reported* cannot be changed by another listener's timing.
+   */
+  let lastSeen: { conversationId: string | null; spaceId: string | null } | null = null;
   const stop = (deps.onAccessChange ?? onAccessContextChange)(() => {
-    const held = deps.shell();
+    const held = lastSeen ?? deps.shell();
     heldAtSwitch.conversationId = held.conversationId;
     heldAtSwitch.spaceId = held.spaceId;
   });
 
   const unlessHeld = (key: 'conversationId' | 'spaceId', value: string | null): string | null => {
     if (heldAtSwitch[key] === undefined) return value;
-    if (value === heldAtSwitch[key]) return null;
+    /*
+     * `null` is not "moved on": the shell clears these ids on a switch (L6.12),
+     * and the address bar catches up a render later. Dropping the filter on the
+     * first `null` let that render's description go out with the previous
+     * identity's conversation still in its `url`. The filter is released only
+     * when the shell names something — which can only be the new identity's.
+     */
+    if (value === heldAtSwitch[key] || value === null) return null;
     heldAtSwitch[key] = undefined; // the shell has moved on: its ids are the new identity's
     return value;
   };
@@ -97,6 +127,7 @@ export function createShellSnapshotSource(deps: ShellSnapshotDeps): ShellSnapsho
     if (views) known.views = views;
 
     const shell = deps.shell();
+    lastSeen = { conversationId: shell.conversationId, spaceId: shell.spaceId };
     const heldSpace = heldAtSwitch.spaceId;
     const conversationId = unlessHeld('conversationId', shell.conversationId);
     const spaceId = unlessHeld('spaceId', shell.spaceId);
@@ -119,6 +150,12 @@ export function createShellSnapshotSource(deps: ShellSnapshotDeps): ShellSnapsho
       pathname,
       conversationId,
       spaceId,
+      /*
+       * Nothing from before an identity switch, as above: while the shell still
+       * holds the previous identity's space, what was selected in it is that
+       * identity's too and is not published under the new one.
+       */
+      context: heldSpace !== undefined && spaceId === null ? EMPTY_UI_SNAPSHOT_CONTEXT : shell.context,
       instances: deps.instances(),
       targets: known.targets,
       views: known.views,

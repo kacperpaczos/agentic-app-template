@@ -1,7 +1,16 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, extname } from 'node:path';
 import { z } from 'zod';
-import { AppError, type ModuleToolDefinition, type ToolCallContext } from '@platform/contracts';
+import {
+  AppError,
+  applyReadWindow,
+  READ_WINDOW_DEFAULT_LIMIT,
+  READ_WINDOW_MAX_LIMIT,
+  readWindowInput,
+  readWindowNote,
+  type ModuleToolDefinition,
+  type ToolCallContext,
+} from '@platform/contracts';
 import type { PlatformServices } from '../../services/index.ts';
 import { resolveInWorkspace, listWorkspaceOutputs } from '../sandbox.ts';
 
@@ -26,17 +35,21 @@ export function fileTools(services: PlatformServices): Array<ModuleToolDefinitio
     {
       name: 'files_list',
       description:
-        'Wypisuje pliki w magazynie aplikacji. Uzyj scope, zeby zawezic do konkretnego rekordu biznesowego.',
+        'Wypisuje pliki w magazynie aplikacji. Uzyj scope, zeby zawezic do konkretnego rekordu biznesowego. ' +
+        `Odczyt jest stronicowany: domyslnie ${READ_WINDOW_DEFAULT_LIMIT} plikow, najwyzej ${READ_WINDOW_MAX_LIMIT}. ` +
+        'window.truncated=true znaczy, ze to nie sa wszystkie pliki — po kolejne wywolaj z window.nextOffset.',
       effect: 'read',
       inputSchema: z.object({
         scopeKind: z.string().optional(),
         scopeId: z.string().optional(),
+        ...readWindowInput,
       }),
       handler: async (input: any, ctx: ToolCallContext) => {
         const scope =
           input.scopeKind && input.scopeId ? { kind: input.scopeKind, id: input.scopeId } : undefined;
+        const { items, window } = applyReadWindow(services.files.list(ctx.ownerId, scope), input);
         return {
-          files: services.files.list(ctx.ownerId, scope).map((f) => ({
+          files: items.map((f) => ({
             id: f.id,
             filename: f.filename,
             mediaType: f.mediaType,
@@ -44,6 +57,8 @@ export function fileTools(services: PlatformServices): Array<ModuleToolDefinitio
             scopeKind: f.scopeKind,
             scopeId: f.scopeId,
           })),
+          window,
+          windowNote: readWindowNote(window, 'plikow'),
         };
       },
     },
@@ -127,14 +142,17 @@ export function fileTools(services: PlatformServices): Array<ModuleToolDefinitio
     },
     {
       name: 'files_versions',
-      description: 'Wypisuje wersje wyprodukowane z danego pliku, wraz z oryginalem.',
+      description:
+        'Wypisuje wersje wyprodukowane z danego pliku, wraz z oryginalem. ' +
+        `Odczyt jest stronicowany: domyslnie ${READ_WINDOW_DEFAULT_LIMIT} wersji, najwyzej ${READ_WINDOW_MAX_LIMIT}.`,
       effect: 'read',
-      inputSchema: z.object({ fileId: z.string() }),
-      handler: async (input: { fileId: string }, ctx: ToolCallContext) => {
+      inputSchema: z.object({ fileId: z.string(), ...readWindowInput }),
+      handler: async (input: { fileId: string; limit?: number; offset?: number }, ctx: ToolCallContext) => {
         const original = services.files.meta(input.fileId, ctx.ownerId);
+        const { items, window } = applyReadWindow(services.files.versionsOf(input.fileId, ctx.ownerId), input);
         return {
           original: { fileId: original.id, filename: original.filename, version: original.version },
-          versions: services.files.versionsOf(input.fileId, ctx.ownerId).map((f) => ({
+          versions: items.map((f) => ({
             fileId: f.id,
             filename: f.filename,
             version: f.version,
@@ -142,17 +160,25 @@ export function fileTools(services: PlatformServices): Array<ModuleToolDefinitio
             createdAt: f.createdAt,
             downloadUrl: `/api/files/${f.id}/content`,
           })),
+          window,
+          windowNote: readWindowNote(window, 'wersji pliku'),
         };
       },
     },
     {
       name: 'workspace_outputs',
-      description: 'Wypisuje pliki, ktore powstaly w katalogu output/ workspace uruchomienia.',
+      description:
+        'Wypisuje pliki, ktore powstaly w katalogu output/ workspace uruchomienia. ' +
+        `Odczyt jest stronicowany: domyslnie ${READ_WINDOW_DEFAULT_LIMIT} plikow, najwyzej ${READ_WINDOW_MAX_LIMIT}.`,
       effect: 'read',
-      inputSchema: z.object({}),
-      handler: async (_input: unknown, ctx: ToolCallContext) => {
-        if (!ctx.workspaceDir) return { outputs: [] };
-        return { outputs: listWorkspaceOutputs(ctx.workspaceDir) };
+      inputSchema: z.object(readWindowInput),
+      handler: async (input: { limit?: number; offset?: number }, ctx: ToolCallContext) => {
+        if (!ctx.workspaceDir) {
+          const { window } = applyReadWindow([], input);
+          return { outputs: [], window, windowNote: readWindowNote(window, 'plikow wyjsciowych') };
+        }
+        const { items, window } = applyReadWindow(listWorkspaceOutputs(ctx.workspaceDir), input);
+        return { outputs: items, window, windowNote: readWindowNote(window, 'plikow wyjsciowych') };
       },
     },
   ];

@@ -509,7 +509,7 @@ export class AgentRuntime {
       contextFor: () => toolCtx,
     });
 
-    const resourceSummary = await this.services.modules.describeResource(
+    const resourceDescription = await this.services.modules.describeResource(
       args.appContext.resource,
       args.ownerId,
     );
@@ -518,7 +518,8 @@ export class AgentRuntime {
       registry: this.services.modules,
       catalog: this.services.catalog,
       appContext: args.appContext,
-      resourceSummary,
+      resourceSummary: resourceDescription.summary,
+      resourceDescription,
       workspaceDir: args.workspace.dir,
       stagedFiles: args.staged,
       toolkit: args.workspace.toolkit,
@@ -795,11 +796,22 @@ export class AgentRuntime {
 
 const truncate = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}...` : s);
 
+/**
+ * How much of a tool's answer is kept in the conversation.
+ *
+ * Exported because it is a real limit on what a tool may return, not an
+ * implementation detail: past it the stored text is cut mid-value, so a reader
+ * of the conversation (the chat, a test, a diagnostic) gets something that no
+ * longer parses. A listing tool that can grow with the user's data therefore
+ * has to be windowed, and the window has to be small enough to fit here.
+ */
+export const TOOL_RESULT_STORED_CHARS = 4000;
+
 function summariseToolResponse(response: unknown): string {
   if (response == null) return 'null';
-  if (typeof response === 'string') return truncate(response, 4000);
+  if (typeof response === 'string') return truncate(response, TOOL_RESULT_STORED_CHARS);
   try {
-    return truncate(JSON.stringify(response), 4000);
+    return truncate(JSON.stringify(response), TOOL_RESULT_STORED_CHARS);
   } catch {
     return String(response);
   }
