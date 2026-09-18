@@ -10,6 +10,10 @@
       "ProbeNoteList",
       "probe-notes",
       "devkit-probe"
+    ],
+    "domainLabels": [
+      "notatki testowe",
+      "modul testowy"
     ]
   },
   "exports": {

@@ -29,11 +29,26 @@
  * and each module declares the words that must never leak into the platform in
  * its own package.json:
  *
- *   "agenticApp": { "domainVocabulary": ["supplier", "oferta", ...] }
+ *   "agenticApp": {
+ *     "domainVocabulary": ["supplier", "oferta", "pc_cases"],
+ *     "domainLabels": ["sprawy zakupowe", "sprawe"]
+ *   }
+ *
+ * Two lists, because identifiers and user-visible copy need different matching
+ * and one list could not do both:
+ *
+ *  - `domainVocabulary` matches as a **prefix** at a word boundary. That is what
+ *    identifiers and table prefixes need (`dostawc` catches `dostawcy`,
+ *    `dostawcow`, `supplierName`), and it is far too greedy for ordinary prose.
+ *  - `domainLabels` matches as a **whole word or phrase**. That is what the text
+ *    on screen needs: a heading, a button, an empty state. Prefix matching could
+ *    not express it — the leak this list was added for was the shell's menu
+ *    heading "Sprawy zakupowe", and a `spraw` prefix would have condemned
+ *    "sprawdza", "sprawne" and "Sprawdz" in every platform file.
  *
  * Replacing the example module therefore needs no edit to this script — the new
  * module brings its own vocabulary, and the check refuses to pass silently when
- * no module declares any.
+ * no module declares either list.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -91,27 +106,51 @@ for (const pkg of platformPackages) {
 
 const IMPORT_RE = /(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g;
 
+/** Regex-safe: a label is prose, so it may contain `.`, `(`, `-` and the rest. */
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /**
- * Business vocabulary that must never appear in the platform core. Checked as
- * whole-word prefixes, case-insensitively, against identifiers and string
- * literals. Collected from every module's `agenticApp.domainVocabulary`.
+ * Business vocabulary that must never appear in the platform core, collected
+ * from every module's manifest. See the header for why there are two lists:
+ * `domainVocabulary` matches as a word-boundary **prefix** (identifiers, table
+ * prefixes), `domainLabels` as a whole **word or phrase** (text on screen).
  */
-const vocabularyOwners = new Map();
-for (const dir of modulePackages) {
-  const words = readManifest(dir).agenticApp?.domainVocabulary;
-  if (words === undefined) continue;
+const readWordList = (dir, field) => {
+  const words = readManifest(dir).agenticApp?.[field];
+  if (words === undefined) return [];
   if (!Array.isArray(words) || words.some((w) => typeof w !== 'string' || w.trim() === '')) {
-    failures.push(`[slownik] packages/${dir}/package.json: agenticApp.domainVocabulary musi byc lista niepustych napisow`);
-    continue;
+    failures.push(`[slownik] packages/${dir}/package.json: agenticApp.${field} musi byc lista niepustych napisow`);
+    return [];
   }
-  for (const word of words) vocabularyOwners.set(word, dir);
+  return words;
+};
+
+const vocabularyOwners = new Map();
+const labelOwners = new Map();
+for (const dir of modulePackages) {
+  for (const word of readWordList(dir, 'domainVocabulary')) vocabularyOwners.set(word, dir);
+  for (const word of readWordList(dir, 'domainLabels')) labelOwners.set(word, dir);
 }
-const DOMAIN_WORDS = [...vocabularyOwners.keys()];
-if (DOMAIN_WORDS.length === 0) {
+if (vocabularyOwners.size === 0) {
   failures.push(
     '[slownik] zaden modul nie deklaruje agenticApp.domainVocabulary — kontrola slownika nie mialaby czego sprawdzac',
   );
 }
+if (labelOwners.size === 0) {
+  failures.push(
+    '[slownik] zaden modul nie deklaruje agenticApp.domainLabels — kontrola etykiet widocznych w interfejsie nie mialaby czego sprawdzac',
+  );
+}
+
+/**
+ * Every term to look for, with the regular expression that decides a hit and
+ * the module that owns it. One list downstream, so the code and the
+ * configuration scans cannot drift apart.
+ */
+const DOMAIN_TERMS = [
+  ...[...vocabularyOwners].map(([word, owner]) => ({ word, owner, kind: 'slownik', re: new RegExp(`\\b${escapeRe(word)}`, 'i') })),
+  ...[...labelOwners].map(([word, owner]) => ({ word, owner, kind: 'etykieta', re: new RegExp(`\\b${escapeRe(word)}\\b`, 'i') })),
+];
 
 // The platform legitimately talks about its own generic concepts; these lines
 // are exempted so the vocabulary scan does not produce noise.
@@ -143,10 +182,9 @@ for (const pkg of platformPackages) {
 
     source.split('\n').forEach((line, i) => {
       if (isExempt(line)) return;
-      for (const word of DOMAIN_WORDS) {
-        const re = new RegExp(`\\b${word}`, 'i');
-        if (re.test(line)) {
-          failures.push(`[slownik] ${rel}:${i + 1} zawiera pojecie domenowe "${word}": ${line.trim().slice(0, 90)}`);
+      for (const term of DOMAIN_TERMS) {
+        if (term.re.test(line)) {
+          failures.push(`[${term.kind}] ${rel}:${i + 1} zawiera pojecie domenowe modulu ${term.owner} "${term.word}": ${line.trim().slice(0, 90)}`);
         }
       }
     });
@@ -181,9 +219,9 @@ for (const pkg of platformPackages) {
         failures.push(`[konfiguracja] ${rel}:${i + 1} odwoluje sie do modulu biznesowego: ${line.trim().slice(0, 90)}`);
       }
       if (isExempt(line)) return;
-      for (const word of DOMAIN_WORDS) {
-        if (new RegExp(`\\b${word}`, 'i').test(line)) {
-          failures.push(`[konfiguracja] ${rel}:${i + 1} zawiera pojecie domenowe "${word}": ${line.trim().slice(0, 90)}`);
+      for (const term of DOMAIN_TERMS) {
+        if (term.re.test(line)) {
+          failures.push(`[konfiguracja/${term.kind}] ${rel}:${i + 1} zawiera pojecie domenowe modulu ${term.owner} "${term.word}": ${line.trim().slice(0, 90)}`);
         }
       }
     });
@@ -269,7 +307,9 @@ console.log('Granica platforma-domena zachowana:');
 console.log(`  - pakiety platformy: ${platformPackages.join(', ')}; moduly: ${modulePackages.join(', ') || '(brak)'}`);
 console.log('  - zaden pakiet @platform/* nie deklaruje zaleznosci od @module/*');
 console.log('  - zaden plik platformy nie importuje z @module/*');
-console.log(`  - zaden plik platformy nie uzywa slownika domenowego (${DOMAIN_WORDS.length} pojec z manifestow modulow)`);
+console.log(
+  `  - zaden plik platformy nie uzywa slownika domenowego (${vocabularyOwners.size} przedrostkow) ani etykiety domenowej (${labelOwners.size} calych slow i fraz) z manifestow modulow`,
+);
 console.log(
   `  - konfiguracja platformy tez czysta (${configFilesScanned} plikow json/css/js/yaml bez @module/* i bez slownika)`,
 );

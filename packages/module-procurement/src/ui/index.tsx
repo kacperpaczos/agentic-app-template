@@ -1,5 +1,9 @@
 import { defineComponent } from '@openuidev/react-lang';
-import type { ConversationStarterContribution, MenuItemContribution } from '@platform/contracts';
+import type {
+  ConversationStarterContribution,
+  MenuItemContribution,
+  MenuSectionLabels,
+} from '@platform/contracts';
 import type { ModuleScreen, UiModule } from '@platform/ui';
 import { MODULE_ID } from '../shared/index.ts';
 import { PROCUREMENT_OPENUI_COMPONENTS } from '../shared/openui-components.ts';
@@ -19,6 +23,16 @@ const menu: MenuItemContribution[] = [
   { id: 'procurement.cases', section: 'records', label: 'Wszystkie sprawy', to: '/cases', order: 10 },
   { id: 'procurement.suppliers', section: 'data', label: 'Dostawcy', to: '/data', order: 10 },
 ];
+
+/**
+ * What this module calls the sections it puts those items in.
+ *
+ * "Sprawy zakupowe" is a sentence about somebody's business, so it belongs
+ * here and not in the shell — which is exactly where it used to live
+ * (`AppShell.tsx`, `SECTION_LABELS.records`), with the result that an
+ * application composing any other module still read "Sprawy zakupowe".
+ */
+const menuSections: MenuSectionLabels = { records: 'Sprawy zakupowe' };
 
 /**
  * This module's screens, declared for the composition root to mount.
@@ -95,6 +109,7 @@ export const procurementUiModule: UiModule = {
   cardRenderers: procurementCardRenderers,
   openuiComponents,
   menu,
+  menuSections,
   screens,
   starters,
 };

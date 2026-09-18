@@ -280,10 +280,14 @@ try {
       nav.includes('Canvas') &&
       nav.includes('Pliki') &&
       nav.includes('Notatki testowe') &&
+      // Nagłówek sekcji też pochodzi od modułu: powłoka nie ma własnego słowa
+      // na cudzy rekord. Przed BL-06 stało tu na stałe „Sprawy zakupowe”.
+      nav.includes('Notatki') &&
+      !nav.includes('Sprawy zakupowe') &&
       !nav.includes('Wszystkie sprawy') &&
       !nav.includes('Dostawcy');
     record(
-      'powłoka w przeglądarce: menu platformy z pozycją modułu kontrolnego, bez ekranów przykładu',
+      'powłoka w przeglądarce: menu i nagłówki sekcji od modułu kontrolnego, bez słownika przykładu',
       shellOk,
       nav.replace(/\s+/g, ' ').slice(0, 160),
     );

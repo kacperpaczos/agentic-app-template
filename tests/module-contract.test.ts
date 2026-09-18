@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createPlatform, DEFAULT_USER_ID, type PlatformInstance } from '@platform/server';
-import { buildRegistry, platformCardRenderers, type UiModule } from '@platform/ui';
+import { buildRegistry, NEUTRAL_MENU_SECTION_LABELS, platformCardRenderers, type UiModule } from '@platform/ui';
 import { createProbeModule } from '@module/devkit-probe/server';
 
 /**
@@ -147,6 +147,35 @@ describe('modul rejestruje sie wylacznie przez zadeklarowane kontrakty', () => {
     expect(Object.keys(browserDefs['ProbeNoteList']!.properties ?? {})).toEqual(
       Object.keys(p.services.catalog.openui.schema.$defs!['ProbeNoteList']!.properties ?? {}),
     );
+  });
+
+  it('naglowki sekcji nawigacji pochodza od modulu, a nieponazwane sa neutralne', async () => {
+    const probeUiModule = await loadUi();
+
+    // Bez żadnego modułu powłoka nie ma własnego słowa na cudzy rekord.
+    const empty = buildRegistry({ modules: [], platformCardRenderers, platformMenu: [] });
+    expect(empty.menuSections).toEqual(NEUTRAL_MENU_SECTION_LABELS);
+    expect(Object.values(empty.menuSections).join(' ')).not.toMatch(/sprawy|notatki/i);
+
+    // Z modułem — jego słowo, nie słowo innego modułu.
+    const withProbe = buildRegistry({ modules: [probeUiModule], platformCardRenderers, platformMenu: [] });
+    expect(withProbe.menuSections.records).toBe('Notatki');
+    // Sekcja, której moduł nie nazwał, zostaje neutralna.
+    expect(withProbe.menuSections.files).toBe(NEUTRAL_MENU_SECTION_LABELS.files);
+
+    // Dwa moduły nazywające tę samą sekcję inaczej: decyzja należy do warstwy
+    // składania, nie do kolejności tablicy `modules`.
+    const other: UiModule = {
+      ...probeUiModule,
+      meta: { ...probeUiModule.meta, id: 'other' },
+      cardRenderers: {},
+      openuiComponents: [],
+      screens: [],
+      menuSections: { records: 'Zgloszenia' },
+    };
+    expect(() =>
+      buildRegistry({ modules: [probeUiModule, other], platformCardRenderers, platformMenu: [] }),
+    ).toThrowError(/Konflikt nazw sekcji: "records"/);
   });
 
   it('ekran modulu nie moze przejac sciezki platformy ani sciezki innego modulu', async () => {

@@ -180,6 +180,7 @@ Definicja: `packages/platform-ui/src/catalog/registry.tsx`.
 | `openuiComponents` | komponenty OpenUI Lang (`defineComponent`), które agent może złożyć w wiadomości lub w karcie `openui`; dołączane do katalogu `@openuidev/react-ui` |
 | `artifactRenderers` | renderery artefaktów po `rendererType` |
 | `menu` | pozycje nawigacji: `section` (`workspace`, `records`, `data`, `files`, `settings`), `label`, `to`, `order` |
+| `menuSections` | jak moduł nazywa sekcje, w których ma pozycje, np. `{ records: 'Sprawy zakupowe' }`. Zbiór sekcji należy do platformy, ich **nazwy** do modułu; sekcja, której nikt nie nazwał, dostaje neutralny nagłówek (`NEUTRAL_MENU_SECTION_LABELS`). Dwa moduły nazywające tę samą sekcję inaczej przerywają budowę rejestru |
 | `screens` | ekrany modułu: `{ id, path, component }`; `path` może mieć segmenty `$param`. Montuje je warstwa składania, więc żaden plik poza modułem nie nazywa jego ekranu. Konflikt `id` albo `path` (także ze ścieżką ekranu platformy) przerywa budowę rejestru |
 | `starters` | podpowiedzi poleceń w czacie — słownik domeny należy do modułu, nie do platformy |
 
@@ -205,6 +206,29 @@ Zasady: listy `cardComponents` (serwer) i `cardRenderers` (przeglądarka) muszą
 (konflikt identyfikatora przerywa budowę rejestru). Router zachowuje parametry `c` (rozmowa) i `s`
 (przestrzeń) przy każdej nawigacji — także dla `AppLink`; pozostałe parametry (np. zawężenie
 `?country=PL`) walidator przepuszcza, ale nie przenoszą się na inny ekran.
+
+### Słownik domeny w manifeście modułu
+
+`pnpm check:boundaries` odmawia, gdy pakiet platformy zawiera pojęcie domenowe — w kodzie **albo** w
+konfiguracji. Skąd bierze pojęcia: z manifestu każdego modułu, w dwóch listach o różnym dopasowaniu.
+
+```jsonc
+"agenticApp": {
+  // przedrostki przy granicy słowa — identyfikatory, prefiksy tabel
+  "domainVocabulary": ["supplier", "dostawc", "unitPrice", "pc_cases"],
+  // całe słowa i frazy — to, co użytkownik widzi na ekranie
+  "domainLabels": ["sprawa", "sprawy", "sprawe", "cena jednostkowa"]
+}
+```
+
+Dwie listy, bo jedna nie umiałaby obu rzeczy naraz: `dostawc` musi łapać `dostawcy` i `supplierName`,
+a `spraw` jako przedrostek skazałby w powłoce każde „sprawdza”, „sprawne” i „Sprawdz”. Etykieta
+dopasowuje się jako całe słowo lub fraza. Obie listy muszą być niepuste u co najmniej jednego modułu —
+inaczej kontrola przechodziłaby, nie mając czego sprawdzać.
+
+Etykiety widoczne w interfejsie **należą do modułu**: nagłówek sekcji menu podaje się przez
+`UiModule.menuSections`, a nie wpisuje w powłokę. Teksty stanów pustych platformy mówią o „rekordzie”,
+bo platforma nie wie, czym jest rekord w twojej domenie.
 
 ## 5. Co zapewnia platforma bez pracy po stronie modułu
 

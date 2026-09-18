@@ -17,6 +17,16 @@
       "faktur",
       "pc_cases",
       "pc_offers"
+    ],
+    "domainLabels": [
+      "sprawa",
+      "sprawy",
+      "sprawe",
+      "sprawie",
+      "sprawami",
+      "spraw",
+      "cena jednostkowa",
+      "podstawa cenowa"
     ]
   },
   "exports": {

@@ -35,6 +35,24 @@ export interface MenuItemContribution {
 }
 
 /**
+ * What a module calls the navigation sections it puts items in.
+ *
+ * The *set* of sections is the platform's — it decides how a workspace is
+ * arranged — but what one of them is **called** is a word about somebody's
+ * business, and the platform has none. It used to have one anyway: the shell
+ * hard-coded the `records` heading as "Sprawy zakupowe", the example module's
+ * noun, so an application composing any other module read "Sprawy zakupowe →
+ * Notatki testowe". That is the same leak as a hard-coded table name, only
+ * visible on screen instead of in a query.
+ *
+ * So a module names the sections it uses, and a section nobody named keeps a
+ * neutral heading. Two modules naming one section differently is refused when
+ * the registry is built: the composition root has to decide, rather than the
+ * order of the `modules` array deciding for it.
+ */
+export type MenuSectionLabels = Partial<Record<MenuSection, string>>;
+
+/**
  * A screen this module contributes to the application's router.
  *
  * Declared, not hand-mounted. Before this contract existed the application's
@@ -373,6 +391,8 @@ export interface ClientModule<TComponentDef = unknown, TElement = unknown> {
   /** Artifact renderers, keyed by `rendererType`. */
   artifactRenderers?: Record<string, TElement>;
   menu: MenuItemContribution[];
+  /** What this module calls the sections its menu items go in. */
+  menuSections?: MenuSectionLabels;
   /** Screens mounted by the composition root. See {@link ModuleScreenContribution}. */
   screens?: ModuleScreenContribution<TElement>[];
 }

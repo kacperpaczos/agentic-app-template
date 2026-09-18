@@ -9,7 +9,7 @@
     {
       "name": "kopia robocza",
       "ok": true,
-      "detail": "361 plików → /tmp/agentic-module-swap-30VSJx"
+      "detail": "363 plików → /tmp/agentic-module-swap-cojaJQ"
     },
     {
       "name": "warstwa składania przełączona na moduł kontrolny",
@@ -24,7 +24,7 @@
     {
       "name": "pakiety platformy i moduł przykładowy bez zmian",
       "ok": true,
-      "detail": "module-procurement:5f08cfe11055 platform-contracts:08f73e9715f6 platform-server:2a8e3cbe294a platform-ui:f4f7367d85b8"
+      "detail": "module-procurement:c075fbc3514c platform-contracts:17ef79e542b3 platform-server:2a8e3cbe294a platform-ui:26de08064599"
     },
     {
       "name": "zmienione pliki ograniczone do dwóch plików warstwy składania",
@@ -54,12 +54,12 @@
     {
       "name": "testy platformy na kopii z innym modułem",
       "ok": true,
-      "detail": "Tests  551 passed (551)"
+      "detail": "Tests  552 passed (552)"
     },
     {
       "name": "serwer wystartował",
       "ok": true,
-      "detail": "http://127.0.0.1:40351; [server] modules: probe"
+      "detail": "http://127.0.0.1:37673; [server] modules: probe"
     },
     {
       "name": "rejestr: wyłącznie moduł kontrolny",
@@ -117,24 +117,24 @@
       "detail": "tabele=15"
     },
     {
-      "name": "powłoka w przeglądarce: menu platformy z pozycją modułu kontrolnego, bez ekranów przykładu",
+      "name": "powłoka w przeglądarce: menu i nagłówki sekcji od modułu kontrolnego, bez słownika przykładu",
       "ok": true,
-      "detail": "☰Przestrzen pracyCanvasZapisane kompozycjeWidoki agentaSprawy zakupoweNotatki testowePliki i raportyPliki i raportyUstawieniaUstawienia"
+      "detail": "☰Przestrzen pracyCanvasZapisane kompozycjeWidoki agentaNotatkiNotatki testowePliki i raportyPliki i raportyUstawieniaUstawienia"
     },
     {
       "name": "karta modułu kontrolnego wyrenderowana z katalogu, danymi z trasy modułu",
       "ok": true,
-      "detail": "notatka wymiany 1789724500987"
+      "detail": "notatka wymiany 1789725897529"
     },
     {
       "name": "ekran modułu zamontowany kontraktem i wypełniony kompozycją OpenUI",
       "ok": true,
-      "detail": "Notatki testowenotatka wymiany 1789724500987Tresc notatkiZastosujWyczyscTrescUtworzononotatka wymiany 178972450098718.09.2026"
+      "detail": "Notatki testowenotatka wymiany 1789725897529Tresc notatkiZastosujWyczyscTrescUtworzononotatka wymiany 178972589752918.09.2026"
     },
     {
       "name": "ekran modułu z parametrem trasy czyta swój $noteId",
       "ok": true,
-      "detail": "notatka wymiany 1789724500987"
+      "detail": "notatka wymiany 1789725897529"
     },
     {
       "name": "ekrany platformy /files i /settings bez błędów strony",
@@ -144,7 +144,7 @@
     {
       "name": "próba zakończona",
       "ok": true,
-      "detail": "38 s"
+      "detail": "55 s"
     }
   ],
   "keptWorkDir": null

@@ -1,5 +1,5 @@
 import { defineComponent } from '@openuidev/react-lang';
-import type { MenuItemContribution } from '@platform/contracts';
+import type { MenuItemContribution, MenuSectionLabels } from '@platform/contracts';
 import {
   AppLink,
   ComposedView,
@@ -132,6 +132,13 @@ const menu: MenuItemContribution[] = [
   { id: NOTES_SCREEN_ID, section: 'records', label: 'Notatki testowe', to: NOTES_PATH, order: 10 },
 ];
 
+/**
+ * The control module names its section too — that is what makes the contract
+ * real rather than a field only the example module fills in. With this module
+ * composed the heading reads "Notatki", not the example module's noun.
+ */
+const menuSections: MenuSectionLabels = { records: 'Notatki' };
+
 /* -------------------------------------------------------------------------- */
 /*  OpenUI catalog                                                            */
 /* -------------------------------------------------------------------------- */
@@ -159,5 +166,6 @@ export const probeUiModule: UiModule = {
   cardRenderers,
   openuiComponents,
   menu,
+  menuSections,
   screens,
 };
