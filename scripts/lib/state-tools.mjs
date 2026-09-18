@@ -189,7 +189,31 @@ export function dataDirAtOrAbove(path) {
  * before.
  */
 export function isOurs(dir) {
-  return existsSync(join(dir, SCRATCH_MARKER));
+  const marker = join(dir, SCRATCH_MARKER);
+  if (!existsSync(marker)) return false;
+  /*
+   * The marker names the directory it was written for, and only counts there.
+   *
+   * Without that, the claim travels: `cp -r` of a scratch directory carries the
+   * marker into the copy, and a directory that later became somebody's data
+   * directory would keep an exemption it was never given. It was observed
+   * exactly that way — an evidence run copied a generated fixture, added a
+   * `session.secret`, and the backup happily overwrote it, because the copy
+   * still carried the original's marker.
+   *
+   * Comparing the recorded path with where the file actually is makes the
+   * marker worthless the moment it is copied or moved, which is the only
+   * honest reading of "these scripts created this directory".
+   */
+  try {
+    const recorded = readFileSync(marker, 'utf8')
+      .split('\n')
+      .find((line) => line.startsWith(MARKER_PATH_PREFIX));
+    if (!recorded) return false;
+    return realResolve(recorded.slice(MARKER_PATH_PREFIX.length).trim()) === realResolve(dir);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -289,10 +313,14 @@ export function assertOwnOrEmptyDir(path, { what = 'Katalog docelowy', ownMarker
   return target;
 }
 
-const MARKER_TEXT =
+const MARKER_PATH_PREFIX = 'sciezka: ';
+
+const markerText = (dir) =>
   'Katalog roboczy skryptow stanu (scripts/synthetic-state.mjs, scripts/migration-rehearsal.mjs).\n' +
   'Zawiera dane SYNTETYCZNE albo kopie robocza. Skrypty kasuja katalog z tym znacznikiem\n' +
-  'bez pytania i odmawiaja skasowania katalogu bez niego.\n';
+  'bez pytania i odmawiaja skasowania katalogu bez niego.\n' +
+  'Znacznik liczy sie WYLACZNIE dla sciezki ponizej — skopiowany gdzie indziej nic nie znaczy.\n' +
+  `${MARKER_PATH_PREFIX}${dir}\n`;
 
 /**
  * Empties a directory these scripts are about to fill — and refuses to empty
@@ -324,7 +352,7 @@ export function prepareScratchDir(path, { what = 'Katalog roboczy', repo = REPO 
   }
 
   mkdirSync(target, { recursive: true });
-  writeFileSync(join(target, SCRATCH_MARKER), MARKER_TEXT);
+  writeFileSync(join(target, SCRATCH_MARKER), markerText(target));
   return target;
 }
 

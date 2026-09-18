@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -312,6 +313,10 @@ describe('kopie i proby odmawiaja pracy na katalogu danych aplikacji', () => {
      * and carries no marker of theirs, and leaving one here would hand the
      * fixture the ownership exemption that exists for scratch directories —
      * making these refusals pass for the wrong reason, or not at all.
+     *
+     * (A marker only counts for the path written inside it, so copying a
+     * generated directory no longer carries the claim with it. Removing it here
+     * as well keeps the fixture honest rather than relying on that.)
      */
     rmSync(resolve(udawaneDane, '.katalog-roboczy-agentic'));
   }, 120_000);
@@ -602,7 +607,12 @@ describe('sciezki wokol katalogu danych — trzy ochrony przed skasowaniem', () 
      */
     const nadrzedny = dir('nad-danymi');
     mkdirSync(resolve(nadrzedny, 'cudze-dane'), { recursive: true });
-    writeFileSync(resolve(nadrzedny, '.katalog-roboczy-agentic'), 'nasz\n');
+    // A valid marker: it names the directory it sits in, which is what makes it
+    // count (a marker carried elsewhere by a copy does not).
+    writeFileSync(
+      resolve(nadrzedny, '.katalog-roboczy-agentic'),
+      `sciezka: ${realpathSync(nadrzedny)}\n`,
+    );
     writeFileSync(resolve(nadrzedny, 'cudze-dane', 'session.secret'), 'sekret\n');
     writeFileSync(resolve(nadrzedny, 'cudze-dane', 'app.db'), 'baza\n');
 
@@ -611,6 +621,26 @@ describe('sciezki wokol katalogu danych — trzy ochrony przed skasowaniem', () 
     expect(r.out).toMatch(/zawiera katalog danych aplikacji/);
     expect(readFileSync(resolve(nadrzedny, 'cudze-dane', 'app.db'), 'utf8')).toBe('baza\n');
   }, 60_000);
+
+  it('znacznik skopiowany do innego katalogu nic nie znaczy', () => {
+    /*
+     * Found while re-recording the evidence, not by a test: `cp -r` of a
+     * generated directory carried the marker into the copy, so a copy that had
+     * since become somebody's data directory still counted as ours — and a
+     * backup wrote straight into it. The marker now names the directory it was
+     * written for and is worthless anywhere else.
+     */
+    const oryginal = dir('znacznik-oryginal');
+    expect(run('synthetic-state.mjs', ['--out', oryginal, '--stage', 'current']).status).toBe(0);
+    const kopiaKatalogu = dir('znacznik-kopia');
+    cpSync(oryginal, kopiaKatalogu, { recursive: true });
+    expect(existsSync(resolve(kopiaKatalogu, '.katalog-roboczy-agentic'))).toBe(true);
+    writeFileSync(resolve(kopiaKatalogu, 'session.secret'), 'sekret\n');
+
+    const r = run('backup-state.mjs', ['--data', oryginal, '--out', kopiaKatalogu]);
+    expect(r.status, r.out).toBe(2);
+    expect(r.out).toMatch(/lezy w katalogu danych aplikacji/);
+  }, 120_000);
 
   it('awaria skryptu ma inny kod wyjscia niz werdykt proby', () => {
     /*
