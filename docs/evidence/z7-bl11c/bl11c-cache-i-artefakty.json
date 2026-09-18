@@ -1,0 +1,52 @@
+{
+  "opis": "Pakiet BL-11c (cache i artefakty): rozroznienie wersji definicji artefaktu live od stanu zrodla, oraz zakres stanu klienta czyszczonego przy zmianie wlasciciela.",
+  "zrodlo": "tests/cache-evidence.test.ts w regresji szablonu (pnpm evidence)",
+  "wersjaKodu": {
+    "commit": "4e9157d53c2d3f62a2668f355dc96517f451990d",
+    "brudneDrzewo": false,
+    "node": "24.19.0",
+    "pakiety": {}
+  },
+  "artefaktLive": {
+    "artefakt": "art_bcc3a1828e2848e6b2b2",
+    "pierwszyOdczyt": {
+      "definitionVersion": 1,
+      "state": "fresh",
+      "sourceFingerprint": "e400922d4671acca"
+    },
+    "drugiOdczytBezZmianyZrodla": {
+      "definitionVersion": 1,
+      "state": "fresh",
+      "sourceFingerprint": "e400922d4671acca"
+    },
+    "odczytPoZmianieZrodla": {
+      "definitionVersion": 1,
+      "state": "fresh",
+      "sourceFingerprint": "9d2149468be9baa1"
+    },
+    "wniosek": "definitionVersion stoi, resolvedAt rosnie przy kazdym odczycie, sourceFingerprint zmienia sie wylacznie wtedy, gdy zmienily sie rekordy zwrocone przez zarejestrowany odczyt."
+  },
+  "zmianaWlasciciela": {
+    "wpisyCachePoPrzelaczeniu": 0,
+    "wyczyszczonePolaStanuKlienta": [
+      "agentFilterKey",
+      "attachments",
+      "cardState",
+      "conversationId",
+      "drafts",
+      "filterOutcome",
+      "filters",
+      "lastRunId",
+      "resource",
+      "revealNotice",
+      "runs",
+      "selection",
+      "spaceId",
+      "viewStates",
+      "viewport"
+    ],
+    "niewyczyszczone": [
+      "navOpen — wlasciwosc okna, nie tozsamosci"
+    ]
+  }
+}
