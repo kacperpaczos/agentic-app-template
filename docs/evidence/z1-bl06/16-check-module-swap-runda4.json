@@ -1,0 +1,161 @@
+{
+  "ok": true,
+  "steps": [
+    {
+      "name": "lista plików repozytorium",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "commit, z którego powstaje kopia",
+      "ok": true,
+      "detail": "d5ba1865867229cb31dd96d4e776ba5d17ea26dd"
+    },
+    {
+      "name": "kopia robocza",
+      "ok": true,
+      "detail": "396 plików → /tmp/agentic-module-swap-vyfvkl"
+    },
+    {
+      "name": "moduł niescalany dostarcza słownik do kontroli negatywnych",
+      "ok": true,
+      "detail": "module-procurement: 12 przedrostkow, 8 etykiet, 8 tabel, zakresy [case]; modul skladany: zakresy [probe]"
+    },
+    {
+      "name": "warstwa składania przełączona na moduł kontrolny",
+      "ok": true,
+      "detail": "apps/server/src/compose.ts, apps/web/src/compose.tsx"
+    },
+    {
+      "name": "router aplikacji bez zmian i bez nazwy jakiegokolwiek modułu",
+      "ok": true,
+      "detail": "ekrany modułu montowane z registry.screens"
+    },
+    {
+      "name": "pakiety platformy i moduł przykładowy bez zmian",
+      "ok": true,
+      "detail": "module-procurement:3606a7905a18 platform-contracts:ea968d2a3dd1 platform-server:b56e806ecf85 platform-ui:26de08064599"
+    },
+    {
+      "name": "zmienione pliki ograniczone do dwóch plików warstwy składania",
+      "ok": true,
+      "detail": "apps/server/src/compose.ts, apps/web/src/compose.tsx"
+    },
+    {
+      "name": "pnpm install --frozen-lockfile",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "kontrola granicy platforma–domena",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "typecheck",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "build frontendu i backendu",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "regresja jednostkowa na kopii przechodzi (test dymny podmiany)",
+      "ok": true,
+      "detail": "Tests  561 passed (561)"
+    },
+    {
+      "name": "serwer wystartował",
+      "ok": true,
+      "detail": "http://127.0.0.1:40279; [server] modules: probe"
+    },
+    {
+      "name": "rejestr: wyłącznie moduł kontrolny",
+      "ok": true,
+      "detail": "moduły=[\"probe\"]"
+    },
+    {
+      "name": "narzędzia: wyłącznie przestrzeń nazw modułu kontrolnego",
+      "ok": true,
+      "detail": "probe_add_note, probe_list_notes"
+    },
+    {
+      "name": "katalog: komponenty tylko platformy i modułu kontrolnego",
+      "ok": true,
+      "detail": "platform.markdown, platform.artifact, platform.files, probe.noteList"
+    },
+    {
+      "name": "trasa modułu /api/m/probe/notes",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "operacja odczytu modułu zarejestrowana z deskryptorem",
+      "ok": true,
+      "detail": "probe.notes"
+    },
+    {
+      "name": "cel nawigacji modułu zarejestrowany",
+      "ok": true,
+      "detail": "platform.canvas, platform.spaces, platform.agentViews, platform.files, platform.files.upload, platform.settings, platform.settings.auth, platform.settings.chat, platform.chat, platform.chat.attachments, platform.chat.artifacts, platform.tasks, probe.notes"
+    },
+    {
+      "name": "ekran modułu jako kompozycja OpenUI",
+      "ok": true,
+      "detail": "probe.notes"
+    },
+    {
+      "name": "zapis przez trasę modułu",
+      "ok": true,
+      "detail": "HTTP 201"
+    },
+    {
+      "name": "zadeklarowany zakres modułu składanego daje jego kompozycję domyślną",
+      "ok": true,
+      "detail": "zakres=probe, HTTP 200, karta=probe.noteList"
+    },
+    {
+      "name": "zadeklarowane zakresy nieobecnych modułów nie dają kart",
+      "ok": true,
+      "detail": "case: HTTP 200, karty=0"
+    },
+    {
+      "name": "baza: tabela modułu kontrolnego, żadnej tabeli nieobecnego modułu",
+      "ok": true,
+      "detail": "tabele=15; sprawdzono 8 tabel nieobecnego modułu"
+    },
+    {
+      "name": "powłoka w przeglądarce: menu i nagłówki sekcji od modułu kontrolnego, bez słownika nieobecnego modułu",
+      "ok": true,
+      "detail": "naglowki=[Przestrzen pracy | Notatki | Pliki i raporty | Ustawienia]; pozycje=[Canvas | Zapisane kompozycje | Widoki agenta | Notatki testowe | Pliki i raporty | Ustawienia]; sprawdzono 20 pojec"
+    },
+    {
+      "name": "karta modułu kontrolnego wyrenderowana z katalogu, danymi z trasy modułu",
+      "ok": true,
+      "detail": "notatka wymiany 1789730282942"
+    },
+    {
+      "name": "ekran modułu zamontowany kontraktem i wypełniony kompozycją OpenUI",
+      "ok": true,
+      "detail": "Notatki testowenotatka wymiany 1789730282942Tresc notatkiZastosujWyczyscTrescUtworzononotatka wymiany 178973028294218.09.2026"
+    },
+    {
+      "name": "ekran modułu z parametrem trasy czyta swój $noteId",
+      "ok": true,
+      "detail": "notatka wymiany 1789730282942"
+    },
+    {
+      "name": "ekrany platformy /files i /settings bez błędów strony",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "próba zakończona",
+      "ok": true,
+      "detail": "41 s"
+    }
+  ],
+  "keptWorkDir": null
+}

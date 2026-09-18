@@ -111,6 +111,8 @@ try {
   /* 1. kopia repozytorium ------------------------------------------------- */
   const listed = run('git', ['ls-files', '-co', '--exclude-standard', '-z'], repo);
   record('lista plików repozytorium', listed.code === 0, listed.code === 0 ? '' : listed.out);
+  const repoCommit = run('git', ['rev-parse', 'HEAD'], repo).out.trim();
+  record('commit, z którego powstaje kopia', /^[0-9a-f]{7,40}$/.test(repoCommit), repoCommit);
   const files = listed.out.split('\0').filter(Boolean);
   for (const f of files) {
     const src = join(repo, f);
@@ -260,7 +262,19 @@ try {
    * zdanie jest prawdziwe o `tests/module-contract.test.ts`, bo tamte testy
    * naprawdę biegną na module kontrolnym.
    */
-  const unit = run('pnpm', ['-s', 'test'], work);
+  /*
+   * Kopia nie ma `.git` — i nie ma go mieć: kopiowanie repozytorium gita jest
+   * drogie i zmieniłoby sens próby (kopia ma być tym, co widzi autor nowej
+   * aplikacji, a nie klonem). Regresja, która zapisuje w dowodzie wersję kodu,
+   * nie miałaby więc czego odczytać i zapisałaby „nieznany”, oblewając własną
+   * asercję o prawdziwym commicie. Podajemy jej zatem prawdę wprost: commit, z
+   * którego kopia powstała, i to, że kopia różni się od niego — bo różni się
+   * zawsze, o podmianę warstwy składania, którą ta próba właśnie zrobiła.
+   */
+  const unit = run('pnpm', ['-s', 'test'], work, {
+    APP_CODE_COMMIT: repoCommit,
+    APP_CODE_TREE_DIRTY: '1',
+  });
   const summary = (unit.out.match(/Tests\s+.*$/m) ?? [''])[0].trim();
   record('regresja jednostkowa na kopii przechodzi (test dymny podmiany)', unit.code === 0, unit.code === 0 ? summary : unit.out.slice(-1500));
 

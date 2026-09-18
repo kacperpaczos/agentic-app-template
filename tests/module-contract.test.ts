@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createPlatform, DEFAULT_USER_ID, type PlatformInstance } from '@platform/server';
 import { buildRegistry, NEUTRAL_MENU_SECTION_LABELS, platformCardRenderers, type UiModule } from '@platform/ui';
 import { createProbeModule } from '@module/devkit-probe/server';
+import { CODE_COMMIT_ENV, CODE_TREE_DIRTY_ENV, codeVersion } from './support/measurement-evidence.ts';
 
 /**
  * Rejestracja modułu przez jawne kontrakty (L9.11) i niezależność platformy od
@@ -319,6 +320,72 @@ describe('brak modulu nie powoduje odwolan do jego tabel', () => {
     expect(out, out).toContain('module-devkit-probe');
     expect(out, out).toContain('module-procurement');
     expect(r.status, out).toBe(0);
+  });
+});
+
+describe('kopia repozytorium bez .git zna commit, z ktorego powstala', () => {
+  /*
+   * Własność kroku podmiany, nie pomiarów: to `pnpm check:module-swap` tworzy
+   * kopię bez `.git`, więc to tutaj należy pilnować, że regresja uruchomiona w
+   * takiej kopii dostaje prawdę o wersji kodu zamiast zapisywać „nieznany”.
+   * Bez tego dowód pomiarowy z kopii nie mowilby, z czego powstal — i tak
+   * wlasnie oblala integracja BL-05 z BL-06.
+   */
+  const cwd = process.cwd();
+  const env = { commit: process.env[CODE_COMMIT_ENV], dirty: process.env[CODE_TREE_DIRTY_ENV] };
+  const outside = mkdtempSync(join(tmpdir(), 'agentic-bez-gita-'));
+  afterEach(() => {
+    process.chdir(cwd);
+    if (env.commit === undefined) delete process.env[CODE_COMMIT_ENV];
+    else process.env[CODE_COMMIT_ENV] = env.commit;
+    if (env.dirty === undefined) delete process.env[CODE_TREE_DIRTY_ENV];
+    else process.env[CODE_TREE_DIRTY_ENV] = env.dirty;
+  });
+
+  it('podany commit trafia do rekordu, razem z informacja o roznicy wobec niego', () => {
+    process.chdir(outside);
+    process.env[CODE_COMMIT_ENV] = 'd5ba1865867229cb31dd96d4e776ba5d17ea26dd';
+    process.env[CODE_TREE_DIRTY_ENV] = '1';
+    const v = codeVersion();
+    expect(v.commit).toBe('d5ba1865867229cb31dd96d4e776ba5d17ea26dd');
+    expect(v.brudneDrzewo).toBe(true);
+  });
+
+  it('bez podanego commita zostaje wartownik, a podrobka innego ksztaltu nie przechodzi', () => {
+    process.chdir(outside);
+    delete process.env[CODE_COMMIT_ENV];
+    expect(codeVersion().commit).toBe('nieznany');
+    // Wartość, która nie wygląda na commit, nie może wejść do rekordu zamiast niego.
+    process.env[CODE_COMMIT_ENV] = 'HEAD';
+    expect(codeVersion().commit).toBe('nieznany');
+  });
+
+  it('git wygrywa ze zmienna wszedzie tam, gdzie git moze odpowiedziec', () => {
+    /*
+     * Ten test biegnie w dwoch swiatach: w repozytorium (pnpm verify) i w kopii
+     * bez `.git` (regresja uruchamiana przez pnpm check:module-swap). Regula
+     * jest jedna i tu zapisana w calosci, wiec kazdy z tych swiatow cos
+     * sprawdza — zamiast pomijac test tam, gdzie zalozenie nie zachodzi.
+     */
+    const podrobka = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
+    process.env[CODE_COMMIT_ENV] = podrobka;
+    let gitHead: string | null = null;
+    try {
+      gitHead = execFileSync('git', ['rev-parse', 'HEAD'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+    } catch {
+      gitHead = null;
+    }
+    const v = codeVersion();
+    if (gitHead) {
+      expect(v.commit).toBe(gitHead);
+      expect(v.commit).not.toBe(podrobka);
+    } else {
+      // Bez gita zostaje to, co podal ten, kto zrobil kopie.
+      expect(v.commit).toBe(podrobka);
+    }
   });
 });
 
