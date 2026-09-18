@@ -63,10 +63,15 @@ Nie kopiuje się ani nie przepisuje pakietów `platform-*`. Kroki:
 Próbę dokładnie tej wymiany wykonuje `pnpm check:module-swap`: na kopii repozytorium zmienia
 wyłącznie te dwa pliki składania, sprawdza sumami SHA-256, że `packages/platform-*` **i**
 `packages/module-procurement` są bez zmian, instaluje zależności z lockfile, uruchamia kontrolę
-granicy, typecheck, build i całą regresję jednostkową, startuje aplikację na wolnym porcie i
-sprawdza rejestr, narzędzia, operację odczytu, cel UI, widok, trasy modułu, walidację kompozycji i
-bazę, a w przeglądarce — pozycję menu modułu kontrolnego, jego kartę na canvasie (treść z jego
-własnej trasy backendu), jego ekran wypełniony kompozycją OpenUI i jego ekran z parametrem trasy.
+granicy, typecheck, build i regresję jednostkową (test dymny: testy w `tests/` budują platformę same
+i nie przechodzą przez warstwę składania, więc mówią tylko, że podmiana niczego nie zepsuła — tym,
+co naprawdę biegnie na module kontrolnym, jest `tests/module-contract.test.ts`), startuje aplikację
+na wolnym porcie i sprawdza rejestr, narzędzia, operację odczytu, cel UI, widok, trasy modułu,
+walidację kompozycji i bazę, a w przeglądarce — pozycję menu i nagłówek sekcji od modułu
+kontrolnego, jego kartę na canvasie (treść z jego własnej trasy backendu), jego ekran wypełniony
+kompozycją OpenUI i jego ekran z parametrem trasy. Kontrole negatywne (czego po wymianie nie wolno
+zobaczyć) biorą słownik i nazwy tabel z manifestów oraz migracji modułów, których kopia nie składa —
+wymiana modułu przykładowego nie czyni ich bezgłośnymi.
 
 ## 3. Serwer: `ServerModule`
 

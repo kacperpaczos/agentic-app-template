@@ -15,15 +15,23 @@
  *      przeglądarkowa modułu przykładowego zostaje w kopii nietknięta — to jest
  *      dowód, że moduł z ekranami przechodzi typecheck niezależnie od tego, czy
  *      aplikacja go składa,
- *   3. dowodzi sumami SHA-256, że `packages/platform-*` i `packages/module-procurement`
- *      są identyczne jak przed zmianą,
+ *   3. dowodzi sumami SHA-256, że `packages/platform-*` i każdy moduł, którego kopia
+ *      nie składa, są identyczne jak przed zmianą,
  *   4. instaluje zależności z lockfile, uruchamia kontrolę granicy, typecheck, build
- *      i całą regresję jednostkową (`pnpm test`) na kopii z innym modułem,
+ *      i regresję jednostkową (test dymny — patrz przy kroku),
  *   5. startuje zbudowany serwer na wolnym porcie z własnym katalogiem danych i sprawdza:
  *      rejestr modułów, narzędzia, trasy modułu, operację odczytu, walidację kompozycji
- *      komponentem modułu, brak tabel modułu przykładowego, a w przeglądarce —
+ *      komponentem modułu, brak tabel nieobecnego modułu, a w przeglądarce —
  *      kartę modułu kontrolnego wyrenderowaną z katalogu danymi z jego własnej
  *      trasy, jego ekran z menu i ekran z parametrem trasy.
+ *
+ * Co ta próba nazywa po imieniu, a czego nie: podmiana w warstwie składania musi
+ * wskazać fragment, który zastępuje (`replaceOnce` przerywa próbę, gdy fragmentu
+ * nie ma dokładnie raz — więc nie może zwietrzeć po cichu). Natomiast wszystkie
+ * kontrole negatywne — czego po wymianie nie wolno zobaczyć w narzędziach,
+ * katalogu, bazie i nawigacji — biorą słownik i nazwy tabel z manifestów oraz
+ * migracji modułów, których kopia NIE składa. Wymiana modułu przykładowego w
+ * szablonie nie czyni ich więc bezgłośnymi.
  *
  *   node scripts/check-module-swap.mjs [--keep] [--json <plik>]
  *
@@ -39,6 +47,16 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * Moduł, którym ta próba podmienia domenę, i jego przestrzeń nazw.
+ *
+ * To jedyne dwie nazwy, które próba z natury musi znać — to jest moduł, który
+ * ona wstawia. Wszystko, czego po wymianie NIE wolno zobaczyć, jest wyprowadzone
+ * z manifestów modułów, których kopia nie składa (patrz krok 2).
+ */
+const SWAPPED_IN = 'module-devkit-probe';
+const COMPOSED_ID = 'probe';
 const keep = process.argv.includes('--keep');
 const jsonOut = process.argv.includes('--json') ? process.argv[process.argv.indexOf('--json') + 1] : null;
 
@@ -113,11 +131,53 @@ try {
    * one it is not composing, or "a module works without changes in the
    * platform" would only mean "after deleting the other module".
    */
+  const moduleDirs = readdirSync(join(work, 'packages')).filter((d) => d.startsWith('module-')).sort();
+  const absentModules = moduleDirs.filter((d) => d !== SWAPPED_IN);
   const untouchedDirs = readdirSync(join(work, 'packages'))
-    .filter((d) => d.startsWith('platform-') || d === 'module-procurement')
+    .filter((d) => d.startsWith('platform-') || absentModules.includes(d))
     .sort();
   const platformDirs = untouchedDirs.filter((d) => d.startsWith('platform-'));
   const before = Object.fromEntries(untouchedDirs.map((d) => [d, hashTree(join(work, 'packages', d))]));
+
+  /*
+   * Czego po wymianie nie wolno zobaczyć — wyprowadzone, nie wpisane.
+   *
+   * Te asercje negatywne wcześniej wymieniały z nazwy słownik modułu
+   * przykładowego („Sprawy zakupowe”, `pc_`, `procurement_`). W szablonie ktoś
+   * ten moduł wymieni — i wtedy każda z nich staje się na zawsze bezgłośna,
+   * a krok raportuje OK, nie sprawdzając niczego. Ta sama wada, którą kontrola
+   * granicy naprawiła przy nazwach tabel. Źródłem jest więc manifest modułu,
+   * którego kopia NIE składa, i jego własne migracje.
+   */
+  const manifestOf = (d) => JSON.parse(readFileSync(join(work, 'packages', d, 'package.json'), 'utf8'));
+  const absentPrefixes = absentModules.flatMap((d) => manifestOf(d).agenticApp?.domainVocabulary ?? []);
+  const absentLabels = absentModules.flatMap((d) => manifestOf(d).agenticApp?.domainLabels ?? []);
+  const absentTables = [];
+  for (const d of absentModules) {
+    const walk = (dir) => {
+      for (const e of readdirSync(dir)) {
+        const p = join(dir, e);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (/\.tsx?$/.test(p)) {
+          for (const m of readFileSync(p, 'utf8').matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)/gi)) {
+            absentTables.push(m[1]);
+          }
+        }
+      }
+    };
+    walk(join(work, 'packages', d, 'src'));
+  }
+  const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  /** Co ze słownika nieobecnego modułu przecieka do podanego tekstu. */
+  const leaks = (text) => [
+    ...absentPrefixes.filter((w) => new RegExp(`\\b${escapeRe(w)}`, 'i').test(text)),
+    ...absentLabels.filter((w) => new RegExp(`\\b${escapeRe(w)}\\b`, 'i').test(text)),
+  ];
+  record(
+    'moduł niescalany dostarcza słownik do kontroli negatywnych',
+    absentModules.length > 0 && absentPrefixes.length > 0 && absentLabels.length > 0 && absentTables.length > 0,
+    `${absentModules.join(', ')}: ${absentPrefixes.length} przedrostkow, ${absentLabels.length} etykiet, ${absentTables.length} tabel`,
+  );
 
   /* 2. zmiana warstwy składania ------------------------------------------- */
   const serverCompose = join(work, 'apps/server/src/compose.ts');
@@ -175,13 +235,19 @@ try {
   record('build frontendu i backendu', build.code === 0, build.code === 0 ? '' : build.out.slice(-1500));
 
   /*
-   * Cała regresja jednostkowa i kontraktowa na kopii, w której aplikacja składa
-   * inny moduł. Bez tego „platforma działa z innym modułem” znaczyłoby tylko
-   * „wstaje i odpowiada”: testy platformy są tym, co mówi, że działa tak samo.
+   * Regresja jednostkowa na kopii — **test dymny**, i tylko tak wolno go czytać.
+   *
+   * Testy w `tests/` budują platformę same (`createPlatform` / `createHarness`)
+   * i rejestrują moduł wprost, więc nie przechodzą przez warstwę składania w `apps/`
+   * i biegłyby tak samo, gdyby kopia składała cokolwiek innego. Ten krok mówi
+   * zatem: podmiana warstwy składania niczego w repozytorium nie zepsuła — a
+   * NIE: „regresja platformy jest zielona na module kontrolnym”. To drugie
+   * zdanie jest prawdziwe o `tests/module-contract.test.ts`, bo tamte testy
+   * naprawdę biegną na module kontrolnym.
    */
   const unit = run('pnpm', ['-s', 'test'], work);
   const summary = (unit.out.match(/Tests\s+.*$/m) ?? [''])[0].trim();
-  record('testy platformy na kopii z innym modułem', unit.code === 0, unit.code === 0 ? summary : unit.out.slice(-1500));
+  record('regresja jednostkowa na kopii przechodzi (test dymny podmiany)', unit.code === 0, unit.code === 0 ? summary : unit.out.slice(-1500));
 
   /* 4. start i sprawdzenie ------------------------------------------------- */
   const port = await freePort();
@@ -223,9 +289,22 @@ try {
   const moduleIds = (status.body?.modules ?? []).map((m) => m.id);
   const toolNames = (status.body?.tools ?? []).map((t) => t.name);
   record('rejestr: wyłącznie moduł kontrolny', JSON.stringify(moduleIds) === '["probe"]', `moduły=${JSON.stringify(moduleIds)}`);
-  record('narzędzia modułu kontrolnego zarejestrowane', toolNames.includes('probe_add_note') && toolNames.includes('probe_list_notes') && !toolNames.some((n) => n.startsWith('procurement_')), toolNames.join(', '));
-  const componentIds = JSON.stringify(status.body?.components ?? '');
-  record('komponent modułu w katalogu, bez komponentów przykładu', componentIds.includes('probe.noteList') && !componentIds.includes('procurement.'), '');
+  record(
+    'narzędzia: wyłącznie przestrzeń nazw modułu kontrolnego',
+    toolNames.includes(`${COMPOSED_ID}_add_note`) &&
+      toolNames.includes(`${COMPOSED_ID}_list_notes`) &&
+      toolNames.every((n) => n.startsWith(`${COMPOSED_ID}_`)) &&
+      leaks(toolNames.join(' ')).length === 0,
+    toolNames.join(', '),
+  );
+  const componentIds = (status.body?.components ?? []).map((c) => c.id);
+  record(
+    'katalog: komponenty tylko platformy i modułu kontrolnego',
+    componentIds.includes(`${COMPOSED_ID}.noteList`) &&
+      componentIds.every((id) => id.startsWith('platform.') || id.startsWith(`${COMPOSED_ID}.`)) &&
+      leaks(componentIds.join(' ')).length === 0,
+    componentIds.join(', '),
+  );
 
   const notes = await api('/api/m/probe/notes');
   record('trasa modułu /api/m/probe/notes', notes.status === 200 && Array.isArray(notes.body?.notes), `HTTP ${notes.status}`);
@@ -234,7 +313,9 @@ try {
   const readNames = (reads.body?.operations ?? []).map((o) => o.name);
   record(
     'operacja odczytu modułu zarejestrowana z deskryptorem',
-    readNames.includes('probe.notes') && !readNames.some((n) => n.startsWith('procurement.')),
+    readNames.includes(`${COMPOSED_ID}.notes`) &&
+      readNames.every((n) => n.startsWith(`${COMPOSED_ID}.`)) &&
+      leaks(readNames.join(' ')).length === 0,
     readNames.join(', '),
   );
 
@@ -256,15 +337,20 @@ try {
   const spaceId = space.body?.space?.id;
   record('kompozycja domyślna modułu walidowana katalogiem', space.status === 200 && card?.component === 'probe.noteList' && card?.props?.limit === 20 && typeof spaceId === 'string', `HTTP ${space.status}, karta=${card?.component}`);
 
-  const unknown = await api('/api/canvas/spaces/for-scope', { method: 'POST', body: JSON.stringify({ kind: 'procurement_case', id: 'x', title: 'x' }) });
-  record('zakres modułu przykładowego nie daje kart', unknown.status === 200 && (unknown.body?.cards ?? []).length === 0, `HTTP ${unknown.status}, karty=${(unknown.body?.cards ?? []).length}`);
+  const unknown = await api('/api/canvas/spaces/for-scope', { method: 'POST', body: JSON.stringify({ kind: 'zakres-nieobecnego-modulu', id: 'x', title: 'x' }) });
+  record('zakres nieobecnego modułu nie daje kart', unknown.status === 200 && (unknown.body?.cards ?? []).length === 0, `HTTP ${unknown.status}, karty=${(unknown.body?.cards ?? []).length}`);
 
   const req = createRequire(join(work, 'packages/platform-server/package.json'));
   const Database = req('better-sqlite3');
   const db = new Database(join(dataDir, 'app.db'), { readonly: true });
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((r) => r.name);
   db.close();
-  record('baza: tabela modułu kontrolnego, brak tabel przykładu', tables.includes('probe_notes') && !tables.some((t) => t.startsWith('pc_')), `tabele=${tables.length}`);
+  const presentAbsentTables = tables.filter((t) => absentTables.includes(t));
+  record(
+    'baza: tabela modułu kontrolnego, żadnej tabeli nieobecnego modułu',
+    tables.includes(`${COMPOSED_ID}_notes`) && presentAbsentTables.length === 0,
+    `tabele=${tables.length}; sprawdzono ${absentTables.length} tabel nieobecnego modułu${presentAbsentTables.length ? `; znalezione: ${presentAbsentTables.join(', ')}` : ''}`,
+  );
 
   // require (nie import po ścieżce pliku): rozwiązany plik CJS w imporcie ESM udostępnia tylko `default`.
   const { chromium } = createRequire(join(work, 'package.json'))('@playwright/test');
@@ -276,20 +362,26 @@ try {
     await page.goto(`${base}/`);
     await page.getByRole('navigation').first().waitFor({ timeout: 20_000 });
     const nav = (await page.getByRole('navigation').first().textContent()) ?? '';
+    /*
+     * Nagłówki sekcji czytane jako osobne elementy, nie z tekstu całej
+     * nawigacji: „Notatki” jest podciągiem pozycji „Notatki testowe”, więc
+     * asercja na sklejonym tekście przechodziłaby nawet wtedy, gdyby nagłówek
+     * w ogóle nie pochodził od modułu.
+     */
+    const headings = (await page.locator('.pf-nav__heading').allTextContents()).map((h) => h.trim());
+    const navLeaks = leaks(nav);
     const shellOk =
       nav.includes('Canvas') &&
       nav.includes('Pliki') &&
       nav.includes('Notatki testowe') &&
-      // Nagłówek sekcji też pochodzi od modułu: powłoka nie ma własnego słowa
-      // na cudzy rekord. Przed BL-06 stało tu na stałe „Sprawy zakupowe”.
-      nav.includes('Notatki') &&
-      !nav.includes('Sprawy zakupowe') &&
-      !nav.includes('Wszystkie sprawy') &&
-      !nav.includes('Dostawcy');
+      headings.includes('Notatki') &&
+      navLeaks.length === 0;
     record(
-      'powłoka w przeglądarce: menu i nagłówki sekcji od modułu kontrolnego, bez słownika przykładu',
+      'powłoka w przeglądarce: menu i nagłówki sekcji od modułu kontrolnego, bez słownika nieobecnego modułu',
       shellOk,
-      nav.replace(/\s+/g, ' ').slice(0, 160),
+      navLeaks.length
+        ? `slownik nieobecnego modulu w nawigacji: ${navLeaks.join(', ')}`
+        : `naglowki=[${headings.join(' | ')}]; sprawdzono ${absentPrefixes.length + absentLabels.length} pojec`,
     );
 
     /*
