@@ -1,0 +1,151 @@
+{
+  "ok": true,
+  "steps": [
+    {
+      "name": "lista plików repozytorium",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "kopia robocza",
+      "ok": true,
+      "detail": "361 plików → /tmp/agentic-module-swap-30VSJx"
+    },
+    {
+      "name": "warstwa składania przełączona na moduł kontrolny",
+      "ok": true,
+      "detail": "apps/server/src/compose.ts, apps/web/src/compose.tsx"
+    },
+    {
+      "name": "router aplikacji bez zmian i bez nazwy jakiegokolwiek modułu",
+      "ok": true,
+      "detail": "ekrany modułu montowane z registry.screens"
+    },
+    {
+      "name": "pakiety platformy i moduł przykładowy bez zmian",
+      "ok": true,
+      "detail": "module-procurement:5f08cfe11055 platform-contracts:08f73e9715f6 platform-server:2a8e3cbe294a platform-ui:f4f7367d85b8"
+    },
+    {
+      "name": "zmienione pliki ograniczone do dwóch plików warstwy składania",
+      "ok": true,
+      "detail": "apps/server/src/compose.ts, apps/web/src/compose.tsx"
+    },
+    {
+      "name": "pnpm install --frozen-lockfile",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "kontrola granicy platforma–domena",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "typecheck",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "build frontendu i backendu",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "testy platformy na kopii z innym modułem",
+      "ok": true,
+      "detail": "Tests  551 passed (551)"
+    },
+    {
+      "name": "serwer wystartował",
+      "ok": true,
+      "detail": "http://127.0.0.1:40351; [server] modules: probe"
+    },
+    {
+      "name": "rejestr: wyłącznie moduł kontrolny",
+      "ok": true,
+      "detail": "moduły=[\"probe\"]"
+    },
+    {
+      "name": "narzędzia modułu kontrolnego zarejestrowane",
+      "ok": true,
+      "detail": "probe_add_note, probe_list_notes"
+    },
+    {
+      "name": "komponent modułu w katalogu, bez komponentów przykładu",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "trasa modułu /api/m/probe/notes",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "operacja odczytu modułu zarejestrowana z deskryptorem",
+      "ok": true,
+      "detail": "probe.notes"
+    },
+    {
+      "name": "cel nawigacji modułu zarejestrowany",
+      "ok": true,
+      "detail": "platform.canvas, platform.spaces, platform.agentViews, platform.files, platform.files.upload, platform.settings, platform.settings.auth, platform.settings.chat, platform.chat, platform.chat.attachments, platform.chat.artifacts, platform.tasks, probe.notes"
+    },
+    {
+      "name": "ekran modułu jako kompozycja OpenUI",
+      "ok": true,
+      "detail": "probe.notes"
+    },
+    {
+      "name": "zapis przez trasę modułu",
+      "ok": true,
+      "detail": "HTTP 201"
+    },
+    {
+      "name": "kompozycja domyślna modułu walidowana katalogiem",
+      "ok": true,
+      "detail": "HTTP 200, karta=probe.noteList"
+    },
+    {
+      "name": "zakres modułu przykładowego nie daje kart",
+      "ok": true,
+      "detail": "HTTP 200, karty=0"
+    },
+    {
+      "name": "baza: tabela modułu kontrolnego, brak tabel przykładu",
+      "ok": true,
+      "detail": "tabele=15"
+    },
+    {
+      "name": "powłoka w przeglądarce: menu platformy z pozycją modułu kontrolnego, bez ekranów przykładu",
+      "ok": true,
+      "detail": "☰Przestrzen pracyCanvasZapisane kompozycjeWidoki agentaSprawy zakupoweNotatki testowePliki i raportyPliki i raportyUstawieniaUstawienia"
+    },
+    {
+      "name": "karta modułu kontrolnego wyrenderowana z katalogu, danymi z trasy modułu",
+      "ok": true,
+      "detail": "notatka wymiany 1789724500987"
+    },
+    {
+      "name": "ekran modułu zamontowany kontraktem i wypełniony kompozycją OpenUI",
+      "ok": true,
+      "detail": "Notatki testowenotatka wymiany 1789724500987Tresc notatkiZastosujWyczyscTrescUtworzononotatka wymiany 178972450098718.09.2026"
+    },
+    {
+      "name": "ekran modułu z parametrem trasy czyta swój $noteId",
+      "ok": true,
+      "detail": "notatka wymiany 1789724500987"
+    },
+    {
+      "name": "ekrany platformy /files i /settings bez błędów strony",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "próba zakończona",
+      "ok": true,
+      "detail": "38 s"
+    }
+  ],
+  "keptWorkDir": null
+}

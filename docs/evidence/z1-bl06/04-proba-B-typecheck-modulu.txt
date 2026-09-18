@@ -1,0 +1,37 @@
+# Proba zdolnosci wykrycia B — ekran modulu zalezny od rejestracji tras aplikacji
+# HEAD f43ac88; drzewo przed proba (pomijajac nowe dowody):
+(pusto = czyste)
+
+## wycofana zmiana: strona modulu znow czyta parametr przez identyfikator trasy aplikacji
+diff --git a/packages/module-procurement/src/ui/pages.tsx b/packages/module-procurement/src/ui/pages.tsx
+index fcc034c..b4db7e8 100644
+--- a/packages/module-procurement/src/ui/pages.tsx
++++ b/packages/module-procurement/src/ui/pages.tsx
+@@ -1,0 +2 @@ import { useEffect } from 'react';
++import { useParams } from '@tanstack/react-router';
+@@ -52 +53 @@ export function CaseDetailPage() {
+-  const { caseId = '' } = useScreenParams();
++  const { caseId } = useParams({ from: '/cases/$caseId' });
+
+## pnpm typecheck:modules (kazdy modul we wlasnym programie)
+OK   module-devkit-probe — typecheck bez aplikacji
+BLAD module-procurement — typecheck bez aplikacji nie przeszedl:
+packages/module-procurement/src/ui/pages.tsx(2,27): error TS2307: Cannot find module '@tanstack/react-router' or its corresponding type declarations.
+
+1 modul(y) nie przechodza typecheck samodzielnie.
+EXIT=1
+
+## node scripts/check-boundaries.mjs (kod i konfiguracja)
+GRANICA PLATFORMA-DOMENA NARUSZONA:
+
+  - [import] packages/module-procurement/src/ui/pages.tsx importuje pakiet warstwy skladania: @tanstack/react-router — ekran modulu czyta parametry przez useScreenParams(), a linkuje przez AppLink
+
+1 naruszen.
+EXIT=1
+
+## pnpm typecheck:src (caly program: platforma + moduly + aplikacja)
+packages/module-procurement/src/ui/pages.tsx(2,27): error TS2307: Cannot find module '@tanstack/react-router' or its corresponding type declarations.
+EXIT=1
+
+## przywrocenie
+(pusto = drzewo znow czyste)

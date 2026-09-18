@@ -1,0 +1,21 @@
+# Proba zdolnosci wykrycia A — renderer karty modulu kontrolnego w przegladarce
+# HEAD f43ac88; drzewo przed proba (pomijajac nowe dowody):
+(pusto = czyste)
+
+## wycofana linia (packages/module-devkit-probe/src/ui/index.tsx)
++++ b/packages/module-devkit-probe/src/ui/index.tsx
+@@ -77 +77 @@ export function NoteListCard({ props }: CardComponentProps) {
+-const cardRenderers: Record<string, CardComponent> = { [NOTE_LIST_CARD]: NoteListCard };
++const cardRenderers: Record<string, CardComponent> = {};
+
+## pnpm check:module-swap
+OK   kompozycja domyślna modułu walidowana katalogiem — HTTP 200, karta=probe.noteList
+OK   zakres modułu przykładowego nie daje kart — HTTP 200, karty=0
+OK   baza: tabela modułu kontrolnego, brak tabel przykładu — tabele=15
+OK   powłoka w przeglądarce: menu platformy z pozycją modułu kontrolnego, bez ekranów przykładu — ☰Przestrzen pracyCanvasZapisane kompozycjeWidoki agentaSprawy zakupoweNotatki testowePliki i raportyPliki i raportyUstawieniaUstawienia
+BLAD karta modułu kontrolnego wyrenderowana z katalogu, danymi z trasy modułu — brak listy na canvasie; strona:  ☰Przestrzen pracyCanvasZapisane kompozycjeWidoki agentaSprawy zakupoweNotatki testowePliki i raportyPliki i raportyUstawieniaUstawieniaClaude: subskrypcja (max)·model claude-sonnet-4-5·1 modul(y), 28
+karta modułu kontrolnego wyrenderowana z katalogu, danymi z trasy modułu: brak listy na canvasie; strona:  ☰Przestrzen pracyCanvasZapisane kompozycjeWidoki agentaSprawy zakupoweNotatki testowePliki i raportyPliki i raportyUstawieniaUstawieniaClaude: subskrypcja (max)·model claude-sonnet-4-5·1 modul(y), 28
+EXIT=1
+
+## przywrocenie
+(pusto = drzewo znow czyste)

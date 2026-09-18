@@ -33,8 +33,9 @@ Mapa wszystkich dokumentów: [`docs/DOCUMENTATION-MAP.md`](docs/DOCUMENTATION-MA
 - `packages/platform-*` nie importują i nie deklarują `@module/*` i nie zawierają słownika domeny.
   Sprawdza to `pnpm check:boundaries` (słownik pochodzi z `agenticApp.domainVocabulary` modułów).
 - Moduł domenowy dostaje usługi platformy przez fabrykę i kontrakty z `platform-contracts`.
-- Moduły łączy wyłącznie warstwa składania: `apps/server/src/compose.ts`, `apps/web/src/compose.tsx`,
-  `apps/web/src/router.tsx`.
+- Moduły łączy wyłącznie warstwa składania: `apps/server/src/compose.ts` i `apps/web/src/compose.tsx`.
+  `apps/web/src/router.tsx` nie nazywa żadnego modułu — montuje ekrany z `registry.screens`, a moduł
+  nie importuje `@tanstack/react-router` (parametry trasy: `useScreenParams()`, linki: `AppLink`).
 - Dane biznesowe należą do serwisów backendu. MCP udostępnia operacje, AG-UI przenosi zdarzenia,
   OpenUI opisuje i renderuje kompozycje. Żaden z tych mechanizmów nie jest bazą danych.
 - Brak potrzebnej funkcji platformy rozszerza się w platformie w sposób neutralny domenowo, a nie
@@ -98,8 +99,9 @@ pnpm test:e2e:model  # tylko testy z prawdziwym modelem; koszt: 11 tur subskrypc
 pnpm check:module-swap   # przy zmianach kontraktu modułu lub warstwy składania
 ```
 
-`pnpm typecheck` sprawdza dwie konfiguracje: `tsconfig.json` (pakiety, aplikacje, `tests/`, `scripts/`)
-i `tsconfig.e2e.json` (`e2e/` i `playwright.config.ts`). Playwright uruchamia TypeScript bez sprawdzania
+`pnpm typecheck` sprawdza trzy konfiguracje: `tsconfig.json` (pakiety, aplikacje, `tests/`, `scripts/`),
+osobny program każdego modułu (`pnpm typecheck:modules` — moduł musi się skompilować bez `apps/`, bo
+inaczej zależy od tego, co akurat składa aplikacja) i `tsconfig.e2e.json` (`e2e/` i `playwright.config.ts`). Playwright uruchamia TypeScript bez sprawdzania
 typów, więc bez tej drugiej bramki błąd typu w specu wychodzi dopiero w trakcie przebiegu — przy testach
 modelowych kosztuje turę.
 
