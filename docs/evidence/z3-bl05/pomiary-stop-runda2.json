@@ -1,10 +1,10 @@
 {
   "opis": "Faktyczne anulowanie rozdzielone na trzy instanty: potwierdzenie zadania Stop, zakonczenie strumienia zdarzen i zakonczenie procesow uruchomienia. Po zakonczeniu sprawdzony brak dalszych mutacji domeny i dzialajaca kolejka rozmowy.",
   "zrodlo": "pnpm test → tests/measurements.test.ts (regresja szablonu)",
-  "zapisano": "2026-09-18T10:00:06.183Z",
+  "zapisano": "2026-09-18T10:02:10.183Z",
   "wersjaKodu": {
-    "commit": "1f494596312504ed6c634ba1454018a77050ecac",
-    "brudneDrzewo": true,
+    "commit": "22674a9cf0bba98b8563e8037348c80869a09323",
+    "brudneDrzewo": false,
     "node": "24.19.0",
     "pakiety": {
       "node": "24.19.0",
@@ -24,9 +24,28 @@
       "do": "odpowiedz 200 z cancelled=true",
       "warunki": "stand-in modelu na granicy adaptera (AbortSignal przekazany tak jak do Claude Agent SDK); zadanie Stop przez rzeczywista trase POST /api/runs/:id/cancel; 3 uruchomienia, kazde strumieniujace tekst i trzymajace prawdziwy proces potomny zwiazany z sygnalem przerwania; proces potomny zastepuje proces Claude Agent SDK, ktorego ten przebieg nie uruchamia; w tym instancie proces trzymany przez uruchomienie jeszcze zyje — asertowane, nie zalozone",
       "probkiMs": [
-        8,
-        5,
+        2,
+        1,
         3
+      ],
+      "podsumowanie": {
+        "probek": 3,
+        "zMetryka": 3,
+        "brakMetryki": 0,
+        "minMs": 1,
+        "medianaMs": 2,
+        "maxMs": 3
+      }
+    },
+    "stopKoniecStrumienia": {
+      "co": "zakonczenie strumienia zdarzen anulowanego uruchomienia",
+      "od": "wyslanie POST /api/runs/:id/cancel",
+      "do": "wyczerpanie strumienia AG-UI po jego zamknieciu (koniec odczytu konsumenta)",
+      "warunki": "stand-in modelu na granicy adaptera (AbortSignal przekazany tak jak do Claude Agent SDK); zadanie Stop przez rzeczywista trase POST /api/runs/:id/cancel; 3 uruchomienia, kazde strumieniujace tekst i trzymajace prawdziwy proces potomny zwiazany z sygnalem przerwania; proces potomny zastepuje proces Claude Agent SDK, ktorego ten przebieg nie uruchamia",
+      "probkiMs": [
+        3,
+        8,
+        5
       ],
       "podsumowanie": {
         "probek": 3,
@@ -37,42 +56,23 @@
         "maxMs": 8
       }
     },
-    "stopKoniecStrumienia": {
-      "co": "zakonczenie strumienia zdarzen anulowanego uruchomienia",
-      "od": "wyslanie POST /api/runs/:id/cancel",
-      "do": "wyczerpanie strumienia AG-UI po jego zamknieciu (koniec odczytu konsumenta)",
-      "warunki": "stand-in modelu na granicy adaptera (AbortSignal przekazany tak jak do Claude Agent SDK); zadanie Stop przez rzeczywista trase POST /api/runs/:id/cancel; 3 uruchomienia, kazde strumieniujace tekst i trzymajace prawdziwy proces potomny zwiazany z sygnalem przerwania; proces potomny zastepuje proces Claude Agent SDK, ktorego ten przebieg nie uruchamia",
-      "probkiMs": [
-        16,
-        15,
-        18
-      ],
-      "podsumowanie": {
-        "probek": 3,
-        "zMetryka": 3,
-        "brakMetryki": 0,
-        "minMs": 15,
-        "medianaMs": 16,
-        "maxMs": 18
-      }
-    },
     "stopKoniecProcesow": {
       "co": "zakonczenie procesow uruchomienia",
       "od": "wyslanie POST /api/runs/:id/cancel",
       "do": "ostatni z czterech faktow: rozstrzygnieta obietnica wykonania, usuniety workspace, zakonczony proces potomny i wyrejestrowany strumien uruchomienia",
       "warunki": "stand-in modelu na granicy adaptera (AbortSignal przekazany tak jak do Claude Agent SDK); zadanie Stop przez rzeczywista trase POST /api/runs/:id/cancel; 3 uruchomienia, kazde strumieniujace tekst i trzymajace prawdziwy proces potomny zwiazany z sygnalem przerwania; proces potomny zastepuje proces Claude Agent SDK, ktorego ten przebieg nie uruchamia",
       "probkiMs": [
-        29,
-        31,
-        32
+        13,
+        18,
+        15
       ],
       "podsumowanie": {
         "probek": 3,
         "zMetryka": 3,
         "brakMetryki": 0,
-        "minMs": 29,
-        "medianaMs": 31,
-        "maxMs": 32
+        "minMs": 13,
+        "medianaMs": 15,
+        "maxMs": 18
       }
     },
     "stopWyjscieProcesuPotomnego": {
@@ -81,18 +81,18 @@
       "do": "zdarzenie exit procesu potomnego",
       "warunki": "stand-in modelu na granicy adaptera (AbortSignal przekazany tak jak do Claude Agent SDK); zadanie Stop przez rzeczywista trase POST /api/runs/:id/cancel; 3 uruchomienia, kazde strumieniujace tekst i trzymajace prawdziwy proces potomny zwiazany z sygnalem przerwania; proces potomny zastepuje proces Claude Agent SDK, ktorego ten przebieg nie uruchamia; symulacja procesu potomnego modelu",
       "probkiMs": [
-        17,
-        15,
-        22
+        3,
+        8,
+        6
       ],
       "uwagi": "Proces potomny jest stand-inem procesu Claude Agent SDK. Dowodzi, ze sygnal przerwania dociera na granice adaptera i konczy proces przed zamknieciem uruchomienia; nie dowodzi zachowania samego SDK.",
       "podsumowanie": {
         "probek": 3,
         "zMetryka": 3,
         "brakMetryki": 0,
-        "minMs": 15,
-        "medianaMs": 17,
-        "maxMs": 22
+        "minMs": 3,
+        "medianaMs": 6,
+        "maxMs": 8
       }
     }
   }

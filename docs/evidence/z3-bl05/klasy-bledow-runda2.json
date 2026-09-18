@@ -3,8 +3,8 @@
   "zrodlo": "pnpm test → tests/diagnostics.test.ts (regresja szablonu)",
   "warunki": "stand-in modelu na granicy adaptera; komunikaty bledow w brzmieniu, jakie produkuje SDK; blad integracji to odrzucone wywolanie adaptera, blad modelu to strumien, ktory zglosil awarie",
   "wersjaKodu": {
-    "commit": "1f494596312504ed6c634ba1454018a77050ecac",
-    "brudneDrzewo": true,
+    "commit": "22674a9cf0bba98b8563e8037348c80869a09323",
+    "brudneDrzewo": false,
     "node": "24.19.0",
     "pakiety": {
       "node": "24.19.0",

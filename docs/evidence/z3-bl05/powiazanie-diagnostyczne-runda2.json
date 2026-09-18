@@ -3,8 +3,8 @@
   "zrodlo": "pnpm test → tests/diagnostics.test.ts (regresja szablonu)",
   "warunki": "stand-in modelu na granicy adaptera; prawdziwe handlery narzedzi MCP, prawdziwe serwisy domenowe i baza; jedno uruchomienie z zapisem domenowym i zapisem artefaktu",
   "wersjaKodu": {
-    "commit": "1f494596312504ed6c634ba1454018a77050ecac",
-    "brudneDrzewo": true,
+    "commit": "22674a9cf0bba98b8563e8037348c80869a09323",
+    "brudneDrzewo": false,
     "node": "24.19.0",
     "pakiety": {
       "node": "24.19.0",
@@ -17,8 +17,8 @@
     }
   },
   "lancuch": {
-    "rozmowa": "cnv_a7d193b6a5fa4d36a1a5",
-    "wykonanie": "run_e47ad2a1c88e43b4bc6b",
+    "rozmowa": "cnv_ed2dc28706b4453ebd5f",
+    "wykonanie": "run_5920634588c746b79c72",
     "narzedzie": {
       "nazwa": "mcp__app__procurement_update_offer_item",
       "toolCallId": "tu_1",
@@ -26,23 +26,23 @@
       "zrodloWyniku": "run_events TOOL_CALL_RESULT oraz messages(role=tool)"
     },
     "mutacja": {
-      "rekord": "pci_d3cabcfa74a942db857f",
+      "rekord": "pci_931c3602b803409690ff",
       "wersjaPrzed": 1,
       "wersjaPo": 2,
       "zasobyZdarzenia": [
-        "case:pcs_4a693872e85542cda69a",
-        "offer:pco_1507bf2266684bf083de"
+        "case:pcs_1c9379cf1ac940519b3f",
+        "offer:pco_94fa24a53191468b850d"
       ]
     },
     "artefakt": {
-      "id": "art_9667c5e6db484efcb9e9",
-      "runId": "run_e47ad2a1c88e43b4bc6b",
-      "conversationId": "cnv_a7d193b6a5fa4d36a1a5"
+      "id": "art_382f65f0557e425f8365",
+      "runId": "run_5920634588c746b79c72",
+      "conversationId": "cnv_ed2dc28706b4453ebd5f"
     }
   },
   "kontrolaNegatywna": {
     "opis": "artefakt utworzony poza uruchomieniem",
-    "artefakt": "art_88aea8f18d2f46469080",
+    "artefakt": "art_1c33513a0ed94e788794",
     "runId": null
   }
 }
