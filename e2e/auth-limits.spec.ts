@@ -326,7 +326,7 @@ test.describe('uwierzytelnienie i limity w interfejsie (symulacja na granicy ada
     ['api-key', 'api_key', false],
     ['unavailable', 'unavailable', true],
   ] as const) {
-    test(`sesja SDK "${answer}" ma wlasny, rozrozalny stan w Ustawieniach`, async ({ page }) => {
+    test(`sesja SDK "${answer}" ma wlasny, rozroznialny stan w Ustawieniach`, async ({ page }) => {
       await scripted.start('auth-expired-ok', { SDK_SESSION: answer });
       await openApp(page);
       await openSettings(page);

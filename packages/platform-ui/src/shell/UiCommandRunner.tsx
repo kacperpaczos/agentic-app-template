@@ -142,7 +142,22 @@ export function UiCommandRunner() {
       if (!el) return { shown: false, adjustments: [] };
       const adjustments = expandCollapsedAncestors(el);
       if (!hasBox(el)) return { shown: false, adjustments };
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      /*
+       * Centred, unless the target is taller than the window — then its **top**
+       * is what has to be on screen.
+       *
+       * `block: 'center'` on an element taller than the viewport puts the
+       * middle of it in view and its beginning above the fold, so the user is
+       * sent to a list and lands somewhere inside it. It went unnoticed because
+       * the one target this applies to (the tool table, 1244 px against a
+       * 720 px window) sat low enough that the container could not scroll far
+       * enough to really centre it; adding a section above it on the Settings
+       * screen was enough to expose the difference. The property a navigation
+       * owes the user is "the beginning of what I sent you to is visible", and
+       * that is what this now does.
+       */
+      const tallerThanWindow = el.getBoundingClientRect().height > window.innerHeight;
+      el.scrollIntoView({ block: tallerThanWindow ? 'start' : 'center', behavior: 'smooth' });
       markHighlighted(el);
       return { shown: true, adjustments };
     },
