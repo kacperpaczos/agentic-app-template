@@ -51,6 +51,47 @@ const { flag } = makeArgs(process.argv);
 /* ------------------------------- the census ------------------------------- */
 
 /**
+ * Every flag of this script that takes a path, and what it does with it.
+ *
+ * Declared here, next to the code, and checked by `tests/script-path-flags.test.ts`:
+ * that test reads the flags this script actually uses out of its source, compares
+ * them with this list, and then **runs** the script once per writing flag to see
+ * the refusal for itself. A flag added without an entry here fails the test; an
+ * entry that claims protection the code does not have fails it too.
+ *
+ * It exists because this package shipped the same defect twice: a guard that
+ * watched the wrong argument. Both times the flag was `--out`, both times the
+ * code looked careful, and both times it was someone reading it — not a test —
+ * who noticed.
+ *
+ *   zapis-chroniony  — writes; must refuse a live data directory
+ *   odczyt-chroniony — only reads, but still refuses one (here: because the
+ *                      rehearsal would boot the application against it)
+ *   zapis-docelowy   — writes *into* a data directory on purpose
+ *   odczyt           — only reads; a live data directory is allowed, and `why`
+ *                      has to say why that is safe
+ *   wartosc          — not a path at all
+ */
+export const FLAGS = {
+  backup: {
+    kind: 'odczyt-chroniony',
+    why: 'Kopia, z ktorej bierze sie proba: czytana i kopiowana gdzie indziej, a na koniec skrypt '
+      + 'sprawdza sumy SHA-256 wszystkich jej plikow, zeby pokazac, ze jej nie tknal. Mimo to '
+      + 'przechodzi przez ochrone — proba na zywym katalogu nie bylaby proba, tylko migracja '
+      + 'wykonana na danych uzytkownika pod nazwa, ktora mowi co innego.',
+  },
+  out: {
+    kind: 'zapis-chroniony',
+    why: 'Katalog roboczy jest KASOWANY przed wypelnieniem, a potem startuje na nim aplikacja.',
+  },
+  json: {
+    kind: 'zapis-chroniony',
+    why: 'Raport nadpisuje wskazany plik i tworzy katalogi po drodze. Do 2026-09-18 nic nie pytalo, '
+      + 'gdzie ten plik laduje — --json <katalog danych>/app.db niszczylo baze.',
+  },
+};
+
+/**
  * Starts the platform once against `dataDir`, then shuts it down.
  *
  * Deliberately the real thing — `apps/server/src/compose.ts` through
@@ -245,6 +286,16 @@ function main() {
     );
   }
 
+  /*
+   * The report file is a *write*, and until this check nothing asked where it
+   * would land. It creates directories and overwrites whatever file it names,
+   * so `--json <katalog danych>/app.db` would have destroyed a database from a
+   * flag nobody thinks of as dangerous. Checked here, with the other arguments,
+   * rather than at the moment of writing: an argument that will be refused
+   * should be refused before the work starts, not after.
+   */
+  if (flag('json')) assertAwayFromLiveData(resolve(flag('json')), { what: 'Plik raportu' });
+
   const backupBefore = fingerprint(backupDir);
 
   /*
@@ -371,4 +422,6 @@ function main() {
  * indistinguishable from "the migration would lose data" — the one verdict
  * nobody may misread.
  */
-runScript('proba', main);
+if (process.argv[1] && realResolve(process.argv[1]) === realResolve(fileURLToPath(import.meta.url))) {
+  runScript('proba', main);
+}

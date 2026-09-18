@@ -67,6 +67,40 @@ import {
 const { flag, has } = makeArgs(process.argv);
 
 /**
+ * Every flag of this script that takes a path, and what it does with it.
+ *
+ * Declared here, next to the code, and checked by `tests/script-path-flags.test.ts`:
+ * that test reads the flags this script actually uses out of its source, compares
+ * them with this list, and then **runs** the script once per writing flag to see
+ * the refusal for itself. A flag added without an entry here fails the test; an
+ * entry that claims protection the code does not have fails it too.
+ *
+ * It exists because this package shipped the same defect twice: a guard that
+ * watched the wrong argument. Both times the flag was `--out`, both times the
+ * code looked careful, and both times it was someone reading it — not a test —
+ * who noticed.
+ *
+ *   zapis-chroniony  — writes; must refuse a live data directory
+ *   odczyt-chroniony — only reads, but still refuses one
+ *   zapis-docelowy   — writes *into* a data directory on purpose
+ *   odczyt           — only reads; a live data directory is allowed, and `why`
+ *                      has to say why that is safe
+ *   wartosc          — not a path at all
+ */
+export const FLAGS = {
+  backup: {
+    kind: 'odczyt',
+    why: 'Kopia, z ktorej odtwarzamy. Czytana i weryfikowana, nigdy zapisywana.',
+  },
+  data: {
+    kind: 'zapis-docelowy',
+    why: 'Katalog danych aplikacji to WLASCIWY cel odtworzenia — tu ochrona przed katalogiem danych '
+      + 'byla by odwrotnoscia sensu. Zamiast niej dziala kontrola przeciwna: katalog istniejacy i '
+      + 'niepusty musi wygladac na katalog danych, zanim zostanie przeniesiony na bok.',
+  },
+};
+
+/**
  * Migration ids this checkout would apply, obtained by letting it apply them.
  *
  * Not a hard-coded list and not a read of the platform's migration array: the

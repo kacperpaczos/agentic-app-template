@@ -56,6 +56,39 @@ const USERS = [
 ];
 
 /**
+ * Every flag of this script that takes a path, and what it does with it.
+ *
+ * Declared here, next to the code, and checked by `tests/script-path-flags.test.ts`:
+ * that test reads the flags this script actually uses out of its source, compares
+ * them with this list, and then **runs** the script once per writing flag to see
+ * the refusal for itself. A flag added without an entry here fails the test; an
+ * entry that claims protection the code does not have fails it too.
+ *
+ * It exists because this package shipped the same defect twice: a guard that
+ * watched the wrong argument. Both times the flag was `--out`, both times the
+ * code looked careful, and both times it was someone reading it — not a test —
+ * who noticed.
+ *
+ *   zapis-chroniony  — writes; must refuse a live data directory
+ *   odczyt-chroniony — only reads, but still refuses one
+ *   zapis-docelowy   — writes *into* a data directory on purpose
+ *   odczyt           — only reads; a live data directory is allowed, and `why`
+ *                      has to say why that is safe
+ *   wartosc          — not a path at all
+ */
+export const FLAGS = {
+  out: {
+    kind: 'zapis-chroniony',
+    why: 'Katalog jest KASOWANY, a potem wypelniany danymi syntetycznymi.',
+  },
+  stage: {
+    kind: 'wartosc',
+    why: 'Nazwa etapu migracji (identyfikator z --list), a nie sciezka — nic nie otwiera i niczego '
+      + 'nie zapisuje, wiec nie ma tu czego chronic.',
+  },
+};
+
+/**
  * The migration lists, read from the composition root.
  *
  * Both halves matter: the platform's own migrations and those of whichever

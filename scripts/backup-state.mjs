@@ -81,6 +81,45 @@ function walk(dir, base = dir) {
  * `--verify` and by `restore-state.mjs` today, so renaming a key here would
  * quietly declare older copies unverifiable.
  */
+/**
+ * Every flag of this script that takes a path, and what it does with it.
+ *
+ * Declared here, next to the code, and checked by `tests/script-path-flags.test.ts`:
+ * that test reads the flags this script actually uses out of its source, compares
+ * them with this list, and then **runs** the script once per writing flag to see
+ * the refusal for itself. A flag added without an entry here fails the test; an
+ * entry that claims protection the code does not have fails it too.
+ *
+ * It exists because this package shipped the same defect twice: a guard that
+ * watched the wrong argument. Both times the flag was `--out`, both times the
+ * code looked careful, and both times it was someone reading it — not a test —
+ * who noticed.
+ *
+ *   zapis-chroniony  — writes; must refuse a live data directory
+ *   odczyt-chroniony — only reads, but still refuses one
+ *   zapis-docelowy   — writes *into* a data directory on purpose
+ *   odczyt           — only reads; a live data directory is allowed, and `why`
+ *                      has to say why that is safe
+ *   wartosc          — not a path at all
+ */
+export const FLAGS = {
+  data: {
+    kind: 'odczyt',
+    why: 'Zrodlo kopii. Czytanie zywego katalogu danych jest sensem tego skryptu, a czyta go '
+      + 'wylacznie jako bajty, bez otwierania bazy — wiec ta flaga celowo NIE ma ochrony przed '
+      + 'katalogiem danych. To jedyne takie miejsce w tych skryptach i dlatego jest tu napisane wprost.',
+  },
+  out: {
+    kind: 'zapis-chroniony',
+    why: 'Kopia nadpisuje app.db i drzewa plikow. Wskazana na czyjs katalog danych niszczyla baze '
+      + 'uzytkownika i konczyla sie kodem 0 (do 2026-09-18).',
+  },
+  verify: {
+    kind: 'odczyt',
+    why: 'Sprawdza istniejaca kopie: czyta manifest i baze kopii, niczego nie zapisuje.',
+  },
+};
+
 export function census(dbFile) {
   const c = censusOf(dbFile);
   return {
