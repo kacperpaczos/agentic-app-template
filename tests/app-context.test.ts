@@ -396,6 +396,61 @@ describe('L6.7 — wiekszy zbior jest pobierany oknem, nie w calosci', () => {
     expect(Object.keys(oversizeAllowed).filter((n) => !names.has(n))).toEqual([]);
   });
 
+  it('odpowiedz get_context miesci sie w tym, co rozmowa przechowuje', async () => {
+    /*
+     * `get_context` takes no window — nothing about it is a page of a larger
+     * set — so the enumeration above skips it, and yet it is the answer that
+     * grows with everything the user has picked and typed. It is also the
+     * answer that already forced a change once: naming the command context
+     * twice (flat and in a block of its own) pushed a heavy context past the
+     * limit, and the duplicate was dropped rather than the fields.
+     *
+     * The context below is a heavy one a person can really produce: a dozen
+     * rows selected, a narrowed and ordered view, five dirty forms. It is not
+     * the schema's ceiling — fifty selected rows with ids of the maximum length
+     * and twenty forms of sixty dirty fields do not fit, and no tool answer of
+     * that size would; that is the stored projection's limit, recorded as an
+     * observation rather than silently assumed away here.
+     */
+    const caseId = h.service.listCases(h.ownerId)[0]!.id;
+    const answer = await callTool(
+      'get_context',
+      {},
+      {
+        appContext: {
+          ...EMPTY_CONTEXT,
+          spaceId: 'spc_pomiarowa',
+          resource: { kind: 'case', id: caseId },
+          selection: Array.from({ length: 12 }, (_, i) => ({
+            kind: 'offer_item',
+            id: `pci_${i}${'a'.repeat(16)}`,
+          })),
+          filters: {
+            'procurement.data': {
+              predicates: [{ field: 'country', op: 'eq', value: 'PL' }],
+              sort: { field: 'name', direction: 'desc' },
+              page: { index: 1, size: 10, count: 1 },
+              matched: 5,
+              total: 7,
+            },
+          },
+          viewport: { x: 12, y: 34, zoom: 1 },
+          drafts: Array.from({ length: 5 }, (_, i) => ({
+            formId: `form_${i}`,
+            entity: 'offer_item',
+            entityId: `pci_${i}`,
+            dirtyFields: ['unitPrice', 'quantity'],
+          })),
+          ui: { version: 12, clientId: 'ui_tab_kontekst', viewId: 'procurement.data', url: '/data?country=PL' },
+        },
+      },
+    );
+    expect(
+      JSON.stringify(answer).length,
+      'get_context nie miesci sie w zapisie wyniku narzedzia',
+    ).toBeLessThan(TOOL_RESULT_STORED_CHARS);
+  });
+
   it('limit poza zakresem schematu jest odrzucany, a nie znosi ograniczenia odczytu', async () => {
     for (const limit of [0, -1, 5000]) {
       await expect(callTool('procurement_list_cases', { limit }), String(limit)).rejects.toMatchObject({
@@ -852,16 +907,37 @@ describe('dowod pakietu', () => {
         stanyOpisuZasobu: states,
         oknoOdczytu: {
           domyslnyLimit: READ_WINDOW_DEFAULT_LIMIT,
-          narzedzia: ['canvas_list_cards', 'files_list', 'ui_catalog', 'procurement_list_cases', 'procurement_get_case', 'procurement_list_offers'],
+          /*
+           * Read off the registry, not typed out here. A hand-written list was
+           * six names long and stayed six names long after three more tools
+           * took a window — the evidence file then described a state of the
+           * code that had not been true for two commits.
+           */
+          narzedzia: windowedReadNames(),
         },
       },
       'docs/evidence/z5-bl11a',
     );
     expect(result.written).toBe(evidenceWritingRequested());
     expect(result.path).toContain('docs/evidence/z5-bl11a');
-    expect(JSON.parse(result.body).stanyOpisuZasobu.cudzy).toBe('forbidden');
+    const body = JSON.parse(result.body);
+    expect(body.stanyOpisuZasobu.cudzy).toBe('forbidden');
+    // An empty or shrunken list would be evidence of nothing, quietly.
+    expect(body.oknoOdczytu.narzedzia, 'dowod wymienia windowane odczyty').toEqual(windowedReadNames());
+    expect(body.oknoOdczytu.narzedzia.length).toBeGreaterThanOrEqual(9);
   });
 });
+
+/** Names of the agent's read tools that take a window, straight from the registry. */
+function windowedReadNames(): string[] {
+  return tools()
+    .filter((t) => {
+      const keys = Object.keys((t.def.inputSchema as any).shape);
+      return t.def.effect === 'read' && keys.includes('limit') && keys.includes('offset');
+    })
+    .map((t) => t.localName)
+    .sort();
+}
 
 /** A space of the signed-in owner, with a few cards in it. */
 async function spaceWithCards(cards = 3): Promise<string> {

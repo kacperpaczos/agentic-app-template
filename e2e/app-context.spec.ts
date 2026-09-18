@@ -154,6 +154,48 @@ const commandHalf = (answer: any) => {
   return JSON.stringify(command);
 };
 
+/**
+ * Puts the editable line of an offer on a space, the way a composition would.
+ *
+ * The leak this serves is the half-typed form. A draft is the one piece of
+ * scoped state that survives navigation on its own — the record is dropped when
+ * its screen closes, the selection belongs to the space — so it is what a
+ * command sent after a switch of identity could still be carrying. The default
+ * composition of a case has no editable card, hence this setup; the typing
+ * itself is done on the keyboard, in the browser.
+ */
+async function addItemFormCard(page: Page, spaceId: string, caseId: string): Promise<void> {
+  const offerId = await page.evaluate(async (id) => {
+    const detail = await (await fetch(`/api/m/procurement/cases/${id}`, { credentials: 'include' })).json();
+    const withItems = detail.offers.find((o: any) => o.items.length > 0);
+    return withItems.offer.id as string;
+  }, caseId);
+  expect(offerId, 'sprawa musi miec oferte z pozycjami').toBeTruthy();
+  const added = await postJson(page, '/api/canvas/cards', {
+    spaceId,
+    title: 'Edycja pozycji',
+    spec: { kind: 'component', component: 'procurement.offerItemForm', props: { offerId } },
+  });
+  expect(added.id, `nie udalo sie dodac karty: ${JSON.stringify(added)}`).toBeTruthy();
+}
+
+/**
+ * Types into the editable line and returns the id of the item left half-edited.
+ *
+ * `markDirty` registers the draft in the platform store on every keystroke, so
+ * this is a real unsaved form, not a fixture written into state.
+ */
+async function typeIntoItemForm(page: Page): Promise<string> {
+  const form = page.getByTestId('card-item-form').first();
+  await expect(form).toBeVisible({ timeout: 30_000 });
+  const itemId = await form.locator('select').first().inputValue();
+  expect(itemId, 'formularz nie wybral pozycji').toBeTruthy();
+  const qty = form.locator('input').first();
+  await qty.click();
+  await qty.pressSequentially('7');
+  return itemId;
+}
+
 /** Selects the first card on the canvas by its title button, and returns its id. */
 async function selectFirstCard(page: Page): Promise<string> {
   const card = page.locator('[data-testid^="card-"]').first();
@@ -287,8 +329,37 @@ test.describe('kontekst aplikacji dla agenta', () => {
     await page.locator('[data-testid^="case-tile-"]').first().click();
     await expect(page.getByTestId('case-detail-page')).toBeVisible();
     const caseId = new URL(page.url()).pathname.split('/').pop()!;
+    /*
+     * The half-typed form is put within reach before the canvas is opened.
+     *
+     * What the first owner leaves behind has to be state that is *still there*
+     * when they hand the tab over, or the assertions below hold no matter what
+     * the switch does. The record is not such state any more — leaving its
+     * screen drops it, which is its own test — so the leak vectors here are the
+     * three that do survive walking around the application: the workspace, the
+     * selection inside it, and an unsaved draft.
+     */
+    const spaceOfCase = await page.evaluate(async () => {
+      const { spaces } = await (await fetch('/api/canvas/spaces', { credentials: 'include' })).json();
+      return spaces.find((s: any) => s.scopeKind === 'case')?.id as string;
+    });
+    expect(spaceOfCase, 'ekran sprawy zaklada jej przestrzen').toBeTruthy();
     await navigate(page, 'Canvas');
+    await expect
+      .poll(() => page.evaluate(() => new URL(location.href).searchParams.get('s')), { timeout: 20_000 })
+      .toBe(spaceOfCase);
+    await addItemFormCard(page, spaceOfCase, caseId);
+    /*
+     * The only reload in this test, and it is setup: the canvas has already
+     * fetched this space's cards, and a card put there behind its back does not
+     * appear until it asks again. The address still names the space, so the
+     * reload opens the same canvas. Everything the test is about — the command
+     * as the first owner, the switch, the command as the second — happens after
+     * this line, in this one page instance.
+     */
+    await page.reload();
     const cardId = await selectFirstCard(page);
+    const itemId = await typeIntoItemForm(page);
     /*
      * One command as the first owner, so there *is* a conversation of theirs to
      * leak. Without it the address never carries `?c=`, `firstConversation`
@@ -299,7 +370,13 @@ test.describe('kontekst aplikacji dla agenta', () => {
     await settled(page);
     const firstConversation = await conversationOnScreen(page);
     const spaceId = await page.evaluate(() => new URL(location.href).searchParams.get('s'));
-    expect(spaceId).toBeTruthy();
+    expect(spaceId).toBe(spaceOfCase);
+
+    // The precondition: the first owner's command really did carry all three.
+    const [asFirstOwner] = await toolResults(page, firstConversation, 'get_context');
+    expect(asFirstOwner.spaceId).toBe(spaceId);
+    expect(asFirstOwner.selection).toEqual([{ kind: 'card', id: cardId }]);
+    expect(asFirstOwner.unsavedDrafts.map((d: any) => d.entityId)).toContain(itemId);
 
     /* ----------------------------- the switch ------------------------------ */
 
@@ -329,9 +406,18 @@ test.describe('kontekst aplikacji dla agenta', () => {
     const [context] = await toolResults(page, conversationId, 'get_context');
 
     const text = commandHalf(context);
-    // Every one of these is a non-empty id of the first owner's, and the second
-    // owner's command must carry none of them.
-    for (const leaked of [caseId, cardId, spaceId!, firstConversation]) {
+    /*
+     * Every one of these is a non-empty id of the first owner's *and* was in
+     * that owner's last command a moment ago — the precondition above says so
+     * for each. The second owner's command must carry none of them.
+     *
+     * The case id is deliberately not on the list: it left the context when its
+     * screen closed, before the switch, so its absence here would prove nothing
+     * about the switch. That it leaves at all is proven in "wyjscie z ekranu
+     * rekordu…", and the item id below is the piece of the same case's data
+     * that a draft keeps alive across the whole walk to the settings screen.
+     */
+    for (const leaked of [cardId, spaceId!, itemId, firstConversation]) {
       expect(leaked, 'kazdy identyfikator poprzedniego wlasciciela musi istniec').toBeTruthy();
       expect(text, `wyciek ${leaked}`).not.toContain(leaked);
     }
@@ -342,6 +428,52 @@ test.describe('kontekst aplikacji dla agenta', () => {
     expect(conversationId).not.toBe(firstConversation);
   });
 
+  test('L6.12: wyjscie z ekranu rekordu zdejmuje rekord z kontekstu nastepnego polecenia', async ({ page }) => {
+    await scripted.restart('app-context');
+    /*
+     * The same conversation, the same owner, no reload — only the user walking
+     * away from the record. "The record the user is looking at" has to stop
+     * being true when they stop looking at it, or every later command in that
+     * conversation names a screen that has been closed for minutes.
+     */
+    await openApp(page, '/');
+    await navigate(page, 'Wszystkie sprawy');
+    await page.locator('[data-testid^="case-tile-"]').first().click();
+    await expect(page.getByTestId('case-detail-page')).toBeVisible();
+    const caseId = new URL(page.url()).pathname.split('/').pop()!;
+
+    await send(page, 'Co mam teraz w kontekscie?');
+    await settled(page);
+    const conversationId = await conversationOnScreen(page);
+    const [onTheRecord] = await toolResults(page, conversationId, 'get_context');
+    expect(onTheRecord.resource).toEqual({ kind: 'case', id: caseId });
+
+    // The user walks away — by clicking, in the same conversation.
+    await navigate(page, 'Dostawcy');
+    await expect(page.getByTestId('data-page')).toBeVisible();
+    await published(page, (s) => s.url.startsWith('/data'));
+
+    await send(page, 'A teraz?');
+    /*
+     * Waited on by the second reading appearing in the conversation, not by the
+     * run phase: the first command left the phase at `succeeded`, so waiting for
+     * that would return before the second command had done anything at all.
+     */
+    let answers: any[] = [];
+    await expect
+      .poll(async () => (answers = await toolResults(page, conversationId, 'get_context')).length, {
+        timeout: 60_000,
+      })
+      .toBe(2);
+    await settled(page);
+    const after = answers[1];
+    expect(after.resource, 'rekord opuszczonego ekranu').toBeNull();
+    expect(after.resourceState).toBe('none');
+    expect(commandHalf(after), `wyciek ${caseId}`).not.toContain(caseId);
+    // The workspace is not part of this: the case's space stays open on purpose,
+    // and the address bar still carries it.
+    expect(after.spaceId, 'przestrzen sprawy zostaje').toBeTruthy();
+  });
 
   test('L6.12: przejscie do rozmowy bez przestrzeni nie zabiera ze soba przestrzeni ani zaznaczenia poprzedniej', async ({
     page,
