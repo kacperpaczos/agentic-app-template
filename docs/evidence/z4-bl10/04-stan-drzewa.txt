@@ -1054,3 +1054,8 @@ $ git status --porcelain (po verify, przed commitem dowodow)
  M tests/bl10-card-catalog.test.ts
 ?? apps/web/src/dev-proxy.ts
 ?? tests/dev-proxy.test.ts
+
+# Kontrola koncowa rundy 1 (po commicie 0affbbf)
+$ pnpm verify                     -> EXIT=0, 34 pliki / 553 testy
+$ git status --porcelain          -> (pusto)
+Zaden test nie zapisuje do docs/evidence/ — pliki tego katalogu pochodza z recznych przebiegow.
