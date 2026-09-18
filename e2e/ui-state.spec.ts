@@ -421,14 +421,19 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
      * loop would be empty and the assertion would pass without looking at
      * anything.
      *
-     * Deliberately no assertion about the table's own state attribute here: two
-     * complementary fixes land on this screen (this package clears the shell
-     * store; the sibling package rebuilds `AgentInterface`), and they leave the
-     * table in different shapes — gone, or present and empty. What both have to
-     * satisfy is below and in the description: none of the first owner's data.
+     * Deliberately no assertion about the table's own state attribute here, and
+     * deliberately over the **panel** rather than the table: two complementary
+     * fixes land on this screen (this package clears the shell store; the
+     * sibling package rebuilds `AgentInterface`), and they leave the table in
+     * different shapes — present and empty, or gone. A negated matcher on a
+     * locator that resolves to nothing fails rather than passes, so asserting
+     * over the table would make the test depend on which of the two happened.
+     * The panel is there either way, and "none of the first owner's rows are in
+     * the chat" is the claim that matters.
      */
+    const chat = page.locator('.pf-chat');
     for (const id of mine) {
-      await expect(table).not.toContainText(id);
+      await expect(chat).not.toContainText(id);
     }
 
     // What the new owner's backend holds for this tab (the page's session is now the new owner's).

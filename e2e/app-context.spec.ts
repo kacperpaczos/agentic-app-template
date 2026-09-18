@@ -309,6 +309,19 @@ test.describe('kontekst aplikacji dla agenta', () => {
     await page.getByTestId('switch-access-context').click();
     await expect(page.getByTestId('access-owner')).not.toHaveText(before ?? '');
 
+    /*
+     * The chat panel still has the previous owner's conversation selected: it is
+     * not rebuilt on a switch, which is a separate, reported defect and the
+     * sibling package's fix, not this one's. Sending straight away would post to
+     * a conversation the new owner may not open, and the run would never leave
+     * `queued` — which is what this test hit the first time it sent a command as
+     * the first owner. So the user does what the interface offers them, and what
+     * they would have to do anyway: start a new conversation. Everything this
+     * test is about happens after that, still in the same tab and without a
+     * reload.
+     */
+    await page.locator('.pf-chat .openui-icon-button[aria-label="New chat"]').first().click();
+
     // The next command, in the same tab, without a reload.
     await send(page, 'Co mam w kontekscie?');
     await settled(page);
@@ -361,12 +374,23 @@ test.describe('kontekst aplikacji dla agenta', () => {
     expect(inA.spaceId).toBe(spaceA);
     expect(inA.selection).toEqual([{ kind: 'card', id: cardId }]);
 
+    /*
+     * Off the canvas before switching, and that matters.
+     *
+     * The canvas has a deliberate fallback: with no space selected it opens the
+     * most recent one. On that screen a cleared space is therefore put back
+     * immediately — not as a leak but because the canvas really is showing it.
+     * The user here walks to a module screen first (still conversation A), so
+     * what the next command carries is the scope of the conversation they moved
+     * to, with nothing standing in for it.
+     */
+    await navigate(page, 'Dostawcy');
+    await expect(page.getByTestId('data-page')).toBeVisible();
+
     /* The user picks the other conversation from the drawer — with the mouse. */
     await page.locator('.pf-chat [aria-label="Open sidebar"]').first().click();
-    await page
-      .locator('.openui-agent-sidebar-item', { hasText: TITLE_WITHOUT_SPACE })
-      .first()
-      .click();
+    // The drawer lists each conversation as a button titled after its first message.
+    await page.locator('.pf-chat').getByRole('button', { name: TITLE_WITHOUT_SPACE, exact: true }).first().click();
     await expect
       .poll(() => page.evaluate(() => new URL(location.href).searchParams.get('c')), { timeout: 20_000 })
       .toBe(empty.id);
@@ -377,7 +401,7 @@ test.describe('kontekst aplikacji dla agenta', () => {
 
     expect(inEmpty.conversationId).toBe(empty.id);
     // Neither the workspace of the conversation left behind …
-    expect(inEmpty.spaceId).not.toBe(spaceA);
+    expect(inEmpty.spaceId).toBeNull();
     // … nor what was selected inside it.
     expect(inEmpty.selection).toEqual([]);
     expect(commandHalf(inEmpty)).not.toContain(cardId);
