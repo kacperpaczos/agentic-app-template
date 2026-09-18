@@ -369,19 +369,27 @@ try {
      * w ogóle nie pochodził od modułu.
      */
     const headings = (await page.locator('.pf-nav__heading').allTextContents()).map((h) => h.trim());
-    const navLeaks = leaks(nav);
+    const links = (await page.locator('.pf-nav__link').allTextContents()).map((t) => t.trim());
+    /*
+     * Słownika szukamy w rozdzielonych napisach, nie w `textContent` całej
+     * nawigacji: tam „Wszystkie sprawy” i „Pliki i raporty” sklejają się w
+     * „sprawyPliki”, więc dopasowanie całego słowa (`\bsprawy\b`) nie widzi
+     * granicy i przecieka przez kontrolę. Znalezione właśnie próbą F1.
+     */
+    const navParts = [...headings, ...links];
+    const navLeaks = leaks(navParts.join(' | '));
     const shellOk =
-      nav.includes('Canvas') &&
-      nav.includes('Pliki') &&
-      nav.includes('Notatki testowe') &&
+      links.includes('Canvas') &&
+      links.some((l) => l.startsWith('Pliki')) &&
+      links.includes('Notatki testowe') &&
       headings.includes('Notatki') &&
       navLeaks.length === 0;
     record(
       'powłoka w przeglądarce: menu i nagłówki sekcji od modułu kontrolnego, bez słownika nieobecnego modułu',
       shellOk,
       navLeaks.length
-        ? `slownik nieobecnego modulu w nawigacji: ${navLeaks.join(', ')}`
-        : `naglowki=[${headings.join(' | ')}]; sprawdzono ${absentPrefixes.length + absentLabels.length} pojec`,
+        ? `slownik nieobecnego modulu w nawigacji: ${navLeaks.join(', ')} — ${navParts.join(' | ')}`
+        : `naglowki=[${headings.join(' | ')}]; pozycje=[${links.join(' | ')}]; sprawdzono ${absentPrefixes.length + absentLabels.length} pojec`,
     );
 
     /*
