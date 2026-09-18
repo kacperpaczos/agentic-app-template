@@ -65,7 +65,17 @@ test.describe('zmiana wlasciciela w jednej karcie przegladarki', () => {
     await page.locator('[data-testid^="case-tile-"]').first().click();
     await expect(page.getByTestId('case-detail-page')).toBeVisible();
 
-    const command = 'Opowiedz dlugo o tej sprawie.';
+    /*
+     * The title the thread list shows, and the command that produces it.
+     *
+     * They are not the same string: the ready-made chat drops the trailing
+     * period when it names a thread. Asserting the command text against the
+     * panel therefore *always* passes in the negative form — which is how the
+     * first version of this test reported success with the previous owner's
+     * conversation plainly on screen. Every assertion below uses the title.
+     */
+    const threadTitle = 'Opowiedz dlugo o tej sprawie';
+    const command = `${threadTitle}.`;
     await page.locator('.openui-agent-thread-composer__input').fill(command);
     await page.locator('.pf-chat [aria-label="Send message"]').first().click();
 
@@ -109,7 +119,7 @@ test.describe('zmiana wlasciciela w jednej karcie przegladarki', () => {
     // Polled: clearing them is a router navigation, so it lands a tick later.
     await expect.poll(() => new URL(page.url()).search).not.toMatch(/[?&][cs]=/);
     // The conversation itself is not in the ready-made chat's list any more.
-    await expect(page.locator('.pf-chat')).not.toContainText(command);
+    await expect(page.locator('.pf-chat')).not.toContainText(threadTitle);
 
     /* --------- the part that only a still-running stream can show ----------- */
 
@@ -121,7 +131,7 @@ test.describe('zmiana wlasciciela w jednej karcie przegladarki', () => {
     await page.waitForTimeout(4000);
     await expect(page.getByTestId('run-state')).toHaveCount(0);
     await expect(page.getByTestId('streaming-answer')).toHaveCount(0);
-    await expect(page.locator('.pf-chat')).not.toContainText(command);
+    await expect(page.locator('.pf-chat')).not.toContainText(threadTitle);
     await expect(page.locator('.pf-chat')).not.toContainText('fragment');
     // Nothing of the previous identity's answer anywhere on the page.
     await expect(page.locator('body')).not.toContainText(partial.slice(0, 20));
@@ -136,6 +146,6 @@ test.describe('zmiana wlasciciela w jednej karcie przegladarki', () => {
      */
     await page.getByTestId('switch-access-context').click();
     await expect(owner(page)).toHaveText(before ?? '');
-    await expect(page.locator('.pf-chat')).toContainText(command, { timeout: 20_000 });
+    await expect(page.locator('.pf-chat')).toContainText(threadTitle, { timeout: 20_000 });
   });
 });
