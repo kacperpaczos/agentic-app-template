@@ -33,3 +33,14 @@ na granicy adaptera SDK (tests/support/model-standin.ts) — oznaczone jako symu
   Zmiana ruszyla POST /api/auth/session, czyli trase, ktora loguje kazdy spec przegladarkowy,
   wiec pelny przebieg powtorzony: 153 testy, 11.1 min, kod wyjscia 0.
   Proby wykrycia rundy: P20 (odcisk bez tresci pliku), P21 (sesja polyka zepsute cialo).
+
+== naprawa po integracji ==
+Drzewo: scalone (moj pakiet + BL-11c), commit 608f863.
+  pnpm verify: 45 plikow / 759 testow, kod wyjscia 0, drzewo czyste po przebiegu.
+  Przegladarka: cztery spece, ktore przyszly ze scaleniem i dotykaja zaostrzonych
+  kontraktow (artifact-views, access-switch, shared-fetch, ui-state) — 16 testow, 2.2 min, 0.
+  Nie pelny przebieg, bo zmiana dotyczy dwoch krokow jednego scenariusza i jednego testu;
+  pelny przebieg na kodzie tego pakietu jest wyzej (153 testy).
+  Proba wykrycia P22: bez operationId w tych krokach e2e/artifact-views.spec.ts oblewa
+  ('element(s) not found' — artefakt nie powstaje), co potwierdza, ze scalone drzewo mialo
+  zepsuty spec przegladarkowy, a nie tylko czerwony lint.

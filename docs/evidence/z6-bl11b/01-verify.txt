@@ -25,7 +25,11 @@ git status --porcelain bezposrednio po przebiegu: PUSTO (drzewo czyste)
               durationMs liczy sie od zakolejkowania.
   #4 exit 0 — 737 testow, drzewo czyste (stan przed runda poprawek 1)
   #5 exit 0 — 744 testy, drzewo czyste (runda poprawek 1)
-  #6 exit 0 — 746 testow, drzewo czyste (runda poprawek 2, przebieg powyzej)
+  #6 exit 0 — 746 testow, drzewo czyste (runda poprawek 2)
+  #7 exit 1 — 758/759 na drzewie SCALONYM, przed naprawa: lint wymaganych pol scenariuszy
+              wskazal dwa kroki BL-11c wolajace procurement_save_comparison i artifact_create
+              bez operationId (tsc wskazal wczesniej jednego wywolujacego updateOfferItem)
+  #8 exit 0 — 759 testow, drzewo czyste (drzewo scalone, po naprawie obu wywolujacych)
 
 == higiena historii ==
 Historia pakietu zostala przepisana przed oddaniem: plik idempotency.ts byl w osmiu
