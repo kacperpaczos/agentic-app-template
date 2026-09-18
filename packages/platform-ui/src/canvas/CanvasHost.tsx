@@ -391,7 +391,20 @@ export function CanvasHost() {
   useEffect(() => {
     // A conversation's agent views space is not a workspace: it has its own page.
     const working = data?.spaces.find((sp) => sp.scopeKind !== AGENT_VIEWS_SCOPE_KIND);
-    if (spaceId || !working) return;
+    if (!working) return;
+    /*
+     * Read from the store, not from the render's value.
+     *
+     * This effect mounts in the same commit as the one in which `SpaceSync`
+     * adopts the space from the address — and effects see the props of the
+     * render they belong to, so the `spaceId` in scope here is the one from
+     * *before* that adoption: null. Opening a saved composition from the list
+     * therefore fell back to the most recently changed space instead, wrote
+     * that into the address, and the user landed in a workspace they had not
+     * chosen. The store is the only value that is current at the moment this
+     * runs.
+     */
+    if (useAppState.getState().spaceId) return;
     setSpace(working.id);
   }, [spaceId, data, setSpace]);
 

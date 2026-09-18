@@ -63,12 +63,53 @@ import { markHighlighted, performReveal } from './uiReveal.ts';
 const VIEW_REPORT_ATTEMPTS = 80;
 const VIEW_REPORT_INTERVAL_MS = 60;
 
+/**
+ * Commands this tab has already performed — kept across reloads.
+ *
+ * Idempotency by `commandId` was already the rule, and the reason given for it
+ * was a reload: a client re-attaches to a run and the backend replays its
+ * events from the cursor this tab holds, which a reload resets to zero. But the
+ * set was in memory, so a reload was exactly the case it did not cover: the
+ * navigation was performed a second time, and if the user had moved on in the
+ * meantime their screen was pulled back to where the agent had sent them
+ * minutes earlier.
+ *
+ * `sessionStorage` is the right scope: one tab, kept across its reloads, gone
+ * when the tab is. A second tab is a second client and must perform the command
+ * for itself. Storage may be unavailable (private mode, a browser with site
+ * data blocked), so every access is guarded and the in-memory set still works
+ * on its own.
+ */
+const HANDLED_KEY = 'pf.ui-commands-handled';
+/** Bounded: a long session must not grow this without limit. */
+const HANDLED_KEPT = 200;
+
+function loadHandled(): Set<string> {
+  try {
+    const raw = window.sessionStorage.getItem(HANDLED_KEY);
+    const ids: unknown = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(ids) ? ids.filter((i): i is string => typeof i === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function rememberHandled(ids: Set<string>, id: string): void {
+  ids.add(id);
+  try {
+    window.sessionStorage.setItem(HANDLED_KEY, JSON.stringify([...ids].slice(-HANDLED_KEPT)));
+  } catch {
+    /* No storage: this tab still de-duplicates for as long as it lives. */
+  }
+}
+
 export function UiCommandRunner() {
   const navigate = useNavigate();
   const setSpace = useAppState((s) => s.setSpace);
   const setAgentFilterKey = useAppState((s) => s.setAgentFilterKey);
   const reportFilterOutcome = useAppState((s) => s.reportFilterOutcome);
-  const handled = useRef(new Set<string>());
+  const handled = useRef<Set<string> | null>(null);
+  handled.current ??= loadHandled();
   const catalog = useRef<UiTarget[] | null>(null);
   // View definitions, loaded on the first command that needs them; a failed load is retried.
   const loadViews = useMemo(
@@ -303,8 +344,9 @@ export function UiCommandRunner() {
     setUiCommandHandler(async (command) => {
       // Replayed events must not re-navigate: a reload re-reads the run's
       // stream from a cursor, and a jump that already happened is done.
-      if (handled.current.has(command.commandId)) return;
-      handled.current.add(command.commandId);
+      const done = (handled.current ??= loadHandled());
+      if (done.has(command.commandId)) return;
+      rememberHandled(done, command.commandId);
 
       await performAndAcknowledge(command, {
         perform,
