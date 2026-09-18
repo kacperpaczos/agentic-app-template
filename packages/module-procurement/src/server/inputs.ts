@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { readWindowInput } from '@platform/contracts';
 import { unitSchema } from '../shared/index.ts';
 
 /**
@@ -42,7 +43,7 @@ export const searchInput = z.object({
 
 export const listOffersInput = z.object({
   caseId: z.string().min(1),
-  limit: z.number().int().min(1).max(100).optional(),
+  ...readWindowInput,
 });
 
 export const saveComparisonInput = z.object({

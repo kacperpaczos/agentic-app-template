@@ -85,6 +85,51 @@ export const uiSnapshotCardSchema = z.object({
 });
 export type UiSnapshotCard = z.infer<typeof uiSnapshotCardSchema>;
 
+/**
+ * The part of a command's context that is *live*: what the user has picked and
+ * what they are typing, as the tab holds it right now.
+ *
+ * **Why it travels with the screen description.** `AppContext` is fixed when a
+ * command is sent, and must be — the run's target is decided then, not later
+ * (L6.10, L6.14). But a task that takes a minute has no way to notice that the
+ * user meanwhile selected two other rows or started a form, and asking the agent
+ * to work from a context it knows to be a minute old is asking it to guess. So
+ * the same versioned, per-tab, per-conversation channel that already carries the
+ * screen carries this too, and `get_context` reports it **beside** the command's
+ * context, never instead of it — with `stale` and its reason when no tab of this
+ * conversation has published lately.
+ *
+ * Conversation scoping is the whole safety property: a run of conversation A is
+ * never shown what a tab looking at conversation B selected.
+ */
+export const uiSnapshotContextSchema = z.object({
+  /** Module-defined record the user is on, as `AppContext.resource`. */
+  resource: z.object({ kind: z.string().max(80), id: z.string().max(128) }).nullable(),
+  /** Rows and cards the user has selected, as `AppContext.selection`. */
+  selection: z.array(z.object({ kind: z.string().max(80), id: z.string().max(128) })).max(50),
+  /**
+   * Unsaved form state, named but never valued — as `AppContext.drafts`. A
+   * draft is not stored data and the agent is told so wherever it appears.
+   */
+  drafts: z
+    .array(
+      z.object({
+        formId: z.string().max(120),
+        entity: z.string().max(80),
+        entityId: z.string().max(128).nullable(),
+        dirtyFields: z.array(z.string().max(80)).max(60),
+      }),
+    )
+    .max(20),
+});
+export type UiSnapshotContext = z.infer<typeof uiSnapshotContextSchema>;
+
+export const EMPTY_UI_SNAPSHOT_CONTEXT: UiSnapshotContext = {
+  resource: null,
+  selection: [],
+  drafts: [],
+};
+
 export const uiSnapshotSchema = z.object({
   /** Grows by one per significant change, within one `clientId`. Starts at 1. */
   version: z.number().int().min(1),
@@ -167,6 +212,13 @@ export const uiSnapshotSchema = z.object({
    * `sort` when its view names the read of its primary instance.
    */
   actions: z.array(z.string().max(80)).max(20),
+  /**
+   * The live part of the command context — see {@link uiSnapshotContextSchema}.
+   * Defaulted to empty so a description assembled before this field existed (or
+   * by a fixture that does not care) still parses; a tab that publishes one
+   * always fills it.
+   */
+  context: uiSnapshotContextSchema.default(EMPTY_UI_SNAPSHOT_CONTEXT),
 });
 export type UiSnapshot = z.infer<typeof uiSnapshotSchema>;
 

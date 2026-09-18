@@ -248,13 +248,15 @@ export function createProcurementModule(platform: PlatformServices): ServerModul
       '- Pochodzenie wartosci sprawdzaj narzedziem procurement_find_price_provenance.',
     ].join('\n'),
 
+    /*
+     * `null` only for a kind this module does not describe. A case that is gone
+     * or belongs to someone else raises (`not_found` / `forbidden` from the
+     * service), and the platform reports that state — swallowing it here made
+     * a deleted case, another owner's case and an unknown kind the same answer.
+     */
     describeResource: async (resource, ownerId) => {
       if (resource.kind !== 'case') return null;
-      try {
-        return service.describeCase(resource.id, ownerId);
-      } catch {
-        return null;
-      }
+      return service.describeCase(resource.id, ownerId);
     },
 
     /**

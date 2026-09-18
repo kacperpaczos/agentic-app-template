@@ -3,6 +3,7 @@ import {
   viewStateContextSchema,
   type AppContext,
   type ReadOperationSummary,
+  type ResourceDescription,
 } from '@platform/contracts';
 import type { ComponentCatalog } from '../registry/catalog.ts';
 import type { ServerModuleRegistry } from '../registry/modules.ts';
@@ -15,7 +16,16 @@ export interface PromptInput {
   registry: ServerModuleRegistry;
   catalog: ComponentCatalog;
   appContext: AppContext;
+  /** @deprecated superseded by {@link PromptInput.resourceDescription}; kept for callers that only have the text. */
   resourceSummary: string | null;
+  /**
+   * What became of the resource in the context. When it says the record is
+   * gone, is another owner's or is not described by any module, the prompt says
+   * *that* — the alternative is a prompt that mentions a resource id and then
+   * nothing, which reads as "you know this record" and invites an invented
+   * description of it.
+   */
+  resourceDescription?: ResourceDescription;
   workspaceDir: string | null;
   stagedFiles: Array<{ fileId: string; path: string; filename: string; mediaType: string }>;
   /** Analysis libraries linked into this run's workspace. */
@@ -53,7 +63,7 @@ export function buildSystemPrompt(input: PromptInput): string {
     `- rozmowa: ${ctx.conversationId ?? '(brak)'}`,
     `- przestrzen canvas: ${ctx.spaceId ?? '(brak)'}`,
     `- zasob: ${ctx.resource ? `${ctx.resource.kind}:${ctx.resource.id}` : '(brak)'}`,
-    input.resourceSummary ? `- opis zasobu: ${input.resourceSummary}` : '',
+    ...describeResourceState(input),
     `- zaznaczenie: ${ctx.selection.length ? ctx.selection.map((s) => `${s.kind}:${s.id}`).join(', ') : '(brak)'}`,
     ...describeFilters(ctx.filters),
     /*
@@ -330,6 +340,22 @@ export function buildSystemPrompt(input: PromptInput): string {
  * to country PL, sorted by name descending, page 1 of 2, 3 of 4 shown" instead
  * of parsing JSON. Anything else a module put there is passed on as it is.
  */
+/**
+ * The resource line (or lines) of the context section.
+ *
+ * A described resource gets its summary. Anything else gets a sentence naming
+ * what is wrong with it — a record that is gone, one belonging to another
+ * owner, one no module describes — because the id alone, printed with nothing
+ * after it, reads as a record the agent is supposed to know.
+ */
+function describeResourceState(input: PromptInput): string[] {
+  const d = input.resourceDescription;
+  if (!d) return input.resourceSummary ? [`- opis zasobu: ${input.resourceSummary}`] : [];
+  if (d.state === 'none') return [];
+  if (d.state === 'described') return [`- opis zasobu: ${d.summary ?? input.resourceSummary ?? ''}`];
+  return [`- opis zasobu: BRAK (${d.state}). ${d.note}`];
+}
+
 function describeFilters(filters: AppContext['filters']): string[] {
   const entries = Object.entries(filters);
   if (entries.length === 0) return ['- filtry: (brak)'];

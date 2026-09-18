@@ -99,6 +99,13 @@ export class ProcurementService {
         quantityMilli: item.quantityMilli,
         unitPriceMinor: item.unitPriceMinor,
         currency: offer.currency,
+        /*
+         * Not a column of the table (the descriptor does not list it) — it is
+         * what the record action hands `update_offer_item` as `expectedVersion`,
+         * so a write started from a row is checked against the row it was
+         * started from instead of against whatever is there at write time.
+         */
+        version: item.version,
       })),
     );
   }

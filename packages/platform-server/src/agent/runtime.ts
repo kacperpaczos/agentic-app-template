@@ -470,7 +470,7 @@ export class AgentRuntime {
       contextFor: () => toolCtx,
     });
 
-    const resourceSummary = await this.services.modules.describeResource(
+    const resourceDescription = await this.services.modules.describeResource(
       args.appContext.resource,
       args.ownerId,
     );
@@ -479,7 +479,8 @@ export class AgentRuntime {
       registry: this.services.modules,
       catalog: this.services.catalog,
       appContext: args.appContext,
-      resourceSummary,
+      resourceSummary: resourceDescription.summary,
+      resourceDescription,
       workspaceDir: args.workspace.dir,
       stagedFiles: args.staged,
       toolkit: args.workspace.toolkit,

@@ -700,7 +700,11 @@ describe('narzedzia widokow agenta', () => {
     const created = await call('agent_view_create', { title: 'T', source: `root = DataTable(${comparison()})` }, ctx);
     const literal = { kind: 'openui', source: 'root = Table([Col("Suma", [1, 2])])' };
 
-    const viaTool = await call('canvas_update_card', { cardId: created.body.cardId, spec: literal }, ctx);
+    const viaTool = await call(
+      'canvas_update_card',
+      { cardId: created.body.cardId, spec: literal, expectedSpecVersion: created.body.specVersion ?? 1 },
+      ctx,
+    );
     expect(viaTool.body.details.reason).toBe('component_not_allowed');
     const viaAdd = await call('canvas_add_card', { spaceId: created.body.spaceId, title: 'x', spec: literal }, ctx);
     expect(viaAdd.body.details.reason).toBe('component_not_allowed');
@@ -725,7 +729,7 @@ describe('narzedzia widokow agenta', () => {
     const attempts: Array<[string, unknown]> = [
       ['canvas_list_cards', { spaceId: bSpace }],
       ['canvas_add_card', { spaceId: bSpace, title: 'x', spec: { kind: 'openui', source: `root = DataTable(${comparison()})` } }],
-      ['canvas_update_card', { cardId: bCard, spec: { kind: 'openui', source: `root = DataTable(${comparison()}, ["supplierName"])` } }],
+      ['canvas_update_card', { cardId: bCard, spec: { kind: 'openui', source: `root = DataTable(${comparison()}, ["supplierName"])` }, expectedSpecVersion: 1 }],
       ['canvas_move_card', { cardId: bCard, geometry: { x: 700 } }],
       ['canvas_remove_card', { cardId: bCard }],
       ['ui_navigate', { targetId: 'platform.canvas', spaceId: bSpace }],

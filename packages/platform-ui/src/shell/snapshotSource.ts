@@ -1,5 +1,12 @@
 import type { QueryClient } from '@tanstack/react-query';
-import type { CanvasState, SemanticInstance, UiTarget, ViewDefinition } from '@platform/contracts';
+import {
+  EMPTY_UI_SNAPSHOT_CONTEXT,
+  type CanvasState,
+  type SemanticInstance,
+  type UiSnapshotContext,
+  type UiTarget,
+  type ViewDefinition,
+} from '@platform/contracts';
 import { accessScope, onAccessContextChange } from '../api/accessContext.ts';
 import { qk } from '../api/queries.ts';
 import type { DisplayedCanvas } from '../state/displayedCanvas.ts';
@@ -9,7 +16,12 @@ export interface ShellSnapshotDeps {
   qc: QueryClient;
   /** The address as the browser shows it. */
   location: () => { pathname: string; search: string };
-  shell: () => { conversationId: string | null; spaceId: string | null };
+  shell: () => {
+    conversationId: string | null;
+    spaceId: string | null;
+    /** The live command context of this tab (`UiSnapshotContext`); absent means empty. */
+    context?: UiSnapshotContext;
+  };
   /** Descriptions recorded under the identity signed in now (`listInstances`). */
   instances: () => SemanticInstance[];
   /** The space on screen, under the identity signed in now (`displayedCanvas`). */
@@ -119,6 +131,12 @@ export function createShellSnapshotSource(deps: ShellSnapshotDeps): ShellSnapsho
       pathname,
       conversationId,
       spaceId,
+      /*
+       * Nothing from before an identity switch, as above: while the shell still
+       * holds the previous identity's space, what was selected in it is that
+       * identity's too and is not published under the new one.
+       */
+      context: heldSpace !== undefined && spaceId === null ? EMPTY_UI_SNAPSHOT_CONTEXT : shell.context,
       instances: deps.instances(),
       targets: known.targets,
       views: known.views,

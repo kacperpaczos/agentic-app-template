@@ -1,7 +1,16 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, extname } from 'node:path';
 import { z } from 'zod';
-import { AppError, type ModuleToolDefinition, type ToolCallContext } from '@platform/contracts';
+import {
+  AppError,
+  applyReadWindow,
+  READ_WINDOW_DEFAULT_LIMIT,
+  READ_WINDOW_MAX_LIMIT,
+  readWindowInput,
+  readWindowNote,
+  type ModuleToolDefinition,
+  type ToolCallContext,
+} from '@platform/contracts';
 import type { PlatformServices } from '../../services/index.ts';
 import { resolveInWorkspace, listWorkspaceOutputs } from '../sandbox.ts';
 
@@ -26,17 +35,21 @@ export function fileTools(services: PlatformServices): Array<ModuleToolDefinitio
     {
       name: 'files_list',
       description:
-        'Wypisuje pliki w magazynie aplikacji. Uzyj scope, zeby zawezic do konkretnego rekordu biznesowego.',
+        'Wypisuje pliki w magazynie aplikacji. Uzyj scope, zeby zawezic do konkretnego rekordu biznesowego. ' +
+        `Odczyt jest stronicowany: domyslnie ${READ_WINDOW_DEFAULT_LIMIT} plikow, najwyzej ${READ_WINDOW_MAX_LIMIT}. ` +
+        'window.truncated=true znaczy, ze to nie sa wszystkie pliki — po kolejne wywolaj z window.nextOffset.',
       effect: 'read',
       inputSchema: z.object({
         scopeKind: z.string().optional(),
         scopeId: z.string().optional(),
+        ...readWindowInput,
       }),
       handler: async (input: any, ctx: ToolCallContext) => {
         const scope =
           input.scopeKind && input.scopeId ? { kind: input.scopeKind, id: input.scopeId } : undefined;
+        const { items, window } = applyReadWindow(services.files.list(ctx.ownerId, scope), input);
         return {
-          files: services.files.list(ctx.ownerId, scope).map((f) => ({
+          files: items.map((f) => ({
             id: f.id,
             filename: f.filename,
             mediaType: f.mediaType,
@@ -44,6 +57,8 @@ export function fileTools(services: PlatformServices): Array<ModuleToolDefinitio
             scopeKind: f.scopeKind,
             scopeId: f.scopeId,
           })),
+          window,
+          windowNote: readWindowNote(window, 'plikow'),
         };
       },
     },

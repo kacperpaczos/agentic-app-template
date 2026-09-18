@@ -109,6 +109,13 @@ export const caseOfferItemRecords: ReadResultDescriptor = {
     { field: 'quantityMilli', label: 'Ilosc', type: 'quantity_milli', unitField: 'unit' },
     { field: 'unitPriceMinor', label: 'Cena jednostkowa', type: 'money_minor', unitField: 'currency' },
     { field: 'currency', label: 'Waluta', type: 'text', sortable: true },
+    /*
+     * Declared because the record carries it and the record action maps it
+     * (`$record.version` → `expectedVersion`), which the descriptor check
+     * requires to be a field of the record. Not a column anybody would put in a
+     * table: a composition lists the columns it wants, and none lists this one.
+     */
+    { field: 'version', label: 'Wersja zapisu', type: 'number', sortable: false },
   ],
   /*
    * Changing an item's unit price from any table over this read — the case
@@ -125,6 +132,8 @@ export const caseOfferItemRecords: ReadResultDescriptor = {
       input: [
         { key: 'itemId', from: '$record.id' },
         { key: 'unitPrice', from: '$form.unitPrice' },
+        // The version of the row the action was started from: the tool requires it.
+        { key: 'expectedVersion', from: '$record.version' },
       ],
       form: [{ key: 'unitPrice', label: 'Nowa cena jednostkowa', type: 'number' }],
     },

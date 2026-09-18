@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   AGENT_VIEWS_SCOPE_KIND,
   AppError,
+  EMPTY_UI_SNAPSHOT_CONTEXT,
   PLATFORM_CUSTOM_EVENTS,
   SHOW_VALUE_REFUSALS,
   UI_COMMAND_FAILURES,
@@ -210,6 +211,7 @@ const caseDetailSnapshot = (conversationId: string, caseId: string, itemId: stri
   cardsSpaceId: null,
   cardsState: 'none',
   cardsOmitted: 0,
+  context: EMPTY_UI_SNAPSHOT_CONTEXT,
   instances: [
     {
       instanceId: 'DataTable-items',
