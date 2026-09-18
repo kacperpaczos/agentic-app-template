@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { FILE_ANALYSIS, FILE_LIMITS, type StoredFile } from '@platform/contracts';
+import { accessFetch } from '../api/client.ts';
 import { qk, useFiles } from '../api/queries.ts';
 import { useAppState } from '../state/appState.ts';
 import { useChatSlots } from './chatSlots.ts';
@@ -133,7 +134,9 @@ export function ComposerAttachments() {
     try {
       const form = new FormData();
       form.append('file', file);
-      const res = await fetch('/api/files', { method: 'POST', body: form, credentials: 'include' });
+      // Bound to the access context like every other request: an upload that
+      // completes after an identity switch belongs to nobody on screen.
+      const res = await accessFetch('/api/files', { method: 'POST', body: form });
       if (!res.ok) {
         // The backend's message names the real reason — an unsupported type
         // lists what is accepted, an oversized file states the limit. Our own

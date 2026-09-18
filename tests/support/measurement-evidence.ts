@@ -26,7 +26,13 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-/** Evidence directory of this task. Named after the task, not after older work. */
+/**
+ * Evidence directory of the task that introduced this writer.
+ *
+ * Kept as the default rather than as the only choice: a later package writes its
+ * own proofs under its own name (`emit`/`writeEvidence` take a directory), so
+ * one task's committed evidence is never overwritten by another's regeneration.
+ */
 export const EVIDENCE_DIR = 'docs/evidence/z3-bl05';
 
 /** The switch that lets a run write evidence files. */
@@ -59,8 +65,8 @@ export interface EvidenceResult {
   written: boolean;
 }
 
-function emit(fileName: string, body: string): EvidenceResult {
-  const dir = resolve(process.cwd(), EVIDENCE_DIR);
+function emit(fileName: string, body: string, dirName = EVIDENCE_DIR): EvidenceResult {
+  const dir = resolve(process.cwd(), dirName);
   const path = resolve(dir, fileName);
   if (!evidenceWritingRequested()) return { path, body, written: false };
   mkdirSync(dir, { recursive: true });
@@ -178,7 +184,14 @@ export function writeMeasurementRecord(
   return emit(fileName, `${JSON.stringify(body, null, 2)}\n`);
 }
 
-/** Writes a non-measurement proof (correlation, error classes, secret scan). */
-export function writeEvidence(fileName: string, body: unknown): EvidenceResult {
-  return emit(fileName, `${JSON.stringify(body, null, 2)}\n`);
+/**
+ * Writes a non-measurement proof (correlation, error classes, secret scan).
+ *
+ * `dirName` names the task's own evidence directory; it defaults to the one this
+ * module was written for. The `APP_WRITE_EVIDENCE` rule is the same whatever the
+ * directory: an ordinary `pnpm verify` performs every assertion on `body` and
+ * writes nothing.
+ */
+export function writeEvidence(fileName: string, body: unknown, dirName = EVIDENCE_DIR): EvidenceResult {
+  return emit(fileName, `${JSON.stringify(body, null, 2)}\n`, dirName);
 }

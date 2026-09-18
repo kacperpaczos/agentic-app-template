@@ -1,5 +1,11 @@
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
-import { AppError, type ModuleToolDefinition, type ToolCallContext } from '@platform/contracts';
+import {
+  AppError,
+  MCP_SERVER_NAME,
+  mcpToolName,
+  type ModuleToolDefinition,
+  type ToolCallContext,
+} from '@platform/contracts';
 import type { ServerModuleRegistry } from '../registry/modules.ts';
 import { executeTool } from '../registry/tool-execution.ts';
 
@@ -12,8 +18,12 @@ export interface McpHostTool {
   moduleId: string;
 }
 
-export const MCP_SERVER_NAME = 'app';
-export const mcpToolName = (localName: string): string => `mcp__${MCP_SERVER_NAME}__${localName}`;
+/*
+ * Re-exported, not re-declared: the exposed name is also what the browser
+ * matches an artifact renderer against, so it lives in `@platform/contracts`
+ * where both ends read it from one definition.
+ */
+export { MCP_SERVER_NAME, mcpToolName };
 
 interface BuildInput {
   registry: ServerModuleRegistry;

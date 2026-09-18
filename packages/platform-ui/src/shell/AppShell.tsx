@@ -6,6 +6,7 @@ import { CanvasHost } from '../canvas/CanvasHost.tsx';
 import { ChatPanel } from '../chat/ChatPanel.tsx';
 import { useRegistry } from '../catalog/registry.tsx';
 import { useAppState } from '../state/appState.ts';
+import { AccessContextReset } from './AccessContextReset.tsx';
 import { SpaceSync } from './SpaceSync.tsx';
 import { BackgroundTasks } from './BackgroundTasks.tsx';
 import { UiCommandRunner } from './UiCommandRunner.tsx';
@@ -137,6 +138,12 @@ export function AppShell({ children }: { children?: ReactNode }) {
       <UiCommandRunner />
       {/* Publishes what this tab shows, versioned, for the agent's `ui_state`. */}
       <UiSnapshotPublisher />
+      {/*
+        Below the publisher on purpose: a switch of identity has to let the
+        description source record what it was describing before the client's own
+        state is emptied. See `state/accessReset.ts`.
+      */}
+      <AccessContextReset />
       <Nav />
       <main className="pf-main">
         <StatusBar />

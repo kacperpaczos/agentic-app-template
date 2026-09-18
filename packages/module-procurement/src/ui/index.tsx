@@ -6,6 +6,7 @@ import { PROCUREMENT_OPENUI_COMPONENTS } from '../shared/openui-components.ts';
 import {
   ComparisonTableCard,
   CostChartCard,
+  procurementArtifactRenderers,
   procurementCardRenderers,
 } from './cards.tsx';
 import { procurementDetailOpenuiComponents } from './detailComponents.tsx';
@@ -78,6 +79,7 @@ export const procurementUiModule: UiModule = {
     description: 'Karty, ekrany i komponenty OpenUI domeny zakupowej.',
   },
   cardRenderers: procurementCardRenderers,
+  artifactRenderers: procurementArtifactRenderers,
   openuiComponents,
   menu,
   starters,

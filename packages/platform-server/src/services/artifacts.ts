@@ -1,12 +1,16 @@
+import { createHash } from 'node:crypto';
 import {
   AppError,
   liveArtifactSourceSchema,
+  recordsOf,
+  stableJson,
   type ArtifactKind,
   type ArtifactMeta,
   type ArtifactMode,
   type ArtifactVersion,
   type LiveArtifactSource,
   type LiveResolution,
+  type ReadResultDescriptor,
 } from '@platform/contracts';
 import type { Db } from '../db/client.ts';
 import type { ServerModuleRegistry } from '../registry/modules.ts';
@@ -55,6 +59,41 @@ const toArt = (r: ArtRow): ArtifactMeta => ({
   createdAt: r.created_at,
   updatedAt: r.updated_at,
 });
+
+/**
+ * Fingerprint of the *source state* one answer was produced from.
+ *
+ * Taken over the **records** the read declares, not over the whole envelope,
+ * and that distinction is the whole value of the field. A module's result may
+ * carry the moment it was computed beside the data (the comparison here does:
+ * `evaluatedAt`), so a digest of the envelope changes on every single read and
+ * says "the source moved" every time, which is worse than saying nothing. The
+ * records are the data the reader is looking at; when they are identical, the
+ * two reads saw one state of the source.
+ *
+ * Without a declared descriptor there is nothing to narrow to, and the digest
+ * covers the whole result — with the same weakness. That is stated rather than
+ * hidden: a read that wants a meaningful fingerprint declares its records.
+ *
+ * Short on purpose: it is read by a person comparing two views side by side,
+ * and 16 hex characters is far past the point where a collision would be the
+ * likely explanation for two views agreeing. `stableJson` is the same
+ * key-ordering used for cache keys, so the same data never fingerprints two
+ * ways because a service happened to build its object in another order.
+ */
+export function fingerprintOf(result: unknown, descriptor?: ReadResultDescriptor | null): string {
+  let subject: unknown = result ?? null;
+  if (descriptor) {
+    try {
+      subject = recordsOf(result, descriptor);
+    } catch {
+      // A result that does not match its own descriptor is a defect reported
+      // elsewhere (`runPreparedRead` throws on it); here it only means the
+      // narrowing is unavailable.
+    }
+  }
+  return createHash('sha256').update(stableJson(subject)).digest('hex').slice(0, 16);
+}
 
 const toVer = (r: VerRow): ArtifactVersion => ({
   artifactId: r.artifact_id,
@@ -111,6 +150,7 @@ export class ArtifactService {
       definitionVersion: stored.version,
       state: 'unavailable',
       resolvedAt: null,
+      sourceFingerprint: null,
       error: null,
     };
 
@@ -159,6 +199,11 @@ export class ArtifactService {
           operation: read.operation,
           state: 'fresh',
           resolvedAt: read.resolvedAt,
+          // The state of the source this answer came from — see the field's
+          // note in `platform-contracts`. Two views showing the same definition
+          // version and two different fingerprints are showing two different
+          // source states, and that is the only way to tell.
+          sourceFingerprint: fingerprintOf(read.result, read.descriptor),
         },
       };
     } catch (err) {

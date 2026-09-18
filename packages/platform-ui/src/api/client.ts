@@ -59,6 +59,33 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return body;
 }
 
+/**
+ * `fetch`, bound to the access context, for the requests that cannot go through
+ * {@link api}.
+ *
+ * Three of them exist and all three are real holes when they are left
+ * unbound: the ready-made chat's own thread storage (`restStorage`, which takes
+ * a `fetch` and parses the body itself), a file upload (whose body is
+ * `FormData` and whose response the caller reads directly), and the run stream
+ * (whose body is consumed for minutes after the request resolved). Each one of
+ * them used a bare `fetch`, so switching identity left them running and
+ * delivering the previous owner's data into a cache that had just been emptied.
+ *
+ * Same two defences as {@link api}, and for the same reason — either alone
+ * leaves a window: the shared signal aborts the request, and the epoch check
+ * refuses a response that raced past the abort. Deliberately returns the
+ * `Response` rather than a parsed body: these callers need the response itself.
+ * A streamed body stops on the signal alone, which is why the signal is not
+ * optional here.
+ */
+export async function accessFetch(input: string | URL | Request, init: RequestInit = {}): Promise<Response> {
+  const issuedAt = accessEpoch();
+  const signal = init.signal ? AbortSignal.any([init.signal, accessSignal()]) : accessSignal();
+  const res = await fetch(input, { ...init, signal, credentials: init.credentials ?? 'include' });
+  if (accessEpoch() !== issuedAt) throw new AccessContextChanged();
+  return res;
+}
+
 export const apiGet = <T>(path: string) => api<T>(path);
 export const apiPost = <T>(path: string, body?: unknown) =>
   api<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) });

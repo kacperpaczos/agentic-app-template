@@ -234,8 +234,55 @@ interface AppState {
   runFor: (conversationId: string | null) => ConversationRun;
   /** Clears the "finished while you were elsewhere" marker. */
   acknowledgeRun: (conversationId: string) => void;
+  /**
+   * Drops everything that belonged to the identity the application was acting
+   * as. See {@link scopedAppState}.
+   */
+  resetForAccessChange: () => void;
   toAppContext: () => AppContext;
 }
+
+/**
+ * The part of this store that belongs to *one* access context.
+ *
+ * Emptying the query cache is not enough, and this is what was left over: the
+ * conversation on screen, the runs being followed, the attached files, the
+ * half-typed forms, the selection, the resource and the space are all the
+ * previous owner's, and all of them are read again the moment the next command
+ * is composed — `toAppContext()` sends every one of them to the agent. Clearing
+ * the cache and leaving these behind means the rows disappear while the context
+ * they described is still on its way to the backend.
+ *
+ * Written as a value rather than as a list of setter calls so that a field
+ * added to the store is a compile error here until somebody decides which side
+ * of the line it is on.
+ *
+ * `navOpen` is deliberately absent: a collapsed menu is a property of the
+ * window, not of who is signed in, and re-opening it on every switch would be
+ * an unexplained jump.
+ */
+export const scopedAppState = (): Omit<AppState, keyof AppActions | 'navOpen'> => ({
+  spaceId: null,
+  conversationId: null,
+  resource: null,
+  selection: [],
+  filters: {},
+  viewport: null,
+  drafts: {},
+  cardState: {},
+  lastRunId: null,
+  attachments: [],
+  agentFilterKey: null,
+  filterOutcome: null,
+  viewStates: {},
+  revealNotice: null,
+  runs: {},
+});
+
+/** Everything on the store that is a function; the rest is the state itself. */
+type AppActions = {
+  [K in keyof AppState as AppState[K] extends (...args: never[]) => unknown ? K : never]: AppState[K];
+};
 
 /**
  * Client-side application state.
@@ -249,22 +296,10 @@ interface AppState {
  * to the model as stored data.
  */
 export const useAppState = create<AppState>((set, get) => ({
-  spaceId: null,
-  conversationId: null,
-  resource: null,
-  selection: [],
-  filters: {},
-  viewport: null,
-  drafts: {},
-  cardState: {},
+  // The initial state is the same as the state after a switch: one definition,
+  // so a field cannot start empty and then survive a change of identity.
+  ...scopedAppState(),
   navOpen: true,
-  lastRunId: null,
-  attachments: [],
-  agentFilterKey: null,
-  filterOutcome: null,
-  viewStates: {},
-  revealNotice: null,
-  runs: {},
 
   setSpace: (id) => set({ spaceId: id }),
   setConversation: (id) => set({ conversationId: id }),
@@ -330,6 +365,8 @@ export const useAppState = create<AppState>((set, get) => ({
         ? { runs: { ...s.runs, [conversationId]: { ...s.runs[conversationId]!, unseenResult: false } } }
         : s,
     ),
+
+  resetForAccessChange: () => set(scopedAppState()),
 
   toAppContext: () => {
     const s = get();
