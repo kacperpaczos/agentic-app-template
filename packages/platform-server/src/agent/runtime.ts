@@ -572,6 +572,26 @@ export class AgentRuntime {
       toolkit: args.workspace.toolkit,
     });
 
+    /**
+     * A tool call id that cannot be confused with another run's.
+     *
+     * The ready-made chat pairs an assistant message's `toolCalls[]` with the
+     * `role: "tool"` messages of the *whole* conversation by `toolCallId`
+     * (`pairToolActivity`), so uniqueness has to hold across every run of a
+     * conversation — not only within one. The provider's id does not promise
+     * that: `tool_use_id` is unique inside a session, a resumed session may
+     * restart it, and the fallback used when a hook carries none
+     * (`tu_<Date.now()>`) promises even less. Two runs reusing one id made the
+     * second run's result attach to the first run's call: a successful call
+     * shown as failed, an argument list shown under the wrong step.
+     *
+     * The run id is the one thing that is unique per execution by construction,
+     * so it is the namespace. Applied here, at the single point where the SDK's
+     * id enters the platform, so the live stream and the stored history carry
+     * the identical id and cannot drift.
+     */
+    const scopeToolId = (raw: unknown): string => `${runId}~${String(raw)}`;
+
     /* -------------------- SDK hook bridge (see class doc) ------------------ */
     const hookCallback = async (raw: unknown) => {
       const input = raw as Record<string, any>;
@@ -582,7 +602,7 @@ export class AgentRuntime {
       if (input.hook_event_name === 'Stop') return { continue: true };
 
       if (input.hook_event_name === 'PreToolUse') {
-        const id = String(input.tool_use_id ?? `tu_${Date.now()}`);
+        const id = scopeToolId(input.tool_use_id ?? `tu_${Date.now()}`);
         /*
          * Deliberately does *not* open a text message.
          *
@@ -600,15 +620,15 @@ export class AgentRuntime {
         stream.toolArgs(id, JSON.stringify(input.tool_input ?? {}));
         stream.toolEnd(id);
       } else if (input.hook_event_name === 'PostToolUse') {
-        const id = String(input.tool_use_id ?? '');
-        if (id) stream.toolResult(id, summariseToolResponse(input.tool_response));
+        const raw = String(input.tool_use_id ?? '');
+        if (raw) stream.toolResult(scopeToolId(raw), summariseToolResponse(input.tool_response));
       } else if (input.hook_event_name === 'PostToolUseFailure') {
         // This hook carries `error`, not `tool_response` — reporting the latter
         // produced a literal "null" in the chat instead of the reason.
-        const id = String(input.tool_use_id ?? '');
-        if (id) {
+        const raw = String(input.tool_use_id ?? '');
+        if (raw) {
           stream.toolResult(
-            id,
+            scopeToolId(raw),
             summariseToolResponse(input.error ?? input.tool_response ?? 'Narzedzie zakonczylo sie bledem.'),
             true,
           );
@@ -646,6 +666,32 @@ export class AgentRuntime {
       () => abort.abort(new Error('run_timeout')),
       this.services.config.runTimeoutMs,
     );
+
+    /**
+     * Writes the run's terminal status, and tolerates the run no longer having
+     * a row.
+     *
+     * Deleting a conversation cancels its runs and then removes them
+     * (`agent_runs` cascades). The cancellation is delivered through the abort
+     * signal, so the run reaches this line a moment *after* its row is gone and
+     * `RunRegistry.finish` — which re-reads what it wrote — answers `not_found`.
+     * Thrown from here that ends the run through the wrong path and prints a
+     * stack for the orderly outcome the user asked for. There is nothing left to
+     * record, and saying so is the honest handling.
+     */
+    const settle = (
+      status: 'succeeded' | 'failed' | 'cancelled',
+      opts: { errorCode?: string; errorMessage?: string; durationMs?: number },
+    ): void => {
+      try {
+        this.services.runs.finish(runId, status, opts);
+      } catch (err) {
+        console.warn(
+          `[run ${runId}] status koncowy ${status} nie zostal zapisany (rozmowa usunieta?)`,
+          err,
+        );
+      }
+    };
 
     try {
       const agent = this.agent;
@@ -701,7 +747,7 @@ export class AgentRuntime {
       // without any of its tool activity.
 
       const durationMs = Date.now() - executionStartedAt;
-      this.services.runs.finish(runId, 'succeeded', { durationMs });
+      settle('succeeded', { durationMs });
       recordVerification(true);
       stream.runFinished(args.conversationId, runId, { durationMs });
     } catch (err) {
@@ -711,7 +757,7 @@ export class AgentRuntime {
       if (textOpened) stream.textEnd(messageId);
       // Partial text is already persisted by the projection, so a failed or
       // cancelled run keeps whatever the model managed to say.
-      this.services.runs.finish(runId, cancelled ? 'cancelled' : 'failed', {
+      settle(cancelled ? 'cancelled' : 'failed', {
         errorCode: code,
         errorMessage: message,
         durationMs: Date.now() - executionStartedAt,

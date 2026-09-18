@@ -302,6 +302,27 @@ body {
 */
 .pf-chat__notice:empty { display: none; }
 
+/*
+  The conversation's name, and the control that renames it.
+
+  Same collapse-when-empty rule as the notice: before a conversation is chosen
+  there is nothing to name, and an always-rendered host must cost no space.
+*/
+.pf-chat__title:empty { display: none; }
+.pf-conv-title {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 10px; border-bottom: 1px solid var(--pf-border);
+  font-size: 12px;
+}
+.pf-conv-title__value {
+  font-weight: 600;
+  /* A long derived title must not push the control off the panel. */
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%;
+}
+.pf-conv-title__form { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; }
+.pf-conv-title__label { color: var(--pf-muted); text-transform: uppercase; font-size: 10px; letter-spacing: .05em; }
+.pf-conv-title__input { flex: 1 1 auto; min-width: 0; font-size: 12px; padding: 3px 6px; }
+
 /* Holds floating pieces that position themselves; contributes no box of its own. */
 .pf-chat__overlay { position: absolute; }
 

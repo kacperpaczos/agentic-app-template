@@ -369,3 +369,98 @@ zostały bez zmian i nadal przechodzą, tylko spełniane są mocniej.
   `caseId`, zanim parametr `$caseId` zostanie związany. Żądanie może się tylko nie powieść.
 - Asercja `not.toContainText(<treść polecenia>)` na panelu czatu jest zawsze prawdziwa: gotowy czat
   nazywa wątek bez końcowej kropki. Warto przejrzeć pozostałe spece pod tym kątem.
+
+---
+
+## T4 — 2026-09-18 — BL-08a: czat i historia (L4.3, L4.5, L4.6, L4.7, L4.8, L4.9, L4.11, L4.13, L4.15)
+
+Pakiet dotyczy powierzchni rozmowy i tego, co po niej zostaje: tytułów, przełączania rozmów,
+powtórzonego żądania, skutku usunięcia, zadeklarowanego zakresu funkcji, tego, co widać w czacie,
+oraz identyfikatorów, które nie mogą się zderzyć.
+
+### Co było zepsute (nie tylko nieudowodnione)
+
+- **`POST /api/agui/run` ignorował `runId` klienta.** Powtórzenie tego samego żądania — retry proxy,
+  ponowione ciało — startowało **drugie** wykonanie: druga odpowiedź asystenta w wątku, skutki
+  narzędzi wykonane dwa razy, a bez `threadId` także druga rozmowa. Deduplikowana była tylko
+  wiadomość użytkownika (po id).
+- **Usunięcie rozmowy nie miało określonego skutku dla trwającego zadania.** Wykonanie żyło dalej w
+  pamięci, a jego wiersz `agent_runs` znikał kaskadowo; przy `foreign_keys = ON` każdy kolejny zapis
+  zdarzenia i wiadomości był odrzucany, więc przebieg kończył się serią błędów klucza obcego i nie
+  miał gdzie zapisać statusu końcowego.
+- **`toolCallId` nie miał przestrzeni nazw wykonania.** Gotowy czat paruje wywołania z wynikami po
+  tym identyfikatorze w **całej** historii rozmowy, a dostawca gwarantuje unikalność tylko w obrębie
+  sesji (awaryjnie `tu_<Date.now()>`). Dwa wykonania w jednej rozmowie potrafiły podpiąć wynik
+  drugiego pod wywołanie pierwszego.
+- **Zmiana tytułu istniała wyłącznie w API.** `CHAT_CAPABILITIES.renameConversation` deklarowało
+  funkcję jako dostępną, a menu wiersza gotowego `ThreadList` (@openuidev/react-ui 0.13.10) ma tylko
+  `Delete` — ekran mówił o sobie nieprawdę (L4.8).
+
+### Co zbudowano
+
+- **Idempotencja polecenia** — `IdempotencyStore` w zakresie `agui.run`: pierwsze żądanie zapisuje
+  `{runId, conversationId}` pod kluczem klienta, każde następne dostaje `X-Run-Replayed: 1` i
+  **odtworzenie zdarzeń tego samego uruchomienia**, bez tworzenia rozmowy, dopisywania wiadomości i
+  bez wejścia do modelu. Strumień odtworzenia i `GET /api/runs/:id/stream` korzystają z jednej
+  funkcji, więc nie mogą się rozjechać.
+- **Określony skutek usunięcia** — `ConversationService.delete` anuluje uruchomienia `queued` i
+  `running` tej rozmowy przed skasowaniem wiersza i raportuje `cancelledRuns` obok
+  `detachedArtifacts` i `removedViewSpaces`. `RunEventStream` i `AgentRuntime` znoszą zniknięcie
+  wiersza: zdarzenie, którego nie ma gdzie zapisać, kończy dziennik komunikatem, zamiast wywracać
+  przebieg; status końcowy nieistniejącego uruchomienia nie jest błędem.
+- **Przestrzeń nazw identyfikatora narzędzia** — `${runId}~${tool_use_id}`, nadawana w jednym
+  miejscu (most hooków SDK), więc żywy strumień i zapisana historia niosą ten sam identyfikator.
+- **Kontrolka zmiany tytułu** — `chat/ConversationTitle.tsx`: renderowana wewnątrz `AgentInterface`
+  (bo `useThreadList` istnieje tylko w jego kontekście), portalowana do własnego paska panelu (bo
+  cokolwiek nierozpoznanego wewnątrz staje się kolumną obok wątku). Zapis idzie przez `updateThread`
+  biblioteki, czyli przez `PATCH /api/threads/update/:id`.
+- **Deklaracja czytelna maszynowo** — wiersze możliwości czatu w Ustawieniach niosą
+  `data-available`, więc test sprawdza zgodność deklaracji z interfejsem bez asercji o brzmieniu.
+
+### Ograniczenie biblioteki, przypięte testem
+
+Proza wypowiedziana **przed** wywołaniem narzędzia nie trafia do bańki odpowiedzi gotowego czatu.
+`InterleavedTurn` (0.13.10) uznaje za odpowiedź wyłącznie ostatni segment tury, a prozę wcześniejszych
+segmentów wkłada jako krok tekstowy do osi „Behind the scenes”, która po zakończeniu tury jest
+zwinięta — i wtedy nie ma jej w DOM. Tekst nie ginie (jest w historii i na ekranie po jednym
+kliknięciu), ale nie jest widoczny bez tego kliknięcia. Zgłoszony jako defekt składania tury; po
+sprawdzeniu to zachowanie gotowego komponentu, a nie nasza projekcja — `tests/chat-history.test.ts`
+pokazuje, że historia ma oba człony tury w dobrej kolejności. Test
+`e2e/chat-history.spec.ts` przypina jedno i drugie do tej wersji biblioteki.
+
+### Zaobserwowane, nienaprawione
+
+- `e2e/app-context.spec.ts` obchodzi nieistniejący już defekt: komentarz mówi, że po zmianie
+  tożsamości panel rozmowy trzyma rozmowę poprzedniego właściciela i dlatego test zakłada nową
+  rozmowę. Pakiet BL-11c dodał klucz epoki dostępu na `AgentInterface` i czyszczenie `c`/`s` z
+  adresu, więc obejście jest już zbędne — zostawione, bo to cudzy spec i nadal przechodzi.
+- `e2e/support/scripted-agent.ts` wywołuje hooki kroków `kind: 'tool'` **przed** otwarciem strumienia,
+  więc taki krok zawsze poprzedza każdy token. Kolejność „tekst, potem narzędzie” da się odtworzyć
+  tylko krokiem `kind: 'call'` (wykonywanym w strumieniu) — wykorzystane w scenariuszu tego pakietu.
+  Dotyczy kryterium L5.13, spoza tego pakietu.
+
+### Runda poprawek 1 (po recenzji)
+
+- **`RunEventStream.emit` znosił każdą awarię zapisu zdarzenia jako ostrzeżenie.** Zawężone do
+  `SQLITE_CONSTRAINT_FOREIGNKEY`, czyli do jedynego przypadku, który jest oczekiwany (wiersz
+  uruchomienia zniknął razem z rozmową). Każda inna awaria zapisu w jedynym źródle prawdy jest
+  `console.error` z przyczyną i mówi wprost, że dziennik jest od tego miejsca niepełny i taki zostanie
+  odtworzony — ten sam wzorzec, co catch projekcji piętnaście linii niżej.
+- **Klucz idempotencji rezerwowany na czas startu.** Zapis do `idempotency_keys` następuje po
+  `await runtime.start(...)`, więc dwa *równoczesne* kopie jednego żądania mogły obie nie znaleźć
+  klucza i obie wystartować. Rejestr `startingRuns` (w pamięci, ustawiany w tym samym takcie, w którym
+  start jest wywoływany) zamyka to okno; powtórzenie czeka na pierwszy start i dostaje odtworzenie.
+  Test: „dwa rownoczesne zadania z tym samym runId”.
+- **Test usunięcia rozmowy dostał artefakt.** Usuwana rozmowa najpierw publikuje własny artefakt
+  prawdziwym narzędziem, więc asercja o odłączeniu ma czego dotyczyć: artefakt zostaje na liście, jest
+  otwieralny z treścią i nie wskazuje już rozmowy. Wcześniej liczba artefaktów nie mogła się zmienić.
+- **Asercja paska stanu w teście przełączania rozmów** była owinięta w `if (count > 0)` i przechodziła
+  przez nieobecność elementu. Teraz to brak *konkretnego* elementu: paska z identyfikatorem
+  uruchomienia rozmowy A.
+- **Nowy test objawu** dla zgłoszonego defektu „polecenie w kolejce po zmianie tożsamości”: przełącz
+  właściciela, wyślij polecenie natychmiast, doczekaj `succeeded`. Dotąd dowodziliśmy, że przyczyny
+  nie ma; ten test oblewa, gdy objaw wróci **dowolną** drogą. Próba P13 (wyłączone czyszczenie `c`/`s`
+  z adresu) odtwarza go dokładnie — faza zostaje `queued`.
+- Komentarz przy teście prozy sprzed narzędzia mówi teraz, że przypięcie jest **dwukierunkowe**:
+  wersja biblioteki, która to naprawi, obleje te same linie, i wtedy należy asercję rozluźnić, a nie
+  obchodzić.

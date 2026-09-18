@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
-import { streamSSE } from 'hono/streaming';
+import { streamSSE, type SSEStreamingApi } from 'hono/streaming';
 import { z } from 'zod';
 import {
   AGENT_VIEWS_SCOPE_KIND,
@@ -142,9 +142,86 @@ function toAguiMessage(m: StoredMessage): Record<string, unknown> {
   };
 }
 
+/** What a replayed `POST /api/agui/run` has to answer with, stored on first use. */
+interface RecordedRun {
+  runId: string;
+  conversationId: string;
+}
+
+/** Scope of the run idempotency keys, kept out of every other caller's namespace. */
+const AGUI_RUN_SCOPE = 'agui.run';
+
+/**
+ * Runs whose start is under way, per `${owner}\0${clientRunId}`.
+ *
+ * The recorded key closes the window *after* a run exists; this closes the one
+ * *while* it is being created. `runtime.start` is awaited, so a second copy of
+ * the same request can run its lookup in that gap, find nothing recorded yet and
+ * start a second execution — the very thing the key exists to prevent. The entry
+ * is registered in the same tick the start is invoked, so there is no instant at
+ * which a run is being created and nothing says so; a repeat that arrives then
+ * waits for it and is answered as the replay it is.
+ *
+ * In memory on purpose: it describes work happening in *this* process, and a
+ * restart leaves no such work behind. The durable answer stays in
+ * `idempotency_keys`.
+ */
+const startingRuns = new Map<string, Promise<RecordedRun>>();
+
 export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
   const { services, runtime, auth } = deps;
   const app = new Hono<Env>();
+
+  /**
+   * Writes one run's events to an SSE stream, from `from` onwards.
+   *
+   * Two sources and one sequence, as `GET /api/runs/:id/stream` describes: the
+   * live stream while the run executes here, the persisted log otherwise. Shared
+   * with the replay branch of `POST /api/agui/run` so a repeated command is
+   * answered with the *same* events as the original rather than with a second
+   * execution — and so the two cannot drift apart.
+   */
+  const writeRunStream = async (
+    sse: SSEStreamingApi,
+    runId: string,
+    ownerId: string,
+    from: number,
+  ): Promise<void> => {
+    const run = services.runs.get(runId, ownerId);
+    const live = runtime.liveStream(runId);
+    if (live) {
+      for await (const { seq, event } of live.read(from)) {
+        await sse.writeSSE({ id: String(seq), data: JSON.stringify(event) });
+      }
+      return;
+    }
+    for (const { seq, payload } of services.runs.eventsAfter(runId, ownerId, from)) {
+      await sse.writeSSE({ id: String(seq), data: JSON.stringify(payload) });
+    }
+    /*
+     * A resolved run whose log carries no terminal event — killed process, or
+     * a restart — would otherwise leave the client waiting for ever. The
+     * stored status is the authority on how it ended.
+     */
+    const terminal = ['succeeded', 'failed', 'cancelled'];
+    if (terminal.includes(run.status)) {
+      const seen = services.runs.eventsAfter(runId, ownerId, 0).some((e) => {
+        const name = (e.payload as { type?: string } | null)?.type;
+        return name === 'RUN_FINISHED' || name === 'RUN_ERROR';
+      });
+      if (!seen) {
+        await sse.writeSSE({
+          data: JSON.stringify({
+            type: run.status === 'succeeded' ? 'RUN_FINISHED' : 'RUN_ERROR',
+            runId,
+            threadId: run.conversationId,
+            code: run.errorCode ?? run.status,
+            message: run.errorMessage ?? `Uruchomienie zakonczylo sie jako ${run.status}.`,
+          }),
+        });
+      }
+    }
+  };
 
   /* ------------------------------- CORS -------------------------------- */
 
@@ -378,6 +455,61 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
     const forwarded = (input.forwardedProps ?? {}) as Record<string, unknown>;
 
     /*
+     * The same command sent twice is one command.
+     *
+     * The client names its run (`runId` in `RunAgentInput`, a UUID minted per
+     * send in `chatWiring.ts`). That name used to be read and thrown away, so a
+     * repeat of one POST — a proxy retry, a resent request, a double submit of
+     * the identical body — started a *second* execution: a second assistant
+     * answer in the thread, the tool work done twice, and with no `threadId` a
+     * second conversation as well. The user's own message was the only part
+     * that was safe, because `appendMessage` deduplicates by id.
+     *
+     * So the run is recorded under that name the first time and every later
+     * request carrying it is answered from the run it already started — the
+     * same headers, the same event sequence, from the beginning. Nothing is
+     * created, nothing is appended, no model is asked. Placed before the
+     * conversation is created and before the message is appended, because a
+     * replay must have no side effect at all.
+     *
+     * It does **not** turn two *different* commands into one: the client mints
+     * a fresh id per send, so pressing send twice is two commands and is meant
+     * to be. What it guarantees is that one request, however many times it
+     * arrives, produces one run.
+     */
+    const clientRunId = input.runId?.trim() || null;
+    const runKey = clientRunId ? `${ownerId}\u0000${clientRunId}` : null;
+    if (clientRunId) {
+      const recorded =
+        services.idempotency.get<RecordedRun>(clientRunId, ownerId, AGUI_RUN_SCOPE) ??
+        /*
+         * Not recorded yet, but possibly being created right now. Awaiting the
+         * first request's start is what makes two *simultaneous* copies of one
+         * request produce one run rather than racing the durable key. A start
+         * that fails resolves to nothing here, so this request goes on to make
+         * its own attempt instead of inheriting the failure.
+         */
+        (runKey && startingRuns.has(runKey)
+          ? await startingRuns.get(runKey)!.catch(() => null)
+          : null);
+      if (recorded) {
+        /*
+         * Checked here, before a stream is opened: a run whose conversation has
+         * since been deleted cannot be replayed, and the caller gets
+         * `not_found` rather than an empty stream. Re-running the command
+         * instead would recreate work the user removed.
+         */
+        services.runs.get(recorded.runId, ownerId);
+        c.header('X-Run-Id', recorded.runId);
+        c.header('X-Conversation-Id', recorded.conversationId);
+        // Says which branch answered, so a test — and a client — can tell a
+        // replay from a fresh run without inferring it from the events.
+        c.header('X-Run-Replayed', '1');
+        return streamSSE(c, (sse) => writeRunStream(sse, recorded.runId, ownerId, 0));
+      }
+    }
+
+    /*
      * The frontend's context selects what to look at; it never carries identity.
      *
      * A context the contract refuses is a *client* error and is reported as one.
@@ -471,13 +603,43 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
       ? (forwarded.attachFileIds as string[]).slice(0, 10)
       : [];
 
-    const started = await runtime.start({
+    /*
+     * Invoked and announced in the same tick: `startingRuns` is set immediately
+     * after the call, with no `await` in between, so from the instant the run
+     * begins there is something for a concurrent repeat to wait on.
+     */
+    const starting = runtime.start({
       ownerId,
       conversationId,
       prompt,
       appContext: { ...appContext, conversationId },
       attachFileIds,
     });
+    if (runKey) {
+      startingRuns.set(
+        runKey,
+        starting.then((s) => ({ runId: s.runId, conversationId }) satisfies RecordedRun),
+      );
+    }
+
+    let started: Awaited<typeof starting>;
+    try {
+      started = await starting;
+      /*
+       * Recorded before the stream opens, not after it closes: the window a
+       * retry arrives in is precisely while the first run is still going.
+       */
+      if (clientRunId) {
+        services.idempotency.put(clientRunId, ownerId, AGUI_RUN_SCOPE, {
+          runId: started.runId,
+          conversationId,
+        } satisfies RecordedRun);
+      }
+    } finally {
+      // The durable key has taken over by now (or the start failed and there is
+      // nothing to hand anyone).
+      if (runKey) startingRuns.delete(runKey);
+    }
 
     c.header('X-Run-Id', started.runId);
     c.header('X-Conversation-Id', conversationId);
@@ -532,45 +694,8 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
     const runId = c.req.param('id');
     const from = Number(c.req.query('from') ?? 0) || 0;
     // Ownership first: this must not become a way to read someone else's run.
-    const run = services.runs.get(runId, ownerId);
-    const live = runtime.liveStream(runId);
-
-    return streamSSE(c, async (sse) => {
-      if (live) {
-        for await (const { seq, event } of live.read(from)) {
-          await sse.writeSSE({ id: String(seq), data: JSON.stringify(event) });
-        }
-        return;
-      }
-      for (const { seq, payload } of services.runs.eventsAfter(runId, ownerId, from)) {
-        await sse.writeSSE({ id: String(seq), data: JSON.stringify(payload) });
-      }
-      /*
-       * A resolved run whose log carries no terminal event — killed process, or
-       * a restart — would otherwise leave the client waiting for ever. The
-       * stored status is the authority on how it ended.
-       */
-      const terminal = ['succeeded', 'failed', 'cancelled'];
-      if (terminal.includes(run.status)) {
-        const seen = services.runs
-          .eventsAfter(runId, ownerId, 0)
-          .some((e) => {
-            const name = (e.payload as { type?: string } | null)?.type;
-            return name === 'RUN_FINISHED' || name === 'RUN_ERROR';
-          });
-        if (!seen) {
-          await sse.writeSSE({
-            data: JSON.stringify({
-              type: run.status === 'succeeded' ? 'RUN_FINISHED' : 'RUN_ERROR',
-              runId,
-              threadId: run.conversationId,
-              code: run.errorCode ?? run.status,
-              message: run.errorMessage ?? `Uruchomienie zakonczylo sie jako ${run.status}.`,
-            }),
-          });
-        }
-      }
-    });
+    services.runs.get(runId, ownerId);
+    return streamSSE(c, (sse) => writeRunStream(sse, runId, ownerId, from));
   });
 
   app.get('/api/runs/:id/events', (c) =>

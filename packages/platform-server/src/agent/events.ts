@@ -45,7 +45,44 @@ export class RunEventStream {
     if (this.#closed) return this.#seq;
     this.#seq += 1;
     const seq = this.#seq;
-    this.runs.appendEvent(this.runId, seq, event.type, event);
+    try {
+      this.runs.appendEvent(this.runId, seq, event.type, event);
+    } catch (err) {
+      /*
+       * One expected failure, and everything else stays loud.
+       *
+       * The expected one: the run's row can disappear underneath it. Deleting a
+       * conversation cascades to `agent_runs`, and with `foreign_keys = ON` the
+       * next `run_events` insert is refused with a foreign-key violation. That
+       * is a legitimate end for a run nobody can look at any more, and it must
+       * not become an exception thrown out of an event emit — which took the
+       * run down mid-stream and left the failure looking like a model error.
+       * The cancellation issued by the delete is the orderly path
+       * (`ConversationService.delete`); this is the guard for the one or two
+       * events already in flight when it landed.
+       *
+       * Everything else — a full disk, a locked or read-only database, a
+       * corrupted file — is a write failure in the **single source of truth**
+       * for this run. The stream carries on, because killing a run the user is
+       * watching over a logging failure helps nobody, but the log this leaves
+       * behind is now shorter than what was delivered, and that is exactly what
+       * a reload and a restart will replay. So it is reported the way the
+       * projection below reports its own genuine failures: an error, with the
+       * cause, saying plainly what is now incomplete. Swallowing this as a
+       * warning is how a truncated history would look like a rendering problem.
+       */
+      const sqlite = (err as { code?: unknown } | null)?.code;
+      if (sqlite === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+        console.warn(
+          `[run ${this.runId}] zdarzenia ${event.type} nie ma juz gdzie zapisac: uruchomienie zniknelo razem z rozmowa`,
+        );
+      } else {
+        console.error(
+          `[run ${this.runId}] BLAD ZAPISU DZIENNIKA zdarzenia ${event.type}: dziennik tego uruchomienia jest od tego miejsca niepelny i taki zostanie odtworzony po przeladowaniu i restarcie`,
+          err,
+        );
+      }
+    }
     // Persist the projection before the event is readable: a client that
     // reconnects and refetches the thread must never see a message the stream
     // has already delivered but the database does not know about yet.
@@ -56,11 +93,25 @@ export class RunEventStream {
        * A projection failure must not take down the run the user is watching —
        * but it must be loud. Swallowing it silently is how a missing tool
        * message looked like a rendering problem for an afternoon.
+       *
+       * With one exception, and it is a real one rather than a convenience: a
+       * conversation that has been deleted answers `not_found` (or `forbidden`
+       * once its owner is gone) to every write, and there is nothing incomplete
+       * about a history nobody kept. Printing a stack for the outcome the user
+       * asked for teaches the reader to ignore this line, which is how the
+       * genuine failure above stops being noticed.
        */
-      console.error(
-        `[run ${this.runId}] BLAD PROJEKCJI zdarzenia ${event.type}: historia tego uruchomienia bedzie niekompletna`,
-        err,
-      );
+      const code = (err as { code?: unknown } | null)?.code;
+      if (code === 'not_found' || code === 'forbidden') {
+        console.warn(
+          `[run ${this.runId}] zdarzenie ${event.type} nie ma juz gdzie trafic: rozmowa zostala usunieta`,
+        );
+      } else {
+        console.error(
+          `[run ${this.runId}] BLAD PROJEKCJI zdarzenia ${event.type}: historia tego uruchomienia bedzie niekompletna`,
+          err,
+        );
+      }
     }
     this.#buffer.push({ seq, event });
     for (const w of this.#waiters.splice(0)) w();

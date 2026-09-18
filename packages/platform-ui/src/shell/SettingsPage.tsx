@@ -287,9 +287,20 @@ export function SettingsPage() {
 
       {/* Anchor for `platform.settings.chat` in the UI target catalog. */}
       <h2 data-testid="settings-chat-capabilities">Zakres gotowej obslugi rozmow</h2>
+      {/*
+        Each row carries the declaration as data, not only as a word.
+
+        The screen is what a user reads, and it is also the only place a test can
+        check that the declaration and the interface still agree — "this is
+        declared unavailable, so there is no control for it" (L4.8). Reading
+        that claim out of a sentence would tie the check to the wording, which is
+        exactly the kind of assertion that broke elsewhere in this suite when a
+        label changed. `data-available` says the same thing in a form that
+        cannot be rephrased.
+      */}
       <ul>
         {Object.entries(data.chatCapabilities).map(([key, value]) => (
-          <li key={key}>
+          <li key={key} data-testid={`chat-capability-${key}`} data-available={value ? 'true' : 'false'}>
             {key}: <strong>{value ? 'dostepne' : 'niedostepne'}</strong>
           </li>
         ))}

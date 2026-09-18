@@ -33,8 +33,10 @@ export async function createHarness(
      * beside it has different pending consents, different live streams and a
      * different conversation queue — and an endpoint asked about a run of that
      * other runtime answers about nothing.
+     *
+     * without a model. Results obtained this way are simulations and are reported as such.
      */
-    modelAgent?: ModelAgentLike;
+    modelAgent?: ModelAgentLike | null;
   } = {},
 ): Promise<Harness> {
   const dataDir = mkdtempSync(join(tmpdir(), 'agentic-test-'));
@@ -44,7 +46,7 @@ export async function createHarness(
   const platform = createPlatform({
     modules: withModule ? (services) => [createProcurementModule(services)] : [],
     env,
-    ...(options.modelAgent ? { modelAgent: options.modelAgent } : {}),
+    ...(options.modelAgent !== undefined ? { modelAgent: options.modelAgent } : {}),
   });
 
   const service = new Service(platform.services);

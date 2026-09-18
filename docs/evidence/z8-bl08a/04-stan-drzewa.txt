@@ -1,0 +1,18 @@
+Bramka G17/G18 — `pnpm verify` = 0 przy czystym drzewie
+=======================================================
+
+1) Przebieg regresji po rundzie poprawek 1 (01-verify.txt):
+   $ pnpm verify
+   exit 0; 44 pliki / 709 testow
+   (przed pakietem: 43 pliki / 697; po rundzie 0: 44 / 708 — runda 1 dodaje
+    test rownoczesnego powtorzenia polecenia)
+
+2) Stan drzewa bezposrednio po `pnpm verify` — pusty, zaden test nie dopisal
+   pliku dowodowego (G18):
+
+   $ git status --porcelain
+   (bez wyjscia)
+
+3) Stan drzewa po przebiegu przegladarkowym: identyczny — wyniki Playwrighta
+   ida do `test-results/` i `docs/evidence/playwright-report/`, oba ignorowane
+   przez .gitignore.
