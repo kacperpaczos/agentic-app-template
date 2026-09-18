@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   AppError,
   applyReadWindow,
+  operationFingerprint,
   READ_WINDOW_DEFAULT_LIMIT,
   READ_WINDOW_MAX_LIMIT,
   readWindowInput,
@@ -108,6 +109,14 @@ export function fileTools(services: PlatformServices): Array<ModuleToolDefinitio
           input.operationId,
           ctx.ownerId,
           'files.publishVersion',
+          /*
+           * The fingerprint is not optional here either. Without it a repeated
+           * `operationId` carrying a *different* path or a different original
+           * file answered with the first publication's id, version and download
+           * link and reported success — the caller would be told its second file
+           * was published when nothing of it was written. This was the one write
+           * path that was missed when the guard was rebuilt.
+           */
           async () => {
             const filename = input.filename ?? basename(abs);
             const { original, version } = services.files.storeVersion({
@@ -133,6 +142,7 @@ export function fileTools(services: PlatformServices): Array<ModuleToolDefinitio
               },
             };
           },
+          { fingerprint: operationFingerprint(input) },
         );
         // A new version is a file change, not a canvas change: the files screen
         // and any open list must re-read, which is what this event drives.

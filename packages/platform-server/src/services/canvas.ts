@@ -2,7 +2,7 @@ import {
   AGENT_VIEWS_SCOPE_KIND,
   AppError,
   canvasViewportSchema,
-  stableJson,
+  operationFingerprint,
   type AddCardInput,
   type CanvasCard,
   type CanvasSpace,
@@ -43,19 +43,6 @@ export function assertOwnConversationViews(
 }
 
 const DEFAULT_GEOMETRY: CardGeometry = { x: 0, y: 0, width: 520, height: 360, z: 0 };
-
-/**
- * What a repeated canvas write has to match to count as the same write.
- *
- * Everything the call asks for except the key itself: a second call under one
- * `operationId` carrying a different title, spec or target is not a retry of
- * the first, and returning the first one's answer to it would report a change
- * that was never applied.
- */
-const cardWriteFingerprint = (input: Record<string, unknown>): string => {
-  const { operationId: _ignored, ...request } = input;
-  return stableJson(request);
-};
 
 interface SpaceRow {
   id: string;
@@ -277,7 +264,7 @@ export class CanvasService {
         this.db.$client.prepare('SELECT * FROM canvas_cards WHERE id = ?').get(id) as CardRow,
       );
       },
-      { fingerprint: cardWriteFingerprint(input) },
+      { fingerprint: operationFingerprint(input) },
     );
     return result;
   }
@@ -324,7 +311,7 @@ export class CanvasService {
             .get(input.cardId) as CardRow,
         );
       },
-      { fingerprint: cardWriteFingerprint(input) },
+      { fingerprint: operationFingerprint(input) },
     );
     return result;
   }
@@ -366,7 +353,7 @@ export class CanvasService {
         })();
         return { removed: input.cardId };
       },
-      { fingerprint: cardWriteFingerprint(input) },
+      { fingerprint: operationFingerprint(input) },
     );
     return result;
   }
