@@ -1059,3 +1059,14 @@ $ git status --porcelain (po verify, przed commitem dowodow)
 $ pnpm verify                     -> EXIT=0, 34 pliki / 553 testy
 $ git status --porcelain          -> (pusto)
 Zaden test nie zapisuje do docs/evidence/ — pliki tego katalogu pochodza z recznych przebiegow.
+
+# Runda poprawek 2 (commit 1e89610)
+$ pnpm verify
+ Test Files  34 passed (34)
+      Tests  554 passed (554)
+EXIT=0
+$ git status --porcelain (przed commitem dowodow)
+(pusto poza dowodami = czyste)
+Przebieg przegladarkowy tej rundy: e2e/app.spec.ts + e2e/bl10-composition.spec.ts = 24 testy zielone
+(pelnego przebiegu nie powtarzano — runda dotknela jednego napisu w apps/web/src/main.tsx,
+ ktorego zaden test nie asercjonuje, oraz plikow poza buildem: AGENTS.md, dev-proxy, macierz)
