@@ -49,7 +49,9 @@ sprawdza.
 
 | Polecenie | Kod wyjścia | Wynik |
 |---|---|---|
-| `pnpm verify` (drzewo scalone z `domkniecie/integracja`, commit `b4332fd`) | 0 | 51 plików / 834 testy; `git status --porcelain` po przebiegu: pusto |
+| `pnpm verify` (drzewo scalone z `domkniecie/integracja` przed Z9, commit `b4332fd`) | 0 | 51 plików / 834 testy; `git status --porcelain` po przebiegu: pusto |
+| `pnpm verify` (**po scaleniu z Z9/BL-08b**, merge `714b9b7`) | 0 | **867 testów**; drzewo czyste |
+| `pnpm exec playwright test` (**po scaleniu z Z9/BL-08b**, pod blokadą) | 0 | **209 testów** |
 | `pnpm typecheck` (pakiety + moduły osobno + `e2e/`) | 0 | bez błędów |
 | `pnpm build && pnpm exec playwright test e2e/auth-limits.spec.ts` (pod blokadą) | 0 | 13 testów |
 | `pnpm exec playwright test` (cały domyślny przebieg, pod blokadą) — **pierwszy przebieg** | 1 | 196 zielonych, 1 oblany: `e2e/bl10-agent-navigation.spec.ts` „cel w zwinietej sekcji…”. **Nie flake — regresja tej zmiany**, opis niżej |
