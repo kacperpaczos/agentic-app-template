@@ -1070,3 +1070,8 @@ $ git status --porcelain (przed commitem dowodow)
 Przebieg przegladarkowy tej rundy: e2e/app.spec.ts + e2e/bl10-composition.spec.ts = 24 testy zielone
 (pelnego przebiegu nie powtarzano — runda dotknela jednego napisu w apps/web/src/main.tsx,
  ktorego zaden test nie asercjonuje, oraz plikow poza buildem: AGENTS.md, dev-proxy, macierz)
+
+# Runda poprawek 3 (commit 01457f8)
+$ pnpm verify                     -> EXIT=0, 34 pliki / 554 testy
+$ git status --porcelain          -> (pusto)
+Przegladarki nie uruchamiano: runda zmienila wylacznie tests/dev-proxy.test.ts.

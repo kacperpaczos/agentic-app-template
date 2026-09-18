@@ -7,6 +7,7 @@
 - 05-proby-wykrycia-runda-1.txt — trzy proby dla dodatkow rundy 1 (proxy dev, odtwarzanie szkicu, walidacja propsow karty)
 - 06-proby-wykrycia-runda-2.txt — proba dla rozroznienia opisu czesciowego (nazwanie brakujacego odczytu)
 - 07-e2e-runda-2.txt — przebieg przegladarkowy rundy 2 (app.spec + bl10-composition, 24 testy)
+- 08-proby-wykrycia-runda-3.txt — proba dla wspoldzielenia sondy /api/health (pomiar liczby sond)
 
 Odtworzenie: `pnpm verify`, a nastepnie
 `flock -w 5400 ../.e2e.lock pnpm exec playwright test` (spece modelowe pozostaja poza przebiegiem).

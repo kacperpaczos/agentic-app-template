@@ -1,0 +1,18 @@
+Proba zdolnosci wykrycia — runda poprawek 3 — 2026-09-18T15:50:44+02:00
+Commit bazowy: 01457f8; drzewo przed proba: czyste
+(„BRUDNE” w pierwotnym zapisie to artefakt: ten plik dowodowy powstal przez przekierowanie
+ sekunde przed odczytem `git status`, wiec byl jedynym nowym plikiem)
+
+=== T5 — wspoldzielenie sondy /api/health przy rownoleglych pierwszych zadaniach
+  plik: apps/web/src/dev-proxy.ts
+  wycofane: 'asking ??=' -> 'asking =' (kazde wywolanie tworzy wlasna sonde)
+  wycofano linie (diff niepusty)
+  WYNIK: test OBLAL (exit 1) — zdolnosc wykrycia potwierdzona
+     FAIL  tests/dev-proxy.test.ts > proxy trybu deweloperskiego > cel z wlasciwa etykieta przechodzi, a sprawdzenie zapamietuje tylko sukces
+    AssertionError: trzy rownolegle wywolania wyslaly wiecej niz jedna sonde: expected 3 to be 1 // Object.is equality
+  drzewo po przywroceniu: `git diff apps/web/src/dev-proxy.ts` pusty, linia `asking ??=` na miejscu;
+  `git status --porcelain` wskazuje wylacznie ten plik dowodowy
+
+Pomiar zamiast wyniku: stand-in liczy zadania, ktore do niego dotarly. Przy wspoldzielonej sondzie
+trzy rownolegle wywolania bramki daja 1 zadanie; bez wspoldzielenia — 3. Poprzednia asercja
+(`[null, null, null]`) byla prawdziwa w obu przypadkach, wiec nie mogla oblac.
