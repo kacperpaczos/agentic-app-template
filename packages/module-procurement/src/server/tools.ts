@@ -254,11 +254,14 @@ export function procurementTools(service: ProcurementService): ModuleToolDefinit
     {
       name: 'save_comparison',
       description:
-        'Zapisuje aktualne zestawienie porownawcze jako trwaly artefakt (snapshot). Tresc artefaktu nie zmienia sie pozniej.',
+        'Zapisuje aktualne zestawienie porownawcze jako trwaly artefakt (snapshot). Tresc artefaktu nie zmienia sie pozniej. ' +
+        'operationId jest wymagane: nadaj wlasny identyfikator tego zapisu. Powtorzone wywolanie z tym samym ' +
+        'operationId zwraca ten sam artefakt (replayed=true) zamiast tworzyc drugi; ten sam operationId z innym ' +
+        'zapytaniem konczy sie conflict.',
       effect: 'write',
       inputSchema: saveComparisonInput,
       handler: async (i: any, ctx: ToolCallContext) => {
-        const saved = service.saveComparisonArtifact({
+        const saved = await service.saveComparisonArtifact({
           caseId: i.caseId,
           ownerId: ctx.ownerId,
           conversationId: ctx.conversationId,
@@ -271,6 +274,9 @@ export function procurementTools(service: ProcurementService): ModuleToolDefinit
           artifactId: saved.artifactId,
           version: saved.version,
           bestOfferId: saved.result.bestOfferId,
+          // Stated, so a retry can tell "saved" from "already saved" instead of
+          // inferring one artifact from two successful answers.
+          replayed: saved.replayed,
         };
       },
     },

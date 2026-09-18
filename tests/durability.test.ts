@@ -168,7 +168,10 @@ describe('przerwana operacja wieloetapowa nie zostawia polowicznego stanu', () =
 
     // A domain rule rejects this halfway through the operation.
     await expect(
-      h.service.updateOfferItem({ itemId: item.id, quantity: -5 }, h.ownerId),
+      h.service.updateOfferItem(
+        { itemId: item.id, quantity: -5, expectedVersion: item.version },
+        h.ownerId,
+      ),
     ).rejects.toThrow();
 
     const after = h.service
