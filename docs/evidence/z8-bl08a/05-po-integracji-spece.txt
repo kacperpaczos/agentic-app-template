@@ -1,0 +1,20 @@
+
+Running 13 tests using 1 worker
+
+  ✓   1 [chromium] › e2e/artifact-views.spec.ts:68:3 › podglad i pelny widok artefaktu › podglad w wiadomosci i pelny widok pokazuja te sama wersje i ten sam stan zrodla (4.9s)
+  ✓   2 [chromium] › e2e/artifact-views.spec.ts:118:3 › podglad i pelny widok artefaktu › snapshot i live po zmianie zrodla z interfejsu: otwarty widok live sie odswieza (4.9s)
+  ✓   3 [chromium] › e2e/artifact-views.spec.ts:226:3 › podglad i pelny widok artefaktu › po restarcie backendu snapshot nadal zamrozony, live nadal biezacy, plik do pobrania (11.7s)
+  ✓   4 [chromium] › e2e/chat-history.spec.ts:147:3 › czat i historia rozmowy › L4.3: tytul z pierwszej wiadomosci, a uzytkownik moze go zmienic (7.1s)
+  ✓   5 [chromium] › e2e/chat-history.spec.ts:195:3 › czat i historia rozmowy › L4.8: zadeklarowany zakres obslugi rozmow zgadza sie z tym, co interfejs oferuje (4.4s)
+  ✓   6 [chromium] › e2e/chat-history.spec.ts:257:3 › czat i historia rozmowy › L4.9: proza z formatowaniem, kompozycja OpenUI i odpowiedz po narzedziu sa widoczne (5.8s)
+  ✓   7 [chromium] › e2e/chat-history.spec.ts:325:3 › czat i historia rozmowy › L4.9: tekst wypowiedziany PRZED wywolaniem narzedzia nie ginie — jest krokiem osi (2.6s)
+  ✓   8 [chromium] › e2e/chat-history.spec.ts:382:3 › czat i historia rozmowy › L4.11: wywolanie, argumenty i wynik widoczne w trakcie, po przeladowaniu i po restarcie (6.0s)
+  ✓   9 [chromium] › e2e/chat-history.spec.ts:459:3 › czat i historia rozmowy › L4.11: blad narzedzia pozostaje bledem po przeladowaniu i po restarcie (5.1s)
+  ✓  10 [chromium] › e2e/chat-history.spec.ts:496:3 › czat i historia rozmowy › L4.15: artefakt ma podglad w wiadomosci i pelny widok, a os narzedzi i odpowiedz zostaja (2.5s)
+  ✓  11 [chromium] › e2e/chat-history.spec.ts:544:3 › czat i historia rozmowy › L4.5: praca w drugiej rozmowie w trakcie zadania pierwszej nie miesza niczego (19.2s)
+  ✓  12 [chromium] › e2e/chat-history.spec.ts:629:3 › czat i historia rozmowy › L4.5: polecenie wyslane zaraz po zmianie tozsamosci wykonuje sie, nie zostaje w kolejce (2.5s)
+  ✓  13 [chromium] › e2e/chat-history.spec.ts:672:3 › czat i historia rozmowy › L4.7: usuniecie rozmowy z trwajacym zadaniem zatrzymuje to zadanie (3.4s)
+
+  13 passed (1.8m)
+
+[exited with code 0]

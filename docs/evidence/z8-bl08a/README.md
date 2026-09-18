@@ -2,10 +2,11 @@
 
 Kryteria: L4.3, L4.5, L4.6, L4.7, L4.8, L4.9, L4.11, L4.13, L4.15.
 
-- `01-verify.txt` — pelny `pnpm verify` (exit 0, 44 pliki / 709 testow; przed pakietem 43 / 697)
+- `01-verify.txt` — pelny `pnpm verify` na drzewie scalonym z galezia integracyjna (exit 0, 46 plikow / 771 testow; przed pakietem 43 / 697)
 - `02-e2e-pelny-przebieg.txt` — `pnpm exec playwright test` pod blokada (169 testow (13,4 min), spece modelowe poza przebiegiem)
-- `03-proby-wykrycia.txt` — 16 prob zdolnosci wykrycia wedlug G16, w tym dwie, ktore zlapaly **test**, a nie kod
-- `04-stan-drzewa.txt` — bramka G17/G18: `pnpm verify` = 0 i puste `git status --porcelain`
+- `03-proby-wykrycia.txt` — 19 prob zdolnosci wykrycia wedlug G16, w tym dwie, ktore zlapaly **test**, a nie kod
+- `04-stan-drzewa.txt` — bramka G17/G18/G19: `pnpm verify` = 0 i puste `git status --porcelain`, na drzewie z oboma pakietami
+- `05-po-integracji-spece.txt` — spece uzywajace zmienionego scenariusza po scaleniu (13 testow: chat-history + artifact-views)
 
 Zaden test nie zapisuje do tego katalogu — pliki pochodza z recznych przebiegow (G18).
 

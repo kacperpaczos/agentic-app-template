@@ -464,3 +464,23 @@ pokazuje, że historia ma oba człony tury w dobrej kolejności. Test
 - Komentarz przy teście prozy sprzed narzędzia mówi teraz, że przypięcie jest **dwukierunkowe**:
   wersja biblioteki, która to naprawi, obleje te same linie, i wtedy należy asercję rozluźnić, a nie
   obchodzić.
+
+### Naprawa po integracji (scalenie z pakietem orkiestracji)
+
+Dwie kolizje, obie widoczne dopiero w drzewie, w którym istnieją oba pakiety.
+
+- **`artifact_create` wymaga teraz `operationId`**, a scenariusz `chat-history` go nie podawał —
+  wywołanie zostałoby odrzucone przed handlerem. Naprawiony **wywołujący**, nie schemat: klucz jest
+  mintowany **per wywołanie** (`crypto.randomUUID()`), bo ta gałąź scenariusza gra więcej niż raz w
+  jednym przebiegu i instancja bywa restartowana na tym samym katalogu danych — drugi przebieg jest
+  nową operacją, nie ponowieniem. Stałe brzmienie klucza odtwarzałoby pierwszy artefakt i test
+  oglądałby opowieść harnessu o idempotencji zamiast tego, o czym jest.
+- **Tytuł rozmowy dłuższy niż limit wejścia jest teraz odrzucany, nie przycinany.** Trasy wątków mają
+  `threadWriteSchema` (`title` max 200) i bare `ZodError` staje się `validation_failed`, więc PATCH z
+  400 znakami odpowiada 400 z nazwanym polem. To **nie** jest regresja przycinania: tytuł w granicach
+  schematu nadal skraca się do 120 znaków, co test dowodzi osobno (180 → 120). Asercja rozszerzona na
+  oba fakty: skrócenie tego, co trasa przyjmuje, i odmowa tego, czego nie — z kontrolą, że odmowa
+  niczego nie zmieniła w bazie.
+
+Sprawdzone próbą przed zmianą asercji (`180 → 200/len 120`, `400 → 400 validation_failed`, tytuł w
+bazie nietknięty), a nie dopasowane do tego, co akurat przechodzi.

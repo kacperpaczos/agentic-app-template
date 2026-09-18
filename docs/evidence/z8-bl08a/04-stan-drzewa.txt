@@ -1,11 +1,16 @@
-Bramka G17/G18 — `pnpm verify` = 0 przy czystym drzewie
-=======================================================
+Bramka G17/G18/G19 — `pnpm verify` = 0 przy czystym drzewie
+===========================================================
 
-1) Przebieg regresji po rundzie poprawek 1 (01-verify.txt):
+1) Przebieg regresji na drzewie ZAWIERAJACYM oba pakiety (BL-08a scalone z
+   galezia integracyjna, w ktorej jest juz pakiet orkiestracji) — 01-verify.txt:
+   $ git merge domkniecie/integracja
+   $ pnpm typecheck    # exit 0 (3 konfiguracje)
    $ pnpm verify
-   exit 0; 44 pliki / 709 testow
-   (przed pakietem: 43 pliki / 697; po rundzie 0: 44 / 708 — runda 1 dodaje
-    test rownoczesnego powtorzenia polecenia)
+   exit 0; 46 plikow / 771 testow
+
+   Historia liczb: przed pakietem 43 pliki / 697 testow; po rundzie 0
+   44 / 708; po rundzie 1 44 / 709; po scaleniu i naprawie 46 / 771
+   (roznica to testy pakietu orkiestracji, nie tego).
 
 2) Stan drzewa bezposrednio po `pnpm verify` — pusty, zaden test nie dopisal
    pliku dowodowego (G18):
