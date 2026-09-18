@@ -198,7 +198,7 @@ describe('powiazanie rozmowy z wykonaniem, narzedziem, mutacja i artefaktem', ()
     expect(byHand.meta.runId).toBeNull();
     expect(byHand.meta.conversationId).toBe(conversationId);
 
-    writeEvidence('powiazanie-diagnostyczne-runda2.json', {
+    writeEvidence('powiazanie-diagnostyczne-runda3.json', {
       opis:
         'Lancuch rozmowa → wykonanie → narzedzie → mutacja → artefakt, przejsty wylacznie po ' +
         'danych diagnostycznych (agent_runs, run_events, messages, artifacts), w obie strony.',
@@ -343,7 +343,7 @@ describe('klasy bledow sa rozroznialne w zapisanym uruchomieniu', () => {
       gdzieZapisane: 'messages(role=tool).content + meta.isError',
     };
 
-    writeEvidence('klasy-bledow-runda2.json', {
+    writeEvidence('klasy-bledow-runda3.json', {
       opis:
         'Rozroznialnosc klas bledow w zapisanych danych: blad modelu, blad integracji, odmowa ' +
         'sandboxa, limit dostepu i odmowa reguly domenowej. Kazdy ma inny kod i inne miejsce zapisu.',
@@ -407,22 +407,24 @@ describe('sekret ze srodowiska nie trafia do diagnostyki', () => {
       expect(bad.run().status).toBe('failed');
 
       const cookie = await login(h.platform.app, h.ownerId);
-      const status = await (
-        await h.platform.app.request('/api/status', { headers: { cookie } })
-      ).text();
-
       const db = h.platform.db.$client;
       /*
-       * Built fresh on every call, so the positive control below re-reads the
-       * same places rather than a snapshot of them.
+       * Every surface is read *inside* this function, so the second call really
+       * re-reads them. `/api/status` used to be fetched once, above, and handed
+       * in — which made "the planted value is not in /api/status" true by
+       * construction: the response predated the planting and could not have
+       * contained it whatever the endpoint did. An assertion that cannot fail
+       * for the reason it names is not evidence.
        */
-      const collect = (): Record<string, string> => {
+      const collect = async (): Promise<Record<string, string>> => {
         const out: Record<string, string> = {
           'logi serwera (console.*)': logged.join('\n'),
           'agent_runs': JSON.stringify(db.prepare('SELECT * FROM agent_runs').all()),
           'run_events': JSON.stringify(db.prepare('SELECT * FROM run_events').all()),
           messages: JSON.stringify(db.prepare('SELECT * FROM messages').all()),
-          'odpowiedz /api/status': status,
+          'odpowiedz /api/status': await (
+            await h.platform.app.request('/api/status', { headers: { cookie } })
+          ).text(),
         };
         /*
          * The database is three files in WAL mode, and the most recent writes
@@ -440,7 +442,7 @@ describe('sekret ze srodowiska nie trafia do diagnostyki', () => {
         return out;
       };
 
-      const surfaces = collect();
+      const surfaces = await collect();
       /*
        * A surface that is not there cannot hide a secret, and a clean scan over
        * nothing is the easiest way for this test to pass while proving nothing.
@@ -448,7 +450,17 @@ describe('sekret ze srodowiska nie trafia do diagnostyki', () => {
        * The log is deliberately not on this list: an application that printed
        * nothing is a result, not a missing surface.
        */
-      for (const key of ['agent_runs', 'run_events', 'messages', 'odpowiedz /api/status', 'plik bazy app.db']) {
+      for (const key of [
+        'agent_runs',
+        'run_events',
+        'messages',
+        'odpowiedz /api/status',
+        'plik bazy app.db',
+        // Required by name: at this point `app.db` is 4 kB of header and every
+        // row this run wrote is in the journal. A guard that accepted the main
+        // file alone would be guarding an empty shell.
+        'plik bazy -wal',
+      ]) {
         expect(Object.keys(surfaces), `brak powierzchni: ${key}`).toContain(key);
         expect(surfaces[key]!.length, `pusta powierzchnia: ${key}`).toBeGreaterThan(0);
       }
@@ -475,7 +487,7 @@ describe('sekret ze srodowiska nie trafia do diagnostyki', () => {
       });
       // Moves the journal into the main file, so the file surface is exercised too.
       db.pragma('wal_checkpoint(TRUNCATE)');
-      const planted = collect();
+      const planted = await collect();
       expect(planted.messages, 'skan nie widzi wartosci w tabeli messages').toContain(CANARY);
       expect(
         planted['plik bazy app.db'],
@@ -500,7 +512,7 @@ describe('sekret ze srodowiska nie trafia do diagnostyki', () => {
       for (const s of spies) s.mockRestore();
     }
 
-    writeEvidence('sekrety-w-diagnostyce-runda2.json', {
+    writeEvidence('sekrety-w-diagnostyce-runda3.json', {
       opis:
         'Wartosc poswiadczenia umieszczona w srodowisku procesu serwera nie wystepuje w zadnej ' +
         'powierzchni diagnostycznej aplikacji ani w plikach dowodow tego zadania.',
@@ -518,8 +530,9 @@ describe('sekret ze srodowiska nie trafia do diagnostyki', () => {
         'w tabeli messages i w pliku bazy, a nie znajduje w odpowiedzi /api/status — czyli czyta ' +
         'zywe powierzchnie, a nie napis zbudowany przez test',
       wymaganePowierzchnie:
-        'agent_runs, run_events, messages, odpowiedz /api/status i plik bazy app.db musza istniec i ' +
-        'byc niepuste; znikniecie powierzchni nie moze uchodzic za czysty wynik',
+        'agent_runs, run_events, messages, odpowiedz /api/status, plik bazy app.db oraz dziennik ' +
+        '-wal musza istniec i byc niepuste; znikniecie powierzchni nie moze uchodzic za czysty ' +
+        'wynik, a sam app.db w trybie WAL bywa pustą skorupą — dane leza w dzienniku',
       uwagaOLogach:
         'Zerowa dlugosc „logi serwera (console.*)” znaczy, ze aplikacja nie wypisala w tych przebiegach ' +
         'niczego — to wynik, nie brak pomiaru. Skan niepustego logu serwera produkcyjnego z pelnej tury ' +

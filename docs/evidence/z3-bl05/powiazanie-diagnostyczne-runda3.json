@@ -1,0 +1,48 @@
+{
+  "opis": "Lancuch rozmowa → wykonanie → narzedzie → mutacja → artefakt, przejsty wylacznie po danych diagnostycznych (agent_runs, run_events, messages, artifacts), w obie strony.",
+  "zrodlo": "pnpm test → tests/diagnostics.test.ts (regresja szablonu)",
+  "warunki": "stand-in modelu na granicy adaptera; prawdziwe handlery narzedzi MCP, prawdziwe serwisy domenowe i baza; jedno uruchomienie z zapisem domenowym i zapisem artefaktu",
+  "wersjaKodu": {
+    "commit": "9965cf0969bac7213413babff6fc5901e7f47fc3",
+    "brudneDrzewo": true,
+    "node": "24.19.0",
+    "pakiety": {
+      "node": "24.19.0",
+      "hono": "4.13.7",
+      "drizzle": "0.45.2",
+      "mastraCore": "1.66.0",
+      "mastraClaude": "0.3.1",
+      "claudeAgentSdk": "0.3.270",
+      "zod": "4.6.5"
+    }
+  },
+  "lancuch": {
+    "rozmowa": "cnv_2d7a3ac9aa1d4024ab7d",
+    "wykonanie": "run_248ef7df10b746b28735",
+    "narzedzie": {
+      "nazwa": "mcp__app__procurement_update_offer_item",
+      "toolCallId": "tu_1",
+      "zrodloArgumentow": "run_events TOOL_CALL_ARGS",
+      "zrodloWyniku": "run_events TOOL_CALL_RESULT oraz messages(role=tool)"
+    },
+    "mutacja": {
+      "rekord": "pci_0b088e7a165d4947a94d",
+      "wersjaPrzed": 1,
+      "wersjaPo": 2,
+      "zasobyZdarzenia": [
+        "case:pcs_40023b0c648942a285aa",
+        "offer:pco_3ddcb915cf8348a0bc72"
+      ]
+    },
+    "artefakt": {
+      "id": "art_cef0145ac6ef4cfcbf1e",
+      "runId": "run_248ef7df10b746b28735",
+      "conversationId": "cnv_2d7a3ac9aa1d4024ab7d"
+    }
+  },
+  "kontrolaNegatywna": {
+    "opis": "artefakt utworzony poza uruchomieniem",
+    "artefakt": "art_8e48c050eb21488f9097",
+    "runId": null
+  }
+}

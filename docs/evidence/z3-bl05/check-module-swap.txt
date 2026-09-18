@@ -1,0 +1,26 @@
+# pnpm check:module-swap — proba wymiany modulu domenowego.
+# Uruchomione w rundzie poprawek 2 zadania Z3 (BL-05), bo zmiana dotknela
+# packages/module-procurement/src/server/services.ts. Kod: commit 9965cf0969bac7213413babff6fc5901e7f47fc3.
+# Kod wyjscia: 0. Sciezki maszyny zastapione znacznikami; reszta bez zmian.
+
+OK   lista plików repozytorium
+OK   kopia robocza — 363 plików → <kopia-robocza>
+OK   warstwa składania przełączona na moduł kontrolny — usunięte trasy: casesRoute, caseDetailRoute, dataRoute, itemProvenanceRoute
+OK   połówka UI modułu przykładowego usunięta z kopii — packages/module-procurement/src/ui, eksport ./ui
+OK   pakiety platformy bez zmian — platform-contracts:febae9ccdf80 platform-server:b56e806ecf85 platform-ui:5c894f10a6d6
+OK   zmienione pliki ograniczone do warstwy składania i modułu przykładowego — apps/server/src/compose.ts, apps/web/src/compose.tsx, apps/web/src/router.tsx; moduł przykładowy: 5 plików
+OK   pnpm install --frozen-lockfile
+OK   kontrola granicy platforma–domena
+OK   typecheck
+OK   build frontendu i backendu
+OK   serwer wystartował — http://127.0.0.1:45437; [server] modules: probe
+OK   rejestr: wyłącznie moduł kontrolny — moduły=["probe"]
+OK   narzędzia modułu kontrolnego zarejestrowane — probe_add_note, probe_list_notes
+OK   komponent modułu w katalogu, bez komponentów przykładu
+OK   trasa modułu /api/m/probe/notes — HTTP 200
+OK   kompozycja domyślna modułu walidowana katalogiem — HTTP 200, karta=probe.noteList
+OK   zakres modułu przykładowego nie daje kart — HTTP 200, karty=0
+OK   baza: tabela modułu kontrolnego, brak tabel przykładu — tabele=15
+OK   powłoka w przeglądarce: menu platformy bez ekranów przykładu — ☰Przestrzen pracyCanvasZapisane kompozycjeWidoki agentaPliki i raportyPliki i raportyUstawieniaUstawienia
+OK   ekrany platformy /files i /settings bez błędów strony
+OK   próba zakończona — 20 s

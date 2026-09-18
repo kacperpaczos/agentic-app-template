@@ -247,7 +247,7 @@ describe('pomiary rozdzielone na punkty, zapisane z warunkami i wersja kodu', ()
       },
     };
 
-    const file = writeMeasurementRecord('pomiary-backend-runda2.json', {
+    const file = writeMeasurementRecord('pomiary-backend-runda3.json', {
       opis:
         'Punkty pomiaru uruchomienia agenta rozdzielone: kolejka, start wykonania, pierwszy tekst, ' +
         'zakonczenie. Brak tekstu daje brak metryki, nie zero.',
@@ -432,7 +432,7 @@ describe('Stop: rozdzielone potwierdzenie zadania, koniec strumienia i koniec pr
       'strumieniujace tekst i trzymajace prawdziwy proces potomny zwiazany z sygnalem przerwania; ' +
       'proces potomny zastepuje proces Claude Agent SDK, ktorego ten przebieg nie uruchamia';
 
-    const file = writeMeasurementRecord('pomiary-stop-runda2.json', {
+    const file = writeMeasurementRecord('pomiary-stop-runda3.json', {
       opis:
         'Faktyczne anulowanie rozdzielone na trzy instanty: potwierdzenie zadania Stop, ' +
         'zakonczenie strumienia zdarzen i zakonczenie procesow uruchomienia. Po zakonczeniu ' +
