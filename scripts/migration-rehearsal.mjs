@@ -291,6 +291,15 @@ function main() {
   const again = census(dbFile, { identity: true });
   const idempotency = compareIdempotent(after, again);
 
+  /*
+   * The throw-away installation secret that booting wrote into the working
+   * copy. It is meaningless here — it signs cookies for an installation that
+   * exists for a few seconds — and leaving it behind makes a scratch directory
+   * look like a data directory to the very guards that protect data
+   * directories. Removed as soon as the last boot is done.
+   */
+  rmSync(resolve(work, 'session.secret'), { force: true });
+
   /* --- and the copy this was rehearsed from is still exactly a copy --- */
   const backupAfter = fingerprint(backupDir);
   const touched = [

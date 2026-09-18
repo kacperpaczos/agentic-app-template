@@ -40,7 +40,10 @@ import { basename, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   Database,
+  SCRATCH_MARKER,
+  assertAwayFromLiveData,
   assertNobodyHoldsIt,
+  assertOwnOrEmptyDir,
   census as censusOf,
   isWithin,
   makeArgs,
@@ -91,14 +94,28 @@ export function census(dbFile) {
 }
 
 /**
- * Refuses to write the copy into the directory being copied — or above it.
+ * Where the copy may be written.
  *
- * A backup inside `data/` is copied into itself on the next run, grows without
- * bound and is deleted by the same `rm -rf data` that the recovery procedure
- * tells people to avoid. A backup *containing* the data directory is worse: the
- * copy and the original share a fate, which is the one thing a copy must not do.
+ * Three questions, and for a long time this asked only the first two.
  *
- * Both directions, and through symlinks — see `realResolve`.
+ *  1. Is `--out` **inside** `--data`? Then the backup is copied into itself on
+ *     the next run, grows without bound, and is deleted by the same
+ *     `rm -rf data` the recovery procedure warns about.
+ *  2. Does `--out` **contain** `--data`? Then the copy and the original share a
+ *     fate, which is the one thing a copy must not do.
+ *  3. Is `--out` somebody's **live data directory** — any live data directory,
+ *     not just the one being copied?
+ *
+ * The third was missing, and its absence was the worst defect in this package:
+ * `--data <cokolwiek> --out <katalog danych>` overwrote the user's `app.db` and
+ * their file tree with another installation's, printed "weryfikacja: kopia
+ * odczytana ponownie, sumy i census zgodne" and exited 0. A backup destroying
+ * data while reporting success is the exact inverse of what L10.19 requires,
+ * and no amount of care about `--data` could have caught it, because the copy
+ * *reads* `--data` and *writes* `--out`.
+ *
+ * `assertAwayFromLiveData` is deliberately applied to `--out` only. Reading a
+ * live data directory is this script's whole purpose; writing into one never is.
  */
 function assertSafeOutDir(dataDir, outDir) {
   const data = realResolve(dataDir);
@@ -115,6 +132,16 @@ function assertSafeOutDir(dataDir, outDir) {
         'Kopia i oryginal dzielilyby los; wskaz katalog obok (--out).',
     );
   }
+  assertAwayFromLiveData(out, { what: 'Katalog kopii' });
+  /*
+   * And, even where nothing marks the destination as application data: a backup
+   * overwrites `app.db` and the file trees, so it may only land somewhere empty,
+   * new, or recognisably a previous backup of its own (`manifest.json`).
+   */
+  assertOwnOrEmptyDir(out, {
+    what: 'Katalog kopii',
+    ownMarkers: ['manifest.json', SCRATCH_MARKER],
+  });
 }
 
 export function backup({ dataDir, outDir }) {

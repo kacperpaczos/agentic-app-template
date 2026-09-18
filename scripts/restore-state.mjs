@@ -31,8 +31,11 @@
  *     no transcript, and the application says so explicitly instead of pretending
  *     the memory came back (`session_transcript_lost`).
  *
- * Exit codes: 0 done, 1 the backup did not verify, 2 refused (unsafe
- * arguments, a live database in use), 3 refused (backup newer than this build).
+ * Exit codes: 0 done, 1 a negative verdict (the backup did not verify, or the
+ * restored state does not match its manifest), 2 refused (unsafe arguments, a
+ * live database in use), 3 refused because the backup is newer than this build,
+ * 4 crashed. The same contract in all four state scripts — see
+ * `lib/state-tools.mjs`.
  */
 import { execFileSync } from 'node:child_process';
 import {

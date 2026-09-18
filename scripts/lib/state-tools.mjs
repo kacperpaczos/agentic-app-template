@@ -138,6 +138,9 @@ export function realResolve(path) {
   }
 }
 
+/** Written into every directory these scripts create, so they can recognise it later. */
+export const SCRATCH_MARKER = '.katalog-roboczy-agentic';
+
 /** Is `inner` the same directory as `outer`, or inside it? */
 export const isWithin = (inner, outer) => inner === outer || inner.startsWith(outer + sep);
 
@@ -163,11 +166,30 @@ export function liveDataDirs(repo = REPO) {
 export function dataDirAtOrAbove(path) {
   let cursor = realResolve(path);
   for (;;) {
-    if (existsSync(join(cursor, 'session.secret'))) return cursor;
+    if (existsSync(join(cursor, 'session.secret')) && !isOurs(cursor)) return cursor;
     const parent = dirname(cursor);
     if (parent === cursor) return null;
     cursor = parent;
   }
+}
+
+/**
+ * Did these scripts create this directory?
+ *
+ * The marker outranks the `session.secret` heuristic **for this one directory**,
+ * and it has to: the rehearsal boots the application against its working copy,
+ * and booting writes a `session.secret` there. Without this, the second run
+ * into the same `--out` was refused — the documented command worked once and
+ * then told the user their own scratch directory was application data, leaving
+ * them to `rm -rf` it by hand, which is the thing all of this exists to avoid.
+ *
+ * Scoped deliberately: a marker makes *that* directory ours, and nothing else.
+ * An ancestor that holds a secret without a marker still refuses, so a scratch
+ * directory created inside somebody's data directory is no more allowed than
+ * before.
+ */
+export function isOurs(dir) {
+  return existsSync(join(dir, SCRATCH_MARKER));
 }
 
 /**
@@ -195,7 +217,7 @@ export function dataDirBelow(path, depth = 3) {
       // descending into it keeps this check cheap.
       if (entries.length > 200) continue;
       for (const entry of entries) {
-        if (entry.name === 'session.secret' && entry.isFile()) return dir;
+        if (entry.name === 'session.secret' && entry.isFile() && !isOurs(dir)) return dir;
         if (entry.isDirectory() && !entry.isSymbolicLink()) next.push(join(dir, entry.name));
       }
     }
@@ -242,8 +264,30 @@ export function assertAwayFromLiveData(path, { what = 'Katalog', repo = REPO } =
   return target;
 }
 
-/** Written into every directory these scripts create, so they can recognise it later. */
-export const SCRATCH_MARKER = '.katalog-roboczy-agentic';
+/**
+ * Refuses a destination that exists, holds something, and is not ours.
+ *
+ * For the writers that **overwrite** rather than delete — `backup-state.mjs`
+ * writes `app.db` and the file trees into `--out`. That is not less dangerous
+ * than deleting: pointed at a live data directory it replaces the user's
+ * database with somebody else's and reports success. A destination is
+ * acceptable when it does not exist, is empty, or carries one of `ownMarkers`
+ * — for a backup that is its own `manifest.json`, so re-running a backup over
+ * the previous one keeps working.
+ */
+export function assertOwnOrEmptyDir(path, { what = 'Katalog docelowy', ownMarkers = [SCRATCH_MARKER] } = {}) {
+  const target = realResolve(path);
+  if (!existsSync(target)) return target;
+  if (!statSync(target).isDirectory()) refuse(`${what} ${target} istnieje i nie jest katalogiem.`);
+  if (readdirSync(target).length === 0) return target;
+  if (ownMarkers.some((m) => existsSync(join(target, m)))) return target;
+  refuse(
+    `${what} ${target} istnieje, nie jest pusty i nie zostal utworzony przez te skrypty ` +
+      `(nie ma zadnego z: ${ownMarkers.join(', ')}).\n` +
+      'Nie nadpisuje cudzego katalogu. Wskaz katalog nieistniejacy, pusty albo wlasna wczesniejsza kopie.',
+  );
+  return target;
+}
 
 const MARKER_TEXT =
   'Katalog roboczy skryptow stanu (scripts/synthetic-state.mjs, scripts/migration-rehearsal.mjs).\n' +

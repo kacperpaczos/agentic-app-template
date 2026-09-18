@@ -129,7 +129,14 @@ wypełnią. Dlatego odmawiają pracy (kod wyjścia 2) w każdym z tych przypadk�
   go nie nazwał w konfiguracji;
 - katalog **istnieje, nie jest pusty i nie został utworzony przez te skrypty** — rozpoznają własne
   po pliku `.katalog-roboczy-agentic`. Nie ma znacznika, nie ma kasowania; wskaż katalog pusty albo
-  nieistniejący.
+  nieistniejący. Odwrotnie: znacznik ma pierwszeństwo przed regułą `session.secret` **dla tego
+  jednego katalogu**, więc próbę wolno powtórzyć do tego samego `--out` mimo sekretu, który zapisał
+  tam start aplikacji.
+
+To samo dotyczy `backup-state.mjs` i jego `--out`: kopia **nadpisuje** `app.db` i drzewa plików, więc
+wolno ją zapisać tylko do katalogu nieistniejącego, pustego albo do własnej wcześniejszej kopii
+(rozpoznawanej po `manifest.json`). Kopia **do** cudzego katalogu danych nadpisywała bazę użytkownika
+i kończyła się kodem 0 — do 2026-09-18, kiedy `--out` dostał tę samą ochronę co pozostałe skrypty.
 
 Katalogiem danych jest przy tym `data/` w repozytorium **i** katalog z `APP_DATA_DIR`, bo instalacja
 może trzymać stan gdzie indziej.
@@ -159,9 +166,14 @@ node scripts/migration-rehearsal.mjs --backup .e2e-bl07/kopia --out .e2e-bl07/pr
 ```
 
 `--stage <id>` oznacza **stan tuż przed tą migracją**: wszystkie wcześniejsze zastosowane, ta jeszcze
-nie. Generator kasuje katalog, który dostanie — obowiązują go odmowy opisane niżej. To jedyny kształt, w którym da się przećwiczyć „ta migracja zachowuje istniejące dane”, i to
+nie. To jedyny kształt, w którym da się przećwiczyć „ta migracja zachowuje istniejące dane”, i to
 właśnie robi regresja szablonu — po jednym przebiegu na kopii sprzed każdej migracji platformy
 (`tests/backup-migration.test.ts`). Katalog `.e2e-bl07/` jest ignorowany przez git.
+
+Generator kasuje katalog, który dostanie, a próba migracji kasuje swój katalog roboczy — obowiązują
+je odmowy opisane wyżej, w „Czego te skrypty nie tkną”. Oba wolno uruchomić ponownie z tym samym
+`--out`: katalog, który same utworzyły, rozpoznają po znaczniku `.katalog-roboczy-agentic`, także
+wtedy, gdy start aplikacji zdążył zapisać w nim `session.secret`.
 
 Przebieg zapisany w `docs/evidence/z2-bl07/` obejmuje: kopię z zapisem leżącym wyłącznie w WAL,
 weryfikację, próbę migracji na kopii, drugie i trzecie uruchomienie bez skutku oraz odtworzenie.

@@ -306,6 +306,14 @@ describe('kopie i proby odmawiaja pracy na katalogu danych aplikacji', () => {
     const gen = run('synthetic-state.mjs', ['--out', udawaneDane, '--stage', 'current']);
     expect(gen.status, gen.out).toBe(0);
     writeFileSync(resolve(udawaneDane, 'session.secret'), 'sekret-udawany\n');
+    /*
+     * ...and the marker goes, because this fixture stands in for **somebody
+     * else's** data directory. A real one was never created by these scripts
+     * and carries no marker of theirs, and leaving one here would hand the
+     * fixture the ownership exemption that exists for scratch directories —
+     * making these refusals pass for the wrong reason, or not at all.
+     */
+    rmSync(resolve(udawaneDane, '.katalog-roboczy-agentic'));
   }, 120_000);
 
   it('kopia do wnetrza katalogu danych jest odrzucona', () => {
@@ -402,6 +410,8 @@ describe('sciezki wokol katalogu danych — trzy ochrony przed skasowaniem', () 
     expect(run('backup-state.mjs', ['--data', zrodlo, '--out', kopia]).status).toBe(0);
 
     // A directory indistinguishable from a live one, with something to lose.
+    // Built by hand, not by the generator: a victim directory must look like a
+    // stranger's, marker included — that is, without one.
     dane = dir('ofiara-dane');
     mkdirSync(resolve(dane, 'files', 'local-user'), { recursive: true });
     writeFileSync(resolve(dane, 'session.secret'), 'sekret-instalacji\n');
@@ -507,6 +517,99 @@ describe('sciezki wokol katalogu danych — trzy ochrony przed skasowaniem', () 
     expect(r.status, r.out).toBe(2);
     expect(r.out).toMatch(/nie wyglada na katalog danych aplikacji/);
     expect(readFileSync(resolve(cudzy, 'notatki.md'), 'utf8')).toBe('tresc\n');
+  }, 60_000);
+
+  it('kopia NIE MOZE byc zapisana do zywego katalogu danych', () => {
+    /*
+     * The defect this exists for, and the worst one in the package: the guard
+     * on `--out` only ever compared it with `--data`. Nothing asked whether the
+     * destination was *itself* somebody's data directory, so
+     * `--data <cokolwiek> --out <katalog danych>` overwrote the user's `app.db`
+     * and file tree with another installation's and exited 0, printing that the
+     * copy had been read back and verified. Reading a live directory is this
+     * script's purpose; writing into one never is.
+     */
+    const zrodlo = dir('kopia-do-zywych-zrodlo');
+    expect(run('synthetic-state.mjs', ['--out', zrodlo, '--stage', 'current']).status).toBe(0);
+    const przed = sha256(resolve(dane, 'app.db'));
+
+    const r = run('backup-state.mjs', ['--data', zrodlo, '--out', dane]);
+    expect(r.status, r.out).toBe(2);
+    expect(r.out).toMatch(/Katalog kopii .* lezy w katalogu danych aplikacji/);
+    // The two things that were lost when this passed.
+    expect(sha256(resolve(dane, 'app.db')), 'baza uzytkownika nadpisana kopia').toBe(przed);
+    nienaruszony();
+  }, 120_000);
+
+  it('kopia NIE MOZE nadpisac cudzego niepustego katalogu', () => {
+    // Even where nothing marks the destination as application data: a backup
+    // writes `app.db` and the trees into it, so it may not land on somebody's
+    // files.
+    const zrodlo = dir('kopia-do-cudzego-zrodlo');
+    expect(run('synthetic-state.mjs', ['--out', zrodlo, '--stage', 'current']).status).toBe(0);
+    const cudzy = dir('cudzy-cel-kopii');
+    mkdirSync(cudzy, { recursive: true });
+    writeFileSync(resolve(cudzy, 'foto.jpg'), 'bajty\n');
+
+    const r = run('backup-state.mjs', ['--data', zrodlo, '--out', cudzy]);
+    expect(r.status, r.out).toBe(2);
+    expect(r.out).toMatch(/nie zostal utworzony przez te skrypty/);
+    expect(readFileSync(resolve(cudzy, 'foto.jpg'), 'utf8')).toBe('bajty\n');
+  }, 120_000);
+
+  it('kopia do katalogu wskazanego przez APP_DATA_DIR jest odrzucona', () => {
+    // No `session.secret` here, so only the configured-path rule can catch it.
+    const zrodlo = dir('kopia-env-zrodlo');
+    expect(run('synthetic-state.mjs', ['--out', zrodlo, '--stage', 'current']).status).toBe(0);
+    const cel = dir('kopia-env-cel');
+    mkdirSync(cel, { recursive: true });
+    writeFileSync(resolve(cel, 'app.db'), 'baza uzytkownika\n');
+
+    const r = run('backup-state.mjs', ['--data', zrodlo, '--out', cel], { APP_DATA_DIR: cel });
+    expect(r.status, r.out).toBe(2);
+    expect(r.out).toMatch(/lezy w katalogu danych aplikacji/);
+    expect(readFileSync(resolve(cel, 'app.db'), 'utf8')).toBe('baza uzytkownika\n');
+  }, 120_000);
+
+  it('kopia do katalogu pustego i do wlasnej wczesniejszej kopii dziala', () => {
+    /*
+     * The control. Refusing everything would satisfy the tests above and make
+     * the script useless; re-running a backup over the previous one is the
+     * normal way people use it, and the backup's own `manifest.json` is what
+     * makes that destination recognisably its own.
+     */
+    const zrodlo = dir('kopia-kontrola-zrodlo');
+    expect(run('synthetic-state.mjs', ['--out', zrodlo, '--stage', 'current']).status).toBe(0);
+    const cel = dir('kopia-kontrola-cel');
+
+    expect(run('backup-state.mjs', ['--data', zrodlo, '--out', cel]).status).toBe(0);
+    const powtorka = run('backup-state.mjs', ['--data', zrodlo, '--out', cel]);
+    expect(powtorka.status, powtorka.out).toBe(0);
+  }, 180_000);
+
+  it('katalog danych ukryty POD celem jest wykryty osobna regula', () => {
+    /*
+     * Isolates `dataDirBelow`, which the "parent directory" case above does not:
+     * there, the marker rule refuses first and either message satisfies the
+     * assertion.
+     *
+     * Here the target carries our own marker — so the marker rule says "ours"
+     * and steps aside — and neither the target nor any ancestor holds a
+     * `session.secret`. The only rule left that can refuse is the one looking
+     * *below* the target, which is the point: pointing a script at the parent of
+     * a data directory deletes the data with it, and no comparison against the
+     * data directory's own path would notice.
+     */
+    const nadrzedny = dir('nad-danymi');
+    mkdirSync(resolve(nadrzedny, 'cudze-dane'), { recursive: true });
+    writeFileSync(resolve(nadrzedny, '.katalog-roboczy-agentic'), 'nasz\n');
+    writeFileSync(resolve(nadrzedny, 'cudze-dane', 'session.secret'), 'sekret\n');
+    writeFileSync(resolve(nadrzedny, 'cudze-dane', 'app.db'), 'baza\n');
+
+    const r = run('synthetic-state.mjs', ['--out', nadrzedny, '--stage', 'empty']);
+    expect(r.status, r.out).toBe(2);
+    expect(r.out).toMatch(/zawiera katalog danych aplikacji/);
+    expect(readFileSync(resolve(nadrzedny, 'cudze-dane', 'app.db'), 'utf8')).toBe('baza\n');
   }, 60_000);
 
   it('awaria skryptu ma inny kod wyjscia niz werdykt proby', () => {
@@ -615,6 +718,56 @@ describe('proba migracji na syntetycznej kopii sprzed kazdej migracji platformy'
     expect(report.preserved.pliki).toBe(report.countsBefore.files);
     expect(report.problems).toEqual([]);
   });
+
+  it('proba jest powtarzalna do tego samego --out, mimo ze boot zapisuje tam session.secret', () => {
+    /*
+     * A regression introduced by the very guard that fixed the deletion defect,
+     * and not caught by the positive control next to it — that one repeats
+     * `synthetic-state`, which never boots the platform.
+     *
+     * The rehearsal does boot it, against its own working copy, and booting
+     * writes a `session.secret` there. The second run into the same `--out` was
+     * then refused as "a data directory": the documented command worked once
+     * and afterwards told the user that the scratch directory this script had
+     * just created was theirs to protect, leaving a manual `rm -rf` as the way
+     * out — the exact move this package exists to make unnecessary.
+     *
+     * The marker now outranks the `session.secret` heuristic for a directory
+     * these scripts created, and only for that directory.
+     */
+    const zrodlo = dir('powtorka-zrodlo');
+    const kopiaP = dir('powtorka-kopia');
+    const proba = dir('powtorka-proba');
+    expect(run('synthetic-state.mjs', ['--out', zrodlo, '--stage', 'platform-0003-file-versions']).status).toBe(0);
+    expect(run('backup-state.mjs', ['--data', zrodlo, '--out', kopiaP]).status).toBe(0);
+
+    const pierwszy = run('migration-rehearsal.mjs', ['--backup', kopiaP, '--out', proba]);
+    expect(pierwszy.status, pierwszy.out).toBe(0);
+    expect(existsSync(resolve(proba, '.katalog-roboczy-agentic'))).toBe(true);
+    // Two mechanisms keep this working, and both are checked. The first: the
+    // rehearsal drops the throw-away secret its own boot wrote.
+    expect(existsSync(resolve(proba, 'session.secret')), 'proba zostawila sekret po sobie').toBe(false);
+
+    const drugi = run('migration-rehearsal.mjs', ['--backup', kopiaP, '--out', proba]);
+    expect(drugi.status, drugi.out).toBe(0);
+
+    /*
+     * The second mechanism, which is what saves a run that was interrupted
+     * before it could tidy up: a secret left in a directory these scripts
+     * created does not turn it into somebody's data directory.
+     */
+    writeFileSync(resolve(proba, 'session.secret'), 'po-przerwanym-przebiegu\n');
+    const trzeci = run('migration-rehearsal.mjs', ['--backup', kopiaP, '--out', proba]);
+    expect(trzeci.status, trzeci.out).toBe(0);
+
+    // ...and a foreign directory with a secret is still refused, so the rule
+    // was relaxed for our own directories and nothing else.
+    const obcy = dir('powtorka-obcy');
+    mkdirSync(obcy, { recursive: true });
+    writeFileSync(resolve(obcy, 'session.secret'), 'cudzy\n');
+    const odmowa = run('migration-rehearsal.mjs', ['--backup', kopiaP, '--out', obcy]);
+    expect(odmowa.status, odmowa.out).toBe(2);
+  }, 300_000);
 
   it('trzecie uruchomienie takze nic nie zmienia — sprawdzone przez test, nie przez skrypt', () => {
     /*
