@@ -189,13 +189,25 @@ describe('L5.12 — most tekst / hooki / zdarzenia domeny przy dwoch przebiegach
      * them per session, so both runs produce `tu_1` — and the namespace the
      * bridge adds is the only thing keeping them apart.
      */
+    /*
+     * Of the four lines below, the **third** is the claim — two runs must not
+     * share a tool call id — and the other three are there so it cannot be true
+     * by accident: the first two say where the separation comes from, and the
+     * fourth says that the ids really would have collided without it. They are
+     * deliberately not four independent checks, and saying so here is cheaper
+     * than a reader working it out and assuming redundancy is a mistake.
+     */
     expect(toolCallIds(runA).every((id) => id.startsWith(`${runA.runId}~`))).toBe(true);
     expect(toolCallIds(runB).every((id) => id.startsWith(`${runB.runId}~`))).toBe(true);
-    expect(toolCallIds(runA).some((id) => toolCallIds(runB).includes(id))).toBe(false);
-    // And the unscoped id really was shared — otherwise the line above is true
-    // for a reason that has nothing to do with the namespace.
+    expect(
+      toolCallIds(runA).some((id) => toolCallIds(runB).includes(id)),
+      'dwa uruchomienia uzyly tego samego identyfikatora wywolania',
+    ).toBe(false);
     const bare = (ids: string[]) => new Set(ids.map((id) => id.split('~')[1]));
-    expect([...bare(toolCallIds(runA))]).toEqual([...bare(toolCallIds(runB))]);
+    expect(
+      [...bare(toolCallIds(runA))],
+      'gole identyfikatory sie nie pokrywaly, wiec brak kolizji nie mowi nic o przestrzeni nazw',
+    ).toEqual([...bare(toolCallIds(runB))]);
 
     /* ------------------------- the domain's events ------------------------ */
 

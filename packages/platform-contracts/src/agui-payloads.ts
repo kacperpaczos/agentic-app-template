@@ -35,8 +35,18 @@ import { uiCommandSchema } from './ui.ts';
 /** Current shape version of every platform `CUSTOM` payload. */
 export const PLATFORM_CUSTOM_PAYLOAD_VERSION = 1;
 
+/**
+ * A payload of exactly these fields, and no others.
+ *
+ * `z.strictObject`, not `z.object`: a plain object schema **strips** unknown
+ * keys, so it answers "are the fields I expect present and well typed" and says
+ * nothing about a field somebody added by accident — which is half of what this
+ * file claims to be for. Strict makes the second half true as well: a payload
+ * that grew a key nobody wrote down fails the conformance check instead of
+ * passing it quietly.
+ */
 const versioned = <T extends z.ZodRawShape>(shape: T) =>
-  z.object({ version: z.literal(PLATFORM_CUSTOM_PAYLOAD_VERSION), ...shape });
+  z.strictObject({ version: z.literal(PLATFORM_CUSTOM_PAYLOAD_VERSION), ...shape });
 
 /**
  * One schema per `CUSTOM` name this platform emits.
@@ -79,9 +89,9 @@ export const platformCustomPayloadSchemas = {
    * validates before acting on it — so this reuses it rather than restating it.
    * A second description of one shape is a second thing to forget to update.
    */
-  [PLATFORM_CUSTOM_EVENTS.uiCommand]: uiCommandSchema.extend({
-    version: z.literal(PLATFORM_CUSTOM_PAYLOAD_VERSION),
-  }),
+  [PLATFORM_CUSTOM_EVENTS.uiCommand]: uiCommandSchema
+    .extend({ version: z.literal(PLATFORM_CUSTOM_PAYLOAD_VERSION) })
+    .strict(),
 } satisfies Record<(typeof PLATFORM_CUSTOM_EVENTS)[keyof typeof PLATFORM_CUSTOM_EVENTS], z.ZodType>;
 
 export type PlatformCustomEventName = keyof typeof platformCustomPayloadSchemas;
@@ -96,57 +106,59 @@ export const isPlatformCustomEvent = (name: unknown): name is PlatformCustomEven
  * `RUN_FINISHED.durationMs` is the addition, and it is written down here
  * because AG-UI does not model it: without a line saying so, an extension is
  * indistinguishable from a field somebody added by accident, and the protocol's
- * own schema — which strips unknown keys — will never object to either.
+ * own schema — which strips unknown keys — will never object to either. Strict
+ * here for the same reason as the payloads above: an extension nobody declared
+ * has to fail the check rather than be quietly dropped.
  */
 export const platformAguiEventSchemas = {
-  [AGUI_EVENTS.RUN_STARTED]: z.object({
+  [AGUI_EVENTS.RUN_STARTED]: z.strictObject({
     type: z.literal(AGUI_EVENTS.RUN_STARTED),
     threadId: z.string().min(1),
     runId: z.string().min(1),
   }),
-  [AGUI_EVENTS.RUN_FINISHED]: z.object({
+  [AGUI_EVENTS.RUN_FINISHED]: z.strictObject({
     type: z.literal(AGUI_EVENTS.RUN_FINISHED),
     threadId: z.string().min(1),
     runId: z.string().min(1),
     /** Platform extension: execution time, excluding the wait in the queue. */
     durationMs: z.number().int().nonnegative().optional(),
   }),
-  [AGUI_EVENTS.RUN_ERROR]: z.object({
+  [AGUI_EVENTS.RUN_ERROR]: z.strictObject({
     type: z.literal(AGUI_EVENTS.RUN_ERROR),
     message: z.string(),
     /** Platform extension: the failure taxonomy the interface shows. */
     code: z.string().min(1),
   }),
-  [AGUI_EVENTS.TEXT_MESSAGE_START]: z.object({
+  [AGUI_EVENTS.TEXT_MESSAGE_START]: z.strictObject({
     type: z.literal(AGUI_EVENTS.TEXT_MESSAGE_START),
     messageId: z.string().min(1),
     role: z.literal('assistant'),
   }),
-  [AGUI_EVENTS.TEXT_MESSAGE_CONTENT]: z.object({
+  [AGUI_EVENTS.TEXT_MESSAGE_CONTENT]: z.strictObject({
     type: z.literal(AGUI_EVENTS.TEXT_MESSAGE_CONTENT),
     messageId: z.string().min(1),
     delta: z.string().min(1),
   }),
-  [AGUI_EVENTS.TEXT_MESSAGE_END]: z.object({
+  [AGUI_EVENTS.TEXT_MESSAGE_END]: z.strictObject({
     type: z.literal(AGUI_EVENTS.TEXT_MESSAGE_END),
     messageId: z.string().min(1),
   }),
-  [AGUI_EVENTS.TOOL_CALL_START]: z.object({
+  [AGUI_EVENTS.TOOL_CALL_START]: z.strictObject({
     type: z.literal(AGUI_EVENTS.TOOL_CALL_START),
     toolCallId: z.string().min(1),
     toolCallName: z.string().min(1),
     parentMessageId: z.string().min(1),
   }),
-  [AGUI_EVENTS.TOOL_CALL_ARGS]: z.object({
+  [AGUI_EVENTS.TOOL_CALL_ARGS]: z.strictObject({
     type: z.literal(AGUI_EVENTS.TOOL_CALL_ARGS),
     toolCallId: z.string().min(1),
     delta: z.string(),
   }),
-  [AGUI_EVENTS.TOOL_CALL_END]: z.object({
+  [AGUI_EVENTS.TOOL_CALL_END]: z.strictObject({
     type: z.literal(AGUI_EVENTS.TOOL_CALL_END),
     toolCallId: z.string().min(1),
   }),
-  [AGUI_EVENTS.TOOL_CALL_RESULT]: z.object({
+  [AGUI_EVENTS.TOOL_CALL_RESULT]: z.strictObject({
     type: z.literal(AGUI_EVENTS.TOOL_CALL_RESULT),
     messageId: z.string().min(1),
     toolCallId: z.string().min(1),
@@ -156,7 +168,7 @@ export const platformAguiEventSchemas = {
     isError: z.literal(true).optional(),
     error: z.string().optional(),
   }),
-  [AGUI_EVENTS.CUSTOM]: z.object({
+  [AGUI_EVENTS.CUSTOM]: z.strictObject({
     type: z.literal(AGUI_EVENTS.CUSTOM),
     name: z.string().min(1),
     value: z.unknown(),

@@ -1,7 +1,12 @@
 import { expect, test } from './support/fixtures.ts';
 import { CuttableProxy } from './support/cuttable-proxy.ts';
 import { ScriptedInstance } from './support/scripted.ts';
-import { CONSENT_ARTIFACT_TITLE, EARLY_MARKER, LATE_MARKER } from './support/bl08b-scenarios.ts';
+import {
+  CONSENT_ARTIFACT_TITLE,
+  EARLY_MARKER,
+  LATE_MARKER,
+  SHORT_MARKER,
+} from './support/bl08b-scenarios.ts';
 import { type BrowserContext, type Page } from '@playwright/test';
 
 /**
@@ -312,8 +317,18 @@ test.describe('powrot do trwajacego wykonania', () => {
       timeout: 60_000,
     });
     expect(await answerText(page, conversation)).toContain('KONIEC-PO-ZGODZIE');
+    /*
+     * Exactly one artifact of the approved operation. Deliberately **not**
+     * described as "the operation ran twice": it cannot, because the scenario
+     * names a fixed `operationId` and the idempotency store collapses a repeat
+     * before an artifact is written. What this assertion can see is narrower and
+     * is what it now says — that the approved operation produced its result, once.
+     */
     const titles = await artifactTitles(page);
-    expect(titles.filter((t) => t === CONSENT_ARTIFACT_TITLE), 'operacja wykonala sie dwa razy').toHaveLength(1);
+    expect(
+      titles.filter((t) => t === CONSENT_ARTIFACT_TITLE),
+      'zatwierdzona operacja nie zostawila dokladnie jednego artefaktu',
+    ).toHaveLength(1);
     expect(await runsOf(page, conversation)).toHaveLength(1);
   });
 
@@ -353,11 +368,36 @@ test.describe('powrot do trwajacego wykonania', () => {
       await expect(page.locator('[data-testid="run-state"][data-phase="queued"]')).toHaveCount(0);
       await page.waitForTimeout(120);
     }
-    // What the run managed to say is still there — an interrupted run keeps its
-    // partial answer rather than losing it with the process.
+
+    /*
+     * The absence above is not enough on its own and the review said so: an
+     * interface showing *nothing* — no strip, no thread, a blank panel — passes
+     * every negation in this test. So the rest is stated positively.
+     */
+    // What the run managed to say is on screen, not merely in the database.
+    await expect(page.locator('.openui-agent-thread-messages')).toContainText(EARLY_MARKER, {
+      timeout: 30_000,
+    });
+    // …and what it never said is not invented.
+    expect(await onScreen(page)).not.toContain(LATE_MARKER);
     expect(await answerText(page, conversation)).toContain(EARLY_MARKER);
     expect(await answerText(page, conversation)).not.toContain(LATE_MARKER);
-    // The composer works again: the conversation is usable, not blocked.
-    await expect(page.locator('.openui-agent-thread-composer__input')).toBeEnabled();
+
+    /*
+     * The strongest statement of "no deadlock": the conversation still works.
+     * A queue left holding a run that no longer exists, or a client that thinks
+     * something is in flight, shows up here as a second command that never
+     * starts — which no absence could have told us apart from a quiet screen.
+     */
+    await send(page, 'Powiedz cos krotko.');
+    await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'succeeded', {
+      timeout: 60_000,
+    });
+    await expect(page.locator('.openui-agent-thread-messages')).toContainText(SHORT_MARKER, {
+      timeout: 30_000,
+    });
+    const runsAfter = await runsOf(page, conversation);
+    expect(runsAfter).toHaveLength(2);
+    expect(runsAfter.map((r) => r.status).sort()).toEqual(['failed', 'succeeded']);
   });
 });

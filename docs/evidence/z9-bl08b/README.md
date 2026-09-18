@@ -9,6 +9,8 @@ Kryteria: L5.2, L5.3, L5.4, L5.5, L5.6, L5.11, L5.12, L5.13, L5.14, L5.15 — ws
 - `03-proby-wykrycia.md` — dziewięć prób zdolności wykrycia wg G16, z plikiem i linią, na której każda
   oblewa; **dwie złapały test, a nie kod** (T4, T9) i obie skończyły się wzmocnieniem asercji
 - `03-proby-wykrycia-przebieg.txt` — surowy zapis tych prób, razem z `git status` po każdym przywróceniu
+- `05-runda-poprawek-1.txt` — bramka po recenzji (verify = 0, 11 testów przeglądarkowych z trzech
+  poprawionych speców, zero tur modelu)
 - `04-stan-drzewa.txt` — bramka G17/G18/G19: `pnpm verify` = 0, pusty `git status --porcelain` po
   regresji **i** po pełnym przebiegu przeglądarkowym
 

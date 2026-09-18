@@ -1,0 +1,18 @@
+# Runda poprawek 1 — bramka po recenzji
+
+$ git merge domkniecie/integracja   -> Already up to date (integracja bez zmian od 1c9b1e7)
+$ pnpm typecheck                    -> exit 0
+$ pnpm verify                       -> exit 0
+ Test Files  53 passed (53)
+      Tests  816 passed (816)
+  (816 jak poprzednio: dolozone kontrole negatywne dla schematow strict to asercje
+   w istniejacych testach, nie nowe przypadki)
+
+$ pnpm build && flock -w 5400 ../.e2e.lock pnpm exec playwright test \
+    e2e/run-events.spec.ts e2e/reconnect-live.spec.ts e2e/artifact-renderers.spec.ts
+  -> 11 passed (2,2 min)
+
+$ git status --porcelain   # po przebiegu przegladarkowym, przed commitem tej rundy
+  tylko wlasne, niezacommitowane zmiany rundy — zaden test niczego nie zapisal
+
+Tury modelu subskrypcyjnego wydane w tej rundzie: 0.

@@ -214,12 +214,29 @@ describe('L5.6 / L5.14 — ponowne podlaczenie do uruchomienia', () => {
 
     const all = await replay(run.runId, 0);
     expect(all.length).toBeGreaterThan(3);
-    const cut = 3;
-    const rest = await replay(run.runId, cut);
-    expect(rest.map((e) => e.seq)).toEqual(all.slice(cut).map((e) => e.seq));
-    expect(rest.every((e) => (e.seq ?? 0) > cut)).toBe(true);
-    // Sequence numbers are dense and increasing: a replay cannot silently skip.
+
+    /*
+     * Three claims, each able to fail on its own. An earlier version asserted a
+     * fourth — "nothing at or below the cursor came back" — which is implied by
+     * the other two and could therefore never be the reason a run was red.
+     */
+
+    // 1. The numbering is dense from one: a replay cannot silently skip an event.
     expect(all.map((e) => e.seq)).toEqual(all.map((_, i) => i + 1));
+
+    // 2. For **every** cursor, the replay is exactly the tail after it — compared
+    //    by content, not by sequence number, so an event delivered under the
+    //    right number with the wrong body is still a failure.
+    for (const cut of [0, 1, 3, all.length - 1, all.length]) {
+      const rest = await replay(run.runId, cut);
+      expect(
+        rest.map((e) => JSON.stringify(e.event)),
+        `kursor ${cut}`,
+      ).toEqual(all.slice(cut).map((e) => JSON.stringify(e.event)));
+    }
+
+    // 3. A cursor past the end delivers nothing, rather than starting over.
+    expect(await replay(run.runId, all.length + 5)).toEqual([]);
   });
 
   it('uruchomienie przerwane restartem konczy sie dla klienta, mimo ze dziennik nie ma zdarzenia koncowego', async () => {

@@ -274,6 +274,26 @@ describe('L5.11 — zgodnosc AG-UI: schematy i zachowanie', () => {
     expect(
       rulesOf([started, { type: AGUI_EVENTS.CUSTOM, name: 'platform.wymyslone', value: {} }, finished]),
     ).toContain('1:unknown_custom');
+    /*
+     * A field nobody wrote down — the half of the promise a non-strict schema
+     * cannot keep. `z.object` strips an unknown key and reports success, so
+     * without `z.strictObject` this file would detect a *missing* field and be
+     * blind to an *added* one, which is how a payload quietly grows a second,
+     * undocumented meaning.
+     */
+    expect(
+      rulesOf([
+        started,
+        {
+          type: AGUI_EVENTS.CUSTOM,
+          name: PLATFORM_CUSTOM_EVENTS.canvasChanged,
+          value: { version: PLATFORM_CUSTOM_PAYLOAD_VERSION, spaceId: 'sp_1', dopisanePrzezPomylke: 1 },
+        },
+        finished,
+      ]),
+    ).toContain('1:custom_payload');
+    // The same for an event of the protocol, not only for a CUSTOM payload.
+    expect(rulesOf([started, { ...finished, dopisanePrzezPomylke: 1 }])).toContain('1:platform_schema');
     // Two terminal events, and work after the end.
     expect(rulesOf([started, finished, delta, finished])).toEqual(
       expect.arrayContaining(['2:after_terminal', '3:terminal_repeated']),
@@ -315,7 +335,11 @@ describe('L5.11 — zgodnosc AG-UI: schematy i zachowanie', () => {
      * changes an event's shape has to be looked at, and a test that silently
      * follows whatever is installed would never say so.
      */
-    expect(aguiCore().version).toBe('0.0.53');
+    expect(
+      aguiCore().version,
+      'wersja @ag-ui/core sie zmienila: zgodnosc byla mierzona wobec 0.0.53, wiec ksztalty zdarzen ' +
+        'trzeba zmierzyc ponownie, a nie podbic ten literal',
+    ).toBe('0.0.53');
   });
 });
 

@@ -27,8 +27,19 @@ export const LATE_MARKER = 'WYNIK-POZNY-B';
  * comes back to a run the backend still lists as active. A scenario that
  * finished during the outage would be answering BL-09's question again.
  */
+/** Said by the short second command; the proof a conversation is still usable. */
+export const SHORT_MARKER = 'KROTKA-ODPOWIEDZ-B';
+
 export const liveReconnectScript = (prompt: string): Step[] =>
-  prompt.includes('nawigacja')
+  /*
+   * A short answer for the follow-up command. Without it, "the conversation is
+   * not deadlocked after a restart" could only be asserted as the *absence* of a
+   * loading state — and an interface showing nothing at all satisfies an absence
+   * just as well as an interface that recovered.
+   */
+  prompt.includes('krotko')
+    ? [{ kind: 'text', text: SHORT_MARKER, delayMs: 100 }]
+    : prompt.includes('nawigacja')
     ? [
         /*
          * Moves the screen **before** the wire is cut, and keeps working for a

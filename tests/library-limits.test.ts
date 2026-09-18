@@ -134,8 +134,16 @@ describe('L5.15 — ograniczenia gotowego czatu, przypiete do zainstalowanych we
      * CUSTOM" is a statement about 0.9.13; an upgrade makes it a statement about
      * nothing until somebody re-measures.
      */
-    expect(versionOf('@openuidev/react-headless')).toBe('0.9.13');
-    expect(versionOf('@openuidev/react-ui')).toBe('0.13.10');
+    expect(
+      versionOf('@openuidev/react-headless'),
+      'parser czatu ma inna wersje niz ta, dla ktorej zmierzono ponizsze ograniczenia — zmierz je ' +
+        'ponownie, zanim zmienisz ten literal',
+    ).toBe('0.9.13');
+    expect(
+      versionOf('@openuidev/react-ui'),
+      'watek czatu ma inna wersje niz ta, dla ktorej zmierzono wstrzymanie prozy i podwojne jej ' +
+        'pokazanie w turze z narzedziem (e2e/run-events.spec.ts)',
+    ).toBe('0.13.10');
   });
 
   it('parser biblioteki pomija CUSTOM — dlatego platformAdapter podsluchuje ten sam strumien', async () => {

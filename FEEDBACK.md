@@ -601,11 +601,23 @@ modelu (stand-in na granicy adaptera SDK, oznaczony jako symulacja).
 W turze **z narzędziem** to samo zdanie jest w trakcie na ekranie dwa razy — w osi „Behind the scenes”
 biblioteki i w pasku podglądu tej aplikacji (przez moment nawet trzy: sama biblioteka rysuje je
 chwilowo podwójnie). Pasek istnieje dlatego, że w turze **bez** narzędzia biblioteka nie renderuje
-prozy wcale. Usunięcie paska dla tur z narzędziem zabrałoby jedyny podgląd strumienia dla tych tur
-i dowody innych pakietów; podmiana `Messages` jest wykluczona przez `AGENTS.md`. Zachowanie jest więc
-przypięte dwukierunkowo testem i opisane w `docs/NEW-APPLICATION.md` §7. Przy okazji zmierzone: gotowy
-wątek stawia narysowane wywołanie **nad** poprzedzającą je prozą, więc kolejność wolno dowodzić czasem
-pojawienia się i dziennikiem, nigdy pozycją w DOM.
+prozy wcale.
+
+Rozważona i **odrzucona** naprawa — ukrycie paska w turach, które wywołały narzędzie — ma trzy wady,
+z których dwie wyszły dopiero z własnego dziennika prób i recenzji:
+
+1. **nie naprawia.** W próbie T8 (pasek usunięty) sama oś biblioteki nadal pokazywała zdanie **dwa
+   razy** przez część tury — zapis `running:0/2` w `docs/evidence/z9-bl08b/03-proby-wykrycia-przebieg.txt`.
+   Zostaje resztkowa dubla, tyle że już bez podglądu strumienia;
+2. **kosztuje tury subskrypcji.** `e2e/agent-ui.spec.ts` — dowód L5.1 i L5.9 na **prawdziwym modelu** —
+   czyta ten sam pasek w turze z wywołaniem narzędzia, więc zmiana wymaga ponownego, płatnego pomiaru
+   dwóch kryteriów, żeby odzyskać dowód, który dziś jest;
+3. zabiera jedyny podgląd strumienia dla tur z narzędziem i psuje `e2e/measurements.spec.ts` (Z3).
+
+Podmiana `Messages` jest wykluczona przez `AGENTS.md`. Zachowanie jest więc przypięte dwukierunkowo
+testem i opisane w `docs/NEW-APPLICATION.md` §7; decyzja koordynatora: **nie naprawiamy**. Przy okazji
+zmierzone: gotowy wątek stawia narysowane wywołanie **nad** poprzedzającą je prozą, więc kolejność wolno
+dowodzić czasem pojawienia się i dziennikiem, nigdy pozycją w DOM.
 
 ### Dwie próby wykrycia złapały test, nie kod
 
@@ -624,3 +636,26 @@ zgodę z uruchomieniem, spóźniona odpowiedź, odmowa bez skutku i brak odpowie
 zrobione i pokryte (BL-09, `tests/consent.test.ts`, `e2e/consent-runs.spec.ts`); podobnie odmowa
 powtórzonego polecenia interfejsu po przeładowaniu (`sessionStorage` w `UiCommandRunner`). Zostało to
 sprawdzone w kodzie przed pisaniem czegokolwiek nowego.
+
+### Runda poprawek 1 (recenzja)
+
+Recenzja nie znalazła krytycznych; poprawione zostały zapisy i ostrość kilku asercji.
+
+- **Osierocony wskaźnik.** Zamknięcie pakietu BL-08 zostawiło dwa miejsca kierujące defekt „proza przed
+  wywołaniem narzędzia" do nieistniejącego pakietu (`L3.11.gap`, próba `T04`) — i to **zdaniem, które
+  zmierzyłem jako nieprawdziwe** („brak jej w panelu"). Proza *jest* w panelu, w krokach szuflady
+  biblioteki, na żywo i po odtworzeniu; po turze jest o jedno kliknięcie. Oba miejsca opisują teraz
+  pomiar i wskazują na jawnie niespełnione wymaganie przy L5.15.
+- **Kolumna „Brak" przy L5.15** nazywa jawnie niespełnioną część zamiast świecić pustką.
+- **Zastrzeżenie o starych dziennikach** przeniesione z raportu zadania do `NEW-APPLICATION.md` §7.1,
+  pod opis zdarzenia `platform.permission_resolved`.
+- **Trzy kryteria odzyskały cytaty z prawdziwego modelu** (L5.3, L5.4 — `agent-ui`; L5.5 — `files-agent`,
+  jedyny zapis, że model dotarł do bramki zgód) wraz z notą, dlaczego rodzaj dowodu zmienił się na „test
+  GUI bez modelu": powtarzalnym dowodem w regresji jest test przeglądarkowy, przebieg modelowy zostaje
+  jako potwierdzenie obok.
+- **Ostrość asercji:** schematy zdarzeń i ładunków są `strict`, więc wykrywają też pole dodane przez
+  pomyłkę (z własną kontrolą negatywną); przypięcia wersji mają komunikaty mówiące, co zrobić zamiast
+  podbijać literał; trzy asercje kursora zastąpione trzema, które mogą oblać niezależnie; przypadek
+  restartu ma dowód pozytywny (kolejne polecenie w tej samej rozmowie kończy się sukcesem), bo sama
+  negacja przechodziła też dla pustego ekranu; komunikat „operacja wykonała się dwa razy" zawężony do
+  tego, co asercja widzi — idempotencja usuwa duplikat, zanim artefakt powstanie.
