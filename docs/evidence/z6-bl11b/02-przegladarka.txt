@@ -1,17 +1,28 @@
 Przebieg przegladarkowy — pakiet BL-11b
-commit: fc26a7f
 
-== przebieg celowany (spece dotkniete zmianami) ==
-polecenie: pnpm build && flock -w 5400 ../.e2e.lock pnpm exec playwright test \
-             e2e/interactions.spec.ts e2e/measurements.spec.ts e2e/background-tasks.spec.ts e2e/composed-views.spec.ts
-kod wyjscia: 0 — 21 testow, 1.9 min
-
-== przebieg pelny (domyslny projekt, bez specow modelowych) ==
+== runda poprawek 1 (stan koncowy) ==
+commit kodu w chwili przebiegu: 6076ec4 (przed przepisaniem historii; drzewo bajt w bajt rowne HEAD acdfa9f)
 polecenie: flock -w 5400 ../.e2e.lock pnpm exec playwright test
-kod wyjscia: 0
-  potwierdzono instancje testowa pod http://127.0.0.1:8799
-  pominieto spece z prawdziwym modelem: bl01-bl02-model.spec.ts (7), agent-ui.spec.ts (2), files-agent.spec.ts (2). Kosztuja 11 tur subskrypcji na przebieg — uruchamia sie je swiadomie: pnpm test:e2e:model.
-    153 passed (10.2m)
+kod wyjscia: 0 — 153 testy, 11.3 min
+  Dlaczego pelny przebieg, a nie wybrane spece: runda 1 zmienila /api/threads/create
+  i /api/threads/update/:id, czyli trasy, przez ktore gotowy czat (restStorage
+  biblioteki OpenUI) zaklada i zmienia kazdy watek. Gdyby nowy schemat odrzucal to,
+  co biblioteka wysyla, czat przestalby dzialac — a to widac tylko w przegladarce.
+
+== przebieg przed runda poprawek ==
+  commit 74e0eb3 (po przepisaniu: 820058b) — 153 testy, 10.2 min, kod wyjscia 0
+  oraz przebieg celowany na czterech specach dotknietych zmianami: 21 testow, 1.9 min, 0
+
+== odleglosc przebiegu od HEAD ==
+Przebieg koncowy zostal wykonany na drzewie commitu 6076ec4 — ostatniego przed
+przepisaniem historii pakietu. Przepisanie nie zmienilo ani jednego bajtu drzewa
+(sprawdzone mechanicznie: git diff <stara-koncowka>..<nowa-koncowka> pusty), wiec
+drzewo przebiegu jest identyczne z drzewem nowej koncowki.
+
+Od tamtej chwili do HEAD dochodza wylacznie pliki w docs/evidence/ (ten plik,
+01-verify.txt i zapis prob wykrycia). Zaden plik aplikacji, testu ani konfiguracji
+nie rozni sie miedzy drzewem przebiegu a HEAD — i to jest powod, dla ktorego
+przebieg pozostaje reprezentatywny, a nie to, ze zmiany "wygladaja niegroznie".
 
 Grant tur modelu dla tego zadania: ZERO. Zaden spec modelowy nie byl uruchomiony
 (bl01-bl02-model.spec.ts, agent-ui.spec.ts, files-agent.spec.ts sa poza projektem domyslnym).
