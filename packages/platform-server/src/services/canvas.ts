@@ -261,13 +261,18 @@ export class CanvasService {
         ? this.#nextFreeSlot(input.spaceId)
         : { x: 0, y: 0 };
       const geometry: CardGeometry = { ...DEFAULT_GEOMETRY, ...base, ...(input.geometry ?? {}) };
-      this.db.$client
-        .prepare(
-          `INSERT INTO canvas_cards (id, space_id, title, spec, geometry, spec_version, geometry_version, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)`,
-        )
-        .run(id, input.spaceId, input.title, JSON.stringify(input.spec), JSON.stringify(geometry), ts, ts);
-      this.#touchSpace(input.spaceId);
+      // The card and the space's freshness are one write: a space whose
+      // `updated_at` predates a card it holds is a state nobody asked for, and
+      // the ordering of the library reads from it (L9.8).
+      this.db.$client.transaction(() => {
+        this.db.$client
+          .prepare(
+            `INSERT INTO canvas_cards (id, space_id, title, spec, geometry, spec_version, geometry_version, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)`,
+          )
+          .run(id, input.spaceId, input.title, JSON.stringify(input.spec), JSON.stringify(geometry), ts, ts);
+        this.#touchSpace(input.spaceId);
+      })();
       return toCard(
         this.db.$client.prepare('SELECT * FROM canvas_cards WHERE id = ?').get(id) as CardRow,
       );
@@ -303,14 +308,16 @@ export class CanvasService {
             currentSpecVersion: card.spec_version,
           });
         }
-        this.db.$client
-          .prepare(
-            `UPDATE canvas_cards
-               SET spec = ?, title = COALESCE(?, title), spec_version = spec_version + 1, updated_at = ?
-             WHERE id = ?`,
-          )
-          .run(JSON.stringify(input.spec), input.title ?? null, nowIso(), input.cardId);
-        this.#touchSpace(card.space_id);
+        this.db.$client.transaction(() => {
+          this.db.$client
+            .prepare(
+              `UPDATE canvas_cards
+                 SET spec = ?, title = COALESCE(?, title), spec_version = spec_version + 1, updated_at = ?
+               WHERE id = ?`,
+            )
+            .run(JSON.stringify(input.spec), input.title ?? null, nowIso(), input.cardId);
+          this.#touchSpace(card.space_id);
+        })();
         return toCard(
           this.db.$client
             .prepare('SELECT * FROM canvas_cards WHERE id = ?')
@@ -353,8 +360,10 @@ export class CanvasService {
       'canvas.removeCard',
       async () => {
         const { card } = this.#cardRow(input.cardId, ownerId);
-        this.db.$client.prepare('DELETE FROM canvas_cards WHERE id = ?').run(input.cardId);
-        this.#touchSpace(card.space_id);
+        this.db.$client.transaction(() => {
+          this.db.$client.prepare('DELETE FROM canvas_cards WHERE id = ?').run(input.cardId);
+          this.#touchSpace(card.space_id);
+        })();
         return { removed: input.cardId };
       },
       { fingerprint: cardWriteFingerprint(input) },
