@@ -1363,11 +1363,10 @@
       }
     },
     "L8.2": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "e2e/agent-ui.spec.ts i e2e/files-agent.spec.ts przechodzą na prawdziwym modelu z procesem SDK uruchamianym w środowisku subscriptionOnlyEnv (bez ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL). Tryb: e2e/app.spec.ts „ustawienia pokazuja tryb subskrypcji i nie ujawniaja sekretow” (tekst subskrypcja lub brak logowania, brak sk-ant/accesstoken/refreshtoken); tests/runtime.test.ts „rzeczywista wartosc tokena nie wystepuje w odpowiedzi /api/status”. Etykieta subskrypcja w SettingsPage wynika ze stałej method='subscription' w probeAuth, nie z wykrycia.",
-      "gap": "Żaden test nie potwierdza, że SDK użyło OAuth subskrypcji: apiKeySource z sesji SDK nie jest odczytywane, a po udanym przebiegu nie jest asercjonowany stan access=verified ani plan z poświadczenia; asercja w e2e/app.spec.ts przechodzi także bez logowania.",
+      "proof": "Tryb potwierdzony przez sam SDK, nie przez stala w kodzie: scripts/probe-sdk-session.ts otwiera sesje Claude Agent SDK, ktorej strumien wejsciowy nie emituje wiadomosci, i zadaje zadanie sterujace accountInfo() — bez tury modelu. Zapis w docs/evidence/z12-bl04/sesja-sdk.json: state=subscription, apiKeySource=null, apiProvider=firstParty, subscriptionType=\"Claude Max\", limity planu dostepne. tests/sdk-session-evidence.test.ts (6 testow) pilnuje, ze zapis jest rozstrzygajacy, nie niesie danych konta i pochodzi z wersji SDK, adaptera i CLI zainstalowanych w tym drzewie. W UI: e2e/auth-limits.spec.ts pokazuje trzy rozne stany sekcji \"Sesja SDK\" w Ustawieniach (subskrypcja / klucz API / niesprawdzalne) i sprawdza, ze zadna odpowiedz nie wprowadza sekretu na strone; po udanym przebiegu pasek stanu ma data-auth-confirmed=true, a przed nim false. Rzeczywiste tury subskrypcji z e2e/agent-ui.spec.ts i e2e/files-agent.spec.ts pozostaja czescia lancucha — nowy jest dowod, ze sesja idzie przez OAuth subskrypcji. Tokena nie ujawnia zadna z tych sciezek (tests/runtime.test.ts, tests/durability.test.ts).",
       "backlog": "BL-04",
       "scenarios": [
         "T17"
@@ -1378,11 +1377,10 @@
       }
     },
     "L8.3": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "tests/auth.test.ts „kazda zmienna kierujaca na platne API znika ze srodowiska agenta” (klucz, token, base URL, Bedrock, Vertex, model) i „obecnosc klucza API jest raportowana, a polityka pozostaje \"refused\"”; tests/runtime.test.ts „usuwa zmienne kierujace na platne API i gateway” i „izoluje proces potomny od nadrzednej sesji Claude Code, ale zostawia CLAUDE_CONFIG_DIR”. Kod: runtime.ts przekazuje env: subscriptionOnlyEnv() i settingSources: []; @mastra/claude 0.3.1 scala sdkOptions konstruktora z sdkOptions wywołania; brak kodu fallbacku.",
-      "gap": "Polityka opiera się tylko na czyszczeniu zmiennych środowiska: logowanie CLI kontem z kluczem API (ApiKeySource '/login managed key' w SDK 0.3.270) nie jest w kodzie wykluczone ani wykrywane, bo runtime nie sprawdza apiKeySource sesji; brak próby z ustawionym kluczem pokazującej, że przebieg nadal idzie przez subskrypcję.",
+      "proof": "Trzy przebiegi tej samej sondy w docs/evidence/z12-bl04/sesja-sdk.json, kazdy rzeczywistym wywolaniem SDK bez tury modelu: (1) srodowisko aplikacji => subscription; (2) ANTHROPIC_API_KEY ustawiony w procesie NADRZEDNYM, polityka wlaczona => nadal subscription, bo subscriptionOnlyEnv usuwa klucz; (3) ten sam klucz przy applyPolicy:false => api_key, apiKeySource=ANTHROPIC_API_KEY, brak planu, rate_limits_available=false. Trzeci przebieg jest kontrola: bez niego dwie identyczne odpowiedzi moglyby znaczyc, ze sonda nie widzi roznicy. tests/sdk-session-evidence.test.ts asertuje cala trojke i wiaze ja z wersjami z lockfile. Polityka srodowiska dalej sprawdzana w tests/auth.test.ts i tests/durability.test.ts; nowe jest to, ze jej skutek jest OBSERWOWANY po stronie SDK, a nie zakladany. Sesja na kluczu API czyni aplikacje niezdatna (authIsUsable=false) i ma wlasny, czerwony stan w Ustawieniach oraz na pasku stanu.",
       "backlog": "BL-04",
       "scenarios": [
         "T17"
@@ -1423,11 +1421,10 @@
       }
     },
     "L8.6": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "symulacja",
       "origin": "szablon",
-      "proof": "Limit: e2e/tool-activity.spec.ts „blad wykonania jest widoczny w aplikacji wraz z kodem, a praca nie znika” (stand-in rzuca Claude usage limit reached; GUI pokazuje rate_limited, kompozytor aktywny, tekst Zaczynam zachowany) i tests/run-lifecycle.test.ts „blad modelu konczy sie dokladnie jednym stanem koncowym i zapisuje przyczyne”. Wygaśnięcie: tests/auth.test.ts „plik z terminem w przeszlosci jest \"stale\", a nie zdrowa subskrypcja” oraz przypadki odmowy odnowienia i odwołanego logowania tylko na classifyAccessFailure. Symulacja, nie rzeczywiste wygaśnięcie ani wyczerpanie limitu.",
-      "gap": "Błąd wygasłego lub odwołanego logowania nie jest przeprowadzony przez runtime do GUI (brak scenariusza serwera skryptowego); czytelna podpowiedź (wykonaj /login, poczekaj) jest tylko w Ustawieniach i nie jest sprawdzana testem, czat pokazuje surowy komunikat SDK z kodem.",
+      "proof": "e2e/auth-limits.spec.ts (13 testow, port 8798, katalog .e2e-scripted-auth, stand-in na granicy ModelAgentLike — SYMULACJA): limit uzycia, odwolane logowanie, odmowa odnowienia i zerwane polaczenie przechodza przez runtime do czatu (data-phase=failed + kod bledu w run-error), do paska stanu (data-auth-state) i do Ustawien (auth-access-state, auth-remedy — porada rozna dla kazdego stanu). W kazdym przypadku tekst sprzed awarii zostaje na ekranie, kompozytor jest znow aktywny, a poswiadczenie lokalne dalej ma stan valid. Koniec uruchomienia uniewaznia zapytanie o status (packages/platform-ui/src/chat/runEvents.ts), wiec stan zmienia sie bez przeladowania. tests/run-lifecycle.test.ts dalej pilnuje dokladnie jednego stanu koncowego. Proba wykrycia: wycofanie uniewaznienia statusu => test oblewa na asercji paska stanu (linia 168).",
       "backlog": "BL-04",
       "scenarios": [
         "T17"
@@ -1438,11 +1435,10 @@
       }
     },
     "L8.7": {
-      "status": "czesciowe",
-      "evidence": "test",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "tests/durability.test.ts „zbudowany frontend nie zawiera wartosci tokena”, „zbudowany backend nie zawiera wartosci tokena”, „baza danych aplikacji nie zawiera wartosci tokena”, „diagnostyka uruchomieniowa nie wypisuje tokena” (pnpm migrate); tests/runtime.test.ts „rzeczywista wartosc tokena nie wystepuje w wyniku probeAuth()” i „…w odpowiedzi /api/status”; e2e/app.spec.ts „ustawienia pokazuja tryb subskrypcji i nie ujawniaja sekretow”. Testy czytają rzeczywisty ~/.claude/.credentials.json i przechodzą pusto (tylko ostrzeżenie), gdy pliku brak.",
-      "gap": "Nie przeszukano artefaktów i magazynu plików, run_events ani logów serwera po rzeczywistym uruchomieniu agenta; sandboxSettings nie blokuje odczytu katalogu ~/.claude, a Read jest auto-zatwierdzany, i nie sprawdzono, czy agent może odczytać poświadczenie i opublikować je jako artefakt.",
+      "proof": "Dwie strony problemu. (1) Co aplikacja wypisuje: tests/durability.test.ts skanuje zbudowany frontend, bundle serwera, baze, diagnostyke startowa, raporty i slady Playwright, katalogi robocze uruchomien i magazyn plikow — prawdziwa wartoscia tokena, czytana przez credentialFilePath (czyli takze z CLAUDE_CONFIG_DIR), a brak poswiadczenia trzeba zadeklarowac zamiast przejsc pusto. (2) Czego agent nie moze siegnac — brak wykryty w tym pakiecie: Read byl wstepnie zatwierdzony, wiec bramka zgody nigdy go nie widziala, a sandbox blokowal tylko katalog danych. Teraz katalog poswiadczen jest w denyRead/denyWrite sandboxa oraz odrzucany przez protectedPathRefusal w hooku PreToolUse i w bramce. tests/credential-guard.test.ts (13 testow, kanarek w tymczasowym CLAUDE_CONFIG_DIR) i e2e/auth-limits.spec.ts: proba odczytu konczy sie odmowa widoczna w czacie, a kanarek nie pojawia sie w odpowiedzi, historii ani zdarzeniach. Proba wykrycia: wylaczenie odmowy w hooku => testy oblewaja na asercji o kanarku w odpowiedzi i w historii.",
       "backlog": "BL-04",
       "scenarios": [
         "T17"
@@ -1453,11 +1449,10 @@
       }
     },
     "L8.8": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "Rzeczywiste wywołania w e2e/agent-ui.spec.ts i e2e/files-agent.spec.ts na wersjach z pnpm-lock.yaml (@anthropic-ai/claude-agent-sdk 0.3.270, @mastra/claude 0.3.1, @mastra/core 1.66.0) po pnpm install --frozen-lockfile; wersję CLI i sha lockfile zapisuje skrypt regresji. apps/server/src/main.ts loguje wersje przy starcie, ale Playwright nie utrwala wyjścia serwera.",
-      "gap": "Sposób logowania użyty przez SDK w tych przebiegach nie jest rejestrowany ani asercjonowany (apiKeySource, access.state), a wersje nie trafiają do wyniku testu; zgodność trójki SDK–adapter–logowanie wynika z założenia o środowisku, nie z zapisanego dowodu.",
+      "proof": "docs/evidence/z12-bl04/sesja-sdk.json zapisuje w jednym rekordzie: wersje Claude CLI (2.1.277), @anthropic-ai/claude-agent-sdk (0.3.270), @mastra/claude (0.3.1), @mastra/core (1.66.0), commit — oraz sposob logowania odczytany z SESJI (accountInfo), a nie zalozony ze srodowiska. tests/sdk-session-evidence.test.ts oblewa, gdy ktorakolwiek z tych wersji rozjedzie sie z zainstalowana, i podaje polecenie ponownego wziecia sondy; dzieki temu zapisany fakt nie przezywa kodu, ktorego dotyczy. Rzeczywiste tury na tych wersjach pozostaja w e2e/agent-ui.spec.ts i e2e/files-agent.spec.ts (poza domyslnym przebiegiem). Wersje wyswietla takze /api/status.",
       "backlog": "BL-04",
       "scenarios": [
         "T17"
@@ -1468,11 +1463,10 @@
       }
     },
     "L8.9": {
-      "status": "czesciowe",
-      "evidence": "test",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "tests/auth.test.ts „plik z terminem w przeszlosci jest \"stale\", a nie zdrowa subskrypcja” (present=true, access=unverified), „przed pierwszym wywolaniem stan to \"unverified\", nie \"verified\"”, „nieczytelny plik jest odrozniony od braku pliku”, „blad nie kasuje faktu wczesniejszego udanego wywolania”; kontrakt authStatusSchema (method, credential, access) i SettingsPage z osobnymi wierszami (kod, bez testu GUI).",
-      "gap": "Pasek stanu (AppShell StatusBar) pokazuje zieloną kropkę i napis subskrypcja przy obecnym pliku, gdy dostęp jest unverified lub failed, więc obecność pliku nadal wygląda jak zdrowe połączenie; stan dostępu jest globalny w procesie i nadpisywany przez każdy nieanulowany błąd uruchomienia (także sandbox i timeout), a method jest stałą.",
+      "proof": "Cztery odrebne informacje zamiast trzech: sposob logowania (polityka), poswiadczenie lokalne, ostatni potwierdzony dostep i — nowa — sesja SDK. authIsConfirmed (packages/platform-contracts) oddziela \"warto sprobowac\" od \"wywolanie sie udalo\": pasek stanu jest zielony WYLACZNIE po potwierdzonym wywolaniu, a przy unverified ma kropke neutralna, przy failed ostrzegawcza — wczesniej obecnosc pliku malowala go na zielono. isAccessRelevantFailure przestaje zapisywac jako blad dostepu to, co dostepu nie dotyczy (odmowa sandboxa, utracony transkrypt, wlasny limit czasu uruchomienia), wiec proces-globalny stan nie jest juz zamazywany przez cudzy blad. Dowody: tests/auth.test.ts (33 testy, m.in. \"obecnosc pliku sama w sobie nie jest potwierdzonym dostepem\") i e2e/auth-limits.spec.ts (miniony termin w pliku + dostep verified na dwoch osobnych wierszach). Proby wykrycia: authIsConfirmed=authIsUsable => 2 testy oblewaja; isAccessRelevantFailure bez sandboxa i timeoutu => 2 testy oblewaja.",
       "backlog": "BL-04",
       "scenarios": [
         "T17"
@@ -1482,8 +1476,8 @@
       "status": "czesciowe",
       "evidence": "symulacja",
       "origin": "szablon",
-      "proof": "tests/auth.test.ts „wygasniecie lokalnych metadanych samo w sobie nie blokuje uruchomienia” (authIsUsable=true dla stale) i „odmowa odnowienia → stan \"refresh_refused\" (symulacja na granicy adaptera)” (OAuth token refresh failed: invalid_grant); „odwolane logowanie czyni aplikacje niezdatna do pracy”. Kod: runtime.start nie sprawdza stanu poświadczenia, auth.ts tylko czyta plik i nie odświeża tokenów. Symulacja na klasyfikatorze, bez runtime i GUI.",
-      "gap": "Nie sprawdzono skutecznego odświeżenia (przeterminowane poświadczenie → udany przebieg → access verified i nowy termin) ani odrzuconego odświeżenia przez runtime do czatu i Ustawień; komunikat odmowy to założony tekst, niepotwierdzony dla SDK 0.3.270.",
+      "proof": "Miniony termin nie blokuje uruchomienia i nie jest werdyktem: e2e/auth-limits.spec.ts \"miniony termin w pliku nie blokuje uruchomienia...\" ustawia expiresAt w przeszlosci (kanarek w tymczasowym CLAUDE_CONFIG_DIR), przebieg konczy sie powodzeniem, a Ustawienia pokazuja jednoczesnie poswiadczenie \"stale\" i dostep \"verified\" — dwa fakty w dwoch wierszach. Odrzucone odnowienie przechodzi od granicy adaptera do UI (scenariusz auth-refresh-refused => kod unauthenticated w czacie, stan refresh_refused na pasku i w Ustawieniach, wlasna porada). tests/auth.test.ts dalej trzyma authIsUsable=true dla stale. Wszystko oznaczone jako SYMULACJA.",
+      "gap": "Skuteczne odswiezenie jest symulowane, nie zaobserwowane: stand-in konczy przebieg powodzeniem, ale zaden test nie widzi, jak SDK wymienia przeterminowany access token ani nie sprawdza nowego terminu w pliku po przebiegu. Tekst odmowy odnowienia (\"OAuth token refresh failed: invalid_grant\") pozostaje zalozony — nie zostal potwierdzony na rzeczywistym bledzie SDK 0.3.270. Do domkniecia potrzebna jedna tura na KOPII poswiadczenia z terminem w przeszlosci (osobny CLAUDE_CONFIG_DIR), ktora pokaze odswiezenie i nowy termin bez dotykania logowania uzytkownika.",
       "backlog": "BL-04",
       "scenarios": [
         "T17"
@@ -1493,8 +1487,8 @@
       "status": "czesciowe",
       "evidence": "symulacja",
       "origin": "szablon",
-      "proof": "tests/auth.test.ts: limit (usage limit, 429) → rate_limited, odwołanie i 401 → revoked, socket hang up → failed, „limit uzycia nie jest mylony z zepsutym logowaniem”; błąd narzędzia nie kończy przebiegu: e2e/tool-activity.spec.ts „blad narzedzia jest pokazany jako blad, nie jako wynik” (faza succeeded) i tests/run-lifecycle.test.ts „blad narzedzia jest zapisany jako blad, nie jako wynik”; zachowanie historii przy limicie: run-lifecycle „blad modelu konczy sie dokladnie jednym stanem koncowym i zapisuje przyczyne” i tool-activity „blad wykonania jest widoczny w aplikacji wraz z kodem, a praca nie znika”. Kod: brak ponawiania w runtime.ts.",
-      "gap": "Brak próby, w której mutacja przez narzędzie poprzedza limit, z asercją jednego skutku i braku powtórki; klasyfikacja opiera się na podciągach komunikatu (np. 429, credential, authenticat) niepotwierdzonych na rzeczywistych błędach SDK, więc inny błąd sieci może zostać uznany za limit lub odwołanie.",
+      "proof": "Brak proby z mutacja przed limitem zostal uzupelniony: e2e/auth-limits.spec.ts \"limit po mutacji\" wykonuje procurement_save_comparison przez prawdziwy handler (operationId mintowany na przebieg, wiec powtorka daloby DRUGI artefakt, a nie replay), po czym scenariusz zglasza limit. Asercje: dokladnie jeden artefakt, wywolanie narzedzia i tekst sprzed awarii zostaja w rozmowie i po przeladowaniu, po odczekaniu 6 s nadal jeden artefakt i dokladnie jedno uruchomienie o statusie failed. Rozroznienie czterech przypadkow (limit, odwolanie, odmowa odnowienia, blad sieci) ma cztery rozne stany dostepu w UI, a blad narzedzia nadal konczy przebieg powodzeniem (e2e/tool-activity.spec.ts). Wszystko SYMULACJA na granicy adaptera.",
+      "gap": "Klasyfikacja nadal opiera sie na podciagach komunikatu (usage limit, 429, invalid_grant, /login), a te nie zostaly potwierdzone na RZECZYWISTYCH komunikatach SDK przy wyczerpanym limicie — takiego przebiegu nie da sie wywolac na zadanie, a symulowany limit nie jest limitem wyczerpanym. Sonda sesji czyta rzeczywiste wykorzystanie okien planu (5 h, 7 dni), co jest ODCZYTEM prawdziwego limitu, nie jego wyczerpaniem, i samo w sobie kryterium nie zamyka. Pozostawione otwarte swiadomie.",
       "backlog": "BL-04",
       "scenarios": [
         "T17"
@@ -1504,30 +1498,28 @@
       "status": "czesciowe",
       "evidence": "symulacja",
       "origin": "szablon",
-      "proof": "Limit do GUI: e2e/tool-activity.spec.ts „blad wykonania jest widoczny w aplikacji wraz z kodem, a praca nie znika” (scenariusz run-failure na granicy ModelAgentLike, run-error zawiera rate_limited). Błędy uwierzytelnienia tylko w tests/auth.test.ts na classifyAccessFailure i recordVerification. Symulacja jest oznaczona jako symulacja w nagłówkach tests/auth.test.ts, tests/run-lifecycle.test.ts i w raporcie wykonawcy §6.",
-      "gap": "Odwołane logowanie, odmowa odświeżenia i wygaśnięcie nie są przeprowadzone od granicy adaptera do widocznego UI (czat, pasek stanu, Ustawienia); stan Ustawień po symulowanym limicie też nie jest asercjonowany.",
+      "proof": "Kontrolowane bledy przechodza od granicy adaptera SDK do widocznego UI: e2e/auth-limits.spec.ts prowadzi limit, odwolane logowanie, odmowe odnowienia i blad sieci przez runtime do czatu, paska stanu i Ustawien, z asercjami na atrybutach stanu (data-auth-state, data-state), a nie na napisach; stan Ustawien po symulowanym limicie jest asertowany wprost (auth-access-state=rate_limited, auth-remedy z wlasna trescia). Cztery przypadki daja cztery ROZNE stany — asercja o rozroznialnosci jest osobnym testem. Kazde zrodlo dowodu jest oznaczone jako symulacja: naglowki e2e/support/auth-scenarios.ts, e2e/auth-limits.spec.ts, tests/credential-guard.test.ts, a docs/evidence/z12-bl04/sesja-sdk.json ma pole czegoToNieDowodzi z wprost napisanym zdaniem, ze odczyt limitow planu nie jest wyczerpaniem limitu.",
+      "gap": "Zaden dowod w repozytorium nie pokazuje RZECZYWISTEGO wyczerpania limitu doprowadzonego do UI — wszystkie cztery przypadki sa symulacjami na granicy adaptera. Wedlug wykonawcy tresc kryterium (\"kontrolowane bledy ... sprawdzone na granicy adaptera az do widocznego UI; symulacja nie jest opisana jako rzeczywiste wyczerpanie limitu\") jest tym pakietem spelniona i kryterium nadaje sie do zamkniecia; pozostawione otwarte na wyrazne polecenie zlecenia, ktore wiaze L8.11 i L8.12 z rzeczywistym wyczerpaniem limitu. Decyzja nalezy do koordynatora.",
       "backlog": "BL-04",
       "scenarios": [
         "T17"
       ]
     },
     "L8.13": {
-      "status": "czesciowe",
-      "evidence": "test",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "tests/durability.test.ts skanuje apps/web/dist, apps/server/dist, plik app.db po zapisie syntetycznej rozmowy i wyjście pnpm migrate; tests/runtime.test.ts probeAuth() i /api/status; tests/contracts.test.ts „nie ujawnia sekretow w statusie”; e2e/app.spec.ts tekst strony Ustawień.",
-      "gap": "Nie sprawdzono logów serwera podczas rzeczywistego przebiegu, bazy po przebiegu z modelem (run_events, messages), magazynu plików i artefaktów, katalogów workspace, innych odpowiedzi HTTP (np. /api/runs/:id/events) ani raportów i śladów Playwright; durability.test.ts szuka tokenów tylko w ~/.claude (ignoruje CLAUDE_CONFIG_DIR) i bez pliku przechodzi pusto.",
+      "proof": "Powierzchnie, nie dwa endpointy. e2e/auth-limits.spec.ts \"kanarek poswiadczenia nie wystepuje w zadnej z powierzchni uruchomienia\" prowadzi prawdziwa rozmowe (wywolanie narzedzia, artefakt, awaria) na instancji, ktorej CLAUDE_CONFIG_DIR wskazuje katalog tymczasowy z kanarkiem, a potem przeszukuje: /api/status, /api/threads/get i /api/threads/get/:id, /api/conversations/:id/runs, /api/runs/:id/events, /api/artifacts i /api/artifacts/:id, /api/files, log serwera (przechwycony do pliku i zamkniety PO wyjsciu procesu), plik bazy oraz zbudowany frontend — plus wzorzec sk-ant-. Test najpierw sprawdza, ze kazda powierzchnia jest niepusta, wiec skan nie moze przejsc pusto. tests/durability.test.ts dokłada raporty i slady Playwright, katalogi robocze uruchomien i magazyn plikow, czyta poswiadczenie przez credentialFilePath (CLAUDE_CONFIG_DIR wlacznie), a brak poswiadczenia wymaga jawnej deklaracji APP_ALLOW_NO_CREDENTIAL=1 zamiast cichego przejscia. Niesprawdzone powierzchnie sa WYMIENIONE w docs/evidence/z12-bl04/skan-sekretow.json. Proba wykrycia: wypisanie tresci pliku poswiadczen do logu serwera => test oblewa na liscie znalezisk.",
       "backlog": "BL-04",
       "scenarios": [
         "T17"
       ]
     },
     "L8.14": {
-      "status": "czesciowe",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "Kod zgodny z komentarzem w packages/platform-server/src/agent/auth.ts: cały .credentials.json (~/.claude lub CLAUDE_CONFIG_DIR) jest parsowany, kopiowane są tylko subscriptionType i expiresAt, plik tylko czytany. tests/auth.test.ts używa syntetycznych poświadczeń w katalogu tymczasowym przekazywanym parametrem env, więc testy negatywne nie dotykają logowania użytkownika; tests/durability.test.ts formułuje asercje jako wartości logiczne z nazwą pliku.",
-      "gap": "README.md (Konfiguracja) podaje, że aplikacja czyta z pliku poświadczeń wyłącznie subscriptionType i expiresAt, pomijając przejściowy odczyt tokenów przy parsowaniu całego pliku; tests/runtime.test.ts używa expect(serialized).not.toContain(token), więc przy oblaniu komunikat Vitest wypisałby wartość tokena do logu regresji.",
+      "proof": "Trzy rzeczy, kazda sprawdzalna. (1) Opis zgodny z kodem: README.md (sekcja Konfiguracja) i komentarz packages/platform-server/src/agent/auth.ts mowia teraz wprost, ze CALY plik poswiadczen jest parsowany, wiec accessToken i refreshToken PRZECHODZA PRZEZ PAMIEC PROCESU, a kopiowane sa wylacznie subscriptionType i expiresAt; poprzednie zdanie (\"wczytuje z pliku tylko te dwie informacje\") opisywalo inny program. (2) Tokeny nie trafiaja do logu regresji: asercje zmieniono z expect(x).not.toContain(token) na expect(x.includes(token), '<opis>').toBe(false) w tests/runtime.test.ts i tests/durability.test.ts oraz w skanie e2e — przy oblaniu Vitest wypisuje true/false i komunikat, nigdy wartosci tokena. (3) Testy negatywne nie niszcza logowania uzytkownika: pracuja na syntetycznym poswiadczeniu w katalogu tymczasowym wskazanym przez CLAUDE_CONFIG_DIR, a tests/credential-guard.test.ts mierzy to — bierze rozmiar i czas modyfikacji prawdziwego pliku przed suita i porownuje w afterAll. Proba wykrycia: test dotykajacy prawdziwego pliku => hook oblewa, kod wyjscia 1.",
       "backlog": "BL-04",
       "scenarios": [
         "T17"
@@ -2546,8 +2538,8 @@
     },
     "T17": {
       "status": "czesciowe",
-      "proof": "trzy tury na subskrypcji w regresji (e2e/agent-ui.spec.ts, e2e/files-agent.spec.ts); tests/auth.test.ts: klasyfikacja błędów; e2e/tool-activity.spec.ts: symulowany limit widoczny w UI.",
-      "gap": "Aplikacja nie odczytuje źródła klucza z SDK, więc przebieg przez OAuth subskrypcji nie jest potwierdzony wprost; wygaśnięcie, odmowa odświeżenia i odwołanie są sprawdzone tylko na klasyfikatorze (L8.2, L8.10–L8.12)."
+      "proof": "Dostep do modelu: docs/evidence/z12-bl04/sesja-sdk.json — rzeczywiste wywolanie SDK (zadanie sterujace accountInfo(), bez tury modelu) potwierdza logowanie subskrypcyjne OAuth i pokazuje, ze ten sam klucz API przy wylaczonej polityce bylby widoczny; wersje CLI, SDK i adaptera sa w zapisie i pilnowane przez tests/sdk-session-evidence.test.ts. Diagnostyka sposobu logowania i stanu dostepu: Ustawienia (sekcje Uwierzytelnienie Claude i Sesja SDK) oraz pasek stanu, sprawdzane w e2e/auth-limits.spec.ts. Stand-iny odswiezenia, odmowy, odwolania i limitu ida od granicy adaptera do UI w e2e/auth-limits.spec.ts (13 testow), na instancji z CLAUDE_CONFIG_DIR w katalogu tymczasowym — poswiadczenia uzytkownika nie sa dotykane, co mierzy tests/credential-guard.test.ts. Trzy tury na subskrypcji pozostaja w e2e/agent-ui.spec.ts i e2e/files-agent.spec.ts, poza domyslnym przebiegiem.",
+      "gap": "Brak przebiegu, w ktorym SDK naprawde odswieza przeterminowany token, oraz przebiegu z rzeczywiscie wyczerpanym limitem — podciagi klasyfikatora nie zostaly potwierdzone na prawdziwych komunikatach SDK 0.3.270 (L8.10, L8.11, L8.12)."
     },
     "T18": {
       "status": "potwierdzone",
