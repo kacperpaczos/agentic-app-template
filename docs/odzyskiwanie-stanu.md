@@ -90,13 +90,16 @@ node scripts/migration-rehearsal.mjs --backup backups/data-RRRR-MM-DD \
 Lista tabel, które migracja *może* zmienić (`EXPECTED_TO_CHANGE` w skrypcie), rozróżnia dwa rodzaje
 zmiany, i to rozróżnienie jest istotne:
 
-- **dodane kolumny** (`platform-0002` → `agent_runs.enqueued_at`, `platform-0003-file-versions` →
-  `files.derived_from_file_id` i `files.version`) — skrypt wymaga, żeby kolumny sprzed migracji
-  trzymały **dokładnie te same wartości**, liczba wierszy się nie zmieniła, a nowe kolumny były
-  wyłącznie tymi wymienionymi. To mocniejsze sprawdzenie niż porównanie całych wierszy, a nie
-  słabsze: samo `SELECT *` nie odróżnia dopisanej kolumny od przepisanego wiersza;
+- **dodane kolumny** — lista pochodzi z **SQL samych migracji**: kolumna może się pojawić dlatego,
+  że któraś migracja mówi `ALTER TABLE … ADD COLUMN`, i z żadnego innego powodu. Skrypt wymaga przy
+  tym, żeby kolumny sprzed migracji trzymały **dokładnie te same wartości**, liczba wierszy się nie
+  zmieniła, a nowe kolumny były wyłącznie tymi z DDL. To mocniejsze sprawdzenie niż porównanie
+  całych wierszy, a nie słabsze: samo `SELECT *` nie odróżnia dopisanej kolumny od przepisanego
+  wiersza. Nowa migracja poszerzająca tabelę nie wymaga żadnej edycji skryptu;
 - **przepisane wiersze** (`schema_migrations`, `messages`) — tu odcisk nic nie powie, więc gwarancję
-  daje sprawdzenie po tożsamości: każda rozmowa, wiadomość użytkownika, karta, plik i artefakt.
+  daje sprawdzenie po tożsamości: każda rozmowa, wiadomość użytkownika, karta, plik i artefakt. Ta
+  lista jest i zostaje **ręczna**: nic w schemacie nie mówi, że start aplikacji przepisuje turę z
+  zapisanych zdarzeń. To zdanie o zachowaniu i musi je napisać człowiek.
 
 Do 2026-09-18 tabeli `files` w tej liście nie było, a próba na kopii z niepustą tabelą `files`
 kończyła się fałszywym „tabela files zmieniona nieoczekiwanie” — czyli dokładnie na danych, które

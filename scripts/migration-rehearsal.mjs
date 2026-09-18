@@ -147,25 +147,75 @@ function bootOnce(dataDir) {
  *    anything, so the guarantee comes from the identity checks below: every
  *    conversation, user message, card, file and artifact is followed by id.
  */
-const EXPECTED_TO_CHANGE = {
-  schema_migrations: { reason: 'migracja dopisuje swoj wpis', rowsMayChange: true },
-  agent_runs: {
-    reason: 'platform-0002 dodaje kolumne enqueued_at i wypelnia ja z started_at',
-    addedColumns: ['enqueued_at'],
-  },
-  messages: {
-    reason: 'odtworzenie aktywnosci narzedzi zastepuje pojedyncza wiadomosc asystenta pelna tura',
-    rowsMayChange: true,
-  },
-  files: {
-    reason:
-      'platform-0003-file-versions dodaje kolumny derived_from_file_id i version; ' +
-      'istniejace wiersze zachowuja wszystkie dotychczasowe wartosci',
-    addedColumns: ['derived_from_file_id', 'version'],
-  },
+/**
+ * Tables whose **rows** the boot rewrites, and why.
+ *
+ * Hand-written, and it has to be: nothing in the schema says that the migration
+ * log grows by a row or that the tool-activity backfill replaces one assistant
+ * message with a whole turn. These are statements about behaviour, and a person
+ * has to make them.
+ *
+ * Widened tables are **not** listed here — see `addedColumnsFromMigrations`.
+ */
+const ROWS_MAY_CHANGE = {
+  schema_migrations: 'migracja dopisuje swoj wpis',
+  messages: 'odtworzenie aktywnosci narzedzi zastepuje pojedyncza wiadomosc asystenta pelna tura',
 };
 
-function compare(before, after) {
+/**
+ * Columns the migrations themselves say they add — read from their SQL.
+ *
+ * This list used to be written by hand, and the cost showed up the first time
+ * somebody else's package added a migration: `platform-0004-artifact-run-link`
+ * widened `artifacts`, and every rehearsal reported "tabela artifacts zmieniona
+ * nieoczekiwanie" until a human edited this file. A check that needs an edit
+ * every time the thing it checks changes is a check that will one day be
+ * silenced instead of updated.
+ *
+ * So the sanction comes from the DDL: a column may appear **because a migration
+ * says `ADD COLUMN`**, and for no other reason. Everything else about the table
+ * is still compared — row counts and the values in the columns that existed
+ * before — so a migration that adds a column *and* rewrites data still fails,
+ * which is the property this file exists to keep.
+ */
+function addedColumnsFromMigrations() {
+  const script = `
+    import { PLATFORM_MIGRATIONS } from ${JSON.stringify(resolve(REPO, 'packages/platform-server/src/db/migrations.ts'))};
+    import { composeApp } from ${JSON.stringify(resolve(REPO, 'apps/server/src/compose.ts'))};
+    const probe = ${JSON.stringify(resolve(tmpdir(), `agentic-ddl-${process.pid}`))};
+    const p = composeApp({ dataDir: probe });
+    const all = [...PLATFORM_MIGRATIONS, ...p.registry.migrations()];
+    p.close();
+    console.log('DDL ' + JSON.stringify(all.map((m) => ({ id: m.id, sql: m.sql }))));
+  `;
+  const probe = approveOwnTemp(mkdtempSync(resolve(tmpdir(), 'agentic-ddl-')));
+  let out;
+  try {
+    out = execFileSync(
+      process.execPath,
+      ['--experimental-transform-types', '--no-warnings=ExperimentalWarning', '--input-type=module', '-e', script],
+      { cwd: REPO, env: { ...process.env, APP_DATA_DIR: probe }, stdio: ['ignore', 'pipe', 'pipe'] },
+    ).toString();
+  } finally {
+    usun(probe, { recursive: true, force: true });
+  }
+  const line = out.split('\n').find((l) => l.startsWith('DDL '));
+  if (!line) throw new Error(`nie udalo sie odczytac SQL migracji:\n${out}`);
+
+  const dodane = {};
+  for (const { id, sql } of JSON.parse(line.slice('DDL '.length))) {
+    const re = /ALTER\s+TABLE\s+["'`]?(\w+)["'`]?\s+ADD\s+COLUMN\s+["'`]?(\w+)["'`]?/gi;
+    for (const m of sql.matchAll(re)) {
+      const [, tabela, kolumna] = m;
+      dodane[tabela] ??= { columns: [], migrations: [] };
+      dodane[tabela].columns.push(kolumna);
+      if (!dodane[tabela].migrations.includes(id)) dodane[tabela].migrations.push(id);
+    }
+  }
+  return dodane;
+}
+
+function compare(before, after, poszerzone) {
   const problems = [];
   const notes = [];
 
@@ -176,39 +226,45 @@ function compare(before, after) {
   }
 
   for (const t of before.tables.filter((t) => after.tables.includes(t))) {
-    const expected = EXPECTED_TO_CHANGE[t];
+    const dodane = poszerzone[t];
 
-    /* --- a table that was only widened is checked column by column --- */
-    if (expected?.addedColumns) {
+    /* --- a table the migrations widen is checked column by column --- */
+    if (dodane) {
       const lost = before.columns[t].filter((c) => !after.columns[t].includes(c));
       const added = after.columns[t].filter((c) => !before.columns[t].includes(c));
-      const unannounced = added.filter((c) => !expected.addedColumns.includes(c));
+      const unannounced = added.filter((c) => !dodane.columns.includes(c));
       if (lost.length) problems.push(`tabela ${t}: zniknely kolumny ${lost.join(', ')}`);
       if (unannounced.length) {
         problems.push(
-          `tabela ${t}: nieopisane nowe kolumny ${unannounced.join(', ')} ` +
-            '(uzupelnij EXPECTED_TO_CHANGE razem z testem)',
+          `tabela ${t}: kolumny ${unannounced.join(', ')} pojawily sie bez ALTER TABLE ... ADD COLUMN ` +
+            'w zadnej migracji',
         );
       }
       if (before.counts[t] !== after.counts[t]) {
         problems.push(
           `tabela ${t}: zmieniona liczba wierszy (${before.counts[t]} → ${after.counts[t]}), ` +
-            'a migracja mialas tylko dodac kolumny',
+            'a migracje tylko dodaja do niej kolumny',
         );
       }
-      // The values that were there before, compared over exactly those columns.
+      /*
+       * The values that were there before, over exactly the columns that were
+       * there before. This is what keeps the derived allowance honest: a
+       * migration may widen the table, and may not touch what is already in it.
+       */
       if (after.restrictedDigests[t] !== before.digests[t]) {
         problems.push(`tabela ${t}: zmieniona tresc w kolumnach sprzed migracji`);
       } else if (added.length) {
-        notes.push(`${t}: dodane kolumny ${added.join(', ')} (${expected.reason}); dane bez zmian`);
+        notes.push(
+          `${t}: dodane kolumny ${added.join(', ')} przez ${dodane.migrations.join(', ')}; dane bez zmian`,
+        );
       }
       continue;
     }
 
     const changed = before.digests[t] !== after.digests[t];
     if (!changed) continue;
-    if (expected) {
-      notes.push(`${t}: ${before.counts[t]} → ${after.counts[t]} wierszy (${expected.reason})`);
+    if (ROWS_MAY_CHANGE[t]) {
+      notes.push(`${t}: ${before.counts[t]} → ${after.counts[t]} wierszy (${ROWS_MAY_CHANGE[t]})`);
     } else {
       problems.push(
         `tabela ${t} zmieniona nieoczekiwanie (${before.counts[t]} → ${after.counts[t]} wierszy)`,
@@ -348,7 +404,8 @@ function main() {
     console.log(`[proba] boot:   ${line.trim()}`);
   }
 
-  const { problems, notes } = compare(before, after);
+  const poszerzone = addedColumnsFromMigrations();
+  const { problems, notes } = compare(before, after, poszerzone);
   for (const n of notes) console.log(`[proba] zmiana oczekiwana — ${n}`);
 
   const bootLog2 = bootOnce(work);
