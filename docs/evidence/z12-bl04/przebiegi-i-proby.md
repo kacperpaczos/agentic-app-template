@@ -125,6 +125,51 @@ Trzy ustalenia, wszystkie zaobserwowane:
 Odcisk prawdziwego pliku poświadczeń (rozmiar, czas modyfikacji, skróty obu tokenów) wzięty przed i po
 każdym przebiegu: **bez zmian**. Skrypt kończy się kodem 3, gdyby się zmienił.
 
+### Ślad na pliku poświadczeń użytkownika — pełny zapis
+
+Pytanie „czy wasza praca ruszyła moje logowanie" musi dać się sprawdzić po fakcie, więc tu jest całe
+okno, razem z tym, czego odciski **nie** obejmują.
+
+| Chwila | Zdarzenie | mtime pliku | `expiresAt` |
+|---|---|---|---|
+| ~23:38 | pierwszy odczyt (faza 1) | 2026-09-18 16:43 | 2026-09-19 00:43:24 |
+| ~23:57 | **próba wykrycia G — nasz zapis identycznej treści** | 2026-09-18 23:57 | bez zmian |
+| **00:38:26** | **zapis spoza tej pracy** | 2026-09-19 00:38:26 | → 2026-09-19 08:38:26 |
+| 00:58:50 | przebieg `refresh-refused` #1 | 00:38:26 → 00:38:26 | bez zmian |
+| 00:59:47 | przebieg `revoked` | 00:38:26 → 00:38:26 | bez zmian |
+| 01:01:36 | przebieg `refresh-refused` #2 | 00:38:26 → 00:38:26 | bez zmian |
+
+**Odciski z przebiegów NIE obejmują momentu 00:38:26** — najwcześniejszy „przed" jest o 00:58:50,
+dwadzieścia minut później. Powiedziane wprost, bo inaczej tabela wyglądałaby na dowód czegoś, czego
+nie dowodzi.
+
+Co ten zapis rozstrzyga mimo to:
+
+1. **`expiresAt − mtime = dokładnie 8.0000 h.** Termin ważności tokena jest równo osiem godzin po
+   czasie modyfikacji pliku — podpis **odświeżenia**, które przyznało ośmiogodzinny token o 00:38:26.
+2. **Termin przesunął się o 8 h** między odczytem z ~23:38 (00:43:24) a odczytem z ~00:52 (08:38:26).
+   Żaden zapis tej pracy nie potrafi zmienić `expiresAt`: jedyny, jaki kiedykolwiek dotknął tego
+   pliku (próba G), przepisywał **identyczną treść**.
+3. **Po 00:38 plik jest zamrożony.** mtime i skrót refresh tokena (`c4ffe5d5ebe855d8`) identyczne w
+   sześciu próbkach z trzech przebiegów przez prawdziwe SDK i takie same do teraz.
+
+### Tania obserwacja, której nie wykonano — i która rozstrzygnęłaby L8.10
+
+Nie mamy skrótu refresh tokena **sprzed** 00:38, więc nie wiadomo, czy tamto odświeżenie **wymieniło**
+refresh token. A to jest dokładnie pytanie, na którym opiera się odmowa próby ze skutecznym
+odświeżeniem (niżej): tam wnioskujemy o rotacji z kształtu kodu CLI, nie z obserwacji.
+
+Obserwacja kosztuje zero tur i zero ryzyka, bo jest **biernym odczytem**: zapisać skrót teraz
+(`c4ffe5d5ebe855d8`, stan na 01:0x) i odczytać go ponownie po 08:38:26, gdy sesja użytkownika
+odświeży token sama.
+
+- skrót **się zmieni** → rotacja potwierdzona obserwacyjnie, odmowa próby 1 ma dowód zamiast
+  wnioskowania, a L8.10 zostaje świadomie poza zakresem;
+- skrót **się nie zmieni** → rotacji nie ma, próba ze skutecznym odświeżeniem na kopii jest
+  bezpieczna i L8.10 da się domknąć **bez** konta testowego.
+
+Wykracza poza okno tego zadania (potrzebuje ~7 h zwłoki), więc zostaje opisana, nie wykonana.
+
 ### Dlaczego nie ma próby ze *skutecznym* odświeżeniem
 
 Bo byłaby destrukcyjna, i to nie hipotetycznie. W bundlu CLI 2.1.277 zapis odświeżonego poświadczenia
