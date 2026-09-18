@@ -222,7 +222,9 @@ konfiguracji. Skąd bierze pojęcia: z manifestu każdego modułu, w dwóch list
   // przedrostki przy granicy słowa — identyfikatory, prefiksy tabel
   "domainVocabulary": ["supplier", "dostawc", "unitPrice", "pc_cases"],
   // całe słowa i frazy — to, co użytkownik widzi na ekranie
-  "domainLabels": ["sprawa", "sprawy", "sprawe", "cena jednostkowa"]
+  "domainLabels": ["sprawa", "sprawy", "sprawe", "cena jednostkowa"],
+  // zakresy canvasu, na które odpowiada `defaultComposition` tego modułu
+  "scopeKinds": ["case"]
 }
 ```
 
@@ -230,6 +232,11 @@ Dwie listy, bo jedna nie umiałaby obu rzeczy naraz: `dostawc` musi łapać `dos
 a `spraw` jako przedrostek skazałby w powłoce każde „sprawdza”, „sprawne” i „Sprawdz”. Etykieta
 dopasowuje się jako całe słowo lub fraza. Obie listy muszą być niepuste u co najmniej jednego modułu —
 inaczej kontrola przechodziłaby, nie mając czego sprawdzać.
+
+`scopeKinds` jest tam z innego powodu niż dwie listy słownika: `pnpm check:module-swap` bierze stamtąd
+zakres modułu, który składa (musi **wytworzyć** jego kompozycję domyślną), i zakresy modułów, których
+nie składa (nie mają wytworzyć niczego). Deklaracja rozjechana z `defaultComposition` oblewa w
+`tests/module-contract.test.ts`, a nie dopiero w próbie wymiany.
 
 Etykiety widoczne w interfejsie **należą do modułu**: nagłówek sekcji menu podaje się przez
 `UiModule.menuSections`, a nie wpisuje w powłokę. Teksty stanów pustych platformy mówią o „rekordzie”,

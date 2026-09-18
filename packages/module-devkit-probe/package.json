@@ -14,6 +14,9 @@
     "domainLabels": [
       "notatki testowe",
       "modul testowy"
+    ],
+    "scopeKinds": [
+      "probe"
     ]
   },
   "exports": {

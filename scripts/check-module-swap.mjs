@@ -152,6 +152,16 @@ try {
   const manifestOf = (d) => JSON.parse(readFileSync(join(work, 'packages', d, 'package.json'), 'utf8'));
   const absentPrefixes = absentModules.flatMap((d) => manifestOf(d).agenticApp?.domainVocabulary ?? []);
   const absentLabels = absentModules.flatMap((d) => manifestOf(d).agenticApp?.domainLabels ?? []);
+  /*
+   * Zakresy canvasu, na które odpowiada moduł: te, które kopia składa, i te,
+   * których nie. Deklarowane w manifeście (`agenticApp.scopeKinds`), bo wpisana
+   * na sztywno wartość zmyślona sprawdza mniej niż prawdziwy identyfikator
+   * cudzego modułu — zmyślony ciąg mógłby zostać odrzucony z zupełnie innego
+   * powodu. Deklaracja nie może zgnić po cichu: zakres modułu składanego musi
+   * w tej samej próbie WYTWORZYĆ jego kompozycję domyślną (krok niżej).
+   */
+  const composedScopeKinds = manifestOf(SWAPPED_IN).agenticApp?.scopeKinds ?? [];
+  const absentScopeKinds = absentModules.flatMap((d) => manifestOf(d).agenticApp?.scopeKinds ?? []);
   const absentTables = [];
   for (const d of absentModules) {
     const walk = (dir) => {
@@ -175,8 +185,13 @@ try {
   ];
   record(
     'moduł niescalany dostarcza słownik do kontroli negatywnych',
-    absentModules.length > 0 && absentPrefixes.length > 0 && absentLabels.length > 0 && absentTables.length > 0,
-    `${absentModules.join(', ')}: ${absentPrefixes.length} przedrostkow, ${absentLabels.length} etykiet, ${absentTables.length} tabel`,
+    absentModules.length > 0 &&
+      absentPrefixes.length > 0 &&
+      absentLabels.length > 0 &&
+      absentTables.length > 0 &&
+      absentScopeKinds.length > 0 &&
+      composedScopeKinds.length > 0,
+    `${absentModules.join(', ')}: ${absentPrefixes.length} przedrostkow, ${absentLabels.length} etykiet, ${absentTables.length} tabel, zakresy [${absentScopeKinds.join(', ')}]; modul skladany: zakresy [${composedScopeKinds.join(', ')}]`,
   );
 
   /* 2. zmiana warstwy składania ------------------------------------------- */
@@ -332,13 +347,26 @@ try {
   const created = await api('/api/m/probe/notes', { method: 'POST', body: JSON.stringify({ text: NOTE_TEXT }) });
   record('zapis przez trasę modułu', created.status === 201 && typeof created.body?.id === 'string', `HTTP ${created.status}`);
 
-  const space = await api('/api/canvas/spaces/for-scope', { method: 'POST', body: JSON.stringify({ kind: 'probe', id: 'swap-1', title: 'Próba wymiany' }) });
+  const space = await api('/api/canvas/spaces/for-scope', { method: 'POST', body: JSON.stringify({ kind: composedScopeKinds[0], id: 'swap-1', title: 'Próba wymiany' }) });
   const card = space.body?.cards?.[0]?.spec;
   const spaceId = space.body?.space?.id;
-  record('kompozycja domyślna modułu walidowana katalogiem', space.status === 200 && card?.component === 'probe.noteList' && card?.props?.limit === 20 && typeof spaceId === 'string', `HTTP ${space.status}, karta=${card?.component}`);
+  record(
+    'zadeklarowany zakres modułu składanego daje jego kompozycję domyślną',
+    space.status === 200 && card?.component === `${COMPOSED_ID}.noteList` && card?.props?.limit === 20 && typeof spaceId === 'string',
+    `zakres=${composedScopeKinds[0]}, HTTP ${space.status}, karta=${card?.component}`,
+  );
 
-  const unknown = await api('/api/canvas/spaces/for-scope', { method: 'POST', body: JSON.stringify({ kind: 'zakres-nieobecnego-modulu', id: 'x', title: 'x' }) });
-  record('zakres nieobecnego modułu nie daje kart', unknown.status === 200 && (unknown.body?.cards ?? []).length === 0, `HTTP ${unknown.status}, karty=${(unknown.body?.cards ?? []).length}`);
+  /* Prawdziwe zakresy modułów, których kopia nie składa — to one mają nic nie dać. */
+  const scopeAnswers = [];
+  for (const kind of absentScopeKinds) {
+    const res = await api('/api/canvas/spaces/for-scope', { method: 'POST', body: JSON.stringify({ kind, id: `x-${kind}`, title: 'x' }) });
+    scopeAnswers.push({ kind, status: res.status, cards: (res.body?.cards ?? []).length });
+  }
+  record(
+    'zadeklarowane zakresy nieobecnych modułów nie dają kart',
+    scopeAnswers.length > 0 && scopeAnswers.every((a) => a.status === 200 && a.cards === 0),
+    scopeAnswers.map((a) => `${a.kind}: HTTP ${a.status}, karty=${a.cards}`).join('; '),
+  );
 
   const req = createRequire(join(work, 'packages/platform-server/package.json'));
   const Database = req('better-sqlite3');
@@ -361,7 +389,6 @@ try {
     page.on('pageerror', (e) => errors.push(String(e)));
     await page.goto(`${base}/`);
     await page.getByRole('navigation').first().waitFor({ timeout: 20_000 });
-    const nav = (await page.getByRole('navigation').first().textContent()) ?? '';
     /*
      * Nagłówki sekcji czytane jako osobne elementy, nie z tekstu całej
      * nawigacji: „Notatki” jest podciągiem pozycji „Notatki testowe”, więc

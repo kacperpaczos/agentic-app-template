@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -203,10 +203,23 @@ describe('modul rejestruje sie wylacznie przez zadeklarowane kontrakty', () => {
   it('kompozycja domyslna modulu jest walidowana katalogiem platformy', async () => {
     const p = boot('probe');
     const cookie = await login(p);
+    /*
+     * Zakres brany z manifestu, nie wpisany: `agenticApp.scopeKinds` jest tym,
+     * z czego `pnpm check:module-swap` bierze i zakres modułu składanego, i
+     * zakresy modułów nieobecnych, których nic nie ma wytworzyć. Deklaracja,
+     * która rozjechałaby się z `defaultComposition`, oblewa tutaj — w regresji,
+     * a nie dopiero w próbie wymiany.
+     */
+    const scopeKinds = (
+      JSON.parse(readFileSync(join(repoRoot, 'packages/module-devkit-probe/package.json'), 'utf8')) as {
+        agenticApp: { scopeKinds: string[] };
+      }
+    ).agenticApp.scopeKinds;
+    expect(scopeKinds).toHaveLength(1);
     const res = await p.app.request('/api/canvas/spaces/for-scope', {
       method: 'POST',
       headers: { cookie, 'content-type': 'application/json' },
-      body: JSON.stringify({ kind: 'probe', id: 'k1', title: 'Kontrakt' }),
+      body: JSON.stringify({ kind: scopeKinds[0], id: 'k1', title: 'Kontrakt' }),
     });
     const state = (await res.json()) as { cards: Array<{ spec: { component: string; props: { limit: number } } }> };
     expect(state.cards).toHaveLength(1);
