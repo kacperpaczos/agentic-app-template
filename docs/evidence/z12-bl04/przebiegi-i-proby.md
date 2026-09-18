@@ -6,10 +6,12 @@ Plik jest pisany ręcznie i **nie** powstaje z regresji. Regresja zapisuje na ż
 (`APP_WRITE_EVIDENCE=1`) tylko `skan-sekretow.json`; `sesja-sdk.json` zapisuje świadomie uruchamiany
 skrypt `pnpm probe:sdk-session`.
 
-## Tury modelu: 0
+## Tury modelu: 0 — także po fazie 2
 
-Żaden spec modelowy nie był uruchamiany i **żadna tura subskrypcji nie została wydana**. Przyznany
-grant ≤ 8 tur pozostaje nienaruszony.
+Żaden spec modelowy nie był uruchamiany i **żadna tura subskrypcji nie została wydana**, mimo że
+faza 2 wykonała trzy **rzeczywiste** przebiegi przez Claude Agent SDK. Powód jest prosty i wart
+zapamiętania: przebieg, który nie przechodzi uwierzytelnienia, **nie dociera do modelu**, więc nie ma
+czego naliczyć. Przyznany grant (≤ 8 tur, autoryzowane 3) pozostaje nienaruszony w całości.
 
 Trzy rodzaje dowodu występują w tym pakiecie i nie wolno ich mylić:
 
@@ -54,6 +56,9 @@ sprawdza.
 | `pnpm exec playwright test` (cały domyślny przebieg, po poprawce) | 0 | 198 testów |
 | `pnpm probe:sdk-session` | 0 | trzy przebiegi sondy, wniosek rozstrzygający |
 | `APP_WRITE_EVIDENCE=1 pnpm exec playwright test e2e/auth-limits.spec.ts` | 0 | zapisany `skan-sekretow.json` |
+| `pnpm probe:auth-refusal --rehearsal` (próba generalna, bez SDK) | 0 | wyłapała brak `PORT` z zakresu testowego |
+| `pnpm probe:auth-refusal` (**rzeczywisty SDK**, ×2) | 0 | `refresh-refused-*.json`; 0 tur |
+| `pnpm probe:auth-refusal --revoked` (**rzeczywisty SDK**) | 0 | `revoked-*.json`; 0 tur |
 
 Nie uruchamiano: `pnpm test:e2e:model`, `e2e/bl01-bl02-model.spec.ts`, `e2e/agent-ui.spec.ts`,
 `e2e/files-agent.spec.ts` — wydają tury subskrypcji.
@@ -61,7 +66,7 @@ Nie uruchamiano: `pnpm test:e2e:model`, `e2e/bl01-bl02-model.spec.ts`, `e2e/agen
 ## Próby zdolności wykrycia (G16)
 
 Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** linii, przebieg,
-`git checkout -- <plik>`, kontrola czystości. Wszystkie siedem oblało na spodziewanej asercji;
+`git checkout -- <plik>`, kontrola czystości. Wszystkie osiem oblało na spodziewanej asercji;
 żadna nie wyszła nieoczekiwanie zielona.
 
 | # | Wycofana linia | Test | Jak oblał |
@@ -90,6 +95,46 @@ przywróceniu). To jest dokładnie ta klasa zdarzeń, przed którą chroni kontr
 którego kontrola została dopisana: własność „testy negatywne nie niszczą logowania użytkownika” była
 prawdziwa **z konstrukcji**, a takie własności przestają być prawdziwe, gdy ktoś dopisze test, który
 o konstrukcji zapomni. Teraz jest mierzona.
+
+## Faza 2 — rzeczywiste próby graniczne uwierzytelnienia
+
+Trzy przebiegi przez prawdziwy Claude Agent SDK, każdy na **kopii** poświadczenia z celowo zepsutymi
+**oboma** tokenami (wartości, które nigdy nie były tokenami — nie ma czego unieważnić).
+
+| Tryb | Warunki | Komunikat SDK | Klasyfikacja aplikacji | Kod uruchomienia |
+|---|---|---|---|---|
+| `refresh-refused` | `expiresAt` godzinę w przeszłości, martwy refresh token | `Claude Code returned an error result: Failed to authenticate: OAuth session expired and could not be refreshed` | `refresh_refused` | `unauthenticated` |
+| `revoked` | `expiresAt` godzinę w przyszłości, martwy access token | **ten sam tekst** | `refresh_refused` | `unauthenticated` |
+
+Trzy ustalenia, wszystkie zaobserwowane:
+
+1. **Zakładany komunikat był zły.** Symulacja używała `OAuth token refresh failed: invalid_grant`.
+   SDK 0.3.270 produkuje coś innego. Werdykt klasyfikatora był mimo to poprawny — ale wychodził
+   **przypadkiem**, bo tekst zawiera akurat słowa „refresh" i „expired". Dołożony jawny warunek na
+   potwierdzoną frazę; próba wykrycia H: po jego wycofaniu komunikat klasyfikuje się jako `revoked`.
+2. **SDK nie odróżnia odwołanego logowania od odmowy odnowienia.** Oba przypadki graniczne dają
+   identyczny tekst, więc aplikacja dostaje jeden stan dla dwóch przyczyn — i żaden klasyfikator tego
+   nie naprawi. Skutek dla użytkownika jest poprawny (obie porady mówią „zaloguj się ponownie"), ale
+   rozróżnienie, którego żąda L8.11, jest w tej parze nieosiągalne po stronie aplikacji.
+3. **CLI kasuje poświadczenie na dysku przy odmowie** (`accessToken` i `refreshToken` puste,
+   `expiresAt` wyzerowane) — potwierdzone w obu przebiegach polem `skasowanePrzezCli`. To jest powód,
+   dla którego próba wycelowana w `~/.claude` wylogowałaby użytkownika **natychmiast**.
+
+Odcisk prawdziwego pliku poświadczeń (rozmiar, czas modyfikacji, skróty obu tokenów) wzięty przed i po
+każdym przebiegu: **bez zmian**. Skrypt kończy się kodem 3, gdyby się zmienił.
+
+### Dlaczego nie ma próby ze *skutecznym* odświeżeniem
+
+Bo byłaby destrukcyjna, i to nie hipotetycznie. W bundlu CLI 2.1.277 zapis odświeżonego poświadczenia
+jest **compare-and-swap po `refreshToken`** — CLI nadpisuje plik tylko wtedy, gdy leżący tam refresh
+token jest wciąż tym, od którego zaczynało. Taki zamek istnieje dlatego, że odświeżenie **wymienia**
+zestaw tokenów. Użycie prawdziwego refresh tokena z kopii zostawiłoby więc w pliku użytkownika token
+poprzedniej generacji — a punkt 3 wyżej mówi, co się stanie przy jego najbliższym użyciu: CLI
+wyczyści użytkownikowi logowanie na dysku, kilka godzin później, bez ostrzeżenia.
+
+To jest dokładnie to, czego zakazuje warunek zamknięcia tego pakietu, więc próba **nie została
+wykonana**, a L8.10 zostaje w tej połowie otwarte. Domknięcie wymaga konta testowego odrębnego od
+konta użytkownika.
 
 ## Regresja, którą ten pakiet wywołał i naprawił
 
@@ -127,15 +172,15 @@ pojawia się w żadnej z dwunastu przeszukanych powierzchni.
 
 **Nie dowodzi.**
 
-1. **Rzeczywistego wyczerpania limitu.** Wszystkie cztery awarie są symulacjami. Odczyt wykorzystania
+1. **Rzeczywistego wyczerpania limitu.** Cztery awarie w suicie przeglądarkowej są symulacjami
+   (dwie z nich mają teraz odpowiednik potwierdzony rzeczywistym przebiegiem). Odczyt wykorzystania
    okien planu z sondy (5 h, 7 dni) jest **odczytem prawdziwego limitu**, nie jego wyczerpaniem, i
    kryterium nie zamyka. L8.11 i L8.12 zostają otwarte.
-2. **Że to są komunikaty, które SDK naprawdę wypisuje.** Klasyfikator dopasowuje podciągi
-   (`usage limit`, `429`, `invalid_grant`, `/login`). Żaden z nich nie został potwierdzony na
-   rzeczywistym błędzie SDK 0.3.270. To jest część braku L8.11.
-3. **Skutecznego odświeżenia tokena przez SDK.** Scenariusz kończy się powodzeniem przy minionym
-   terminie w pliku, ale nikt nie widział wymiany tokena ani nowego terminu po przebiegu. To jest
-   brak L8.10.
+2. **Że komunikat limitu i błędu sieci to te, które SDK naprawdę wypisuje.** Komunikat odmowy
+   uwierzytelnienia jest już potwierdzony (faza 2). `usage limit`, `429` i `socket hang up` — nie.
+   To jest pozostały brak L8.11.
+3. **Skutecznego odświeżenia tokena przez SDK.** Powód jest teraz bezpieczeństwem, nie kosztem:
+   próba na kopii wylogowałaby użytkownika (wyżej). To jest pozostały brak L8.10.
 4. **Kolejności, w jakiej SDK stosuje swoje trzy mechanizmy uprawnień.** Odmowa w hooku `PreToolUse`
    jest sprawdzona na stand-inie, który honoruje decyzję hooka tak, jak opisuje to kontrakt SDK.
    Że prawdziwy SDK też ją uhonoruje, jest wypowiedzią o cudzym kodzie — dlatego ochrona katalogu
