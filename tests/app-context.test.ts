@@ -25,7 +25,12 @@ import {
   leavesAnotherConversation,
 } from '../packages/platform-ui/src/chat/sessionRestore.ts';
 import { createHarness, login, type Harness } from './helpers.ts';
-import { dispatchingAgent, type Plan, type StandInHandle } from './support/model-standin.ts';
+import {
+  dispatchingAgent,
+  newStandInHandle,
+  type Plan,
+  type StandInHandle,
+} from './support/model-standin.ts';
 import { codeVersion, evidenceWritingRequested, writeEvidence } from './support/measurement-evidence.ts';
 
 /**
@@ -843,7 +848,7 @@ describe('L6.10 — cel operacji i aktualnosc wersji przy zapisie', () => {
      * reaches a schema, and demanding complete input there would be a lint
      * about nothing.
      */
-    const stepRe = /\{\s*kind:\s*'(call|text|wait|tool|spawnChild|streamError|startFailure)'/g;
+    const stepRe = /\{\s*kind:\s*'(call|text|wait|tool|spawnChild|streamError|startFailure|permission)'/g;
     const gaps: string[] = [];
     let checked = 0;
     for (const [file, src] of sources) {
@@ -1033,13 +1038,7 @@ async function spaceWithCards(cards = 3): Promise<string> {
   return space.id;
 }
 
-const emptyHandle = (): StandInHandle => ({
-  childExitedAt: null,
-  childPid: null,
-  performed: [],
-  gate: [],
-  dispose: () => {},
-});
+const emptyHandle = (): StandInHandle => newStandInHandle();
 
 function currentPrice(itemId: string): number | null {
   const cases = h.service.listCases(h.ownerId);

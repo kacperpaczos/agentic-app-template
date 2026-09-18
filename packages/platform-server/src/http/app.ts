@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
-import { streamSSE } from 'hono/streaming';
+import { streamSSE, type SSEStreamingApi } from 'hono/streaming';
 import { z } from 'zod';
 import {
   AGENT_VIEWS_SCOPE_KIND,
@@ -32,6 +32,69 @@ import { performRecordAction } from '../services/record-actions.ts';
 
 export const DEFAULT_USER_ID = 'local-user';
 export const SECOND_USER_ID = 'other-user';
+
+/**
+ * Body of a request whose body is optional.
+ *
+ * `await c.req.json().catch(() => ({}))` — which is what these routes used —
+ * makes three different situations one: no body, an empty body, and a body that
+ * is not JSON. The first two are "the caller said nothing", which the thread
+ * routes allow. The third is a client error, and swallowing it meant a request
+ * nobody could parse still created a conversation and answered 200: a route
+ * that cannot fail validation is a route that does not validate (L9.3).
+ */
+async function optionalJsonBody(c: Context): Promise<unknown> {
+  const raw = await c.req.text().catch(() => '');
+  if (raw.trim() === '') return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new AppError('validation_failed', 'Cialo zadania nie jest poprawnym JSON-em.', {
+      reason: 'malformed_json',
+    });
+  }
+}
+
+/**
+ * What the chat's `restStorage` sends to `/api/threads/create` and
+ * `/api/threads/update/:id`.
+ *
+ * Create carries `{ messages: [...] }`; update carries the whole thread object,
+ * so it also brings `id` and `createdAt` — read from nowhere here, and stripped
+ * rather than refused, because a library may add a field without asking us.
+ * What is *not* stripped is a wrong type on a field this route acts on.
+ */
+const threadWriteSchema = z.object({
+  title: z.string().max(200).nullish(),
+  spaceId: z.string().max(128).nullish(),
+  messages: z
+    .array(
+      z.object({
+        id: z.string().max(128).optional(),
+        role: z.string().max(40).optional(),
+        content: z.unknown().optional(),
+      }),
+    )
+    .max(200)
+    .optional(),
+});
+
+/**
+ * A space named by the client is checked before it is bound.
+ *
+ * The same check `/api/agui/run` makes, for the same reason: an id travelling
+ * from a browser is a request to use it, not a right to. Without it a
+ * conversation could be left pointing at a space its owner cannot open — which
+ * leaks nothing (every read of the space checks the owner again) but stores a
+ * binding that is a lie.
+ */
+function assertOwnSpace(
+  services: PlatformServices,
+  spaceId: string | null | undefined,
+  ownerId: string,
+): void {
+  if (spaceId) services.canvas.getSpace(spaceId, ownerId);
+}
 
 export interface PlatformAppDeps {
   services: PlatformServices;
@@ -80,9 +143,103 @@ function toAguiMessage(m: StoredMessage): Record<string, unknown> {
   };
 }
 
+/** What a replayed `POST /api/agui/run` has to answer with, stored on first use. */
+interface RecordedRun {
+  runId: string;
+  conversationId: string;
+}
+
+/** Scope of the run idempotency keys, kept out of every other caller's namespace. */
+const AGUI_RUN_SCOPE = 'agui.run';
+
+/**
+ * Runs whose start is under way, per `${owner}\0${clientRunId}`.
+ *
+ * The recorded key closes the window *after* a run exists; this closes the one
+ * *while* it is being created. `runtime.start` is awaited, so a second copy of
+ * the same request can run its lookup in that gap, find nothing recorded yet and
+ * start a second execution — the very thing the key exists to prevent. The entry
+ * is registered in the same tick the start is invoked, so there is no instant at
+ * which a run is being created and nothing says so; a repeat that arrives then
+ * waits for it and is answered as the replay it is.
+ *
+ * In memory on purpose: it describes work happening in *this* process, and a
+ * restart leaves no such work behind. The durable answer stays in
+ * `idempotency_keys`.
+ */
+const startingRuns = new Map<string, Promise<RecordedRun>>();
+
 export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
   const { services, runtime, auth } = deps;
   const app = new Hono<Env>();
+
+  /**
+   * Writes one run's events to an SSE stream, from `from` onwards.
+   *
+   * Two sources and one sequence, as `GET /api/runs/:id/stream` describes: the
+   * live stream while the run executes here, the persisted log otherwise. Shared
+   * with the replay branch of `POST /api/agui/run` so a repeated command is
+   * answered with the *same* events as the original rather than with a second
+   * execution — and so the two cannot drift apart.
+   */
+  const writeRunStream = async (
+    sse: SSEStreamingApi,
+    runId: string,
+    ownerId: string,
+    from: number,
+  ): Promise<void> => {
+    const run = services.runs.get(runId, ownerId);
+    const live = runtime.liveStream(runId);
+    if (live) {
+      for await (const { seq, event } of live.read(from)) {
+        await sse.writeSSE({ id: String(seq), data: JSON.stringify(event) });
+      }
+      return;
+    }
+    /*
+     * A **resolved** run's replay carries no interface commands.
+     *
+     * An interface command is a question the run is waiting on: it asks the
+     * browser to move the screen and does not resolve until the browser answers
+     * or the runtime times it out. Once the run has ended nothing is waiting for
+     * that answer — the agent was already told `no_client` — so performing it
+     * now would move the user's screen for a question settled minutes ago, and
+     * answer it to nobody. A client that *did* see it live refuses the repeat by
+     * `commandId` (`UiCommandRunner`); this covers the other case, where the
+     * client never saw it because it was away while the run was ending.
+     *
+     * Only this path filters. A run still executing is served from its live
+     * stream above, where a command may genuinely still be waiting.
+     */
+    for (const { seq, payload } of services.runs.eventsAfter(runId, ownerId, from)) {
+      const event = payload as { type?: string; name?: string } | null;
+      if (event?.type === 'CUSTOM' && event.name === PLATFORM_CUSTOM_EVENTS.uiCommand) continue;
+      await sse.writeSSE({ id: String(seq), data: JSON.stringify(payload) });
+    }
+    /*
+     * A resolved run whose log carries no terminal event — killed process, or
+     * a restart — would otherwise leave the client waiting for ever. The
+     * stored status is the authority on how it ended.
+     */
+    const terminal = ['succeeded', 'failed', 'cancelled'];
+    if (terminal.includes(run.status)) {
+      const seen = services.runs.eventsAfter(runId, ownerId, 0).some((e) => {
+        const name = (e.payload as { type?: string } | null)?.type;
+        return name === 'RUN_FINISHED' || name === 'RUN_ERROR';
+      });
+      if (!seen) {
+        await sse.writeSSE({
+          data: JSON.stringify({
+            type: run.status === 'succeeded' ? 'RUN_FINISHED' : 'RUN_ERROR',
+            runId,
+            threadId: run.conversationId,
+            code: run.errorCode ?? run.status,
+            message: run.errorMessage ?? `Uruchomienie zakonczylo sie jako ${run.status}.`,
+          }),
+        });
+      }
+    }
+  };
 
   /* ------------------------------- CORS -------------------------------- */
 
@@ -127,7 +284,19 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
    * user back to the first identity.
    */
   app.post('/api/auth/session', async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as { userId?: string };
+    /*
+     * The third route that swallowed a broken body, and the last one.
+     *
+     * A session request with no body is the frontend's "make sure I have a
+     * session" and must keep working — so the distinction is the same one the
+     * thread routes make: nothing said is allowed, something unparseable is a
+     * client error. Left as `.catch(() => ({}))` this route would silently sign
+     * a caller in as the default identity after failing to read what they
+     * asked for, which is the one place where guessing is least acceptable.
+     */
+    const body = z
+      .object({ userId: z.string().max(128).nullish() })
+      .parse(await optionalJsonBody(c));
     const current = auth.verify(getCookie(c, SESSION_COOKIE));
     const requested = body.userId;
     const userId =
@@ -213,16 +382,13 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
 
   app.post('/api/threads/create', async (c) => {
     const ownerId = c.get('ownerId');
-    const body = (await c.req.json().catch(() => ({}))) as {
-      messages?: Array<{ id?: string; role?: string; content?: unknown }>;
-      spaceId?: string;
-      title?: string;
-    };
+    const body = threadWriteSchema.parse(await optionalJsonBody(c));
+    assertOwnSpace(services, body.spaceId, ownerId);
     const first = body.messages?.[0];
     const content = typeof first?.content === 'string' ? first.content : '';
     const conv = services.conversations.create({
       ownerId,
-      title: body.title,
+      title: body.title ?? undefined,
       spaceId: body.spaceId ?? null,
       firstMessage: content ? { id: first?.id, content } : undefined,
     });
@@ -263,7 +429,8 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
 
   app.patch('/api/threads/update/:id', async (c) => {
     const ownerId = c.get('ownerId');
-    const body = (await c.req.json().catch(() => ({}))) as { title?: string; spaceId?: string | null };
+    const body = threadWriteSchema.parse(await optionalJsonBody(c));
+    assertOwnSpace(services, body.spaceId, ownerId);
     const id = c.req.param('id');
     let conv = services.conversations.get(id, ownerId);
     if (typeof body.title === 'string' && body.title.trim()) {
@@ -320,6 +487,61 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
 
     const input = parsed.data;
     const forwarded = (input.forwardedProps ?? {}) as Record<string, unknown>;
+
+    /*
+     * The same command sent twice is one command.
+     *
+     * The client names its run (`runId` in `RunAgentInput`, a UUID minted per
+     * send in `chatWiring.ts`). That name used to be read and thrown away, so a
+     * repeat of one POST — a proxy retry, a resent request, a double submit of
+     * the identical body — started a *second* execution: a second assistant
+     * answer in the thread, the tool work done twice, and with no `threadId` a
+     * second conversation as well. The user's own message was the only part
+     * that was safe, because `appendMessage` deduplicates by id.
+     *
+     * So the run is recorded under that name the first time and every later
+     * request carrying it is answered from the run it already started — the
+     * same headers, the same event sequence, from the beginning. Nothing is
+     * created, nothing is appended, no model is asked. Placed before the
+     * conversation is created and before the message is appended, because a
+     * replay must have no side effect at all.
+     *
+     * It does **not** turn two *different* commands into one: the client mints
+     * a fresh id per send, so pressing send twice is two commands and is meant
+     * to be. What it guarantees is that one request, however many times it
+     * arrives, produces one run.
+     */
+    const clientRunId = input.runId?.trim() || null;
+    const runKey = clientRunId ? `${ownerId}\u0000${clientRunId}` : null;
+    if (clientRunId) {
+      const recorded =
+        services.idempotency.get<RecordedRun>(clientRunId, ownerId, AGUI_RUN_SCOPE) ??
+        /*
+         * Not recorded yet, but possibly being created right now. Awaiting the
+         * first request's start is what makes two *simultaneous* copies of one
+         * request produce one run rather than racing the durable key. A start
+         * that fails resolves to nothing here, so this request goes on to make
+         * its own attempt instead of inheriting the failure.
+         */
+        (runKey && startingRuns.has(runKey)
+          ? await startingRuns.get(runKey)!.catch(() => null)
+          : null);
+      if (recorded) {
+        /*
+         * Checked here, before a stream is opened: a run whose conversation has
+         * since been deleted cannot be replayed, and the caller gets
+         * `not_found` rather than an empty stream. Re-running the command
+         * instead would recreate work the user removed.
+         */
+        services.runs.get(recorded.runId, ownerId);
+        c.header('X-Run-Id', recorded.runId);
+        c.header('X-Conversation-Id', recorded.conversationId);
+        // Says which branch answered, so a test — and a client — can tell a
+        // replay from a fresh run without inferring it from the events.
+        c.header('X-Run-Replayed', '1');
+        return streamSSE(c, (sse) => writeRunStream(sse, recorded.runId, ownerId, 0));
+      }
+    }
 
     /*
      * The frontend's context selects what to look at; it never carries identity.
@@ -415,7 +637,12 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
       ? (forwarded.attachFileIds as string[]).slice(0, 10)
       : [];
 
-    const started = await runtime.start({
+    /*
+     * Invoked and announced in the same tick: `startingRuns` is set immediately
+     * after the call, with no `await` in between, so from the instant the run
+     * begins there is something for a concurrent repeat to wait on.
+     */
+    const starting = runtime.start({
       ownerId,
       conversationId,
       prompt,
@@ -424,6 +651,31 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
       // The command the files were attached to, so the link survives the run.
       userMessageId: userMessage.id,
     });
+    if (runKey) {
+      startingRuns.set(
+        runKey,
+        starting.then((s) => ({ runId: s.runId, conversationId }) satisfies RecordedRun),
+      );
+    }
+
+    let started: Awaited<typeof starting>;
+    try {
+      started = await starting;
+      /*
+       * Recorded before the stream opens, not after it closes: the window a
+       * retry arrives in is precisely while the first run is still going.
+       */
+      if (clientRunId) {
+        services.idempotency.put(clientRunId, ownerId, AGUI_RUN_SCOPE, {
+          runId: started.runId,
+          conversationId,
+        } satisfies RecordedRun);
+      }
+    } finally {
+      // The durable key has taken over by now (or the start failed and there is
+      // nothing to hand anyone).
+      if (runKey) startingRuns.delete(runKey);
+    }
 
     c.header('X-Run-Id', started.runId);
     c.header('X-Conversation-Id', conversationId);
@@ -478,63 +730,8 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
     const runId = c.req.param('id');
     const from = Number(c.req.query('from') ?? 0) || 0;
     // Ownership first: this must not become a way to read someone else's run.
-    const run = services.runs.get(runId, ownerId);
-    const live = runtime.liveStream(runId);
-
-    return streamSSE(c, async (sse) => {
-      if (live) {
-        for await (const { seq, event } of live.read(from)) {
-          await sse.writeSSE({ id: String(seq), data: JSON.stringify(event) });
-        }
-        return;
-      }
-      /*
-       * A **resolved** run's replay carries no interface commands.
-       *
-       * An interface command is a question the run is waiting on: it asks the
-       * browser to move the screen and does not resolve until the browser
-       * answers or the runtime times it out. Once the run has ended, nothing is
-       * waiting for that answer — it was already reported to the agent as
-       * `no_client` — so performing it now would move the user's screen for a
-       * question that was settled, possibly minutes ago, and answer it to
-       * nobody. A client that *did* see it live refuses the repeat by
-       * `commandId` (`UiCommandRunner`); this covers the other case, where the
-       * client never saw it because it was away while the run was ending.
-       *
-       * Only the persisted path filters. A run still executing here is served
-       * from its live stream, where a command may genuinely still be waiting.
-       */
-      for (const { seq, payload } of services.runs.eventsAfter(runId, ownerId, from)) {
-        const event = payload as { type?: string; name?: string } | null;
-        if (event?.type === 'CUSTOM' && event.name === PLATFORM_CUSTOM_EVENTS.uiCommand) continue;
-        await sse.writeSSE({ id: String(seq), data: JSON.stringify(payload) });
-      }
-      /*
-       * A resolved run whose log carries no terminal event — killed process, or
-       * a restart — would otherwise leave the client waiting for ever. The
-       * stored status is the authority on how it ended.
-       */
-      const terminal = ['succeeded', 'failed', 'cancelled'];
-      if (terminal.includes(run.status)) {
-        const seen = services.runs
-          .eventsAfter(runId, ownerId, 0)
-          .some((e) => {
-            const name = (e.payload as { type?: string } | null)?.type;
-            return name === 'RUN_FINISHED' || name === 'RUN_ERROR';
-          });
-        if (!seen) {
-          await sse.writeSSE({
-            data: JSON.stringify({
-              type: run.status === 'succeeded' ? 'RUN_FINISHED' : 'RUN_ERROR',
-              runId,
-              threadId: run.conversationId,
-              code: run.errorCode ?? run.status,
-              message: run.errorMessage ?? `Uruchomienie zakonczylo sie jako ${run.status}.`,
-            }),
-          });
-        }
-      }
-    });
+    services.runs.get(runId, ownerId);
+    return streamSSE(c, (sse) => writeRunStream(sse, runId, ownerId, from));
   });
 
   app.get('/api/runs/:id/events', (c) =>
@@ -690,11 +887,15 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
   /**
    * A decision about one pending question of one run.
    *
-   * The run in the path is not decoration: `answerPermission` compares it (and
-   * the owner) with the run that actually asked. Before that, the ownership
-   * check here was the only guard, and it checked the *addressed* run while the
-   * runtime resolved by request id alone — so an answer posted to a run of one's
-   * own, carrying the request id of somebody else's run, decided theirs.
+   * Two halves, and neither used to be complete. The **body** was read with a
+   * bare `c.req.json()`, so a malformed or absent one became an unhandled
+   * exception and a 500 `internal` instead of a validation failure. The
+   * **binding** was missing: the request id went on without the run, so the
+   * ownership check on the address and the consent actually granted could be
+   * about different runs — an answer posted to a run of one's own, carrying the
+   * request id of somebody else's, decided theirs. The run in the path is
+   * therefore not decoration: `answerPermission` compares it, and the owner,
+   * with the run that actually asked.
    *
    * `answered: false` is the honest answer to every case where nothing was
    * decided: an unknown id, an id belonging to another run, an expired request,
@@ -705,13 +906,19 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
     const ownerId = c.get('ownerId');
     const runId = c.req.param('id');
     services.runs.get(runId, ownerId); // ownership check
-    const body = (await c.req.json()) as { requestId?: string; allow?: boolean };
-    if (!body.requestId) throw new AppError('validation_failed', 'Brak requestId.');
+    const parsed = z
+      .object({ requestId: z.string().min(1), allow: z.boolean().optional() })
+      .safeParse(await c.req.json().catch(() => undefined));
+    if (!parsed.success) {
+      throw new AppError('validation_failed', 'Nieprawidlowa odpowiedz na prosbe o zgode.', {
+        issues: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+      });
+    }
     const answered = runtime.answerPermission({
       runId,
       ownerId,
-      requestId: body.requestId,
-      allow: body.allow === true,
+      requestId: parsed.data.requestId,
+      allow: parsed.data.allow === true,
     });
     return json(c, { answered });
   });

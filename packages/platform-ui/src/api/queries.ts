@@ -285,7 +285,9 @@ export const useUpdateGeometry = (spaceId: string | null) => {
 export const useUpdateCardSpec = (spaceId: string | null) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { cardId: string; spec: CardSpec; expectedSpecVersion?: number; title?: string }) =>
+    // `expectedSpecVersion` is not optional: the route refuses a content write
+    // that does not name the version it replaces (L9.6).
+    mutationFn: (input: { cardId: string; spec: CardSpec; expectedSpecVersion: number; title?: string }) =>
       apiPatch(`/api/canvas/cards/${input.cardId}/spec`, {
         spec: input.spec,
         title: input.title,

@@ -1,9 +1,11 @@
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, extname } from 'node:path';
 import { z } from 'zod';
 import {
   AppError,
   applyReadWindow,
+  operationFingerprint,
   READ_WINDOW_DEFAULT_LIMIT,
   READ_WINDOW_MAX_LIMIT,
   readWindowInput,
@@ -13,6 +15,9 @@ import {
 } from '@platform/contracts';
 import type { PlatformServices } from '../../services/index.ts';
 import { resolveInWorkspace, listWorkspaceOutputs } from '../sandbox.ts';
+
+/** Content identity for a publication's fingerprint (see `files_publish_version`). */
+export const sha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
 
 export const MEDIA_BY_EXT: Record<string, string> = {
   '.csv': 'text/csv',
@@ -105,18 +110,36 @@ export function fileTools(services: PlatformServices): Array<ModuleToolDefinitio
           });
         }
         /*
-         * Read once, above the guard.
+         * Read once, and hashed into the fingerprint.
          *
-         * Whatever the idempotency guard ends up fingerprinting has to be the
-         * same bytes that get published; a second `readFileSync` inside the
-         * closure would fingerprint one read and publish another, and a file
-         * that changed between them would make the two disagree silently.
+         * The fields of the call are not the whole request here: what is being
+         * published is the *content* of a workspace file, and that content can
+         * differ between two calls naming the same path — a run that regenerates
+         * `output/raport.csv` and republishes it is the ordinary case. A
+         * fingerprint over `path` and `originalFileId` alone would call those two
+         * calls identical and answer the second with the first one's version, so
+         * the sentence "a repeat with a different file is refused" would be true
+         * of a different path and false of different bytes. It is now true of
+         * both.
+         *
+         * Read **once**, above the guard, and used for both: the bytes that are
+         * fingerprinted are the bytes that get published. A second read inside
+         * the closure would hash one file and store another whenever the two
+         * differ, and the guard would be answering about something it never saw.
          */
         const bytes = readFileSync(abs);
         const { result } = await services.idempotency.once(
           input.operationId,
           ctx.ownerId,
           'files.publishVersion',
+          /*
+           * The fingerprint is not optional here either. Without it a repeated
+           * `operationId` carrying different content answered with the first
+           * publication's id, version and download link and reported success —
+           * the caller would be told its second file was published when nothing
+           * of it was written. This was the one write path that was missed when
+           * the guard was rebuilt.
+           */
           async () => {
             const filename = input.filename ?? basename(abs);
             /*
@@ -176,6 +199,7 @@ export function fileTools(services: PlatformServices): Array<ModuleToolDefinitio
               },
             };
           },
+          { fingerprint: operationFingerprint({ ...input, contentSha256: sha256(bytes) }) },
         );
         // A new version is a file change, not a canvas change: the files screen
         // and any open list must re-read, which is what this event drives.

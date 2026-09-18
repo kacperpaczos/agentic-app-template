@@ -46,6 +46,15 @@ export type Step =
    * separately.
    */
   | { kind: 'ask'; toolName: string; input?: Record<string, unknown>; then?: Step[] }
+   * A tool the run is not allowed to use unattended, asked for the way the SDK
+   * asks: through the `canUseTool` callback in `sdkOptions`.
+   *
+   * It is the only way a test can reach the consent gate without a model. The
+   * gate lives in the runtime, is handed to the SDK, and is what turns a
+   * request into a chat event and waits for the user's answer — so a scenario
+   * that wants to observe consent has to come through the same door.
+   */
+  | { kind: 'permission'; toolName: string; input?: Record<string, unknown> }
   /** Starts a real OS child process bound to this run's abort signal. */
   | { kind: 'spawnChild' }
   /** The model's stream reports a failure — a stream existed and then failed. */
@@ -64,15 +73,39 @@ export interface StandInHandle {
   performed: string[];
   /** Every gate question this run asked, with the decision it came back with. */
   gate: Array<{ toolName: string; allowed: boolean; message?: string }>;
+  /**
+   * What each `call` step got back, in order.
+   *
+   * Recorded because "the tool ran" and "the tool ran with *this* run's
+   * context" are different statements, and only the answer can tell them
+   * apart: a leak between two parallel runs shows up as one run's tool
+   * reporting the other's conversation, owner or data.
+   */
+  results: Array<{ name: string; text: string; isError: boolean }>;
+  /** Outcome of each `permission` step: whether the gate allowed the tool. */
+  consents: Array<{ toolName: string; allowed: boolean }>;
+  /**
+   * The Claude session this run asked the adapter to continue, or null for a
+   * fresh one.
+   *
+   * It is what the runtime *asked for*, recorded where the SDK would receive
+   * it. A second run on the same conversation must resume the session the first
+   * one bound — and it can only do that if it re-reads the conversation when it
+   * reaches the head of the queue, rather than when it was accepted.
+   */
+  resumedFrom: string | null;
   dispose: () => void;
 }
 
-/** A handle with the counters a test reads, before any run has touched it. */
+/** A handle with every field at its empty value; scenarios fill it as they run. */
 export const newStandInHandle = (): StandInHandle => ({
   childExitedAt: null,
   childPid: null,
   performed: [],
   gate: [],
+  results: [],
+  consents: [],
+  resumedFrom: null,
   dispose: () => {},
 });
 
@@ -189,6 +222,15 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
           }
           // Handled before the stream opened; unreachable here.
           if (step.kind === 'startFailure') continue;
+          if (step.kind === 'permission') {
+            const gate = options?.sdkOptions?.canUseTool as
+              | ((name: string, input: Record<string, unknown>) => Promise<{ behavior: string }>)
+              | undefined;
+            if (!gate) throw new Error('stand-in: brak bramki zgody w sdkOptions');
+            const decision = await gate(step.toolName, step.input ?? {});
+            handle.consents.push({ toolName: step.toolName, allowed: decision.behavior === 'allow' });
+            continue;
+          }
           if (step.kind === 'call') {
             callSeq += 1;
             const id = `tu_${callSeq}`;
@@ -203,6 +245,7 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
             const outcome = await invokeTool(entry, step.input ?? {}, ctx);
             handle.performed.push(step.name);
             const text = outcome.content.map((c) => c.text).join('');
+            handle.results.push({ name: step.name, text, isError: outcome.isError === true });
             if (outcome.isError) await fire('PostToolUseFailure', { tool_use_id: id, error: text });
             else await fire('PostToolUse', { tool_use_id: id, tool_response: text });
             continue;
@@ -222,7 +265,13 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
 
   return {
     stream: (p, o) => play(promptOf(p), o),
-    resumeStream: (i, o) => play(promptOf(i), o),
+    resumeStream: (i, o) => {
+      // Recorded before anything is played: what this run asked to continue is
+      // a property of the call, not of what the script then does.
+      const plan = plans.get(promptOf(i));
+      if (plan) plan.handle.resumedFrom = i.sessionId;
+      return play(promptOf(i), o);
+    },
   };
 }
 

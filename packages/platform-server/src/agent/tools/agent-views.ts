@@ -323,7 +323,22 @@ export function agentViewTools(services: PlatformServices): Array<ModuleToolDefi
             cardId: card.id,
             title: input.title,
             spec,
-            expectedSpecVersion: input.expectedSpecVersion,
+            /*
+             * `updateSpec` compares a version on every write and no longer has
+             * a "no version, no check" branch (L9.6). This tool's version stays
+             * optional, and when it is absent the version of the card read a
+             * few lines above is supplied here, in the open.
+             *
+             * Why that is a check and not a formality: this tool is a
+             * read-modify-write on that very read — `patch` merges into the
+             * source it just read, and the merged text would be wrong against
+             * any other version — so the version it read is the version it
+             * means. A write that lands between the read and this call is
+             * still caught. A caller naming its own (older) version is checked
+             * against that instead, which is what an agent working from an
+             * earlier `agent_views_list` must do.
+             */
+            expectedSpecVersion: input.expectedSpecVersion ?? card.specVersion,
             operationId: input.operationId,
           },
           ctx.ownerId,

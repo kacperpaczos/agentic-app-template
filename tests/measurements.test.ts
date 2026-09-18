@@ -5,7 +5,13 @@ import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AgentRuntime, collectToolEntries, platformTools } from '@platform/server';
 import { createHarness, login, type Harness } from './helpers.ts';
-import { dispatchingAgent, type Plan, type StandInHandle, type Step } from './support/model-standin.ts';
+import {
+  dispatchingAgent,
+  newStandInHandle,
+  type Plan,
+  type StandInHandle,
+  type Step,
+} from './support/model-standin.ts';
 import {
   CODE_COMMIT_ENV,
   CODE_TREE_DIRTY_ENV,
@@ -63,13 +69,7 @@ const EMPTY_CONTEXT = {
 async function startRun(conversationId: string, script: Step[]) {
   promptSeq += 1;
   const prompt = `polecenie pomiarowe ${promptSeq}`;
-  const handle: StandInHandle = {
-    childExitedAt: null,
-    childPid: null,
-    performed: [],
-    gate: [],
-    dispose: () => {},
-  };
+  const handle: StandInHandle = newStandInHandle();
   plans.set(prompt, { script, handle });
   openHandles.push(handle);
 
@@ -136,6 +136,16 @@ afterEach(async () => {
 
 /* ------------------------------ the measurements -------------------------- */
 
+/**
+ * Slack for a comparison that spans two clocks (see its use below).
+ *
+ * Kept far under the 120 ms this measurement partitions, so widening it cannot
+ * hide the regression it exists to catch — a `durationMs` measured from the
+ * moment the run was accepted instead of from the moment it began overshoots by
+ * the whole queue wait, which this window is nowhere near.
+ */
+const SEAM_MS = 25;
+
 const SAMPLES = 5;
 const TEXT_SCRIPT: Step[] = [
   { kind: 'wait', ms: 15 },
@@ -185,11 +195,23 @@ describe('pomiary rozdzielone na punkty, zapisane z warunkami i wersja kodu', ()
        * accounts for the whole span from enqueue to finish, so the 120 ms spent
        * behind the first run is counted once, on the queue side — which is what
        * a threshold in milliseconds would only suggest, and only on one machine.
+       *
+       * The tolerance is `SEAM_MS`, and it is not a fudge factor: the two sides
+       * of the comparison are read from two different clocks. `queuedMs` and
+       * `total` are differences of *stored* instants (`nowIso()`), while
+       * `durationMs` is a difference of `Date.now()` taken inside the run — and
+       * each stored instant is written a moment after its `Date.now()`
+       * counterpart, with a statement preparation in between. The seam is
+       * therefore whatever the process can be descheduled for at those two
+       * points, and a run of this suite under load produced 268 against a
+       * ±5 ms window. The window says nothing about the property; what tests
+       * the property is that it is an order of magnitude below the 120 ms
+       * being partitioned.
        */
       const total = Date.parse(s.finishedAt!) - Date.parse(s.enqueuedAt);
       expect(s.queuedMs).toBeGreaterThan(50);
-      expect(s.queuedMs! + s.durationMs!).toBeLessThanOrEqual(total + 5);
-      expect(s.queuedMs! + s.durationMs!).toBeGreaterThanOrEqual(total - 5);
+      expect(s.queuedMs! + s.durationMs!).toBeLessThanOrEqual(total + SEAM_MS);
+      expect(s.queuedMs! + s.durationMs!).toBeGreaterThanOrEqual(total - SEAM_MS);
     }
 
     /* --- a run that says nothing at all ----------------------------------- */

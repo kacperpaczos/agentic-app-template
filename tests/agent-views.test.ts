@@ -250,7 +250,12 @@ describe('walidacja przy zapisie kart i przy starcie', () => {
 
     const refused = await api(`/api/canvas/cards/${created.body.id}/spec`, {
       method: 'PATCH',
-      body: JSON.stringify({ spec: { kind: 'openui', source: 'root = Nieznany("a")' } }),
+      // The version is named because the route demands it of every content
+      // write (L9.6); what is under test here is the refusal that follows.
+      body: JSON.stringify({
+        spec: { kind: 'openui', source: 'root = Nieznany("a")' },
+        expectedSpecVersion: created.body.specVersion ?? 1,
+      }),
     });
     expect(refused.status).toBe(400);
     expect(refused.body.error.details.reason).toBe('unknown_component');
@@ -712,7 +717,7 @@ describe('narzedzia widokow agenta', () => {
     expect(viaAdd.body.details.reason).toBe('component_not_allowed');
     const viaHttp = await api(`/api/canvas/cards/${created.body.cardId}/spec`, {
       method: 'PATCH',
-      body: JSON.stringify({ spec: literal }),
+      body: JSON.stringify({ spec: literal, expectedSpecVersion: created.body.specVersion ?? 1 }),
     });
     expect(viaHttp.status).toBe(400);
     expect(viaHttp.body.error.details.reason).toBe('component_not_allowed');

@@ -11,7 +11,13 @@ import {
 } from '@platform/server';
 import { AppError } from '@platform/contracts';
 import { createHarness, login, type Harness } from './helpers.ts';
-import { dispatchingAgent, type Plan, type StandInHandle, type Step } from './support/model-standin.ts';
+import {
+  dispatchingAgent,
+  newStandInHandle,
+  type Plan,
+  type StandInHandle,
+  type Step,
+} from './support/model-standin.ts';
 import {
   EVIDENCE_DIR,
   codeVersion,
@@ -57,7 +63,7 @@ const EMPTY_CONTEXT = {
 async function runScript(conversationId: string, script: Step[]) {
   promptSeq += 1;
   const prompt = `polecenie diagnostyczne ${promptSeq}`;
-  const handle: StandInHandle = { childExitedAt: null, childPid: null, performed: [], gate: [], dispose: () => {} };
+  const handle: StandInHandle = newStandInHandle();
   plans.set(prompt, { script, handle });
   const started = await runtime.start({
     ownerId: h.ownerId,
@@ -120,7 +126,11 @@ describe('powiazanie rozmowy z wykonaniem, narzedziem, mutacja i artefaktem', ()
         name: 'procurement_update_offer_item',
         input: { itemId: item.id, quantity: 11, expectedVersion: item.version },
       },
-      { kind: 'call', name: 'procurement_save_comparison', input: { caseId } },
+      {
+        kind: 'call',
+        name: 'procurement_save_comparison',
+        input: { caseId, operationId: `op-diag-${Date.now()}` },
+      },
       { kind: 'text', text: 'Zmienilem pozycje i zapisalem zestawienie.' },
     ]);
     expect(r.run().status).toBe('succeeded');

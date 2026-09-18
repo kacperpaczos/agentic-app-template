@@ -1,0 +1,46 @@
+Przebieg przegladarkowy — pakiet BL-11b
+
+== runda poprawek 1 (stan koncowy) ==
+commit kodu w chwili przebiegu: 6076ec4 (przed przepisaniem historii; drzewo bajt w bajt rowne HEAD acdfa9f)
+polecenie: flock -w 5400 ../.e2e.lock pnpm exec playwright test
+kod wyjscia: 0 — 153 testy, 11.3 min
+  Dlaczego pelny przebieg, a nie wybrane spece: runda 1 zmienila /api/threads/create
+  i /api/threads/update/:id, czyli trasy, przez ktore gotowy czat (restStorage
+  biblioteki OpenUI) zaklada i zmienia kazdy watek. Gdyby nowy schemat odrzucal to,
+  co biblioteka wysyla, czat przestalby dzialac — a to widac tylko w przegladarce.
+
+== przebieg przed runda poprawek ==
+  commit 74e0eb3 (po przepisaniu: 820058b) — 153 testy, 10.2 min, kod wyjscia 0
+  oraz przebieg celowany na czterech specach dotknietych zmianami: 21 testow, 1.9 min, 0
+
+== odleglosc przebiegu od HEAD ==
+Przebieg koncowy zostal wykonany na drzewie commitu 6076ec4 — ostatniego przed
+przepisaniem historii pakietu. Przepisanie nie zmienilo ani jednego bajtu drzewa
+(sprawdzone mechanicznie: git diff <stara-koncowka>..<nowa-koncowka> pusty), wiec
+drzewo przebiegu jest identyczne z drzewem nowej koncowki.
+
+Od tamtej chwili do HEAD dochodza wylacznie pliki w docs/evidence/ (ten plik,
+01-verify.txt i zapis prob wykrycia). Zaden plik aplikacji, testu ani konfiguracji
+nie rozni sie miedzy drzewem przebiegu a HEAD — i to jest powod, dla ktorego
+przebieg pozostaje reprezentatywny, a nie to, ze zmiany "wygladaja niegroznie".
+
+Grant tur modelu dla tego zadania: ZERO. Zaden spec modelowy nie byl uruchomiony
+(bl01-bl02-model.spec.ts, agent-ui.spec.ts, files-agent.spec.ts sa poza projektem domyslnym).
+Dowody pakietu pochodza z testow kontraktowych oraz z symulacji na stand-inie modelu
+na granicy adaptera SDK (tests/support/model-standin.ts) — oznaczone jako symulacja.
+
+== runda poprawek 2 ==
+  Zmiana ruszyla POST /api/auth/session, czyli trase, ktora loguje kazdy spec przegladarkowy,
+  wiec pelny przebieg powtorzony: 153 testy, 11.1 min, kod wyjscia 0.
+  Proby wykrycia rundy: P20 (odcisk bez tresci pliku), P21 (sesja polyka zepsute cialo).
+
+== naprawa po integracji ==
+Drzewo: scalone (moj pakiet + BL-11c), commit 608f863.
+  pnpm verify: 45 plikow / 759 testow, kod wyjscia 0, drzewo czyste po przebiegu.
+  Przegladarka: cztery spece, ktore przyszly ze scaleniem i dotykaja zaostrzonych
+  kontraktow (artifact-views, access-switch, shared-fetch, ui-state) — 16 testow, 2.2 min, 0.
+  Nie pelny przebieg, bo zmiana dotyczy dwoch krokow jednego scenariusza i jednego testu;
+  pelny przebieg na kodzie tego pakietu jest wyzej (153 testy).
+  Proba wykrycia P22: bez operationId w tych krokach e2e/artifact-views.spec.ts oblewa
+  ('element(s) not found' — artefakt nie powstaje), co potwierdza, ze scalone drzewo mialo
+  zepsuty spec przegladarkowy, a nie tylko czerwony lint.

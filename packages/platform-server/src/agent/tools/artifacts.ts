@@ -1,10 +1,17 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, extname } from 'node:path';
 import { z } from 'zod';
-import { AppError, type ModuleToolDefinition, type ToolCallContext } from '@platform/contracts';
+import {
+  AppError,
+  operationFingerprint,
+  type ModuleToolDefinition,
+  type ToolCallContext,
+} from '@platform/contracts';
 import type { PlatformServices } from '../../services/index.ts';
 import { resolveInWorkspace, listWorkspaceOutputs } from '../sandbox.ts';
-import { MEDIA_BY_EXT } from './files.ts';
+import { MEDIA_BY_EXT, sha256 } from './files.ts';
+
+const OPERATION_ID = z.string().min(8).max(200);
 
 /**
  * Durable artifacts: a snapshot or a live descriptor, and a workspace file
@@ -18,7 +25,9 @@ export function artifactTools(services: PlatformServices): Array<ModuleToolDefin
         'Zapisuje trwaly artefakt. mode="snapshot" (domyslnie) zamraza przekazana tresc JSON. ' +
         'mode="live" NIE zapisuje danych: jako content podaj deskryptor {"operation":"<modul>.<operacja>","input":{...}} ' +
         'wskazujacy zarejestrowana operacje odczytu; przy kazdym otwarciu artefaktu platforma uruchomi ja ponownie ' +
-        'i pokaze aktualny wynik. Lista dostepnych operacji jest w opisie systemowym.',
+        'i pokaze aktualny wynik. Lista dostepnych operacji jest w opisie systemowym. ' +
+        'operationId jest wymagane: nadaj wlasny identyfikator tego zapisu. Powtorzone wywolanie z tym samym ' +
+        'operationId zwraca ten sam artefakt zamiast tworzyc drugi.',
       effect: 'write',
       inputSchema: z.object({
         title: z.string().max(200),
@@ -27,7 +36,13 @@ export function artifactTools(services: PlatformServices): Array<ModuleToolDefin
         mode: z.enum(['snapshot', 'live']).optional(),
         rendererType: z.string().max(120),
         content: z.unknown(),
-        operationId: z.string().min(8).max(200).optional(),
+        /*
+         * Required, unlike on the card tools. A card is a piece of the
+         * composition the user can see and drop; an artifact is a stored record
+         * that a duplicate quietly doubles in the library, and the caller that
+         * repeats it is a machine retrying after a reconnect (L9.7).
+         */
+        operationId: OPERATION_ID.describe('Wlasny identyfikator tego zapisu; powtorzenie z tym samym nie tworzy drugiego artefaktu'),
       }),
       handler: async (input: any, ctx: ToolCallContext) => {
         const mode = input.mode ?? 'snapshot';
@@ -54,6 +69,7 @@ export function artifactTools(services: PlatformServices): Array<ModuleToolDefin
               rendererType: input.rendererType,
               content: input.content,
             }).meta,
+          { fingerprint: operationFingerprint(input) },
         );
         ctx.emit({ type: 'artifact_created', artifactId: result.id });
         return { artifactId: result.id, version: result.currentVersion };
@@ -62,14 +78,15 @@ export function artifactTools(services: PlatformServices): Array<ModuleToolDefin
     {
       name: 'artifact_publish_file',
       description:
-        'Publikuje plik z katalogu output/ workspace jako trwaly artefakt do pobrania. Plik jest kopiowany do magazynu aplikacji, wiec przetrwa sprzatniecie workspace.',
+        'Publikuje plik z katalogu output/ workspace jako trwaly artefakt do pobrania. Plik jest kopiowany do magazynu aplikacji, wiec przetrwa sprzatniecie workspace. ' +
+        'operationId jest wymagane: powtorzone wywolanie z tym samym identyfikatorem zwraca ten sam artefakt, a nie drugi.',
       effect: 'write',
       inputSchema: z.object({
         path: z.string().max(400),
         title: z.string().max(200),
         kind: z.enum(['report', 'table', 'chart', 'file']).optional(),
         rendererType: z.string().max(120).optional(),
-        operationId: z.string().min(8).max(200).optional(),
+        operationId: OPERATION_ID.describe('Wlasny identyfikator tej publikacji; powtorzenie z tym samym nie publikuje drugi raz'),
       }),
       handler: async (input: any, ctx: ToolCallContext) => {
         if (!ctx.workspaceDir) throw new AppError('unsupported_operation', 'Brak workspace uruchomienia.');
@@ -80,7 +97,11 @@ export function artifactTools(services: PlatformServices): Array<ModuleToolDefin
             available: listWorkspaceOutputs(ctx.workspaceDir),
           });
         }
-        // Read once, above the guard: see the note in `files_publish_version`.
+        // Read once, and hashed into the fingerprint: the same reasoning as in
+        // `files_publish_version`, because it is the same operation — what is
+        // published is the content of a workspace file, and two calls naming one
+        // path can carry different bytes.
+        // One read serves both: the bytes hashed are the bytes published.
         const bytes = readFileSync(abs);
         const { result } = await services.idempotency.once(
           input.operationId,
@@ -90,11 +111,15 @@ export function artifactTools(services: PlatformServices): Array<ModuleToolDefin
             const filename = basename(abs);
             const mediaType = MEDIA_BY_EXT[extname(filename).toLowerCase()] ?? 'text/plain';
             /*
-             * One publication, not two steps. The bytes are renamed into place
-             * before anything is written, and the file row and the artifact that
-             * points at it are inserted in the same transaction — so an
-             * interrupted publication leaves neither an orphaned file nor an
-             * artifact whose content is missing.
+             * One publication, not two writes with a compensation between them.
+             *
+             * The file row and the artifact that names it are inserted in the
+             * **same transaction**, and the bytes are renamed into place before
+             * either is written. That removes the case the explicit `try/catch`
+             * + `delete` here used to cover — a file left in the user's list
+             * with nothing pointing at it — and removes it in a way that cannot
+             * itself half-succeed: a rollback needs no cleanup of its own, while
+             * a compensating delete can fail and did have to log when it did.
              */
             const { file: stored, result: created } = services.files.storeWith(
               {
@@ -133,6 +158,7 @@ export function artifactTools(services: PlatformServices): Array<ModuleToolDefin
               downloadUrl: `/api/files/${stored.id}/content`,
             };
           },
+          { fingerprint: operationFingerprint({ ...input, contentSha256: sha256(bytes) }) },
         );
         ctx.emit({ type: 'artifact_created', artifactId: result.artifactId });
         return result;

@@ -6,6 +6,7 @@ import {
   type StoredMessage,
 } from '@platform/contracts';
 import type { Db } from '../db/client.ts';
+import type { RunRegistry } from './runs.ts';
 import { newId, nowIso } from '../util/id.ts';
 
 interface ConvRow {
@@ -65,7 +66,14 @@ export function deriveTitle(text: string): string {
 }
 
 export class ConversationService {
-  constructor(private readonly db: Db) {}
+  /**
+   * @param runs Needed for one thing only: a conversation being deleted must
+   *   first stop the work it owns. See {@link ConversationService.delete}.
+   */
+  constructor(
+    private readonly db: Db,
+    private readonly runs: RunRegistry,
+  ) {}
 
   #row(id: string, ownerId: string): ConvRow {
     const row = this.db.$client
@@ -100,19 +108,27 @@ export class ConversationService {
     const ts = nowIso();
     const title =
       input.title ?? (input.firstMessage ? deriveTitle(input.firstMessage.content) : 'Nowa rozmowa');
-    this.db.$client
-      .prepare(
-        `INSERT INTO conversations (id, owner_id, title, space_id, claude_session_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, NULL, ?, ?)`,
-      )
-      .run(id, input.ownerId, title, input.spaceId ?? null, ts, ts);
-    if (input.firstMessage) {
-      this.appendMessage(id, input.ownerId, {
-        id: input.firstMessage.id,
-        role: 'user',
-        content: input.firstMessage.content,
-      });
-    }
+    /*
+     * One statement or two, it is one act: a conversation created *with* its
+     * first message. Written as two writes in sequence, a failure on the second
+     * left a conversation whose title was derived from a message the history
+     * does not contain — the list shows a turn that cannot be opened (L9.8).
+     */
+    this.db.$client.transaction(() => {
+      this.db.$client
+        .prepare(
+          `INSERT INTO conversations (id, owner_id, title, space_id, claude_session_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, NULL, ?, ?)`,
+        )
+        .run(id, input.ownerId, title, input.spaceId ?? null, ts, ts);
+      if (input.firstMessage) {
+        this.appendMessage(id, input.ownerId, {
+          id: input.firstMessage.id,
+          role: 'user',
+          content: input.firstMessage.content,
+        });
+      }
+    })();
     return toConv(this.#row(id, input.ownerId));
   }
 
@@ -170,21 +186,57 @@ export class ConversationService {
   }
 
   /**
-   * Deleting a conversation cascades to its messages and runs (FK ON DELETE
-   * CASCADE) and detaches its artifacts (ON DELETE SET NULL) so published work
-   * survives. The Claude session id is dropped with the row; the SDK's own
-   * transcript is left alone because it is not ours to delete.
+   * Deleting a conversation, and what that means for everything attached to it.
    *
-   * The conversation's agent views space goes with it, cards included (they
-   * cascade from the space). It is bound to the conversation by scope rather
-   * than by a foreign key — spaces are scoped by opaque strings — so it is
-   * deleted here, in the same transaction, instead of being left orphaned.
+   * Stated here because "delete" on its own does not say it, and every part of
+   * it is observable:
+   *
+   *  - **the work in flight is stopped first.** Anything still `queued` or
+   *    `running` for this conversation is cancelled before the row goes (a run
+   *    waiting for consent is `running` in the registry; the wait is a phase of
+   *    the interface, not a stored status). Without that the run carried on in
+   *    memory against a conversation that no longer existed: its `agent_runs`
+   *    row had cascaded away, so with `foreign_keys = ON` the next event
+   *    append, the next message upsert and any artifact it published were
+   *    refused — a run that could neither finish nor be seen, and a log that
+   *    ended in foreign-key errors.
+   *    Cancelling is also the honest answer to the user: they deleted the
+   *    conversation, so the work it was doing stops;
+   *  - **messages and runs go with it** (FK `ON DELETE CASCADE`);
+   *  - **artifacts stay and are detached** (`conversation_id` `ON DELETE SET
+   *    NULL`), because published work outlives the conversation that produced it;
+   *  - **the Claude session binding is dropped** with the row. The SDK's own
+   *    transcript is left alone: it is not ours to delete;
+   *  - **the conversation's agent views space goes with it**, cards included
+   *    (they cascade from the space). It is bound by scope rather than by a
+   *    foreign key — spaces are scoped by opaque strings — so it is deleted
+   *    here, in the same transaction, instead of being left orphaned.
+   *
+   * The counts are returned rather than logged so a caller (and a test) can see
+   * what actually happened rather than trusting that it did.
    */
   delete(
     id: string,
     ownerId: string,
-  ): { deleted: string; detachedArtifacts: number; removedViewSpaces: number } {
+  ): {
+    deleted: string;
+    detachedArtifacts: number;
+    removedViewSpaces: number;
+    cancelledRuns: number;
+  } {
     this.#row(id, ownerId);
+    /*
+     * Before anything is removed: a cancellation needs the run row it names.
+     * `cancel` is a no-op for a run that has already resolved, so this is the
+     * set that was genuinely in flight.
+     */
+    const active = this.runs
+      .listForConversation(id, ownerId)
+      .filter((r) => r.status === 'queued' || r.status === 'running');
+    let cancelledRuns = 0;
+    for (const run of active) {
+      if (this.runs.cancel(run.id, ownerId).cancelled) cancelledRuns += 1;
+    }
     const artifacts = this.db.$client
       .prepare('SELECT COUNT(*) AS n FROM artifacts WHERE conversation_id = ?')
       .get(id) as { n: number };
@@ -195,7 +247,7 @@ export class ConversationService {
       this.db.$client.prepare('DELETE FROM conversations WHERE id = ?').run(id);
       return spaces.changes;
     })();
-    return { deleted: id, detachedArtifacts: artifacts.n, removedViewSpaces };
+    return { deleted: id, detachedArtifacts: artifacts.n, removedViewSpaces, cancelledRuns };
   }
 
   /**

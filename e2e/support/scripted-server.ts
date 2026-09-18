@@ -26,6 +26,7 @@ import {
   filesScript,
   neverEndingScript,
 } from './bl09-scenarios.ts';
+import { chatHistoryScript } from './chat-history-scenario.ts';
 import { interactionsScript } from './interactions-scenario.ts';
 import { showValueScript } from './show-value-scenario.ts';
 import { scriptedAgent, type CallRecord, type Step } from './scripted-agent.ts';
@@ -437,7 +438,24 @@ const SCENARIOS: Record<string, Step[]> = {
     {
       kind: 'call',
       name: 'procurement_save_comparison',
-      input: (calls: CallRecord[]) => ({ caseId: firstCaseId(calls), title: 'Zestawienie z chwili' }),
+      /*
+       * `operationId` is required of both writes below: a tool that creates a
+       * durable record demands a key, so a retry after a reconnect replays
+       * instead of making a second artifact (L9.7). A scripted agent names it
+       * the way a real one has to — one identifier per intended operation.
+       *
+       * Minted per invocation, not a fixed literal: this scenario is also
+       * driven again after a **restart on the same data directory**, and that
+       * second run is a new operation, not a retry of the first. A constant key
+       * would either replay the first artifact or, in another conversation,
+       * collide with its fingerprint — both of which would be the harness
+       * telling a story about idempotency that the test is not about.
+       */
+      input: (calls: CallRecord[]) => ({
+        caseId: firstCaseId(calls),
+        title: 'Zestawienie z chwili',
+        operationId: `e2e-artefakt-snapshot-${Date.now()}`,
+      }),
       maxChars: 200,
     },
     {
@@ -449,6 +467,7 @@ const SCENARIOS: Record<string, Step[]> = {
         mode: 'live',
         rendererType: 'procurement.comparison',
         content: { operation: 'procurement.comparison', input: { caseId: firstCaseId(calls) } },
+        operationId: `e2e-artefakt-live-${Date.now()}`,
       }),
       maxChars: 200,
     },
@@ -518,6 +537,7 @@ const CONVERSATION_SCENARIOS: Record<string, (prompt: string) => Step[]> = {
   'bl10-messages': messageKindsScript,
   'bl10-composition': compositionScript,
   'app-context': appContextScript,
+  'chat-history': chatHistoryScript,
   interactions: interactionsScript,
   'show-value': showValueScript,
   'stop-measurement': stopMeasurementScript,

@@ -1,0 +1,332 @@
+Proby zdolnosci wykrycia (G16) — pakiet BL-11b
+commit: 66001b1
+
+P1 [L7.8] packages/platform-server/src/agent/runtime.ts
+    wycofana linia : this.services.runs.markExecutionStart(runId);
+    test           : tests/orchestration.test.ts -t "okna wykonania sa rozlaczne"
+    oczekiwano     : oblewa na — runB.queuedMs > runA.queuedMs
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: B ruszylo o 2026-09-18T16:33:04.583Z, gdy A konczylo o 2026-09-18T16:33:04.807Z: expected false to be true // Object.is equality
+    drzewo po przywroceniu: czyste
+P2 [L7.4] packages/platform-server/src/agent/runtime.ts
+    wycofana linia : const previous = this.#conversationQueue.get(conversation.id) ?? Promise.resolve();
+    test           : tests/orchestration.test.ts -t "okna wykonania sa rozlaczne"
+    oczekiwano     : oblewa na — drugie polecenie ruszylo, zanim pierwsze skonczylo
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: drugie polecenie ruszylo, zanim pierwsze skonczylo: expected 'running' to be 'queued' // Object.is equality
+    drzewo po przywroceniu: czyste
+P3 [L7.9] packages/platform-server/src/agent/runtime.ts
+    wycofana linia : if (runId !== undefined && pending.runId !== runId) return false;
+    test           : tests/orchestration.test.ts -t "zgoda udzielona pod adresem jednego uruchomienia"
+    oczekiwano     : oblewa na — zgoda cudzego uruchomienia zostala rozstrzygnieta
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: zgoda cudzego uruchomienia zostala rozstrzygnieta: expected true to be false // Object.is equality
+    drzewo po przywroceniu: czyste
+P4 [L7.10] packages/platform-server/src/agent/runtime.ts
+    wycofana linia : if (abort.signal.aborted) {
+    test           : tests/orchestration.test.ts -t "polecenie zatrzymane w kolejce nie rusza wcale"
+    oczekiwano     : oblewa na — anulowane w kolejce mimo to oznaczylo start wykonania / RUN_STARTED
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: anulowane w kolejce mimo to oznaczylo start wykonania: expected '2026-09-18T16:33:39.605Z' to be '2026-09-18T16:33:39.399Z' // Object.is equality
+    drzewo po przywroceniu: czyste
+P5 [L9.2] packages/module-procurement/src/server/index.ts
+    wycofana linia : const input = parseOrThrow(criteriaWeightsInput, {
+    test           : tests/domain-guarantees.test.ts -t "waga kryterium poza 0-100"
+    oczekiwano     : oblewa na — endpoint przyjal: waga kryterium poza 0-100
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: endpoint przyjal: waga kryterium poza 0-100: expected null to be 'validation_failed' // Object.is equality
+    drzewo po przywroceniu: czyste
+P6 [L9.3] packages/platform-contracts/src/errors.ts
+    wycofana linia : if (zod) {
+    test           : tests/domain-guarantees.test.ts -t "przestrzen canvas bez tytulu"
+    oczekiwano     : oblewa na — status 500 / kod internal
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: /api/canvas/spaces → 500: expected 500 not to be 500 // Object.is equality
+    drzewo po przywroceniu: czyste
+P7 [L9.5] packages/platform-server/src/http/app.ts
+    wycofana linia : ownerId: c.get('ownerId'),
+    test           : tests/domain-guarantees.test.ts -t "ownerId w ciele zadania jest ignorowany"
+    oczekiwano     : oblewa na — zapis wykonany jako podstawiony wlasciciel
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: expected 403 to be 200 // Object.is equality
+    drzewo po przywroceniu: czyste
+P8 [L9.6] packages/module-procurement/src/server/services.ts
+    wycofana linia : const expected = input.expectedVersion;
+    test           : tests/domain-guarantees.test.ts -t "zapis pozycji bez wersji jest odrzucany takze w serwisie"
+    oczekiwano     : oblewa na — brak odmowy validation_failed
+    wynik          : PRZESZEDL — TEST NIE WYKRYWA
+    asercja        : (brak)
+    drzewo po przywroceniu: czyste
+P9 [L9.7] packages/module-procurement/src/server/services.ts
+    wycofana linia : input.operationId,
+    test           : tests/domain-guarantees.test.ts -t "osiem jednoczesnych zapisow zestawienia"
+    oczekiwano     : oblewa na — liczba artefaktow > before + 1
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: expected 8 to be 1 // Object.is equality
+    drzewo po przywroceniu: czyste
+P10 [L9.14] packages/platform-server/src/services/idempotency.ts
+    wycofana linia : if (this.#reserve(operationId, ownerId, scope, fingerprint)) {
+    test           : tests/domain-guarantees.test.ts -t "osiem jednoczesnych ponowien zmiany pozycji"
+    oczekiwano     : oblewa na — ponowienia zdublowaly skutek
+    wynik          : OBLAL (poprawnie)
+    asercja        : 233|             expectedVersion: expected,
+    drzewo po przywroceniu: czyste
+P11 [L9.14] packages/platform-server/src/services/idempotency.ts
+    wycofana linia : if (fingerprint !== null && row.fingerprint !== null && row.fingerprint !== fingerprint) {
+    test           : tests/domain-guarantees.test.ts -t "ten sam klucz z inna trescia"
+    oczekiwano     : oblewa na — brak conflict operation_id_reused
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: promise resolved "{ item: { …(10) }, changed: true, …(1) }" instead of rejecting
+    drzewo po przywroceniu: czyste
+P12 [L9.8] packages/module-procurement/src/server/services.ts
+    wycofana linia : this.repo.transaction(() => {
+    test           : tests/domain-guarantees.test.ts -t "awaria w polowie ustawiania wag"
+    oczekiwano     : oblewa na — czesc wag zostala zmieniona mimo przerwanej operacji
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: czesc wag zostala zmieniona mimo przerwanej operacji: expected [ [ 'delivery_days', 6 ], …(2) ] to deeply equal [ [ 'delivery_days', 25 ], …(2) ]
+    drzewo po przywroceniu: czyste
+P13 [L9.15] packages/platform-server/src/agent/tools/artifacts.ts
+    wycofana linia : try {
+    test           : tests/domain-guarantees.test.ts -t "nieudane utworzenie artefaktu z pliku"
+    oczekiwano     : oblewa na — plik zostal na liscie mimo nieudanej publikacji
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: plik zostal na liscie mimo nieudanej publikacji: expected 6 to be 5 // Object.is equality
+    drzewo po przywroceniu: czyste
+
+Wynik zbiorczy: UWAGA — co najmniej jedna proba nie wykryla
+
+P8b [L9.6] packages/module-procurement/src/server/services.ts
+    wycofano       : if (input.expectedVersion === undefined) {; const expected = input.expectedVersion;
+    test           : tests/domain-guarantees.test.ts -t "zapis pozycji bez wersji jest odrzucany takze w serwisie"
+    oczekiwano     : oblewa na — brak odmowy validation_failed (stan sprzed poprawki)
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: promise resolved "{ item: { …(10) }, changed: true, …(1) }" instead of rejecting
+    drzewo po przywroceniu: czyste
+P14 [L9.6] packages/platform-server/src/services/canvas.ts
+    wycofano       : if (input.expectedSpecVersion === undefined) {
+    test           : tests/domain-guarantees.test.ts -t "zmiana tresci karty bez wersji"
+    oczekiwano     : oblewa na — brak odmowy validation_failed dla karty
+    wynik          : OBLAL (poprawnie)
+    asercja        : AssertionError: expected AppError: Card content changed since it w… { …(2) } to match object { code: 'validation_failed' }
+    drzewo po przywroceniu: czyste
+
+P14b [L9.6] packages/platform-server/src/services/canvas.ts
+    wycofano       : if (input.expectedSpecVersion === undefined) {
+    test           : tests/domain-guarantees.test.ts -t "zmiana tresci karty bez wersji"
+    oczekiwano     : oblewa na — zapis bez wersji przechodzi po cichu (dokladny stan sprzed poprawki)
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/domain-guarantees.test.ts > L9.6 — konflikt aktualnosci nie nadpisuje nowszych danych > zmiana tresci karty bez wersji jest odrzucana w serwisie i przez HTTP
+        AssertionError: promise resolved "{ id: 'crd_37d1fb46f4ef48ad9fb9', …(8) }" instead of rejecting
+        
+        - Expected
+        + Received
+        
+        - Error {
+        -   "message": "rejected promise",
+        + {
+        +   "createdAt": "2026-09-18T16:35:07.908Z",
+        +   "geometry": {
+        +     "height": 360,
+        +     "width": 520,
+        +     "x": 0,
+    drzewo po przywroceniu: czyste
+P10b [L9.14] packages/platform-server/src/services/idempotency.ts
+    wycofano       : if (this.#reserve(operationId, ownerId, scope, fingerprint)) {
+    test           : tests/domain-guarantees.test.ts -t "osiem jednoczesnych ponowien zmiany pozycji"
+    oczekiwano     : oblewa na — ponowienia zdublowaly skutek
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/domain-guarantees.test.ts > L9.7, L9.14 — powtorzenie i jednoczesne ponowienia daja jeden skutek > osiem jednoczesnych ponowien zmiany pozycji: jeden przyrost wersji, jeden wynik
+        AppError: Pozycja zostala zmieniona przez kogos innego.
+         ❯ packages/module-procurement/src/server/services.ts:232:17
+            230|         if (!ok) {
+            231|           const current = this.repo.getItem(input.itemId, ownerId).ite…
+            232|           throw new AppError('conflict', 'Pozycja zostala zmieniona pr…
+               |                 ^
+            233|             expectedVersion: expected,
+            234|             currentVersion: current.version,
+         ❯ packages/platform-server/src/services/idempotency.ts:128:32
+         ❯ IdempotencyStore.#once packages/platform-server/src/services/idempotency.ts:137:8
+         ❯ IdempotencyStore.once packages/platform-server/src/services/idempotency.ts:112:17
+         ❯ ProcurementService.updateOfferItem packages/module-procurement/src/server/services.ts:179:66
+         ❯ tests/domain-guarantees.test.ts:550:19
+    drzewo po przywroceniu: czyste
+
+P10c [L9.14] packages/platform-server/src/services/idempotency.ts
+    wycofano       : rezerwacja klucza zastapiona odczytem (stan sprzed poprawki)
+    test           : tests/domain-guarantees.test.ts -t "osiem jednoczesnych zapisow zestawienia"
+    oczekiwano     : oblewa — rownoczesne ponowienia tworza wiele artefaktow
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/domain-guarantees.test.ts > L9.7, L9.14 — powtorzenie i jednoczesne ponowienia daja jeden skutek > osiem jednoczesnych zapisow zestawienia tworzy jeden artefakt
+        AssertionError: expected 8 to be 1 // Object.is equality
+        
+        - Expected
+        + Received
+        
+        - 1
+        + 8
+    drzewo po przywroceniu: czyste
+
+P15 [L9.8] packages/platform-server/src/services/conversations.ts
+    wycofano       : transakcja wokol dwoch zapisow
+    test           : tests/domain-guarantees.test.ts -t "awaria przy pierwszej wiadomosci"
+    oczekiwano     : oblewa — rozmowa zostaje mimo nieudanej pierwszej wiadomosci
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/domain-guarantees.test.ts > L9.8, L9.15 — wymuszona awaria w polowie wieloetapowego zapisu > awaria przy pierwszej wiadomosci nie zostawia rozmowy bez tej wiadomosci
+        AssertionError: expected [ { …(7) } ] to have a length of +0 but got 1
+        
+        - Expected
+        + Received
+        
+        - 0
+    drzewo po przywroceniu: czyste
+P16 [L9.8] packages/platform-server/src/services/canvas.ts
+    wycofano       : transakcja wokol dwoch zapisow
+    test           : tests/domain-guarantees.test.ts -t "awaria przy dotknieciu przestrzeni"
+    oczekiwano     : oblewa — karta przetrwala awarie w polowie zapisu
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/domain-guarantees.test.ts > L9.8, L9.15 — wymuszona awaria w polowie wieloetapowego zapisu > awaria przy dotknieciu przestrzeni nie zostawia karty bez zmiany swiezosci przestrzeni
+        AssertionError: karta przetrwala awarie w polowie zapisu: expected 1 to be +0 // Object.is equality
+        
+        - Expected
+        + Received
+        
+        - 0
+    drzewo po przywroceniu: czyste
+
+P17 [L7.8 / pomiar] packages/platform-server/src/agent/runtime.ts
+    wycofano       : durationMs liczone od startu wykonania -> od zakolejkowania
+    test           : tests/measurements.test.ts -t "kolejka, start wykonania" (okno SEAM_MS = 25 ms)
+    oczekiwano     : oblewa — suma kolejka+wykonanie przekracza caly odcinek o czas oczekiwania
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/measurements.test.ts > pomiary rozdzielone na punkty, zapisane z warunkami i wersja kodu > kolejka, start wykonania, pierwszy tekst i zakonczenie sa osobnymi punktami; brak tekstu daje brak metryki
+        AssertionError: expected 326 to be less than or equal to 223
+         ❯ tests/measurements.test.ts:213:43
+            211|       const total = Date.parse(s.finishedAt!) - Date.parse(s.enqueuedA…
+            212|       expect(s.queuedMs).toBeGreaterThan(50);
+            213|       expect(s.queuedMs! + s.durationMs!).toBeLessThanOrEqual(total + …
+               |                                           ^
+            214|       expect(s.queuedMs! + s.durationMs!).toBeGreaterThanOrEqual(total…
+    drzewo po przywroceniu: czyste
+
+== Runda poprawek 1 ==
+
+P18 [L9.3] packages/platform-server/src/http/app.ts
+    wycofano       : const body = threadWriteSchema.parse(await optionalJsonBody(c));
+    test           : tests/domain-guarantees.test.ts -t "watek z cialem, ktore nie jest JSON-em"
+    oczekiwano     : oblewa — trasa polyka zepsute cialo i zwraca 200 zamiast odmowy
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/domain-guarantees.test.ts > L9.3 — kazde wejscie walidowane w runtime, z rozpoznawalna przyczyna > watek z cialem, ktore nie jest JSON-em jest odrzucone z rozpoznawalna przyczyna
+        AssertionError: /api/threads/create → 200 {"id":"cnv_1d506d5e253146c68414","title":"Nowa rozmowa","createdAt":"2026-09-18T17:42:10.942Z"}: expected 200 to be greater than or equal to 400
+         ❯ tests/domain-guarantees.test.ts:321:93
+            319|     const url = path.replace('PLACEHOLDER_CONV', conv.id).replace('PLA…
+            320|     const out = await http(url, init);
+            321|     expect(out.status, `${url} → ${out.status} ${JSON.stringify(out.bo…
+               |                                                 
+    drzewo po przywroceniu: czyste
+P18b [L9.3] packages/platform-server/src/http/app.ts
+    wycofano       : const body = threadWriteSchema.parse(await optionalJsonBody(c));
+    test           : tests/domain-guarantees.test.ts -t "cialo, ktorego nie da sie sparsowac, nie tworzy rozmowy"
+    oczekiwano     : oblewa — rozmowa powstaje mimo ciala, ktorego nie da sie sparsowac
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/domain-guarantees.test.ts > L9.3 — kazde wejscie walidowane w runtime, z rozpoznawalna przyczyna > cialo, ktorego nie da sie sparsowac, nie tworzy rozmowy i nie zmienia istniejacej
+        AssertionError: expected null to be 'validation_failed' // Object.is equality
+        
+        - Expected:
+        "validation_failed"
+        
+        + Received:
+        null
+    drzewo po przywroceniu: czyste
+P19 [L9.14] packages/platform-server/src/agent/tools/files.ts
+    wycofano       : { fingerprint: operationFingerprint(input) },
+    test           : tests/domain-guarantees.test.ts -t "publikacja wersji pliku: ten sam klucz z innym plikiem"
+    oczekiwano     : oblewa — inny plik pod tym samym kluczem dostaje wynik pierwszej publikacji
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/domain-guarantees.test.ts > L9.7, L9.14 — powtorzenie i jednoczesne ponowienia daja jeden skutek > publikacja wersji pliku: ten sam klucz z innym plikiem jest odrzucany, a nie kwitowany
+        AssertionError: promise resolved "{ …(7) }" instead of rejecting
+        
+        - Expected
+        + Received
+        
+        - Error {
+        -   "message": "rejected promise",
+    drzewo po przywroceniu: czyste
+
+== Runda poprawek 2 ==
+
+P20 [L9.14] packages/platform-server/src/agent/tools/files.ts
+    wycofano       : { fingerprint: operationFingerprint({ ...input, contentSha256: sha256(bytes) }) },
+    test           : tests/domain-guarantees.test.ts -t "publikacja z workspace: ten sam klucz z inna sciezka LUB inna trescia"
+    oczekiwano     : oblewa — ta sama sciezka z inna trescia dostaje wynik pierwszej publikacji
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/domain-guarantees.test.ts > L9.7, L9.14 — powtorzenie i jednoczesne ponowienia daja jeden skutek > publikacja z workspace: ten sam klucz z inna sciezka LUB inna trescia jest odrzucany
+        AssertionError: promise resolved "{ …(7) }" instead of rejecting
+        
+        - Expected
+        + Received
+        
+        - Error {
+    drzewo po przywroceniu: czyste
+P21 [L9.3] packages/platform-server/src/http/app.ts
+    wycofano       : const body = z
+    test           : tests/domain-guarantees.test.ts -t "sesja z cialem, ktore nie jest JSON-em"
+    oczekiwano     : oblewa — trasa sesji polyka zepsute cialo i loguje jako tozsamosc domyslna
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/domain-guarantees.test.ts > L9.3 — kazde wejscie walidowane w runtime, z rozpoznawalna przyczyna > sesja z cialem, ktore nie jest JSON-em jest odrzucone z rozpoznawalna przyczyna
+        AssertionError: /api/auth/session → 200 {"userId":"local-user"}: expected 200 to be greater than or equal to 400
+         ❯ tests/domain-guarantees.test.ts:323:93
+            321|     const url = path.replace('PLACEHOLDER_CONV', conv.id).replace('PLA…
+            322|     const out = await http(url, init);
+            323|     expect(out.status, `${url} → ${out.status} ${JSON.stringify(out.bo…
+               |                                                                         
+    drzewo po przywroceniu: czyste
+
+== Naprawa po integracji ==
+
+P22 [L9.7 / integracja] e2e/support/scripted-server.ts
+    wycofano       : operationId w dwoch krokach scenariusza artifact-snapshot-and-live
+    test           : e2e/artifact-views.spec.ts (pod blokada)
+    oczekiwano     : oblewa — wywolania sa odrzucane przed handlerem, artefakty nie powstaja
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        ✘  1 [chromium] › e2e/artifact-views.spec.ts:68:3 › podglad i pelny widok artefaktu › podglad w wiadomosci i pelny widok pokazuja te sama wersje i ten
+        Error: expect(locator).toBeVisible() failed
+        Error: element(s) not found
+        test-results/artifact-views-podglad-i-p-cd03b-ersje-i-ten-sam-stan-zrodla-chromium/test-failed-1.png
+        Error Context: test-results/artifact-views-podglad-i-p-cd03b-ersje-i-ten-sam-stan-zrodla-chromium/error-context.md
+        Error Context: test-results/artifact-views-podglad-i-p-cd03b-ersje-i-ten-sam-stan-zrodla-chromium/error-context.md
+        1 failed
+    drzewo po przywroceniu: czyste

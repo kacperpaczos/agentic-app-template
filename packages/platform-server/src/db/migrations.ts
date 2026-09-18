@@ -219,6 +219,27 @@ export const PLATFORM_MIGRATIONS: ModuleMigration[] = [
   },
   {
     /**
+     * The idempotency key becomes a reservation, not a receipt.
+     *
+     * The row used to be written *after* the operation, and carried nothing but
+     * its result. Two things were therefore impossible to state: that an
+     * operation is running right now (so a concurrent retry has something to
+     * join instead of a second execution), and that the key was used for a
+     * different request (so a reuse is a conflict rather than someone else's
+     * answer). `status` and `fingerprint` say both.
+     *
+     * Existing rows are `done` with no fingerprint, which is exactly what they
+     * are: completed operations whose request body was never recorded. They
+     * keep replaying as before, and nothing about them is guessed.
+     */
+    id: 'platform-0005-idempotency-reservation',
+    sql: /* sql */ `
+      ALTER TABLE idempotency_keys ADD COLUMN status TEXT NOT NULL DEFAULT 'done';
+      ALTER TABLE idempotency_keys ADD COLUMN fingerprint TEXT;
+    `,
+  },
+  {
+    /**
      * Which command a file was attached to.
      *
      * The link existed only for the duration of the run: `attachFileIds` arrived
@@ -236,7 +257,7 @@ export const PLATFORM_MIGRATIONS: ModuleMigration[] = [
      * the record describes what the run received, not what the request asked
      * for. Deleting a conversation or a file takes its links with it.
      */
-    id: 'platform-0005-message-attachments',
+    id: 'platform-0006-message-attachments',
     sql: /* sql */ `
       CREATE TABLE IF NOT EXISTS message_attachments (
         message_id      TEXT NOT NULL,

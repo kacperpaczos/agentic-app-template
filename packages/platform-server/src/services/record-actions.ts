@@ -2,9 +2,9 @@ import {
   AppError,
   EMPTY_APP_CONTEXT,
   recordActionRequestSchema,
+  operationFingerprint,
   recordIdOf,
   recordsOf,
-  stableJson,
   type RecordActionResponse,
   type ToolCallContext,
 } from '@platform/contracts';
@@ -49,6 +49,14 @@ interface StoredOutcome {
  *
  * A repeated `operationId` returns the first outcome. One reused for a
  * different request is a `conflict`, not the first request's answer.
+ *
+ * The comparison stays here rather than being handed to `IdempotencyStore` as
+ * its `fingerprint` option, and that is deliberate: the store refuses a reused
+ * key with a general message, while this path owes the caller a specific one —
+ * that the earlier attempt *was performed*, so "nothing changed" cannot be read
+ * as "your earlier change did not happen". The effect is identical either way
+ * (the store replays, it never re-runs the action); only the sentence differs,
+ * and here the sentence is part of the contract.
  */
 export async function performRecordAction(
   deps: { registry: ServerModuleRegistry; idempotency: IdempotencyStore },
@@ -81,7 +89,24 @@ export async function performRecordAction(
     throw new AppError('internal', `Akcja ${action.id}: brak narzedzia ${action.tool} modulu ${prepared.entry.moduleId}.`);
   }
   const values = parseActionValues(action, request.values ?? {});
-  const fingerprint = stableJson({
+  /*
+   * The same rule as every other write path — `operationFingerprint` — over a
+   * request this one has to canonicalise first.
+   *
+   * Why the projection is built by hand here and nowhere else: what identifies
+   * a record action is not its raw body. The read's input is resolved by
+   * `prepareRead` (so two callers spelling the same read differently are the
+   * same action), and the body carries fields that say nothing about what is
+   * being done. Fingerprinting the body as it arrived would call two identical
+   * actions different — which the replay test relies on, since it repeats the
+   * request with its keys in another order and expects a replay.
+   *
+   * What is *not* different is the last step, and that is the one that used to
+   * be a private copy: strip the key, render the rest stably. It is shared now,
+   * because the reason this file had its own copy was only that it was written
+   * first.
+   */
+  const fingerprint = operationFingerprint({
     operation: request.operation,
     input: prepared.source.input ?? {},
     action: action.id,

@@ -51,6 +51,10 @@ export function createPlatformServices(input: {
   catalog: ComponentCatalog;
 }): PlatformServices {
   const idempotency = new IdempotencyStore(input.db);
+  // One registry, shared: deleting a conversation has to stop the runs it owns
+  // (see `ConversationService.delete`), and a second registry would hold no
+  // cancel handles for them.
+  const runs = new RunRegistry(input.db, input.config.workspacesDir);
   return {
     config: input.config,
     db: input.db,
@@ -58,10 +62,10 @@ export function createPlatformServices(input: {
     catalog: input.catalog,
     idempotency,
     canvas: new CanvasService(input.db, idempotency),
-    conversations: new ConversationService(input.db),
+    conversations: new ConversationService(input.db, runs),
     artifacts: new ArtifactService(input.db),
     files: new FileService(input.db, input.config.filesDir, input.config.maxUploadBytes),
-    runs: new RunRegistry(input.db, input.config.workspacesDir),
+    runs,
     uiSnapshots: new UiSnapshotStore(),
   };
 }

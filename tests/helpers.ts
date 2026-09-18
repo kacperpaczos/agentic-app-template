@@ -26,14 +26,16 @@ export async function createHarness(
     withModule?: boolean;
     seed?: boolean;
     /**
-     * Replaces the model at the adapter boundary **for the platform's own
-     * runtime** — the one `platform.app` routes to.
+     * Installs a stand-in model in the platform's **own** runtime — the one
+     * `platform.app` is wired to.
      *
-     * A test that drives the HTTP API through a run needs this: building a
-     * second `AgentRuntime` beside the platform gives the stand-in a runtime the
-     * routes know nothing about, so a request answered over HTTP (a permission
-     * decision, a cancellation) reaches the wrong object and quietly does
-     * nothing.
+     * Necessary whenever a test drives runs *and* calls the HTTP API about
+     * them: a runtime built beside the platform has different pending consents,
+     * different live streams and a different conversation queue, so an endpoint
+     * asked about a run of that other runtime answers about nothing — quietly,
+     * which is the worst way to be wrong.
+     *
+     * Results obtained this way are simulations and are reported as such.
      */
     modelAgent?: ModelAgentLike | null;
   } = {},
@@ -45,7 +47,7 @@ export async function createHarness(
   const platform = createPlatform({
     modules: withModule ? (services) => [createProcurementModule(services)] : [],
     env,
-    modelAgent: options.modelAgent ?? null,
+    ...(options.modelAgent !== undefined ? { modelAgent: options.modelAgent } : {}),
   });
 
   const service = new Service(platform.services);

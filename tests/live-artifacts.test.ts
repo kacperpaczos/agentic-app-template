@@ -52,7 +52,7 @@ async function changeSourceData(): Promise<string> {
   // `quantity` is the decimal the domain service accepts; it stores milli-units
   // itself. Passing `quantityMilli` here silently changes nothing.
   await h.service.updateOfferItem(
-    { itemId: item.id, quantity: (item.quantityMilli ?? 1000) / 1000 + 5 },
+    { itemId: item.id, quantity: (item.quantityMilli ?? 1000) / 1000 + 5, expectedVersion: item.version },
     h.ownerId,
   );
   return first.offer.id;

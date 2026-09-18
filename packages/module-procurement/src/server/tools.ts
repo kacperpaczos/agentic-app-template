@@ -187,11 +187,16 @@ export function procurementTools(service: ProcurementService): ModuleToolDefinit
         'wywolanie nie dubluje zmiany.',
       effect: 'write',
       /*
-       * `expectedVersion` required for the agent's door, optional on the shared
-       * schema the HTTP route uses (the module's own form supplies it from the
-       * record it rendered). A write without a version was compared against the
-       * row it was about to overwrite — no check at all — so an agent working
-       * from an older reading would silently replace the user's newer change.
+       * `expectedVersion` is required by the shared schema itself — on both
+       * doors and in the service — so this is no longer where the requirement
+       * lives. What is added here is the *description* the agent reads: the
+       * shared schema cannot say "take it from `list_offers`", because the HTTP
+       * caller takes it from the record it rendered.
+       *
+       * (It used to be the requirement, back when the shared schema left the
+       * field optional and the service filled the gap with the row's current
+       * version — a comparison of a value with itself. That gap is closed; the
+       * comment is kept so nobody re-opens it thinking this line is the guard.)
        */
       inputSchema: updateOfferItemInput.extend({
         expectedVersion: z
@@ -254,11 +259,14 @@ export function procurementTools(service: ProcurementService): ModuleToolDefinit
     {
       name: 'save_comparison',
       description:
-        'Zapisuje aktualne zestawienie porownawcze jako trwaly artefakt (snapshot). Tresc artefaktu nie zmienia sie pozniej.',
+        'Zapisuje aktualne zestawienie porownawcze jako trwaly artefakt (snapshot). Tresc artefaktu nie zmienia sie pozniej. ' +
+        'operationId jest wymagane: nadaj wlasny identyfikator tego zapisu. Powtorzone wywolanie z tym samym ' +
+        'operationId zwraca ten sam artefakt (replayed=true) zamiast tworzyc drugi; ten sam operationId z innym ' +
+        'zapytaniem konczy sie conflict.',
       effect: 'write',
       inputSchema: saveComparisonInput,
       handler: async (i: any, ctx: ToolCallContext) => {
-        const saved = service.saveComparisonArtifact({
+        const saved = await service.saveComparisonArtifact({
           caseId: i.caseId,
           ownerId: ctx.ownerId,
           conversationId: ctx.conversationId,
@@ -271,6 +279,9 @@ export function procurementTools(service: ProcurementService): ModuleToolDefinit
           artifactId: saved.artifactId,
           version: saved.version,
           bestOfferId: saved.result.bestOfferId,
+          // Stated, so a retry can tell "saved" from "already saved" instead of
+          // inferring one artifact from two successful answers.
+          replayed: saved.replayed,
         };
       },
     },
