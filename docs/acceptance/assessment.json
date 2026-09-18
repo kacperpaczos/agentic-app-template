@@ -171,12 +171,11 @@
       ]
     },
     "L2.1": {
-      "status": "czesciowe",
-      "evidence": "gui",
+      "status": "potwierdzone",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "Komponenty danych platformy (DataTable, DataChart, DataSummary) i komponenty ekranow modulu (CaseHeader, CaseOfferSources, ItemProvenance, SectionHeading) sa zdefiniowane przez defineComponent z typowanymi schematami propsow w jednym, wspolnym dla przegladarki i serwera miejscu; zgodnosc katalogow sprawdza tests/openui-catalog-parity.test.ts.",
-      "gap": "Karty canvasu modulu (caseSummary, offerList, comparisonTable, costChart, deliveryTerms, offerItemForm, provenance) nadal istnieja tylko we wlasnym katalogu kart, a ich renderery dostaja props typu Record<string, unknown>.",
-      "backlog": "BL-10",
+      "proof": "Komponenty danych platformy i komponenty ekranow modulu sa definiowane przez defineComponent z typowanymi schematami propsow w jednym miejscu, a KAZDA karta canvasu modulu (caseSummary, offerList, comparisonTable, costChart, deliveryTerms, offerItemForm, provenance) jest teraz deklarowana raz w packages/module-procurement/src/shared/cards.ts: ten sam schemat Zod zasila katalog kart serwera, renderer przegladarki (typedCard w packages/platform-ui/src/catalog/registry.tsx parsuje props przed renderem) i odpowiednik w katalogu OpenUI. Dowod: tests/bl10-card-catalog.test.ts (4 przypadki) i tests/openui-catalog-parity.test.ts (10 komponentow modulu po obu stronach, ta sama kolejnosc parametrow).",
+      "gap": "—",
       "scenarios": [],
       "historical": {
         "status": "potwierdzone",
@@ -198,12 +197,11 @@
       }
     },
     "L2.3": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/session-restore.spec.ts (serwer skryptowany): „po przeladowaniu ta sama rozmowa, jej historia i przestrzen pracy”, „przestrzen pracy wraca razem z rozmowa” (reload przywraca ?c= i ?s= oraz karty przestrzeni bez szuflady), „Wstecz i Dalej przelaczaja rozmowy bez mieszania historii”; tests/session-restore.test.ts (decideRestore). Kod: apps/web/src/router.tsx retainSearchParams(['c','s']), SpaceSync.tsx, ConversationSync.tsx. Nie obejmuje: przestrzeni przy Wstecz/Dalej oraz zachowania c i s przy przejściach przez linki.",
-      "gap": "Nowe brzmienie wymaga rozmowy i przestrzeni: test Wstecz/Dalej sprawdza tylko rozmowę; zmiana przestrzeni w obrębie rozmowy zapisuje adres przez replace (raport §7 pkt 12), więc Wstecz jej nie przywraca; brak testu, że przejście przez Link zachowuje c i s.",
-      "backlog": "BL-10",
+      "proof": "Rozmowa i przestrzen sa w adresie (?c=, ?s=), a router zachowuje oba parametry przy kazdej nawigacji (retainSearchParams). Przejscie przez link platformy i przez link modulu zachowuje rozmowe i przestrzen; Wstecz przywraca poprzednia przestrzen (jeden krok na jeden wybor) razem z rozmowa, Dalej wraca do nowszej. Naprawione dwa defekty: kafelek zapisanej kompozycji przekazuje przestrzen w adresie linku zamiast przez store (WorkspacePage), a fallback canvasu czyta biezaca przestrzen ze store, nie z renderu (CanvasHost) — wczesniej otwarcie kompozycji z listy laadowalo ostatnio zmieniona przestrzen. Dowod: e2e/bl10-session-context.spec.ts (2 przypadki), e2e/session-restore.spec.ts, tests/session-restore.test.ts.",
+      "gap": "—",
       "scenarios": [
         "T03"
       ],
@@ -227,12 +225,11 @@
       }
     },
     "L2.5": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/app.spec.ts „menu jest obslugiwalne z klawiatury i ma widoczny fokus” (focus() i toBeFocused, Enter otwiera ekran spraw); e2e/chat-drawer.spec.ts „otwarcie i zamkniecie dziala z klawiatury, kompozytor pozostaje dostepny” (Enter, kontrolka zamykania przyjmuje fokus). Kod: globalne :focus-visible w styles.css, etykiety pól .pf-field. Nie obejmuje: widoczności fokusu, etykiet i obsługi formularzy z klawiatury.",
-      "gap": "Żaden test nie sprawdza, że fokus jest widoczny (obrys) ani że pola formularzy (np. karta procurement.offerItemForm, wgrywanie pliku) mają etykiety i działają z klawiatury; nazwa testu obiecuje „widoczny fokus”, a asercja sprawdza tylko toBeFocused.",
-      "backlog": "BL-10",
+      "proof": "Nawigacja jest punktem orientacyjnym z nazwa (role=navigation), jej kontrolka niesie aria-expanded zgodne z ekranem, zakladki panelu aria-selected, przycisk zaznaczenia karty aria-pressed, a zwinieta sekcja Ustawien to <details> ze sterowaniem z klawiatury. Widocznosc fokusu jest mierzona obliczonym stylem (outline/box-shadow) dla kolejnych kontrolek osiaganych tabulatorem — nie toBeFocused. Formularz karty procurement.offerItemForm ma etykiety (getByLabel) i daje sie wypelnic oraz zapisac wylacznie z klawiatury, z wynikiem potwierdzonym odczytem backendu (quantityMilli = 7250). Dowod: e2e/bl10-shell-canvas.spec.ts (3 przypadki).",
+      "gap": "—",
       "scenarios": [
         "T02"
       ],
@@ -267,24 +264,22 @@
       ]
     },
     "L2.8": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/session-restore.spec.ts „Wstecz i Dalej przelaczaja rozmowy bez mieszania historii”; e2e/chat.spec.ts „lista rozmow, przelaczanie i usuwanie”; tests/session-restore.test.ts decideRestore (m.in. „Wstecz na poprzednia rozmowe wraca do niej, nie publikuje biezacej”); tests/access-context.test.ts „odpowiedz, ktora mimo wszystko dobiegnie, jest odrzucana po epoce” (tylko zmiana tożsamości). Nie obejmuje: opóźnionej odpowiedzi poprzedniego wyboru rozmowy lub przestrzeni ani przejść przez linki.",
-      "gap": "ConversationSync.followConversationSpace (packages/platform-ui/src/chat/ConversationSync.tsx) po await GET /api/conversations/:id wywołuje setSpace bez sprawdzenia, czy rozmowa jest nadal wybrana — wolniejsza odpowiedź wcześniejszego wyboru może nadpisać przestrzeń wybraną później (zabezpieczenia brak w kodzie, brak testu z opóźnioną odpowiedzią); brak testu zachowania kontekstu przy przejściach przez linki.",
-      "backlog": "BL-10",
+      "proof": "ConversationSync.followConversationSpace porownuje rozmowe z odpowiedzi z rozmowa aktualnie wybrana, zanim ustawi przestrzen — spozniona odpowiedz wczesniejszego wyboru nie nadpisuje nowszego. Dowod GUI z opoznieniem sieciowym (page.route wstrzymuje /api/conversations/<A> o 2,5 s): po wyborze A i natychmiastowym wyborze B adres i canvas pokazuja B takze po dojsciu odpowiedzi dla A. Kontekst przy przejsciach przez linki sprawdzony osobno. Dowod: e2e/bl10-session-context.spec.ts, tests/access-context.test.ts.",
+      "gap": "—",
       "scenarios": [
         "T03",
         "T12"
       ]
     },
     "L2.9": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/chat-drawer.spec.ts przy viewport 1680 i 1120 px: „zamknieta szuflada nie zaslania rozmowy” (pokrycie panelu do 2 px), „otwarcie i zamkniecie dziala z klawiatury, kompozytor pozostaje dostepny”, „canvas pod spodem pozostaje klikalny przy zamknietej szufladzie” (elementFromPoint przy lewej krawędzi panelu należy do czatu); otwarcie myszą „Open sidebar” w e2e/chat.spec.ts i e2e/agent-ui.spec.ts. Kontekst: raport §4d. Nie obejmuje: wąskiego kontenera czatu i zamykania myszą.",
-      "gap": "Oba viewporty dają ten sam kontener czatu 560 px (kolumna --pf-chat-width powyżej 1100 px), więc wąski panel nie jest sprawdzony; przy szerokości do 1100 px czat zajmuje pełną szerokość w drugim wierszu i szuflada nie ma tam testu; zamknięcie tylko z klawiatury; przechwycenie kliknięć sprawdzone tylko przy zamkniętej szufladzie, a e2e/chat.spec.ts klika wiersze z force:true.",
-      "backlog": "BL-10",
+      "proof": "Szuflada sprawdzona na dwoch faktycznie roznych ukladach gotowego czatu: panel 560 px (uklad mobilny biblioteki, szuflada poza kanwa) i panel pelnej szerokosci >768 px (uklad wbudowany). W obu: otwarcie i zamkniecie mysza oraz z klawiatury po etykiecie kontrolki, kompozytor dostepny po zamknieciu, a przy OTWARTEJ szufladzie klikniecie wiersza rozmowy bez force wybiera rozmowe i punkt wiersza nalezy do szuflady (elementFromPoint), wiec ani canvas, ani overflow nie przechwytuja interakcji. Dowod: e2e/bl10-shell-canvas.spec.ts (6 przypadkow), e2e/chat-drawer.spec.ts.",
+      "gap": "—",
       "scenarios": [
         "T02"
       ]
@@ -300,24 +295,22 @@
       ]
     },
     "L2.11": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/session-restore.spec.ts „usunieta rozmowa daje czytelny stan zastepczy, nie pusty ekran” (conversation-missing, data-kind gone, aktywny kompozytor, przycisk nowej rozmowy) i „rozmowa innego wlasciciela nie jest pokazywana” (brak wiadomości i tytułu cudzej rozmowy w .pf-chat); tests/session-restore.test.ts classifyThreadFailure „awaria zadania jest odroznialna od usuniecia”. Mechanizm: raport §4b Rezultat 1. Nie obejmuje: widoku stanu failed w przeglądarce.",
-      "gap": "Stan „błąd pobrania” (data-kind failed, ponowienie) ma tylko test klasyfikacji w Vitest; brak testu GUI, że nieudane wczytanie historii pokazuje czytelny stan zastępczy zamiast pustego wątku.",
-      "backlog": "BL-10",
+      "proof": "Usunieta rozmowa daje stan data-kind=\"gone\", a nieudane wczytanie historii — rozlaczny stan data-kind=\"failed\" z czytelnym zdaniem („Nic nie zostalo utracone”) i dzialajacym ponowieniem: sprawdzone w przegladarce przez wymuszona awarie zadania /api/threads/get/<id>. Kontrola negatywna z dwiema tozsamosciami: drugi wlasciciel widzi stan zastepczy, a tytul ani wiadomosci pierwszego nie pojawiaja sie ani w watku, ani na liscie w szufladzie, ani w odpowiedzi API. Dowod: e2e/bl10-session-context.spec.ts (2 przypadki), e2e/session-restore.spec.ts, tests/session-restore.test.ts.",
+      "gap": "—",
       "scenarios": [
         "T03",
         "T12"
       ]
     },
     "L2.12": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/app.spec.ts „przesuniecie karty jest trwale i nie zmienia jej tresci” (przeciągnięcie nagłówka karty w React Flow, geometryVersion rośnie, specVersion bez zmian, pozycja po reload). Kod: packages/platform-ui/src/canvas/CanvasHost.tsx używa @xyflow/react (pan, zoom, Controls, MiniMap, onMoveEnd zapisuje viewport), treść karty ma nodrag i nowheel. Nie obejmuje: panu, zoomu, zmiany rozmiaru oraz braku zakłóceń czatu i formularza.",
-      "gap": "Brak NodeResizer lub innej kontrolki — użytkownik nie może zmienić rozmiaru karty w UI (gałąź dimensions w onNodesChange obsługuje tylko pomiar); pan i zoom bez testu; brak testu, że przeciąganie lub pan nie przerywa pisania w kompozytorze ani w formularzu karty.",
-      "backlog": "BL-10",
+      "proof": "Pan, zoom i przesuniecie pochodza z @xyflow/react 12.11.6, a zmiane rozmiaru dodaje gotowa kontrolka NodeResizer tej samej biblioteki (widoczna na zaznaczonej karcie; zaznaczenie wezla jest teraz utrzymywane, bo wezly sa kontrolowane). Kazda zmiana geometrii idzie tym samym kanalem co przesuniecie i jest trwala (potwierdzone odczytem backendu i po przeladowaniu). Przeciaganie karty i pan nie przerywaja pisania: tekst w kompozytorze i wartosc w formularzu karty zostaja, a pisanie dziala dalej. Ograniczenie: uchwyty NodeResizer sa tylko wskaznikowe (biblioteka renderuje je jako divy bez obslugi klawiatury) — opisane w kodzie. Dowod: e2e/bl10-shell-canvas.spec.ts (3 przypadki), e2e/app.spec.ts.",
+      "gap": "Zmiana rozmiaru karty jest mozliwa wylacznie wskaznikiem — uchwyty gotowej kontrolki NodeResizer nie sa osiagalne z klawiatury.",
       "scenarios": [
         "T02"
       ]
@@ -334,23 +327,21 @@
       ]
     },
     "L2.14": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "Odslanianie rekordu zdejmuje zawezenie, ktore go ukrywa, przechodzi na jego strone, przewija i podswietla komorke, a kazda zmiana prezentacji jest zgloszona w wyniku i na pasku nad widokiem (packages/platform-ui/src/shell/uiReveal.ts, ViewFilterBanner). Brak celu, brak dostepu, niejednoznacznosc, brak renderera i brak potwierdzenia daja rozlaczne wyniki bez zmiany wartosci. Dowod: e2e/show-value.spec.ts, tests/show-value.test.ts.",
-      "gap": "Rozwijanie zwinietych sekcji (Accordion, Tabs) przed pokazaniem elementu nadal nie jest realizowane; element zaslonięty przez element plywajacy moze zostac zgloszony jako pokazany (sprawdzane jest tylko przyciecie przodkow).",
-      "backlog": "BL-10",
+      "proof": "Odslanianie rekordu zdejmuje zawezenie, przechodzi na jego strone, przewija i podswietla komorke, a kazda zmiana prezentacji jest zgloszona. Doszlo rozwijanie zwinietych sekcji: expandCollapsedAncestors (packages/platform-ui/src/shell/expandSection.ts) otwiera <details> i panele oznaczone aria-expanded/aria-controls oraz zakladki, zglasza to jako section_expanded, a element bez pudelka po rozwinieciu jest raportowany jako niepokazany zamiast podswietlany niewidocznie. Proba GUI: sekcja „Narzedzia agenta” w Ustawieniach jest zwinieta, polecenie ja otwiera, przewija i podswietla, wartosci ustawien sa nietkniete; brak celu daje unknown_target bez zmiany ekranu. Dowod: e2e/bl10-agent-navigation.spec.ts (2 przypadki), e2e/show-value.spec.ts, tests/show-value.test.ts.",
+      "gap": "Zasloniecie elementu przez element plywajacy nadal nie jest wykrywane — sprawdzane sa przyciecie przodkow i wlasne pudelko elementu, nie trafienie w punkt.",
       "scenarios": [
         "T23"
       ]
     },
     "L2.15": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "Nawigacja zlecona przez agenta jest zwykla nawigacja routera (Wstecz i Dalej dzialaja), zdarzenie jest idempotentne po commandId, a kontekst kolejnego polecenia niesie aktywny widok i wersje opisu ekranu (AppContext.ui). Dowod: e2e/ui-navigation.spec.ts, e2e/ui-state.spec.ts.",
-      "gap": "Brak proby GUI, ktora po nawigacji zleconej przez agenta sprawdza historie Wstecz/Dalej razem z aktualizacja kontekstu w jednym przebiegu.",
-      "backlog": "BL-10",
+      "proof": "Nawigacja zlecona przez agenta jest zwykla nawigacja routera: w jednym przebiegu polecenie otwiera ekran, agent odczytuje opis TEGO ekranu (ui_state wskazuje platform.files i nowy adres), a Wstecz i Dalej dzialaja. Ponowienie zdarzenia nie powiela nawigacji takze po przeladowaniu karty: lista wykonanych commandId jest trzymana w sessionStorage, wiec replay strumienia od poczatku (po reloadzie kursor wraca do zera) nie przenosi uzytkownika drugi raz. Dowod: e2e/bl10-agent-navigation.spec.ts (2 przypadki), e2e/ui-navigation.spec.ts, e2e/ui-state.spec.ts.",
+      "gap": "—",
       "scenarios": [
         "T23"
       ]
@@ -434,12 +425,11 @@
       }
     },
     "L3.5": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/app.spec.ts „zmiana widoku karty przezywa przejscie miedzy ekranami” (odznaczony showExcluded w cardState zostaje po przejściu Ustawienia → Canvas); e2e/chat.spec.ts „zaznaczenie karty trafia do kontekstu rozmowy”; appState trzyma selection, cardState i drafts poza węzłami React Flow (kod). Nie obejmuje: zmiany kompozycji.",
-      "gap": "Brak testu, że dodanie, zmiana lub usunięcie karty (przez agenta albo refetch po canvas_changed) zachowuje zaznaczenie, stan widoku karty i niezapisany szkic formularza procurement.offerItemForm; brak jawnego rozwiązania konfliktu, gdy agent zmienia lub usuwa kartę ze szkicem; filtry kontekstu nie są używane (setFilter bez wywołań).",
-      "backlog": "BL-10",
+      "proof": "Zaznaczenie kart, stan widoku karty i niezapisane szkice zyja w appState poza wezlami React Flow, wiec dodanie i podmiana karty przez agenta ich nie gubia — szkic wraca nawet do ponownie utworzonego formularza (OfferItemFormCard odtwarza wartosci z DraftRecord). Usuniecie karty ze szkicem jest konfliktem rozstrzyganym jawnie: platforma pokazuje nad canvasem komunikat z rekordem i polami, nic nie zapisuje ani nie odrzuca, dopoki uzytkownik nie zdecyduje (LostDraftNotice w CanvasHost, DraftRecord.cardId). Dowod: e2e/bl10-composition.spec.ts (3 przypadki).",
+      "gap": "Filtry kontekstu (AppState.filters przez setFilter) nadal nie maja zadnego wywolania — stan widokow jest raportowany osobno przez viewStates.",
       "scenarios": [
         "T08"
       ],
@@ -463,12 +453,11 @@
       }
     },
     "L3.7": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/app.spec.ts „tabela porownawcza pokazuje wartosci z backendu i przyczyny wykluczen”; e2e/measurements.spec.ts „zmiana pozycji oferty jest widoczna w zestawieniu bez przeladowania” (sumy na ekranie zmieniają się po mutacji backendu, porównanie z API); schematy props kart domeny niosą tylko referencje, a z.object usuwa nadmiarowe klucze (kod). Nie obejmuje: kart kind openui i platform.markdown.",
-      "gap": "Karta openui (dowolny OpenUI Lang z ogólnymi komponentami tabeli i wykresu openuiLibrary) i platform.markdown przyjmują treść z wartościami wygenerowanymi przez model bez powiązania z odczytem backendu; brak testu, że karta utworzona przez model nie niesie wartości biznesowych.",
-      "backlog": "BL-10",
+      "proof": "Schematy propsow kart niosa wylacznie referencje, a z.object usuwa nadmiarowe klucze: kompozycja z wpisana kwota zostaje zapisana bez niej (tests/bl10-card-catalog.test.ts). W widoku agenta kompozycja z wpisanymi wierszami jest odrzucana, a ta sama tresc jako DataTable nad zarejestrowanym odczytem — przyjmowana. Proba GUI: wartosc w tabeli porownawczej rowna sie wyliczeniu backendu, a notatka platform.markdown z liczba wymyslona przez model nie zmienia ani tego, co pokazuje tabela, ani danych backendu. Dowod: e2e/bl10-composition.spec.ts (2 przypadki), tests/bl10-card-catalog.test.ts, e2e/measurements.spec.ts.",
+      "gap": "Karta platform.markdown nadal moze zawierac liczbe wymyslona przez model — jest notatka, nie odczytem; test pokazuje, ze nie zastepuje rekordu, ale tresci notatki nic nie waliduje.",
       "scenarios": [
         "T27"
       ],
@@ -509,12 +498,11 @@
       ]
     },
     "L3.11": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "Opis czesciowy i bledny jest odrzucany przy zapisie (walidator serwera), a w czacie komponent danych nie wysyla odczytu dla nazwy operacji, ktora dopiero sie strumieniuje (readGate) — dowod: tests/agent-views.test.ts, e2e/agent-views.spec.ts.",
-      "gap": "Brak proby GUI, ktora w jednej wiadomosci pokazuje zwykla proze, poprawny OpenUI i odpowiedz po narzedziu obok siebie i sprawdza, ze rejestracja katalogu nie ukrywa prozy.",
-      "backlog": "BL-10",
+      "proof": "Cztery rodzaje odpowiedzi sa rozroznialne i zadna nie jest niewidoczna. Tresc wiadomosci jest dzielona na proze i kompozycje (splitMessage w AssistantMessage.tsx): proza obok poprawnego OpenUI i obok wyniku narzedzia jest widoczna w jednej wiadomosci — wczesniej jeden blok OpenUI oddawal cala odpowiedz rendererowi GenUI i zdania wokol niego znikaly bez sladu. Kompozycja, ktora nic nie wyrenderowala (nieznany komponent, opis niepelny), jest zglaszana z trescia opisu zamiast pustego pudelka; opis czesciowy nie kasuje tego, co juz powiedziano. Opis czesciowy i bledny jest odrzucany przy zapisie przez walidator serwera. Dowod: e2e/bl10-composition.spec.ts (4 przypadki), e2e/agent-views.spec.ts, tests/agent-views.test.ts.",
+      "gap": "Tekst, ktory agent wypowiada PRZED wywolaniem narzedzia, nie jest renderowany przez gotowy czat (osobna wiadomosc asystenta w historii, brak jej w panelu) — defekt skladania tury w czacie, poza tym pakietem (BL-08).",
       "scenarios": [
         "T04"
       ]
@@ -2542,18 +2530,18 @@
     },
     "T02": {
       "status": "czesciowe",
-      "proof": "e2e/chat-drawer.spec.ts przy 1680 px i 1120 px: szuflada otwarta i zamknięta, kompozytor dostępny, canvas klikalny; e2e/chat-layout.spec.ts: geometria wątku i przynależność kontrolek.",
-      "gap": "Obie szerokości okna dają ten sam panel czatu 560 px, więc wąski kontener nie jest faktycznie sprawdzony; brak próby zasłoniętej kontrolki przy innej szerokości panelu."
+      "proof": "e2e/chat-drawer.spec.ts przy 1680 px i 1120 px: szuflada otwarta i zamknieta, kompozytor dostepny, canvas klikalny; e2e/chat-layout.spec.ts: geometria watku i przynaleznosc kontrolek; e2e/bl10-shell-canvas.spec.ts na dwoch faktycznie roznych ukladach gotowego czatu (panel 560 px — uklad mobilny biblioteki; panel pelnej szerokosci >768 px — uklad wbudowany): otwarcie i zamkniecie mysza oraz z klawiatury, klikniecie wiersza bez force przy otwartej szufladzie i test trafienia w punkt (elementFromPoint), ktory odrzuca przechwycony klik.",
+      "gap": "Klikalnosc canvasu przy zamknietej szufladzie jest sprawdzona tylko na panelu 560 px; na panelu pelnej szerokosci sprawdzono, ze szuflada nie oddaje swoich klikniec, ale nie ze canvas pod nia pozostaje interaktywny."
     },
     "T03": {
       "status": "czesciowe",
-      "proof": "e2e/session-restore.spec.ts: reload bez klikania listy, kontynuacja sesji, Wstecz/Dalej, przestrzeń wraca z rozmową, usunięta i cudza rozmowa (serwer skryptowany).",
-      "gap": "Opóźniona odpowiedź poprzedniego wyboru nie jest sprawdzona, a analiza kodu wskazuje brak ochrony przed nadpisaniem nowszej przestrzeni (L2.8); kontynuacja sesji potwierdzona na scenariuszu, nie na prawdziwym modelu."
+      "proof": "e2e/session-restore.spec.ts: reload bez klikania listy, kontynuacja sesji, Wstecz/Dalej, przestrzen wraca z rozmowa, usunieta i cudza rozmowa (serwer skryptowany); e2e/bl10-session-context.spec.ts: przejscie przez link zachowuje c i s, Wstecz i Dalej przywracaja przestrzen razem z rozmowa, opozniona o 2,5 s odpowiedz poprzedniego wyboru nie cofa nowszego, a nieudane wczytanie historii ma wlasny stan zastepczy z ponowieniem.",
+      "gap": "Kontynuacja sesji potwierdzona na scenariuszu skryptowanym, nie na prawdziwym modelu."
     },
     "T04": {
       "status": "czesciowe",
-      "proof": "pierwsza odpowiedź po nadaniu ID pozostaje widoczna (L4.10); proza i wynik narzędzia w czacie (e2e/tool-activity.spec.ts, e2e/agent-ui.spec.ts).",
-      "gap": "Brak próby renderowania OpenUI Lang w wiadomości oraz częściowego i błędnego opisu UI; odpowiedź bez tekstu sprawdzona tylko dla strumieniowania."
+      "proof": "pierwsza odpowiedz po nadaniu ID pozostaje widoczna (L4.10); proza i wynik narzedzia w czacie (e2e/tool-activity.spec.ts, e2e/agent-ui.spec.ts); e2e/bl10-composition.spec.ts: proza, poprawny OpenUI i wynik narzedzia obok siebie w jednej wiadomosci, sama proza, opis czesciowy i opis nazywajacy nieznany komponent — kazdy z wlasnym, widocznym rezultatem.",
+      "gap": "Odpowiedz bez tekstu sprawdzona tylko dla strumieniowania. Tekst wypowiedziany przed wywolaniem narzedzia nie jest renderowany przez gotowy czat — zapisany w historii, niewidoczny w panelu (defekt skladania tury, BL-08)."
     },
     "T05": {
       "status": "potwierdzone",
@@ -2713,12 +2701,6 @@
       "title": "Pliki, sandbox i zadania w tle",
       "summary": "Braki dowodu lub implementacji w warstwie 11 niepokryte ponowieniem prób (BL-03), np. izolacja wszystkich klas narzędzi, zakończenie procesów potomnych przy Stop, atomowa publikacja wyników, zachowanie po restarcie.",
       "done": "kryteria pakietu mają dowód wykonywany w regresji szablonu, z kontrolami negatywnymi dla izolacji."
-    },
-    {
-      "id": "BL-10",
-      "title": "Frontend, dostępność i stany UI",
-      "summary": "Braki w warstwach 2 i 3 poza BL-01 i BL-02 oraz narzędzia deweloperskie frontendu (np. proxy Vite na stały port 8791).",
-      "done": "kryteria pakietu mają test GUI w regresji szablonu; tryb deweloperski nie może trafić do obcej instancji."
     },
     {
       "id": "BL-11",

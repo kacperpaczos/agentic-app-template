@@ -3,7 +3,7 @@
 > Plik generowany przez `node scripts/acceptance-matrix.mjs` z `docs/acceptance/assessment.json`.
 > Każde otwarte kryterium macierzy (`docs/ACCEPTANCE.md`) należy do dokładnie jednego pakietu.
 
-Otwartych kryteriów: **123** z 200, w 10 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.
+Otwartych kryteriów: **111** z 200, w 9 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.
 
 | Pakiet | Tytuł | Kryteria | Liczba |
 |---|---|---|---|
@@ -14,7 +14,6 @@ Otwartych kryteriów: **123** z 200, w 10 pakietach. Kolejność pakietów jest 
 | BL-07 | Trwałość, kopia i migracje | L7.13, L10.2, L10.16, L10.17, L10.18, L10.19 | 6 |
 | BL-08 | Czat, zdarzenia i historia | L4.3, L4.5, L4.6, L4.7, L4.8, L4.9, L4.11, L4.13, L4.15, L5.2, L5.3, L5.4, L5.5, L5.6, L5.11, L5.12, L5.13, L5.14, L5.15 | 19 |
 | BL-09 | Pliki, sandbox i zadania w tle | L11.7, L11.10, L11.12, L11.13, L11.15, L11.16, L11.18, L11.19, L11.20, L11.22, L11.23, L11.24 | 12 |
-| BL-10 | Frontend, dostępność i stany UI | L2.1, L2.3, L2.5, L2.8, L2.9, L2.11, L2.12, L2.14, L2.15, L3.5, L3.7, L3.11 | 12 |
 | BL-11 | Domena, backend i cache | L6.3, L6.4, L6.7, L6.8, L6.9, L6.10, L6.11, L6.12, L6.14, L7.4, L7.8, L7.9, L7.10, L9.2, L9.3, L9.5, L9.6, L9.7, L9.8, L9.14, L9.15, L10.6, L10.7, L10.9, L10.11, L10.14, L10.15 | 27 |
 | BL-12 | Odbiór i jakość dowodów | L1.2, L1.8, L1.9, L1.11, L1.12, L12.5, L12.7, L12.10, L12.12, L12.15 | 10 |
 
@@ -154,27 +153,6 @@ Braki dowodu lub implementacji w warstwie 11 niepokryte ponowieniem prób (BL-03
 | L11.22 | Próba XLSX potwierdza odczyt wielu arkuszy i typów komórek, wykonaną zmianę oraz poprawny plik wynikowy; oryginał pozostaje nienaruszony. | częściowe | Próba z modelem wymaga odczytu tylko jednego arkusza i nie sprawdza, że agent odczytuje wiele arkuszy i typy komórek (data, wartość logiczna, formuła), ani że typy komórek są zachowane w pliku wynikowym; uszkodzony plik sprawdzony tylko na poziomie biblioteki. |
 | L11.23 | Formuły i zakres zachowania skoroszytu mają jawną semantykę; wynik nie udaje przeliczonego, jeżeli wykonano tylko zapis formuły lub odczyt starej wartości. | częściowe | Nie sprawdzono na modelu, że odpowiedź agenta nie podaje zapisanej wartości formuły jako wyniku przeliczenia; e2e/files-agent.spec.ts akceptuje w B1 zarówno liczbę, jak i komórkę formuły z zapisanym result, więc nie odróżnia wyniku policzonego od samego zapisu formuły; utrata wykresów i formatowania przy zapisie nie ma testu. |
 | L11.24 | Plik przetworzony w sandboxie jest widoczny jako artefakt z podglądem i pobraniem, także po zmianie rozmowy i restarcie; kontrola dostępu obejmuje wejście i wynik. | częściowe | Wynik files_publish_version jest wersją pliku, a nie artefaktem, więc nie ma podglądu w zakładce artefaktów rozmowy; test nie wraca do rozmowy (przechodzi na /files), nie sprawdza zmiany rozmowy ani restartu, a odmowa odczytu cudzego pliku wynikowego przez HTTP nie jest testowana. |
-
-## BL-10 — Frontend, dostępność i stany UI
-
-Braki w warstwach 2 i 3 poza BL-01 i BL-02 oraz narzędzia deweloperskie frontendu (np. proxy Vite na stały port 8791).
-
-**Warunek zamknięcia:** kryteria pakietu mają test GUI w regresji szablonu; tryb deweloperski nie może trafić do obcej instancji.
-
-| ID | Wymaganie | Stan | Brak |
-|---|---|---|---|
-| L2.1 | Komponenty domenowe mają typowane właściwości i są zarejestrowane w katalogu OpenUI. | częściowe | Karty canvasu modulu (caseSummary, offerList, comparisonTable, costChart, deliveryTerms, offerItemForm, provenance) nadal istnieja tylko we wlasnym katalogu kart, a ich renderery dostaja props typu Record<string, unknown>. |
-| L2.3 | Nawigacja, odświeżenie oraz Wstecz/Dalej przywracają właściwą aktywną rozmowę i przestrzeń pracy bez ręcznego wyszukiwania rozmowy na liście. | częściowe | Nowe brzmienie wymaga rozmowy i przestrzeni: test Wstecz/Dalej sprawdza tylko rozmowę; zmiana przestrzeni w obrębie rozmowy zapisuje adres przez replace (raport §7 pkt 12), więc Wstecz jej nie przywraca; brak testu, że przejście przez Link zachowuje c i s. |
-| L2.5 | Formularze i podstawowe interakcje działają z klawiatury, mają etykiety i widoczny fokus. | częściowe | Żaden test nie sprawdza, że fokus jest widoczny (obrys) ani że pola formularzy (np. karta procurement.offerItemForm, wgrywanie pliku) mają etykiety i działają z klawiatury; nazwa testu obiecuje „widoczny fokus”, a asercja sprawdza tylko toBeFocused. |
-| L2.8 | Wybór rozmowy, zmiana przestrzeni, przejścia przez linki i Wstecz/Dalej zachowują spójny kontekst; stara odpowiedź sieciowa nie cofa nowszego wyboru. | częściowe | ConversationSync.followConversationSpace (packages/platform-ui/src/chat/ConversationSync.tsx) po await GET /api/conversations/:id wywołuje setSpace bez sprawdzenia, czy rozmowa jest nadal wybrana — wolniejsza odpowiedź wcześniejszego wyboru może nadpisać przestrzeń wybraną później (zabezpieczenia brak w kodzie, brak testu z opóźnioną odpowiedzią); brak testu zachowania kontekstu przy przejściach przez linki. |
-| L2.9 | Szufladę rozmów można otworzyć i zamknąć na szerokim i wąskim panelu; canvas ani overflow nie przechwytują jej interakcji. | częściowe | Oba viewporty dają ten sam kontener czatu 560 px (kolumna --pf-chat-width powyżej 1100 px), więc wąski panel nie jest sprawdzony; przy szerokości do 1100 px czat zajmuje pełną szerokość w drugim wierszu i szuflada nie ma tam testu; zamknięcie tylko z klawiatury; przechwycenie kliknięć sprawdzone tylko przy zamkniętej szufladzie, a e2e/chat.spec.ts klika wiersze z force:true. |
-| L2.11 | Usunięta lub niedostępna rozmowa i błąd pobrania mają czytelny stan zastępczy; cudze tytuły i wiadomości nie są ujawniane. | częściowe | Stan „błąd pobrania” (data-kind failed, ponowienie) ma tylko test klasyfikacji w Vitest; brak testu GUI, że nieudane wczytanie historii pokazuje czytelny stan zastępczy zamiast pustego wątku. |
-| L2.12 | Pan, zoom, przesunięcie i zmiana rozmiaru kart działają na gotowej bibliotece canvasu i nie przerywają czatu ani interakcji formularza. | częściowe | Brak NodeResizer lub innej kontrolki — użytkownik nie może zmienić rozmiaru karty w UI (gałąź dimensions w onNodesChange obsługuje tylko pomiar); pan i zoom bez testu; brak testu, że przeciąganie lub pan nie przerywa pisania w kompozytorze ani w formularzu karty. |
-| L2.14 | Element docelowy może być odsłonięty, przewinięty i czasowo podświetlony; brak celu lub dostępu daje czytelny rezultat, bez zmiany wartości ustawienia. | częściowe | Rozwijanie zwinietych sekcji (Accordion, Tabs) przed pokazaniem elementu nadal nie jest realizowane; element zaslonięty przez element plywajacy moze zostac zgloszony jako pokazany (sprawdzane jest tylko przyciecie przodkow). |
-| L2.15 | Nawigacja zlecona przez agenta zachowuje historię Wstecz/Dalej i aktualizuje kontekst; ponowienie zdarzenia nie powiela nawigacji. | częściowe | Brak proby GUI, ktora po nawigacji zleconej przez agenta sprawdza historie Wstecz/Dalej razem z aktualizacja kontekstu w jednym przebiegu. |
-| L3.5 | Zmiana kompozycji zachowuje zaznaczenia, filtry i niezapisane dane albo jawnie rozwiązuje konflikt przed ich utratą. | częściowe | Brak testu, że dodanie, zmiana lub usunięcie karty (przez agenta albo refetch po canvas_changed) zachowuje zaznaczenie, stan widoku karty i niezapisany szkic formularza procurement.offerItemForm; brak jawnego rozwiązania konfliktu, gdy agent zmienia lub usuwa kartę ze szkicem; filtry kontekstu nie są używane (setFilter bez wywołań). |
-| L3.7 | Dane biznesowe wyświetlane przez komponenty pochodzą z backendu; wygenerowane wartości nie zastępują trwałych rekordów. | częściowe | Karta openui (dowolny OpenUI Lang z ogólnymi komponentami tabeli i wykresu openuiLibrary) i platform.markdown przyjmują treść z wartościami wygenerowanymi przez model bez powiązania z odczytem backendu; brak testu, że karta utworzona przez model nie niesie wartości biznesowych. |
-| L3.11 | Zwykły tekst, poprawny OpenUI, częściowy OpenUI i błędny opis są rozróżniane; rejestracja katalogu nie powoduje niewidocznych odpowiedzi. | częściowe | Brak proby GUI, ktora w jednej wiadomosci pokazuje zwykla proze, poprawny OpenUI i odpowiedz po narzedziu obok siebie i sprawdza, ze rejestracja katalogu nie ukrywa prozy. |
 
 ## BL-11 — Domena, backend i cache
 
