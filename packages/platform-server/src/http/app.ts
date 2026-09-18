@@ -88,6 +88,23 @@ interface RecordedRun {
 /** Scope of the run idempotency keys, kept out of every other caller's namespace. */
 const AGUI_RUN_SCOPE = 'agui.run';
 
+/**
+ * Runs whose start is under way, per `${owner}\0${clientRunId}`.
+ *
+ * The recorded key closes the window *after* a run exists; this closes the one
+ * *while* it is being created. `runtime.start` is awaited, so a second copy of
+ * the same request can run its lookup in that gap, find nothing recorded yet and
+ * start a second execution — the very thing the key exists to prevent. The entry
+ * is registered in the same tick the start is invoked, so there is no instant at
+ * which a run is being created and nothing says so; a repeat that arrives then
+ * waits for it and is answered as the replay it is.
+ *
+ * In memory on purpose: it describes work happening in *this* process, and a
+ * restart leaves no such work behind. The durable answer stays in
+ * `idempotency_keys`.
+ */
+const startingRuns = new Map<string, Promise<RecordedRun>>();
+
 export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
   const { services, runtime, auth } = deps;
   const app = new Hono<Env>();
@@ -388,8 +405,20 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
      * arrives, produces one run.
      */
     const clientRunId = input.runId?.trim() || null;
+    const runKey = clientRunId ? `${ownerId}\u0000${clientRunId}` : null;
     if (clientRunId) {
-      const recorded = services.idempotency.get<RecordedRun>(clientRunId, ownerId, AGUI_RUN_SCOPE);
+      const recorded =
+        services.idempotency.get<RecordedRun>(clientRunId, ownerId, AGUI_RUN_SCOPE) ??
+        /*
+         * Not recorded yet, but possibly being created right now. Awaiting the
+         * first request's start is what makes two *simultaneous* copies of one
+         * request produce one run rather than racing the durable key. A start
+         * that fails resolves to nothing here, so this request goes on to make
+         * its own attempt instead of inheriting the failure.
+         */
+        (runKey && startingRuns.has(runKey)
+          ? await startingRuns.get(runKey)!.catch(() => null)
+          : null);
       if (recorded) {
         /*
          * Checked here, before a stream is opened: a run whose conversation has
@@ -501,23 +530,42 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
       ? (forwarded.attachFileIds as string[]).slice(0, 10)
       : [];
 
-    const started = await runtime.start({
+    /*
+     * Invoked and announced in the same tick: `startingRuns` is set immediately
+     * after the call, with no `await` in between, so from the instant the run
+     * begins there is something for a concurrent repeat to wait on.
+     */
+    const starting = runtime.start({
       ownerId,
       conversationId,
       prompt,
       appContext: { ...appContext, conversationId },
       attachFileIds,
     });
+    if (runKey) {
+      startingRuns.set(
+        runKey,
+        starting.then((s) => ({ runId: s.runId, conversationId }) satisfies RecordedRun),
+      );
+    }
 
-    /*
-     * Recorded before the stream opens, not after it closes: the window a
-     * retry arrives in is precisely while the first run is still going.
-     */
-    if (clientRunId) {
-      services.idempotency.put(clientRunId, ownerId, AGUI_RUN_SCOPE, {
-        runId: started.runId,
-        conversationId,
-      } satisfies RecordedRun);
+    let started: Awaited<typeof starting>;
+    try {
+      started = await starting;
+      /*
+       * Recorded before the stream opens, not after it closes: the window a
+       * retry arrives in is precisely while the first run is still going.
+       */
+      if (clientRunId) {
+        services.idempotency.put(clientRunId, ownerId, AGUI_RUN_SCOPE, {
+          runId: started.runId,
+          conversationId,
+        } satisfies RecordedRun);
+      }
+    } finally {
+      // The durable key has taken over by now (or the start failed and there is
+      // nothing to hand anyone).
+      if (runKey) startingRuns.delete(runKey);
     }
 
     c.header('X-Run-Id', started.runId);

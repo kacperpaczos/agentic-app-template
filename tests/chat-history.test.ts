@@ -374,6 +374,42 @@ describe('L4.6 — powtorzone zadanie nie tworzy drugiej odpowiedzi', () => {
     expect((await asJson(`/api/conversations/${threadId}/runs`)).body.runs).toHaveLength(1);
   });
 
+  it('dwa rownoczesne zadania z tym samym runId: nadal jedno uruchomienie', async () => {
+    /*
+     * The repeat that arrives *while* the first one is starting.
+     *
+     * The durable key is written once the run exists, so two simultaneous
+     * copies of one request can both look, both find nothing and both start —
+     * which is the failure the key was supposed to remove, moved earlier by one
+     * await. Sent together here, they must still produce one run and one answer.
+     */
+    script = () => [{ kind: 'text', text: 'Odpowiadam raz.' }];
+    const conv = await asJson('/api/threads/create', {
+      method: 'POST',
+      body: JSON.stringify({ messages: [userMessage('Rozmowa na wyscig')] }),
+    });
+    const threadId = conv.body.id as string;
+    const body = {
+      threadId,
+      runId: crypto.randomUUID(),
+      messages: [userMessage('Zrob to raz, mimo dwoch zadan.')],
+      context: { ...emptyContext, conversationId: threadId },
+    };
+
+    const [a, b] = await Promise.all([command(body), command(body)]);
+    expect(a.status).toBe(200);
+    expect(b.status).toBe(200);
+    // One of the two answered as a replay; both name the same run.
+    expect([a.replayed, b.replayed].filter(Boolean)).toHaveLength(1);
+    expect(new Set([a.runId, b.runId]).size).toBe(1);
+    expect(model.turns, 'wyscig wszedl do modelu dwa razy').toBe(1);
+    expect((await asJson(`/api/conversations/${threadId}/runs`)).body.runs).toHaveLength(1);
+    const history = (await asJson(`/api/threads/get/${threadId}`)).body as any[];
+    expect(history.filter((m) => m.role === 'assistant').map((m) => m.content).join('')).toBe(
+      'Odpowiadam raz.',
+    );
+  });
+
   it('inny runId to inne polecenie — powtorzenie nie zjada drugiej proby', async () => {
     const conv = await asJson('/api/threads/create', {
       method: 'POST',

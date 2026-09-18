@@ -49,19 +49,39 @@ export class RunEventStream {
       this.runs.appendEvent(this.runId, seq, event.type, event);
     } catch (err) {
       /*
-       * The run's row can disappear underneath it: deleting a conversation
-       * cascades to `agent_runs`, and with `foreign_keys = ON` every later
-       * `run_events` insert is then refused. That is a legitimate end for a run
-       * nobody can look at any more, and it must not become an exception
-       * thrown out of an event emit — which took the run down mid-stream and
-       * left the failure looking like a model error. The cancellation issued by
-       * the delete is the orderly path (`ConversationService.delete`); this is
-       * the guard for the events already in flight when it landed.
+       * One expected failure, and everything else stays loud.
+       *
+       * The expected one: the run's row can disappear underneath it. Deleting a
+       * conversation cascades to `agent_runs`, and with `foreign_keys = ON` the
+       * next `run_events` insert is refused with a foreign-key violation. That
+       * is a legitimate end for a run nobody can look at any more, and it must
+       * not become an exception thrown out of an event emit — which took the
+       * run down mid-stream and left the failure looking like a model error.
+       * The cancellation issued by the delete is the orderly path
+       * (`ConversationService.delete`); this is the guard for the one or two
+       * events already in flight when it landed.
+       *
+       * Everything else — a full disk, a locked or read-only database, a
+       * corrupted file — is a write failure in the **single source of truth**
+       * for this run. The stream carries on, because killing a run the user is
+       * watching over a logging failure helps nobody, but the log this leaves
+       * behind is now shorter than what was delivered, and that is exactly what
+       * a reload and a restart will replay. So it is reported the way the
+       * projection below reports its own genuine failures: an error, with the
+       * cause, saying plainly what is now incomplete. Swallowing this as a
+       * warning is how a truncated history would look like a rendering problem.
        */
-      console.warn(
-        `[run ${this.runId}] zdarzenia ${event.type} nie da sie zapisac (rozmowa usunieta?): dziennik tego uruchomienia konczy sie tutaj`,
-        err,
-      );
+      const sqlite = (err as { code?: unknown } | null)?.code;
+      if (sqlite === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+        console.warn(
+          `[run ${this.runId}] zdarzenia ${event.type} nie ma juz gdzie zapisac: uruchomienie zniknelo razem z rozmowa`,
+        );
+      } else {
+        console.error(
+          `[run ${this.runId}] BLAD ZAPISU DZIENNIKA zdarzenia ${event.type}: dziennik tego uruchomienia jest od tego miejsca niepelny i taki zostanie odtworzony po przeladowaniu i restarcie`,
+          err,
+        );
+      }
     }
     // Persist the projection before the event is readable: a client that
     // reconnects and refetches the thread must never see a message the stream

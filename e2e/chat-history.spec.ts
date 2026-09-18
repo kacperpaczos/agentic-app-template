@@ -352,6 +352,14 @@ test.describe('czat i historia rozmowy', () => {
      * that order — absent from the bubble, the tray closed, then present once
      * it is opened — so a library version that stops rendering them at all
      * fails here rather than passing quietly.
+     *
+     * **The pin points both ways, and the next reader should know which red is
+     * which.** A library version that *fixes* this — one that puts the earlier
+     * segment's prose into the bubble, or leaves the tray open once the turn
+     * settles — will fail these same lines. That failure is good news and the
+     * right response is to relax the assertion and note the version that
+     * changed, not to work around it. A failure on the last line (the text is
+     * nowhere, even expanded) is the regression.
      */
     const bubble = page.getByTestId('assistant-message').last();
     await expect(bubble).toContainText('to jest koncowa odpowiedz');
@@ -567,12 +575,16 @@ test.describe('czat i historia rozmowy', () => {
     const chat = page.locator('.pf-chat');
     await expect(chat).not.toContainText('Zaczynam dluga prace');
     await expect(chat).not.toContainText('fragment');
-    const strip = page.getByTestId('run-state');
-    if ((await strip.count()) > 0) {
-      expect(await strip.getAttribute('data-run-id')).not.toBe(
-        (await getJson(page, `/api/conversations/${conversationA}/runs`)).runs[0].id,
-      );
-    }
+    /*
+     * Asserted as the absence of a *specific* element, not as a branch over
+     * whether a strip happens to be on screen: `if (count > 0)` passes when
+     * there is no strip at all, which is one of the two outcomes this is
+     * supposed to tell apart. The run of A is named; a strip carrying its id
+     * must not exist in this conversation, whatever else is showing.
+     */
+    const runOfA = (await getJson(page, `/api/conversations/${conversationA}/runs`)).runs[0].id;
+    expect(runOfA).toMatch(/^run_/);
+    await expect(page.locator(`[data-testid="run-state"][data-run-id="${runOfA}"]`)).toHaveCount(0);
 
     // A is genuinely still working — the switch did not stop it, which is what
     // makes the rest of this test about two live conversations.
@@ -612,17 +624,84 @@ test.describe('czat i historia rozmowy', () => {
     expect(inB.map((m) => m.content).join('')).not.toContain('Koniec dlugiej pracy');
   });
 
+  /* ------------------- objaw zgloszonego defektu (L4.5) ------------------- */
+
+  test('L4.5: polecenie wyslane zaraz po zmianie tozsamosci wykonuje sie, nie zostaje w kolejce', async ({ page }) => {
+    /*
+     * The reported defect, asserted as the symptom rather than as its cause.
+     *
+     * The cause — the chat keeping the previous owner's conversation, and the
+     * address keeping its id — is removed in two places and other suites assert
+     * both. This asserts the thing a user would notice: switch identity, type
+     * immediately, and the command runs. It fails if that behaviour comes back
+     * by *any* route, including one nobody has thought of yet, which is the
+     * point: this defect already returned once through another package.
+     *
+     * Nothing between the switch and the command: no reload, no "New chat", no
+     * picking a conversation. That is what the sibling package had to do as a
+     * workaround, and doing it here would test the workaround instead.
+     */
+    await openApp(page);
+    await send(page, 'Krotko: powiedz, co masz w kontekscie.');
+    await settled(page);
+    const before = await conversationOnScreen(page);
+
+    await page.locator('.pf-nav__link', { hasText: 'Ustawienia' }).first().click();
+    await expect(page.getByTestId('settings-page')).toBeVisible();
+    const owner = page.getByTestId('access-owner');
+    const was = (await owner.textContent())?.trim() ?? '';
+    await page.getByTestId('switch-access-context').click();
+    await expect(owner).not.toHaveText(was);
+
+    // Straight to the composer. `settled` waits for `succeeded`, so a command
+    // stuck in `queued` fails here by timing out on the phase it never reaches.
+    await send(page, 'Krotko: powiedz, co masz w kontekscie teraz.');
+    await settled(page);
+
+    // It ran as the new identity, in a conversation of its own.
+    const after = await conversationOnScreen(page);
+    expect(after).not.toBe(before);
+    const [context] = await toolResults(page, after, 'get_context');
+    expect(context.conversationId).toBe(after);
+    // And the previous identity's conversation is not what answered.
+    expect(JSON.stringify(context)).not.toContain(before);
+  });
+
   /* ---------------------------------------------------------- L4.7 -------- */
 
   test('L4.7: usuniecie rozmowy z trwajacym zadaniem zatrzymuje to zadanie', async ({ page }) => {
     await openApp(page);
     await newChat(page);
+
+    /*
+     * First a command that publishes an artifact **into this conversation**.
+     *
+     * Without it the delete has nothing to detach, the count of artifacts
+     * cannot move, and the assertion at the end of this test would hold
+     * whatever deletion did — the exact shape of the assertion this package was
+     * sent to replace (`e2e/chat.spec.ts` deleted a conversation that owned
+     * none). The artifact is made by the real platform tool, in the real run.
+     */
+    /*
+     * Wording distinct from the artifact test above: the title is derived from
+     * the first message, the suite is serial over one database, and two
+     * conversations with the same title make the drawer row this test deletes
+     * ambiguous — which is how the first version of this deleted the other
+     * test's conversation instead.
+     */
+    await send(page, 'Zapisz artefakt rozmowy przeznaczonej do usuniecia.');
+    await settled(page);
+    const conversationId = await conversationOnScreen(page);
+    const artifactsBefore = (await getJson(page, '/api/artifacts')).artifacts as Array<Record<string, any>>;
+    const owned = artifactsBefore.filter((a) => a.threadId === conversationId);
+    expect(owned.length, 'rozmowa nie ma artefaktu, wiec odlaczenie nie ma czego dotyczyc').toBeGreaterThan(0);
+    const ownedId = owned[0]!.id as string;
+
+    // Now the long task, in the same conversation, still running when it goes.
     await send(page, 'Popracuj dlugo nad czyms do usuniecia.');
     await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'running', {
       timeout: 30_000,
     });
-    const conversationId = await conversationOnScreen(page);
-    const artifactsBefore = (await getJson(page, '/api/artifacts')).artifacts.length;
     await expect
       .poll(async () => (await getJson(page, '/api/runs/active')).runs.map((r: any) => r.conversationId))
       .toContain(conversationId);
@@ -637,15 +716,20 @@ test.describe('czat i historia rozmowy', () => {
      */
     expect((await getJson(page, '/api/status')).activeRuns).toBe(1);
 
-    // Deleted from the row's own menu, as a user would — not over the API.
+    /*
+     * Deleted from the row's own menu, as a user would — not over the API. The
+     * row is named after the conversation's *first* message (the artifact
+     * command), because that is what the title is derived from.
+     */
+    const rowTitle = 'Zapisz artefakt rozmowy przeznaczonej do usuniecia';
     await openDrawer(page);
-    const row = page.locator('.openui-agent-thread-button', { hasText: 'Popracuj dlugo nad czyms' }).first();
+    const row = page.locator('.openui-agent-thread-button', { hasText: rowTitle }).first();
     await expect(row).toBeVisible();
     await row.locator('[aria-label="Thread actions"]').first().click();
     await page.getByRole('menuitem').first().click();
 
     // Gone from the list…
-    await expect(page.locator('.openui-agent-thread-button', { hasText: 'Popracuj dlugo nad czyms' })).toHaveCount(0);
+    await expect(page.locator('.openui-agent-thread-button', { hasText: rowTitle })).toHaveCount(0);
     // …and the work it owned stopped, rather than carrying on against a
     // conversation that no longer exists.
     await expect
@@ -663,9 +747,18 @@ test.describe('czat i historia rozmowy', () => {
       .toBe(0);
     expect((await getJson(page, `/api/threads/get/${conversationId}`)).error?.code).toBe('not_found');
 
-    // Published work is untouched, and the interface is usable: no error notice
-    // and a composer ready for the next command.
-    expect((await getJson(page, '/api/artifacts')).artifacts.length).toBe(artifactsBefore);
+    /*
+     * Published work is untouched — and detached rather than deleted: the
+     * artifact this conversation produced is still listed, still openable with
+     * its content, and no longer names a conversation that is gone.
+     */
+    const artifactsAfter = (await getJson(page, '/api/artifacts')).artifacts as Array<Record<string, any>>;
+    expect(artifactsAfter.length).toBe(artifactsBefore.length);
+    expect(artifactsAfter.map((a) => a.id)).toContain(ownedId);
+    expect(artifactsAfter.filter((a) => a.threadId === conversationId)).toEqual([]);
+    const detached = await getJson(page, `/api/artifacts/${ownedId}`);
+    expect(detached.threadId).toBe('');
+    expect(detached.content, 'odlaczony artefakt stracil tresc').toBeTruthy();
     await expect(page.getByTestId('conversation-missing')).toHaveCount(0);
     await expect(page.locator('.openui-agent-thread-composer__input')).toBeEnabled();
   });
