@@ -313,3 +313,20 @@ P21 [L9.3] packages/platform-server/src/http/app.ts
             323|     expect(out.status, `${url} → ${out.status} ${JSON.stringify(out.bo…
                |                                                                         
     drzewo po przywroceniu: czyste
+
+== Naprawa po integracji ==
+
+P22 [L9.7 / integracja] e2e/support/scripted-server.ts
+    wycofano       : operationId w dwoch krokach scenariusza artifact-snapshot-and-live
+    test           : e2e/artifact-views.spec.ts (pod blokada)
+    oczekiwano     : oblewa — wywolania sa odrzucane przed handlerem, artefakty nie powstaja
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        ✘  1 [chromium] › e2e/artifact-views.spec.ts:68:3 › podglad i pelny widok artefaktu › podglad w wiadomosci i pelny widok pokazuja te sama wersje i ten
+        Error: expect(locator).toBeVisible() failed
+        Error: element(s) not found
+        test-results/artifact-views-podglad-i-p-cd03b-ersje-i-ten-sam-stan-zrodla-chromium/test-failed-1.png
+        Error Context: test-results/artifact-views-podglad-i-p-cd03b-ersje-i-ten-sam-stan-zrodla-chromium/error-context.md
+        Error Context: test-results/artifact-views-podglad-i-p-cd03b-ersje-i-ten-sam-stan-zrodla-chromium/error-context.md
+        1 failed
+    drzewo po przywroceniu: czyste
