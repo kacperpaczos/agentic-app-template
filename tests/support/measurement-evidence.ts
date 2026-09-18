@@ -74,8 +74,10 @@ export function codeVersion(pakiety: Record<string, string> = {}): CodeVersion {
      * make every measurement report a dirty tree and the flag would stop
      * meaning anything. Everything else counts.
      */
+    // `:(top)` so the answer is about the whole repository whatever the
+    // working directory of the runner happens to be.
     brudneDrzewo:
-      (git(['status', '--porcelain', '--', '.', `:(exclude)${EVIDENCE_DIR}`]) ?? '') !== '',
+      (git(['status', '--porcelain', '--', ':(top)', `:(exclude,top)${EVIDENCE_DIR}`]) ?? '') !== '',
     node: process.versions.node,
     pakiety,
   };

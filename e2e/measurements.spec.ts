@@ -351,21 +351,22 @@ test.describe('czas anulowania', () => {
 
     /* ------------------------ no further mutations ------------------------- */
 
-    await page.waitForTimeout(3000);
-    const eventsAfter = await page.evaluate(
-      async (id) =>
-        ((await (await fetch(`/api/runs/${id}/events`, { credentials: 'include' })).json())
-          .events as unknown[]).length,
-      runId!,
-    );
-    const finalCount = await page.evaluate(
-      async (id) =>
-        ((await (await fetch(`/api/runs/${id}/events`, { credentials: 'include' })).json())
-          .events as unknown[]).length,
-      runId!,
-    );
-    // The work stopped: the event log does not keep growing after the terminal state.
-    expect(finalCount).toBe(eventsAfter);
+    const countEvents = () =>
+      page.evaluate(
+        async (id) =>
+          ((await (await fetch(`/api/runs/${id}/events`, { credentials: 'include' })).json())
+            .events as unknown[]).length,
+        runId!,
+      );
+    const atEnd = await countEvents();
+    /*
+     * Long enough that the cancelled scenario's remaining steps — several
+     * seconds of text and then a write — would have arrived if the run were
+     * still going. Reading the count twice with nothing in between would
+     * compare a number to itself.
+     */
+    await page.waitForTimeout(5000);
+    expect(await countEvents(), 'dziennik zdarzen rosnie po zakonczeniu').toBe(atEnd);
 
     /*
      * The domain is the real test. The cancelled scenario's next step was a

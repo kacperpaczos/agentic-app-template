@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -418,8 +418,16 @@ describe('sekret ze srodowiska nie trafia do diagnostyki', () => {
         'run_events': JSON.stringify(db.prepare('SELECT * FROM run_events').all()),
         messages: JSON.stringify(db.prepare('SELECT * FROM messages').all()),
         'odpowiedz /api/status': status,
-        'plik bazy danych': readFileSync(h.platform.config.dbFile).toString('latin1'),
       };
+      /*
+       * The database is three files in WAL mode, and the most recent writes are
+       * in the journal, not in the main file. Scanning `app.db` alone would look
+       * thorough and miss everything this run just wrote.
+       */
+      for (const suffix of ['', '-wal', '-shm']) {
+        const file = `${h.platform.config.dbFile}${suffix}`;
+        if (existsSync(file)) surfaces[`plik bazy ${suffix || 'app.db'}`] = readFileSync(file).toString('latin1');
+      }
       const evidenceDir = resolve(process.cwd(), EVIDENCE_DIR);
       for (const name of readdirSync(evidenceDir)) {
         surfaces[`dowod ${name}`] = readFileSync(resolve(evidenceDir, name), 'utf8');
@@ -468,6 +476,10 @@ describe('sekret ze srodowiska nie trafia do diagnostyki', () => {
       przeskanowanePowierzchnieZnakow: scanned,
       kontrolaNegatywna:
         'ten sam skan nad spreparowanym tekstem zawierajacym kanarka znajduje go — asercja potrafi oblac',
+      uwagaOLogach:
+        'Zerowa dlugosc „logi serwera (console.*)” znaczy, ze aplikacja nie wypisala w tych przebiegach ' +
+        'niczego — to wynik, nie brak pomiaru. Skan niepustego logu serwera produkcyjnego z pelnej tury ' +
+        'jest osobno: e2e/measurements.spec.ts i docs/evidence/z3-bl05/log-serwera-scenariuszowego.txt.',
       uwaga:
         'APP_TAJNY_KANAREK jest przekazywany do srodowiska procesu agenta, bo nie jest przelacznikiem ' +
         'dostawcy; dowodem jest brak jego wartosci w logach i w zapisanych danych, nie brak zmiennej.',

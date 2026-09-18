@@ -46,8 +46,8 @@ w obie strony, wyłącznie po danych zapisanych:
 
 ## Klasy błędów
 
-Zapisany rekord uruchomienia rozróżnia cztery rzeczy, bo każda znaczy co innego
-dla następnego kroku:
+Zapisane dane rozróżniają pięć rzeczy, bo każda znaczy co innego dla następnego
+kroku — i piąta z nich nie jest zapisana tam, gdzie pozostałe:
 
 | Kod | Kiedy | Gdzie widać |
 |---|---|---|
@@ -131,5 +131,10 @@ zmian w reszcie aplikacji.
    logach aplikacji: żadna wartość poświadczenia nie może trafić do eksportu.
    `tests/durability.test.ts` sprawdza brak wartości tokena w zbudowanym
    backendzie, zbudowanym frontendzie, bazie danych i wyjściu diagnostycznym;
-   dla eksportu zewnętrznego analogicznej kontroli **nie wykonano**, bo nie ma
-   czego kontrolować przy wyłączonym eksporcie.
+   `tests/diagnostics.test.ts` dokłada kanarka wstawionego do środowiska procesu
+   i szuka go w przechwyconych logach, w `agent_runs`, `run_events`, `messages`,
+   w odpowiedzi `/api/status`, w plikach bazy (razem z dziennikiem WAL) i w
+   plikach dowodów; `e2e/measurements.spec.ts` skanuje wyjście serwera
+   produkcyjnego po pełnej turze. Dla eksportu zewnętrznego analogicznej
+   kontroli **nie wykonano**, bo nie ma czego kontrolować przy wyłączonym
+   eksporcie.

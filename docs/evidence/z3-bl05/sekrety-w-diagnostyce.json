@@ -3,7 +3,7 @@
   "zrodlo": "pnpm test → tests/diagnostics.test.ts (regresja szablonu)",
   "warunki": "kanarki ustawione w ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN i APP_TAJNY_KANAREK przed utworzeniem instancji; przebieg udany i przebieg zakonczony bledem; console.* przechwycone na czas przebiegu; skan po tresci, nie po nazwie zmiennej",
   "wersjaKodu": {
-    "commit": "13f1b3ba78448722ac25a87eef361a94efe6e3d2",
+    "commit": "fc6301231b8c203fd0d3121395c1f7cbae8ec272",
     "brudneDrzewo": true,
     "node": "24.19.0",
     "pakiety": {
@@ -22,15 +22,18 @@
     "run_events": 3603,
     "messages": 1390,
     "odpowiedz /api/status": 5737,
-    "plik bazy danych": 4096,
+    "plik bazy app.db": 4096,
+    "plik bazy -wal": 1565632,
+    "plik bazy -shm": 32768,
     "dowod klasy-bledow.json": 1975,
     "dowod log-serwera-scenariuszowego.txt": 672,
     "dowod pomiary-backend.json": 3418,
     "dowod pomiary-przegladarka.json": 4001,
-    "dowod pomiary-stop.json": 4653,
+    "dowod pomiary-stop.json": 4643,
     "dowod powiazanie-diagnostyczne.json": 1669,
-    "dowod sekrety-w-diagnostyce.json": 1589
+    "dowod sekrety-w-diagnostyce.json": 1684
   },
   "kontrolaNegatywna": "ten sam skan nad spreparowanym tekstem zawierajacym kanarka znajduje go — asercja potrafi oblac",
+  "uwagaOLogach": "Zerowa dlugosc „logi serwera (console.*)” znaczy, ze aplikacja nie wypisala w tych przebiegach niczego — to wynik, nie brak pomiaru. Skan niepustego logu serwera produkcyjnego z pelnej tury jest osobno: e2e/measurements.spec.ts i docs/evidence/z3-bl05/log-serwera-scenariuszowego.txt.",
   "uwaga": "APP_TAJNY_KANAREK jest przekazywany do srodowiska procesu agenta, bo nie jest przelacznikiem dostawcy; dowodem jest brak jego wartosci w logach i w zapisanych danych, nie brak zmiennej."
 }
