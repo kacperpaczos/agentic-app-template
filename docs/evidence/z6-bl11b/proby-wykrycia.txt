@@ -278,3 +278,38 @@ P19 [L9.14] packages/platform-server/src/agent/tools/files.ts
         - Error {
         -   "message": "rejected promise",
     drzewo po przywroceniu: czyste
+
+== Runda poprawek 2 ==
+
+P20 [L9.14] packages/platform-server/src/agent/tools/files.ts
+    wycofano       : { fingerprint: operationFingerprint({ ...input, contentSha256: sha256(bytes) }) },
+    test           : tests/domain-guarantees.test.ts -t "publikacja z workspace: ten sam klucz z inna sciezka LUB inna trescia"
+    oczekiwano     : oblewa — ta sama sciezka z inna trescia dostaje wynik pierwszej publikacji
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/domain-guarantees.test.ts > L9.7, L9.14 — powtorzenie i jednoczesne ponowienia daja jeden skutek > publikacja z workspace: ten sam klucz z inna sciezka LUB inna trescia jest odrzucany
+        AssertionError: promise resolved "{ …(7) }" instead of rejecting
+        
+        - Expected
+        + Received
+        
+        - Error {
+    drzewo po przywroceniu: czyste
+P21 [L9.3] packages/platform-server/src/http/app.ts
+    wycofano       : const body = z
+    test           : tests/domain-guarantees.test.ts -t "sesja z cialem, ktore nie jest JSON-em"
+    oczekiwano     : oblewa — trasa sesji polyka zepsute cialo i loguje jako tozsamosc domyslna
+    wynik          : OBLAL (poprawnie)
+    wyjscie testu  :
+        Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+        
+         FAIL  tests/domain-guarantees.test.ts > L9.3 — kazde wejscie walidowane w runtime, z rozpoznawalna przyczyna > sesja z cialem, ktore nie jest JSON-em jest odrzucone z rozpoznawalna przyczyna
+        AssertionError: /api/auth/session → 200 {"userId":"local-user"}: expected 200 to be greater than or equal to 400
+         ❯ tests/domain-guarantees.test.ts:323:93
+            321|     const url = path.replace('PLACEHOLDER_CONV', conv.id).replace('PLA…
+            322|     const out = await http(url, init);
+            323|     expect(out.status, `${url} → ${out.status} ${JSON.stringify(out.bo…
+               |                                                                         
+    drzewo po przywroceniu: czyste
