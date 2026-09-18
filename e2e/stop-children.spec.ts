@@ -85,6 +85,15 @@ async function openApp(page: Page) {
 }
 
 const pomiary: Record<string, Measurement> = {};
+/**
+ * Filled from `/api/status` during the run.
+ *
+ * Passed to `codeVersion` **with this task's evidence directory**, which is the
+ * part that is easy to get wrong: the default exclusion covers another task's
+ * directory, so a record written after its own file exists would report a dirty
+ * tree that is dirty only because of the file being written.
+ */
+let pakiety: Record<string, string> = {};
 
 test.describe('Stop dociera do procesow uruchomienia', () => {
   test.describe.configure({ mode: 'serial', timeout: 240_000 });
@@ -102,7 +111,8 @@ test.describe('Stop dociera do procesow uruchomienia', () => {
           'Stop z interfejsu mierzony w procesach: liczba procesow potomnych serwera przed ' +
           'poleceniem, w trakcie wykonania i po zakonczeniu, oraz czasy trzech momentow ' +
           '(potwierdzenie zadania, koniec strumienia w karcie, zniknniecie procesu i workspace).',
-        zrodlo: 'pnpm test:e2e → e2e/stop-children.spec.ts (regresja szablonu)',
+        zrodlo: 'pnpm evidence:z10 → e2e/stop-children.spec.ts (regresja szablonu)',
+        wersjaKodu: codeVersion(pakiety, [EVIDENCE_DIR]),
         pomiary,
       },
       EVIDENCE_DIR,
@@ -113,6 +123,12 @@ test.describe('Stop dociera do procesow uruchomienia', () => {
     await openApp(page);
     const serverPid = scripted.pid!;
     expect(serverPid, 'nie znam pid serwera scenariuszowego').toBeTruthy();
+
+    pakiety = await page.evaluate(async () => {
+      const status = await (await fetch('/api/status', { credentials: 'include' })).json();
+      // Only the versions: a measurement record must not carry credential metadata.
+      return status.versions as Record<string, string>;
+    });
 
     const before = descendants(serverPid);
 
