@@ -18,6 +18,7 @@ import {
   type ViewFilterPredicate,
 } from '@platform/contracts';
 import { focusCanvasCard } from '../canvas/canvasFocus.ts';
+import { expandCollapsedAncestors } from './expandSection.ts';
 import { useAppState, type RevealNotice } from '../state/appState.ts';
 import { revealTargets, type RecordLocation, type RevealTarget } from '../views/revealTarget.ts';
 import { pollUntil } from './uiCommandAck.ts';
@@ -424,6 +425,14 @@ export async function performReveal(
   });
   if (!shown) return refuse(findTable(reveal)?.refreshing ? UI_COMMAND_FAILURES.refreshing : UI_COMMAND_FAILURES.notPresent);
   const { at, cell } = shown;
+
+  /*
+   * A cell inside a part of the screen that is closed cannot be scrolled to or
+   * pointed at — it has no box. Opening what holds it is the same kind of
+   * presentation change as clearing a narrowing or turning a page, and is
+   * reported the same way.
+   */
+  adjustments.push(...expandCollapsedAncestors(cell));
 
   const visible = await bringIntoView(cell, reveal, adjustments, deps.until);
   const page =

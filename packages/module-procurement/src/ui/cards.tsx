@@ -1,7 +1,31 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { BarChart } from '@openuidev/react-ui';
-import { apiPatch, invalidateChangedData, qk, useAppState, useModuleData, type CardComponent } from '@platform/ui';
+import {
+  apiPatch,
+  invalidateChangedData,
+  qk,
+  typedCard,
+  useAppState,
+  useModuleData,
+  type CardComponent,
+} from '@platform/ui';
+import {
+  caseSummaryPropsSchema,
+  deliveryTermsPropsSchema,
+  itemProvenancePropsSchema,
+  offerComparisonPropsSchema,
+  offerCostChartPropsSchema,
+  offerItemFormPropsSchema,
+  offerListPropsSchema,
+  type CaseSummaryProps,
+  type DeliveryTermsProps,
+  type ItemProvenanceProps,
+  type OfferComparisonProps,
+  type OfferCostChartProps,
+  type OfferItemFormProps,
+  type OfferListProps,
+} from '../shared/openui-components.ts';
 import {
   formatMinor,
   formatQuantity,
@@ -103,7 +127,7 @@ const useCaseDetail = (caseId: string) =>
 /*  Cards                                                                     */
 /* -------------------------------------------------------------------------- */
 
-export const CaseSummaryCard: CardComponent = ({ props }) => {
+const CaseSummaryBody: CardComponent<CaseSummaryProps> = ({ props }) => {
   const caseId = String(props.caseId ?? '');
   const { data, isLoading, error } = useCaseDetail(caseId);
   if (isLoading) return <Loading />;
@@ -133,7 +157,7 @@ export const CaseSummaryCard: CardComponent = ({ props }) => {
   );
 };
 
-export const OfferListCard: CardComponent = ({ props }) => {
+const OfferListBody: CardComponent<OfferListProps> = ({ props }) => {
   const caseId = String(props.caseId ?? '');
   const { data, isLoading, error } = useCaseDetail(caseId);
   const toggleSelection = useAppState((s) => s.toggleSelection);
@@ -305,7 +329,7 @@ export function ComparisonView({
 }
 
 /** The case's comparison as it is now. */
-export const ComparisonTableCard: CardComponent = ({ cardId, props }) => {
+const ComparisonTableBody: CardComponent<OfferComparisonProps> = ({ cardId, props }) => {
   const caseId = String(props.caseId ?? '');
   const showExcludedDefault = props.showExcluded !== false;
   const { data, isLoading, error } = useComparison(caseId);
@@ -417,7 +441,7 @@ function LineBreakdown({ rows }: { rows: ComparisonRow[] }) {
   );
 }
 
-export const CostChartCard: CardComponent = ({ props }) => {
+const CostChartBody: CardComponent<OfferCostChartProps> = ({ props }) => {
   const caseId = String(props.caseId ?? '');
   const { data, isLoading, error } = useComparison(caseId);
 
@@ -452,7 +476,7 @@ export const CostChartCard: CardComponent = ({ props }) => {
   );
 };
 
-export const DeliveryTermsCard: CardComponent = ({ props }) => {
+const DeliveryTermsBody: CardComponent<DeliveryTermsProps> = ({ props }) => {
   const caseId = String(props.caseId ?? '');
   const { data, isLoading, error } = useCaseDetail(caseId);
   if (isLoading) return <Loading />;
@@ -495,7 +519,7 @@ export const DeliveryTermsCard: CardComponent = ({ props }) => {
  * The save path goes through the same service the MCP tool uses, carrying the
  * row version so a stale save is rejected rather than applied.
  */
-export const OfferItemFormCard: CardComponent = ({ cardId, props }) => {
+const OfferItemFormBody: CardComponent<OfferItemFormProps> = ({ cardId, props }) => {
   const offerId = String(props.offerId ?? '');
   const preselected = props.itemId ? String(props.itemId) : null;
   const qc = useQueryClient();
@@ -513,6 +537,25 @@ export const OfferItemFormCard: CardComponent = ({ cardId, props }) => {
   const [conflict, setConflict] = useState<string | null>(null);
 
   const item = data?.items.find((i) => i.id === (selectedId ?? data.items[0]?.id));
+
+  /*
+   * Typed-but-unsaved values come back when the form is drawn again.
+   *
+   * A composition change — the agent updating this card, the canvas re-reading
+   * the space — can re-create this component, and everything in its own
+   * `useState` goes with it. The draft it registered does not: it lives in the
+   * platform's state, and the form is what is transient here, not the work. So
+   * the first render for an item takes the values from the draft, once.
+   */
+  const restoredFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!item || restoredFor.current === item.id) return;
+    restoredFor.current = item.id;
+    const draft = useAppState.getState().drafts[`item-${item.id}`];
+    const values = draft?.values as { quantity?: unknown; unitPrice?: unknown } | undefined;
+    if (typeof values?.quantity === 'string' && values.quantity) setQuantity(values.quantity);
+    if (typeof values?.unitPrice === 'string' && values.unitPrice) setUnitPrice(values.unitPrice);
+  }, [item]);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -565,6 +608,9 @@ export const OfferItemFormCard: CardComponent = ({ cardId, props }) => {
         entityId: item.id,
         dirtyFields: dirty,
         values: { quantity, unitPrice, [field]: value },
+        // Which card holds the form, so the platform can tell the user when a
+        // composition change takes it off screen with work still in it.
+        cardId,
       });
     } else if (item) {
       clearDraft(`item-${item.id}`);
@@ -653,7 +699,7 @@ export const OfferItemFormCard: CardComponent = ({ cardId, props }) => {
   );
 };
 
-export const ProvenanceCard: CardComponent = ({ props }) => {
+const ProvenanceBody: CardComponent<ItemProvenanceProps> = ({ props }) => {
   const itemId = String(props.itemId ?? '');
   const { data, isLoading, error } = useModuleData<{
     item: { name: string; quantity: string; unitPriceFormatted: string | null };
@@ -718,6 +764,24 @@ export const ProvenanceCard: CardComponent = ({ props }) => {
   );
 };
 
+/* ---------------------------------------------------------------------------
+ *  Typed cards
+ *
+ *  Each renderer above declares the props it takes; `typedCard` parses a card
+ *  spec against the very schema the server validated it with before handing it
+ *  over. A spec the schema does not accept — an older stored card, a hand-
+ *  edited one, a composition from a future version — becomes a named failure
+ *  instead of a component reading `undefined` and drawing an empty box.
+ * ------------------------------------------------------------------------- */
+
+export const CaseSummaryCard = typedCard(caseSummaryPropsSchema, CaseSummaryBody);
+export const OfferListCard = typedCard(offerListPropsSchema, OfferListBody);
+export const ComparisonTableCard = typedCard(offerComparisonPropsSchema, ComparisonTableBody);
+export const CostChartCard = typedCard(offerCostChartPropsSchema, CostChartBody);
+export const DeliveryTermsCard = typedCard(deliveryTermsPropsSchema, DeliveryTermsBody);
+export const OfferItemFormCard = typedCard(offerItemFormPropsSchema, OfferItemFormBody);
+export const ProvenanceCard = typedCard(itemProvenancePropsSchema, ProvenanceBody);
+
 /**
  * Artifact renderers of this module, keyed by `rendererType`.
  *
@@ -725,7 +789,9 @@ export const ProvenanceCard: CardComponent = ({ props }) => {
  * `procurement.comparison`, and nothing in the browser knew how to draw one —
  * so a saved comparison opened in the artifact browser as raw JSON, or as
  * nothing at all. The renderer is the same table the card draws; only the
- * source of the data differs.
+ * source of the data differs — so it takes `ComparisonView`, the presentation,
+ * and never the card, which would re-read the case and turn a snapshot into a
+ * live view.
  */
 export const procurementArtifactRenderers = {
   'procurement.comparison': ComparisonArtifact,

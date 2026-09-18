@@ -50,7 +50,12 @@ export function UiSnapshotPublisher() {
       location: () => ({ pathname: window.location.pathname, search: window.location.search }),
       shell: () => {
         const s = useAppState.getState();
-        return { conversationId: s.conversationId, spaceId: s.spaceId };
+        return {
+          conversationId: s.conversationId,
+          spaceId: s.spaceId,
+          // The live part of the command context; see `uiSnapshotContextSchema`.
+          context: s.toLiveContext(),
+        };
       },
       instances: listInstances,
       displayed: displayedCanvas,
@@ -61,9 +66,25 @@ export function UiSnapshotPublisher() {
     const unsubscribe = [
       useUiSemantics.subscribe(changed),
       useDisplayedCanvases.subscribe(changed),
-      // The store also carries streamed text; only these two describe the screen.
+      /*
+       * The store also carries streamed text, which describes nothing on screen.
+       * Beside the conversation and the space, the description now carries the
+       * live command context — the record the user is on, the selection and the
+       * dirty forms — so a change to any of those is a change of the screen and
+       * has to produce a new version. Without this, a run reading `get_context`
+       * mid-task would be answered from the version published before the user
+       * touched anything, and could not tell that they had.
+       */
       useAppState.subscribe((s, prev) => {
-        if (s.conversationId !== prev.conversationId || s.spaceId !== prev.spaceId) changed();
+        if (
+          s.conversationId !== prev.conversationId ||
+          s.spaceId !== prev.spaceId ||
+          s.resource !== prev.resource ||
+          s.selection !== prev.selection ||
+          s.drafts !== prev.drafts
+        ) {
+          changed();
+        }
       }),
       qc.getQueryCache().subscribe((event) => {
         const head = event.query.queryKey[0];

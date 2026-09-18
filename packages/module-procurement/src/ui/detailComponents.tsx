@@ -1,7 +1,6 @@
-import { Link } from '@tanstack/react-router';
 import { defineComponent } from '@openuidev/react-lang';
 import { formatFieldValue, type RecordField } from '@platform/contracts';
-import { QueryErrorState, useModuleData, useReadOperation } from '@platform/ui';
+import { AppLink, QueryErrorState, useModuleData, useReadOperation } from '@platform/ui';
 import { PROCUREMENT_OPENUI_COMPONENTS } from '../shared/openui-components.ts';
 import { MODULE_ID, PRICE_BASIS_LABELS } from '../shared/index.ts';
 
@@ -108,9 +107,9 @@ function CaseOfferSourcesView({ caseId }: { caseId: string }) {
             {items.map((i) => (
               <li key={i.id}>
                 {i.name} —{' '}
-                <Link to="/items/$itemId" params={{ itemId: i.id }} className="pf-link">
+                <AppLink to="/items/$itemId" params={{ itemId: i.id }} className="pf-link">
                   pochodzenie
-                </Link>
+                </AppLink>
               </li>
             ))}
           </ul>

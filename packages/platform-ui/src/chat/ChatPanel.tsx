@@ -37,7 +37,7 @@ function ContextStrip() {
     <div className="pf-context" data-testid="chat-context">
       <span className="pf-context__label">Kontekst rozmowy</span>
       <span className="pf-context__value">
-        {resource ? `${resource.kind}: ${resource.id}` : 'brak wybranej sprawy'}
+        {resource ? `${resource.kind}: ${resource.id}` : 'brak wybranego rekordu'}
       </span>
       {selection.length > 0 && (
         <>

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   AGENT_VIEWS_SCOPE_KIND,
   AppError,
+  EMPTY_UI_SNAPSHOT_CONTEXT,
   PLATFORM_CUSTOM_EVENTS,
   SHOW_VALUE_REFUSALS,
   UI_COMMAND_FAILURES,
@@ -210,6 +211,7 @@ const caseDetailSnapshot = (conversationId: string, caseId: string, itemId: stri
   cardsSpaceId: null,
   cardsState: 'none',
   cardsOmitted: 0,
+  context: EMPTY_UI_SNAPSHOT_CONTEXT,
   instances: [
     {
       instanceId: 'DataTable-items',
@@ -982,7 +984,12 @@ describe('kontrakt polecenia i potwierdzenia', () => {
       adjustments: [{ kind: 'page_changed', detail: 'strona 1 → 2', from: 1, to: 2 }],
     });
     expect(ack.adjustments![0]!.kind).toBe('page_changed');
-    expect(UI_REVEAL_ADJUSTMENT_KINDS).toEqual(['filter_cleared', 'page_changed', 'card_focused']);
+    expect(UI_REVEAL_ADJUSTMENT_KINDS).toEqual([
+      'filter_cleared',
+      'page_changed',
+      'card_focused',
+      'section_expanded',
+    ]);
 
     // A presentation must name a place; an adjustment must be one of the kinds.
     expect(() =>

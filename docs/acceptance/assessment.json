@@ -171,12 +171,11 @@
       ]
     },
     "L2.1": {
-      "status": "czesciowe",
-      "evidence": "gui",
+      "status": "potwierdzone",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "Komponenty danych platformy (DataTable, DataChart, DataSummary) i komponenty ekranow modulu (CaseHeader, CaseOfferSources, ItemProvenance, SectionHeading) sa zdefiniowane przez defineComponent z typowanymi schematami propsow w jednym, wspolnym dla przegladarki i serwera miejscu; zgodnosc katalogow sprawdza tests/openui-catalog-parity.test.ts.",
-      "gap": "Karty canvasu modulu (caseSummary, offerList, comparisonTable, costChart, deliveryTerms, offerItemForm, provenance) nadal istnieja tylko we wlasnym katalogu kart, a ich renderery dostaja props typu Record<string, unknown>.",
-      "backlog": "BL-10",
+      "proof": "Komponenty danych platformy i komponenty ekranow modulu sa definiowane przez defineComponent z typowanymi schematami propsow w jednym miejscu, a KAZDA karta canvasu modulu (caseSummary, offerList, comparisonTable, costChart, deliveryTerms, offerItemForm, provenance) jest teraz deklarowana raz w packages/module-procurement/src/shared/cards.ts: ten sam schemat Zod zasila katalog kart serwera, renderer przegladarki (typedCard w packages/platform-ui/src/catalog/registry.tsx parsuje props przed renderem) i odpowiednik w katalogu OpenUI. Dowod: tests/bl10-card-catalog.test.ts (4 przypadki) i tests/openui-catalog-parity.test.ts (10 komponentow modulu po obu stronach, ta sama kolejnosc parametrow). Druga polowa tej maszynerii ma wlasny dowod: karta, ktorej wlasciwosci nie przechodza schematu, zwraca nazwany blad (data-testid=\"card-props-invalid\") i nie dopuszcza renderera do wartosci, ktorych schemat nie przyjal.",
+      "gap": "—",
       "scenarios": [],
       "historical": {
         "status": "potwierdzone",
@@ -198,12 +197,11 @@
       }
     },
     "L2.3": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/session-restore.spec.ts (serwer skryptowany): „po przeladowaniu ta sama rozmowa, jej historia i przestrzen pracy”, „przestrzen pracy wraca razem z rozmowa” (reload przywraca ?c= i ?s= oraz karty przestrzeni bez szuflady), „Wstecz i Dalej przelaczaja rozmowy bez mieszania historii”; tests/session-restore.test.ts (decideRestore). Kod: apps/web/src/router.tsx retainSearchParams(['c','s']), SpaceSync.tsx, ConversationSync.tsx. Nie obejmuje: przestrzeni przy Wstecz/Dalej oraz zachowania c i s przy przejściach przez linki.",
-      "gap": "Nowe brzmienie wymaga rozmowy i przestrzeni: test Wstecz/Dalej sprawdza tylko rozmowę; zmiana przestrzeni w obrębie rozmowy zapisuje adres przez replace (raport §7 pkt 12), więc Wstecz jej nie przywraca; brak testu, że przejście przez Link zachowuje c i s.",
-      "backlog": "BL-10",
+      "proof": "Rozmowa i przestrzen sa w adresie (?c=, ?s=), a router zachowuje oba parametry przy kazdej nawigacji (retainSearchParams). Przejscie przez link platformy i przez link modulu zachowuje rozmowe i przestrzen; Wstecz przywraca poprzednia przestrzen (jeden krok na jeden wybor) razem z rozmowa, Dalej wraca do nowszej. Naprawione dwa defekty: kafelek zapisanej kompozycji przekazuje przestrzen w adresie linku zamiast przez store (WorkspacePage), a fallback canvasu czyta biezaca przestrzen ze store, nie z renderu (CanvasHost) — wczesniej otwarcie kompozycji z listy laadowalo ostatnio zmieniona przestrzen. Dowod: e2e/bl10-session-context.spec.ts (2 przypadki), e2e/session-restore.spec.ts, tests/session-restore.test.ts.",
+      "gap": "—",
       "scenarios": [
         "T03"
       ],
@@ -227,12 +225,11 @@
       }
     },
     "L2.5": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/app.spec.ts „menu jest obslugiwalne z klawiatury i ma widoczny fokus” (focus() i toBeFocused, Enter otwiera ekran spraw); e2e/chat-drawer.spec.ts „otwarcie i zamkniecie dziala z klawiatury, kompozytor pozostaje dostepny” (Enter, kontrolka zamykania przyjmuje fokus). Kod: globalne :focus-visible w styles.css, etykiety pól .pf-field. Nie obejmuje: widoczności fokusu, etykiet i obsługi formularzy z klawiatury.",
-      "gap": "Żaden test nie sprawdza, że fokus jest widoczny (obrys) ani że pola formularzy (np. karta procurement.offerItemForm, wgrywanie pliku) mają etykiety i działają z klawiatury; nazwa testu obiecuje „widoczny fokus”, a asercja sprawdza tylko toBeFocused.",
-      "backlog": "BL-10",
+      "proof": "Nawigacja jest punktem orientacyjnym z nazwa (role=navigation), jej kontrolka niesie aria-expanded zgodne z ekranem, zakladki panelu aria-selected, przycisk zaznaczenia karty aria-pressed, a zwinieta sekcja Ustawien to <details> ze sterowaniem z klawiatury. Widocznosc fokusu jest mierzona obliczonym stylem — obrysem (outline) o niezerowej szerokosci na kontrolce albo na opakowaniu, ktore ja zastepuje (kompozytor czatu) — dla kolejnych kontrolek osiaganych tabulatorem, a nie przez toBeFocused. Cien (box-shadow) nie jest przyjmowany: ma go kazda karta i panel niezaleznie od fokusu, wiec przepuscilby kontrolke z outline: none. Formularz karty procurement.offerItemForm ma etykiety (getByLabel) i daje sie wypelnic oraz zapisac wylacznie z klawiatury, z wynikiem potwierdzonym odczytem backendu (quantityMilli = 7250). Dowod: e2e/bl10-shell-canvas.spec.ts (3 przypadki).",
+      "gap": "—",
       "scenarios": [
         "T02"
       ],
@@ -267,24 +264,22 @@
       ]
     },
     "L2.8": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/session-restore.spec.ts „Wstecz i Dalej przelaczaja rozmowy bez mieszania historii”; e2e/chat.spec.ts „lista rozmow, przelaczanie i usuwanie”; tests/session-restore.test.ts decideRestore (m.in. „Wstecz na poprzednia rozmowe wraca do niej, nie publikuje biezacej”); tests/access-context.test.ts „odpowiedz, ktora mimo wszystko dobiegnie, jest odrzucana po epoce” (tylko zmiana tożsamości). Nie obejmuje: opóźnionej odpowiedzi poprzedniego wyboru rozmowy lub przestrzeni ani przejść przez linki.",
-      "gap": "ConversationSync.followConversationSpace (packages/platform-ui/src/chat/ConversationSync.tsx) po await GET /api/conversations/:id wywołuje setSpace bez sprawdzenia, czy rozmowa jest nadal wybrana — wolniejsza odpowiedź wcześniejszego wyboru może nadpisać przestrzeń wybraną później (zabezpieczenia brak w kodzie, brak testu z opóźnioną odpowiedzią); brak testu zachowania kontekstu przy przejściach przez linki.",
-      "backlog": "BL-10",
+      "proof": "ConversationSync.followConversationSpace porownuje rozmowe z odpowiedzi z rozmowa aktualnie wybrana, zanim ustawi przestrzen — spozniona odpowiedz wczesniejszego wyboru nie nadpisuje nowszego. Dowod GUI z opoznieniem sieciowym (page.route wstrzymuje /api/conversations/<A> o 2,5 s): po wyborze A i natychmiastowym wyborze B adres i canvas pokazuja B takze po dojsciu odpowiedzi dla A. Kontekst przy przejsciach przez linki sprawdzony osobno. Dowod: e2e/bl10-session-context.spec.ts, tests/access-context.test.ts.",
+      "gap": "—",
       "scenarios": [
         "T03",
         "T12"
       ]
     },
     "L2.9": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/chat-drawer.spec.ts przy viewport 1680 i 1120 px: „zamknieta szuflada nie zaslania rozmowy” (pokrycie panelu do 2 px), „otwarcie i zamkniecie dziala z klawiatury, kompozytor pozostaje dostepny”, „canvas pod spodem pozostaje klikalny przy zamknietej szufladzie” (elementFromPoint przy lewej krawędzi panelu należy do czatu); otwarcie myszą „Open sidebar” w e2e/chat.spec.ts i e2e/agent-ui.spec.ts. Kontekst: raport §4d. Nie obejmuje: wąskiego kontenera czatu i zamykania myszą.",
-      "gap": "Oba viewporty dają ten sam kontener czatu 560 px (kolumna --pf-chat-width powyżej 1100 px), więc wąski panel nie jest sprawdzony; przy szerokości do 1100 px czat zajmuje pełną szerokość w drugim wierszu i szuflada nie ma tam testu; zamknięcie tylko z klawiatury; przechwycenie kliknięć sprawdzone tylko przy zamkniętej szufladzie, a e2e/chat.spec.ts klika wiersze z force:true.",
-      "backlog": "BL-10",
+      "proof": "Szuflada sprawdzona na dwoch faktycznie roznych ukladach gotowego czatu: panel 560 px (uklad mobilny biblioteki, szuflada poza kanwa) i panel pelnej szerokosci >768 px (uklad wbudowany). W obu: otwarcie i zamkniecie mysza oraz z klawiatury po etykiecie kontrolki, kompozytor dostepny po zamknieciu, a przy OTWARTEJ szufladzie klikniecie wiersza rozmowy bez force wybiera rozmowe i punkt wiersza nalezy do szuflady (elementFromPoint), wiec ani canvas, ani overflow nie przechwytuja interakcji. Dowod: e2e/bl10-shell-canvas.spec.ts (6 przypadkow), e2e/chat-drawer.spec.ts.",
+      "gap": "—",
       "scenarios": [
         "T02"
       ]
@@ -300,24 +295,22 @@
       ]
     },
     "L2.11": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/session-restore.spec.ts „usunieta rozmowa daje czytelny stan zastepczy, nie pusty ekran” (conversation-missing, data-kind gone, aktywny kompozytor, przycisk nowej rozmowy) i „rozmowa innego wlasciciela nie jest pokazywana” (brak wiadomości i tytułu cudzej rozmowy w .pf-chat); tests/session-restore.test.ts classifyThreadFailure „awaria zadania jest odroznialna od usuniecia”. Mechanizm: raport §4b Rezultat 1. Nie obejmuje: widoku stanu failed w przeglądarce.",
-      "gap": "Stan „błąd pobrania” (data-kind failed, ponowienie) ma tylko test klasyfikacji w Vitest; brak testu GUI, że nieudane wczytanie historii pokazuje czytelny stan zastępczy zamiast pustego wątku.",
-      "backlog": "BL-10",
+      "proof": "Usunieta rozmowa daje stan data-kind=\"gone\", a nieudane wczytanie historii — rozlaczny stan data-kind=\"failed\" z czytelnym zdaniem („Nic nie zostalo utracone”) i dzialajacym ponowieniem: sprawdzone w przegladarce przez wymuszona awarie zadania /api/threads/get/<id>. Kontrola negatywna z dwiema tozsamosciami: drugi wlasciciel widzi stan zastepczy, a tytul ani wiadomosci pierwszego nie pojawiaja sie ani w watku, ani na liscie w szufladzie, ani w odpowiedzi API. Dowod: e2e/bl10-session-context.spec.ts (2 przypadki), e2e/session-restore.spec.ts, tests/session-restore.test.ts.",
+      "gap": "—",
       "scenarios": [
         "T03",
         "T12"
       ]
     },
     "L2.12": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/app.spec.ts „przesuniecie karty jest trwale i nie zmienia jej tresci” (przeciągnięcie nagłówka karty w React Flow, geometryVersion rośnie, specVersion bez zmian, pozycja po reload). Kod: packages/platform-ui/src/canvas/CanvasHost.tsx używa @xyflow/react (pan, zoom, Controls, MiniMap, onMoveEnd zapisuje viewport), treść karty ma nodrag i nowheel. Nie obejmuje: panu, zoomu, zmiany rozmiaru oraz braku zakłóceń czatu i formularza.",
-      "gap": "Brak NodeResizer lub innej kontrolki — użytkownik nie może zmienić rozmiaru karty w UI (gałąź dimensions w onNodesChange obsługuje tylko pomiar); pan i zoom bez testu; brak testu, że przeciąganie lub pan nie przerywa pisania w kompozytorze ani w formularzu karty.",
-      "backlog": "BL-10",
+      "proof": "Pan, zoom i przesuniecie pochodza z @xyflow/react 12.11.6, a zmiane rozmiaru dodaje gotowa kontrolka NodeResizer tej samej biblioteki (widoczna na zaznaczonej karcie; zaznaczenie wezla jest teraz utrzymywane, bo wezly sa kontrolowane). Kazda zmiana geometrii idzie tym samym kanalem co przesuniecie i jest trwala (potwierdzone odczytem backendu i po przeladowaniu). Przeciaganie karty i pan nie przerywaja pisania: tekst w kompozytorze i wartosc w formularzu karty zostaja, a pisanie dziala dalej. Ograniczenie: uchwyty NodeResizer sa tylko wskaznikowe (biblioteka renderuje je jako divy bez obslugi klawiatury) — opisane w kodzie. Dowod: e2e/bl10-shell-canvas.spec.ts (3 przypadki), e2e/app.spec.ts.",
+      "gap": "Zmiana rozmiaru karty jest mozliwa wylacznie wskaznikiem — uchwyty gotowej kontrolki NodeResizer nie sa osiagalne z klawiatury.",
       "scenarios": [
         "T02"
       ]
@@ -334,23 +327,21 @@
       ]
     },
     "L2.14": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "Odslanianie rekordu zdejmuje zawezenie, ktore go ukrywa, przechodzi na jego strone, przewija i podswietla komorke, a kazda zmiana prezentacji jest zgloszona w wyniku i na pasku nad widokiem (packages/platform-ui/src/shell/uiReveal.ts, ViewFilterBanner). Brak celu, brak dostepu, niejednoznacznosc, brak renderera i brak potwierdzenia daja rozlaczne wyniki bez zmiany wartosci. Dowod: e2e/show-value.spec.ts, tests/show-value.test.ts.",
-      "gap": "Rozwijanie zwinietych sekcji (Accordion, Tabs) przed pokazaniem elementu nadal nie jest realizowane; element zaslonięty przez element plywajacy moze zostac zgloszony jako pokazany (sprawdzane jest tylko przyciecie przodkow).",
-      "backlog": "BL-10",
+      "proof": "Odslanianie rekordu zdejmuje zawezenie, przechodzi na jego strone, przewija i podswietla komorke, a kazda zmiana prezentacji jest zgloszona. Doszlo rozwijanie zwinietej sekcji przed pokazaniem elementu: expandCollapsedAncestors (packages/platform-ui/src/shell/expandSection.ts) otwiera to, co trzyma cel zamkniety, a element bez pudelka po rozwinieciu jest raportowany jako niepokazany zamiast podswietlany niewidocznie. Proba GUI dotyczy galezi <details>: sekcja „Narzedzia agenta” w Ustawieniach jest zwinieta, polecenie ja otwiera, przewija do elementu i podswietla go, a potwierdzenie niesie zmiane prezentacji (zmiany=section_expanded) — wartosci ustawien sa nietkniete. Brak celu daje unknown_target, bez zmiany ekranu i bez zgloszonej zmiany. Dowod: e2e/bl10-agent-navigation.spec.ts (2 przypadki), e2e/show-value.spec.ts, tests/show-value.test.ts.",
+      "gap": "Galezie dla paneli aria-expanded/aria-controls i zakladek role=\"tab\" sa w kodzie, ale nie maja testu — aplikacja nie ma dzis takiej zwinietej sekcji, a suite nie ma srodowiska DOM do testu jednostkowego. Zasloniecie elementu przez element plywajacy nadal nie jest wykrywane: sprawdzane sa przyciecie przodkow i wlasne pudelko elementu, nie trafienie w punkt.",
       "scenarios": [
         "T23"
       ]
     },
     "L2.15": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "Nawigacja zlecona przez agenta jest zwykla nawigacja routera (Wstecz i Dalej dzialaja), zdarzenie jest idempotentne po commandId, a kontekst kolejnego polecenia niesie aktywny widok i wersje opisu ekranu (AppContext.ui). Dowod: e2e/ui-navigation.spec.ts, e2e/ui-state.spec.ts.",
-      "gap": "Brak proby GUI, ktora po nawigacji zleconej przez agenta sprawdza historie Wstecz/Dalej razem z aktualizacja kontekstu w jednym przebiegu.",
-      "backlog": "BL-10",
+      "proof": "Nawigacja zlecona przez agenta jest zwykla nawigacja routera: w jednym przebiegu polecenie otwiera ekran, agent odczytuje opis TEGO ekranu (ui_state wskazuje platform.files i nowy adres), a Wstecz i Dalej dzialaja. Ponowienie zdarzenia nie powiela nawigacji takze po przeladowaniu karty: lista wykonanych commandId jest trzymana w sessionStorage, wiec replay strumienia od poczatku (po reloadzie kursor wraca do zera) nie przenosi uzytkownika drugi raz. Dowod: e2e/bl10-agent-navigation.spec.ts (2 przypadki), e2e/ui-navigation.spec.ts, e2e/ui-state.spec.ts.",
+      "gap": "—",
       "scenarios": [
         "T23"
       ]
@@ -434,12 +425,11 @@
       }
     },
     "L3.5": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/app.spec.ts „zmiana widoku karty przezywa przejscie miedzy ekranami” (odznaczony showExcluded w cardState zostaje po przejściu Ustawienia → Canvas); e2e/chat.spec.ts „zaznaczenie karty trafia do kontekstu rozmowy”; appState trzyma selection, cardState i drafts poza węzłami React Flow (kod). Nie obejmuje: zmiany kompozycji.",
-      "gap": "Brak testu, że dodanie, zmiana lub usunięcie karty (przez agenta albo refetch po canvas_changed) zachowuje zaznaczenie, stan widoku karty i niezapisany szkic formularza procurement.offerItemForm; brak jawnego rozwiązania konfliktu, gdy agent zmienia lub usuwa kartę ze szkicem; filtry kontekstu nie są używane (setFilter bez wywołań).",
-      "backlog": "BL-10",
+      "proof": "Zaznaczenie kart, stan widoku karty i niezapisane szkice zyja w appState poza wezlami React Flow, wiec dodanie i podmiana karty przez agenta ich nie gubia (przy podmianie wezel zostaje zamontowany, wiec wartosc po prostu nie znika). Odtwarzanie szkicu do formularza zbudowanego od nowa ma osobny dowod, bo tylko wtedy jest obserwowalne: po przejsciu na inny ekran karta znika z dokumentu, a po powrocie formularz wraca z wpisana wartoscia i oznaczeniem szkicu, podczas gdy rekord w backendzie pozostaje bez zmian (OfferItemFormCard odczytuje DraftRecord przy pierwszym renderze pozycji). Usuniecie karty ze szkicem jest konfliktem rozstrzyganym jawnie: platforma pokazuje nad canvasem komunikat z rekordem i polami, nic nie zapisuje ani nie odrzuca, dopoki uzytkownik nie zdecyduje (LostDraftNotice w CanvasHost, DraftRecord.cardId). Dowod: e2e/bl10-composition.spec.ts (4 przypadki).",
+      "gap": "Filtry kontekstu (AppState.filters przez setFilter) nadal nie maja zadnego wywolania — stan widokow jest raportowany osobno przez viewStates.",
       "scenarios": [
         "T08"
       ],
@@ -463,12 +453,11 @@
       }
     },
     "L3.7": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/app.spec.ts „tabela porownawcza pokazuje wartosci z backendu i przyczyny wykluczen”; e2e/measurements.spec.ts „zmiana pozycji oferty jest widoczna w zestawieniu bez przeladowania” (sumy na ekranie zmieniają się po mutacji backendu, porównanie z API); schematy props kart domeny niosą tylko referencje, a z.object usuwa nadmiarowe klucze (kod). Nie obejmuje: kart kind openui i platform.markdown.",
-      "gap": "Karta openui (dowolny OpenUI Lang z ogólnymi komponentami tabeli i wykresu openuiLibrary) i platform.markdown przyjmują treść z wartościami wygenerowanymi przez model bez powiązania z odczytem backendu; brak testu, że karta utworzona przez model nie niesie wartości biznesowych.",
-      "backlog": "BL-10",
+      "proof": "Schematy propsow kart niosa wylacznie referencje, a z.object usuwa nadmiarowe klucze: kompozycja z wpisana kwota zostaje zapisana bez niej (tests/bl10-card-catalog.test.ts). W widoku agenta kompozycja z wpisanymi wierszami jest odrzucana, a ta sama tresc jako DataTable nad zarejestrowanym odczytem — przyjmowana. Proba GUI: wartosc w tabeli porownawczej rowna sie wyliczeniu backendu, a notatka platform.markdown z liczba wymyslona przez model nie zmienia ani tego, co pokazuje tabela, ani danych backendu. Dowod: e2e/bl10-composition.spec.ts (2 przypadki), tests/bl10-card-catalog.test.ts, e2e/measurements.spec.ts.",
+      "gap": "Karta platform.markdown nadal moze zawierac liczbe wymyslona przez model — jest notatka, nie odczytem; test pokazuje, ze nie zastepuje rekordu, ale tresci notatki nic nie waliduje.",
       "scenarios": [
         "T27"
       ],
@@ -509,12 +498,11 @@
       ]
     },
     "L3.11": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "Opis czesciowy i bledny jest odrzucany przy zapisie (walidator serwera), a w czacie komponent danych nie wysyla odczytu dla nazwy operacji, ktora dopiero sie strumieniuje (readGate) — dowod: tests/agent-views.test.ts, e2e/agent-views.spec.ts.",
-      "gap": "Brak proby GUI, ktora w jednej wiadomosci pokazuje zwykla proze, poprawny OpenUI i odpowiedz po narzedziu obok siebie i sprawdza, ze rejestracja katalogu nie ukrywa prozy.",
-      "backlog": "BL-10",
+      "proof": "Cztery rodzaje odpowiedzi sa rozroznialne i zadna nie jest niewidoczna. Tresc wiadomosci jest dzielona na proze i kompozycje (splitMessage w AssistantMessage.tsx): proza obok poprawnego OpenUI i obok wyniku narzedzia jest widoczna w jednej wiadomosci — wczesniej jeden blok OpenUI oddawal cala odpowiedz rendererowi GenUI i zdania wokol niego znikaly bez sladu. Kazdy rodzaj ma inny, sprawdzony skutek na ekranie: sama proza nie tworzy zadnej kompozycji; poprawny opis rysuje tabele z wartosciami z odczytu; opis czesciowy (urwany plot) rysuje komponent nad nieistniejacym odczytem, ktory nazywa go wprost i wypisuje dostepne odczyty; opis nazywajacy nieznany komponent nie rysuje nic i jest zglaszany wraz z trescia opisu (data-empty=\"true\"). Opis czesciowy i bledny jest odrzucany przy zapisie przez walidator serwera. Dowod: e2e/bl10-composition.spec.ts (4 przypadki), e2e/agent-views.spec.ts, tests/agent-views.test.ts.",
+      "gap": "Tekst, ktory agent wypowiada PRZED wywolaniem narzedzia, nie jest renderowany przez gotowy czat (osobna wiadomosc asystenta w historii, brak jej w panelu) — defekt skladania tury w czacie, poza tym pakietem (BL-08).",
       "scenarios": [
         "T04"
       ]
@@ -1038,12 +1026,11 @@
       }
     },
     "L6.3": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "Narzedzie ui_state zwraca aktualny, wersjonowany opis ekranu w trakcie wykonania (packages/platform-server/src/agent/tools/ui-state.ts) i rozroznia opis nieaktualny; prompt kaze go odczytac po kazdej komendzie UI. Dowod: e2e/ui-state.spec.ts, tests/ui-snapshot.test.ts.",
-      "gap": "get_context nadal zwraca snapshot z chwili startu wykonania: zmiana zaznaczenia, zasobu albo szkicu w trakcie dlugiego zadania jest dla agenta niewidoczna (ui_state opisuje ekran, nie zaznaczenie i szkice).",
-      "backlog": "BL-11",
+      "proof": "get_context zwraca dwie czesci: commandContext (kontekst polecenia, niezmienny przez cale wykonanie) i currentContext — to, co karta przegladarki pokazujaca TE rozmowe trzyma teraz: zasob, zaznaczenie i szkice, z wersja opisu, stale/reason i lista changedSinceCommand (packages/platform-server/src/agent/tools/context.ts). Kanalem jest ten sam wersjonowany, przypisany do karty i do rozmowy opis ekranu co ui_state, rozszerzony o blok context (platform-contracts/src/ui-snapshot.ts, platform-ui/src/state/uiSnapshot.ts, shell/UiSnapshotPublisher.tsx). Dowod: e2e/app-context.spec.ts „L6.3 i L6.9: zaznaczenie zmienione w trakcie dlugiego zadania jest widoczne i odroznione od startowego” (uzytkownik klika kafel karty w trakcie dzialajacego zadania; symulacja modelu na granicy adaptera, reszta prawdziwa) oraz tests/app-context.test.ts „zmiana zaznaczenia i szkicu W TRAKCIE wykonania jest widoczna i nazwana” i „bez opisu karty biezacy kontekst jest NIEZNANY, a nie rowny startowemu”. Nie obejmuje: przebiegu z prawdziwym modelem (brak grantu tur).",
+      "gap": "—",
       "scenarios": [
         "T08"
       ],
@@ -1053,12 +1040,11 @@
       }
     },
     "L6.4": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "appContextSchema nie ma pola właściciela; ownerId pochodzi z sesji (http/app.ts, c.get('ownerId')), serwisy sprawdzają właściciela (conversations #row, canvas.getState). tests/contracts.test.ts „drugi uzytkownik nie widzi cudzej sprawy — mimo poprawnego identyfikatora”, „identyfikator wlasciciela z ciala zadania nie daje dostepu” (w praktyce: cudze ciasteczko daje 403 na zasób modułu); tests/ui-navigation.test.ts „cudza przestrzen pracy jest odrzucona przed dotknieciem interfejsu”.",
-      "gap": "Żaden test nie wysyła do /api/agui/run sfałszowanego lub niepoprawnego appContext (cudzy spaceId, resource, conversationId). Niepoprawny kontekst kończy się ZodError zamapowanym na 500 internal zamiast validation_failed, a spaceId z kontekstu jest zapisywany do rozmowy (create, bindSpace) bez sprawdzenia właściciela przestrzeni — nie daje odczytu, ale tworzy niespójne powiązanie.",
-      "backlog": "BL-11",
+      "proof": "appContextSchema nie ma pola wlasciciela; ownerId pochodzi z sesji. Kontekst niezgodny z kontraktem konczy sie teraz validation_failed z lista pol (reason: invalid_app_context) zamiast 500 internal, a spaceId z kontekstu jest sprawdzany na wlasnosc (canvas.getSpace) zanim trafi do rozmowy — http/app.ts /api/agui/run. Dowod: tests/app-context.test.ts „kontekst niezgodny z kontraktem to validation_failed z polami, nie internal 500”, „cudza przestrzen z kontekstu nie zostaje zapisana w rozmowie: forbidden, wiazanie nietkniete” (rozmowa zostaje przy swojej przestrzeni, zadne uruchomienie nie startuje), „cudzy zasob w kontekscie nie daje odczytu: opis mowi forbidden, a nie tresc rekordu”, „kontekst nie ma pola wlasciciela, a podstawiony ownerId nie zmienia wlasciciela wykonania”; wczesniejsze tests/contracts.test.ts i tests/ui-navigation.test.ts bez zmian.",
+      "gap": "—",
       "scenarios": [
         "T12",
         "T09"
@@ -1099,12 +1085,11 @@
       }
     },
     "L6.7": {
-      "status": "czesciowe",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "agent/prompt.ts zawiera identyfikatory kontekstu i jednozdaniowy opis zasobu, bez danych biznesowych (analiza kodu). Limity: procurement_search (domyślnie 20, maks. 50 w services.ts), procurement_list_offers (limit 25). tests/contracts.test.ts „wyszukiwanie znajduje rekordy po fragmencie nazwy” wywołuje search z limitem, ale nie sprawdza jego egzekwowania.",
-      "gap": "procurement_list_cases, procurement_get_case, canvas_list_cards, files_list i ui_catalog zwracają pełne zbiory bez paginacji ani limitu; list_offers przycina dopiero po pobraniu całej sprawy. Brak testu limitu odczytu.",
-      "backlog": "BL-11",
+      "proof": "Wspolne okno odczytu dla narzedzi agenta (platform-contracts/src/read-window.ts): limit i offset w schemacie, domyslnie 25, najwyzej 100, a odpowiedz niesie window {total, returned, offset, limit, truncated, nextOffset} i zdanie windowNote. Objete: procurement_list_cases, procurement_get_case (oferty przez limit/offset, wymagania przez wlasne requirementsLimit/requirementsOffset), procurement_list_offers (okno ofert przed budowaniem odpowiedzi, pozycje przez itemsLimit/itemsOffset), canvas_list_cards, files_list, files_versions, workspace_outputs, ui_catalog, agent_views_list. prompt.ts nadal nie niesie danych biznesowych poza opisem zasobu. Dowod: tests/app-context.test.ts „bez limitu odczyt zwraca domyslne okno i mowi, ze to nie caly zbior” (30 kart, zwrocone 25, druga strona uzupelnia zbior), „kazde narzedzie odczytu albo bierze okno, albo jest tu wymienione z powodem” (test wylicza WSZYSTKIE narzedzia effect=read z rejestru i wymaga limit+offset albo wpisu w mapie wyjatkow z uzasadnieniem — komenda interfejsu, zbior ograniczony kontraktem, albo okno zmieniajace sens odpowiedzi jak ranking ofert; nowe narzedzie odczytu oblewa ten test), „limit i offset przechodza przez narzedzie modulu, a totals nie klamia”, „limit poza zakresem schematu jest odrzucany”, „kazdy windowany odczyt miesci sie w tym, co rozmowa przechowuje” (takze wyliczane z rejestru, z furtka na ui_catalog, ktorego rozmiar pochodzi z deklaracji aplikacji, nie z danych uzytkownika) oraz „odpowiedz get_context miesci sie w tym, co rozmowa przechowuje” (get_context nie bierze okna, bo nie jest strona wiekszego zbioru, ale rosnie z tym, co uzytkownik zaznaczyl i wpisal — test trzyma go pod TOOL_RESULT_STORED_CHARS przy ciezkim kontekscie: tuzin zaznaczonych wierszy, zawezony i uporzadkowany widok, piec brudnych formularzy). Granica zapisana wprost: kontekst na maksimum schematu (50 zaznaczen o identyfikatorach maksymalnej dlugosci, 20 formularzy po 60 pol) nie miesci sie w zapisie wyniku narzedzia — to limit przechowywanej projekcji, nie okna.",
+      "gap": "—",
       "scenarios": [
         "T09"
       ],
@@ -1114,44 +1099,41 @@
       }
     },
     "L6.8": {
-      "status": "niesprawdzone",
-      "evidence": "brak",
-      "origin": "brak",
-      "proof": "chat/chatWiring.ts createChatLlm: obiekt llm tworzony raz (useMemo w ChatPanel.tsx), ale send odczytuje useAppState.getState().toAppContext() przy każdym wysłaniu — analiza kodu wskazuje odczyt w chwili wysłania. Brak testu, który zmienia kontekst po zamontowaniu czatu i sprawdza kontekst odebrany przez backend.",
-      "gap": "Brak wykonywanego dowodu; e2e/agent-ui.spec.ts przeładowuje stronę przed poleceniem, więc kontekst przy montowaniu i przy wysłaniu jest ten sam i nie rozróżnia obu wariantów.",
-      "backlog": "BL-11",
+      "status": "potwierdzone",
+      "evidence": "gui",
+      "origin": "szablon",
+      "proof": "chat/chatWiring.ts send odczytuje useAppState.getState().toAppContext() przy kazdym wyslaniu. Dowod wykonywany: e2e/app-context.spec.ts „L6.8: kontekst polecenia jest odczytany w chwili wyslania, nie przy montowaniu czatu” — czat montuje sie na ekranie bez rekordu (opis karty publikuje context.resource = null), uzytkownik przechodzi klikajac (bez przeladowania) na ekran sprawy, a kontekst odebrany przez backend w get_context ma resource tej sprawy i znacznik ekranu z jej adresu. Wariant „utrwalony przy montowaniu” dalby resource null. Symulacja modelu na granicy adaptera; przegladarka, runtime i handlery prawdziwe.",
+      "gap": "—",
       "scenarios": [
         "T08"
       ]
     },
     "L6.9": {
-      "status": "niespelnione",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "Jak L6.3: toolCtx.appContext w agent/runtime.ts jest niezmienny przez całe wykonanie, brak endpointu aktualizacji kontekstu; żaden test nie zmienia zaznaczenia ani szkicu w trakcie wykonania.",
-      "gap": "Agent nie ma kanału odczytu nowszego kontekstu, więc nie może go odróżnić od startowego; próba zmiany zaznaczenia lub szkicu podczas pracy (T08) jest niewykonalna w obecnym kodzie.",
-      "backlog": "BL-11",
+      "proof": "Kanal z L6.3 plus rozroznienie: currentContext.changedSinceCommand wymienia, co rozni sie od kontekstu polecenia (resource, selection, drafts, spaceId), a get_context ma waitForChange — czekanie na opis nowszy niz ten, z ktorym przyszlo polecenie. Dowod: e2e/app-context.spec.ts „L6.3 i L6.9…” — pierwszy odczyt w zadaniu widzi puste zaznaczenie, uzytkownik zaznacza karte mysza w trakcie wykonania, drugi odczyt widzi ja z wyzsza wersja opisu, a commandContext.selection pozostaje puste; tests/app-context.test.ts „zmiana zaznaczenia i szkicu W TRAKCIE wykonania jest widoczna i nazwana” (publikacja nowej wersji dokladnie miedzy dwoma odczytami, bez uspienia).",
+      "gap": "—",
       "scenarios": [
         "T08"
       ]
     },
     "L6.10": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "Cel operacji: toolCtx.appContext ustalony przy starcie (agent/runtime.ts), więc późniejsza nawigacja nie zmienia celu z konstrukcji (analiza kodu). Wersja przy zapisie: tests/contracts.test.ts „nie nadpisuje nowszych danych przy nieaktualnej wersji”, „konflikt kompozycji karty nie niszczy ostatniego poprawnego ukladu”.",
-      "gap": "expectedVersion w procurement_update_offer_item i expectedSpecVersion w canvas_update_card są opcjonalne (services.ts: expected = input.expectedVersion ?? item.version), więc zapis agenta bez wersji nie sprawdza aktualności. Brak testu, że nawigacja w trakcie wykonania nie przenosi mutacji na inny rekord.",
-      "backlog": "BL-11",
+      "proof": "Cel: toolCtx.appContext ustalony przy starcie, a od teraz rozroznialny od biezacego kontekstu, wiec da sie wykazac, ze agent widzi nawigacje i mimo to pisze do celu ze startu. Wersja: expectedVersion w procurement_update_offer_item i expectedSpecVersion w canvas_update_card sa WYMAGANE w narzedziach agenta (akcja rekordu podaje wersje odczytanego rekordu, $record.version). Dowod: tests/app-context.test.ts „nawigacja w trakcie wykonania nie przenosi mutacji na inny rekord” (agent czyta zmiane zasobu na inna sprawe, zapis ladny w pozycji ze startu, wersja +1), „zapis narzedziem bez wersji jest odrzucony, a z nieaktualna wersja daje conflict bez nadpisania”, „kompozycja karty: zapis bez wersji odrzucony, z nieaktualna wersja conflict”; przeplyw uzytkownika w e2e/app-context.spec.ts „L6.14…” (nawigacja do innej przestrzeni w trakcie zadania nie przenosi zapisu). Wczesniejsze tests/contracts.test.ts bez zmian.",
+      "gap": "—",
       "scenarios": [
         "T08"
       ]
     },
     "L6.11": {
       "status": "czesciowe",
-      "evidence": "gui",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "e2e/access-context.spec.ts „po przelaczeniu zaden wiersz poprzedniej tozsamosci nie jest widoczny” (access-denied z kodem forbidden/not_found, odróżniony od pustej listy); tests/live-artifacts.test.ts „brak dostepu nie jest przedstawiany jako swieze dane”; e2e/app.spec.ts „brakujace dane sa oznaczone jako brakujace”; narzędzia zgłaszają AppError not_found/forbidden. Od d142b85: procurement_search zwraca totals (liczby spraw, dostawców, pozycji niezależnie od zapytania), a \"*\" zwraca wszystko — „0 pasujących z N” jest odróżnione od pustej aplikacji (tests/view-filter.test.ts, test kontraktu).",
-      "gap": "describeResource modułu (module-procurement/src/server/index.ts) zwraca null przy każdym błędzie, więc get_context i prompt nie odróżniają usuniętego, cudzego i nieopisanego zasobu. Zachowanie agenta (brak zmyślania przy braku danych) nie ma testu z modelem w szablonie.",
+      "proof": "describeResource rozroznia piec stanow zamiast jednego null: none (brak zasobu w kontekscie), described, not_found (rekordu nie ma), forbidden (cudzy), not_described (zadnego modulu nie opisuje tego rodzaju) — registry/modules.ts, kontrakt ResourceDescription w platform-contracts/src/module.ts; modul nie polyka juz bledow serwisu. get_context niesie resourceState i zdanie o tym, czego NIE wolno uzupelniac, a prompt pisze „opis zasobu: BRAK (not_found)” zamiast milczec po identyfikatorze. Dowod: tests/app-context.test.ts „opis zasobu rozroznia brak kontekstu, opisany rekord, usuniety, cudzy i nieopisany rodzaj”, „get_context i prompt mowia wprost, ze rekordu nie ma”, „pusty wynik odczytu to zero rekordow z totals, a brak rekordu to blad — nie to samo”; wczesniejsze dowody (access-context, live-artifacts, view-filter totals) bez zmian.",
+      "gap": "Zachowanie agenta — ze nie uzupelnia brakow wymyslonymi danymi — nadal nie ma proby z prawdziwym modelem w szablonie. Platforma podaje juz rozroznialne stany i wprost zakazuje zmyslania, ale czy model sie do tego stosuje, moze wykazac tylko przebieg modelowy (Z5 mial grant zero tur).",
       "backlog": "BL-11",
       "scenarios": [
         "T09",
@@ -1159,12 +1141,11 @@
       ]
     },
     "L6.12": {
-      "status": "niespelnione",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "Zmiana tożsamości: api/queries.ts switchAccessContext → api/accessContext.ts setAccessContext czyści cache i przerywa żądania (e2e/access-context.spec.ts), ale nie zeruje useAppState. Zmiana przestrzeni: appState.setSpace nie czyści selection (czyści ją tylko setResource). Zmiana rozmowy: ConversationSync ustawia conversationId i przestrzeń rozmowy.",
-      "gap": "Po przełączeniu tożsamości bez przeładowania kolejne polecenie niesie resource, spaceId, selection, drafts i conversationId poprzedniego właściciela; po zmianie przestrzeni zaznaczone karty poprzedniej przestrzeni trafiają do następnego polecenia. Backend odrzuca cudze zasoby, ale kontekst poprzedniego zakresu trafia do promptu. Brak testu kontekstu następnego polecenia po którymkolwiek przełączeniu.",
-      "backlog": "BL-11",
+      "proof": "Trzy przelaczenia, kazde z dowodem. (1) Wlasciciel: useAppState.clearScopedContext() wpiety w onAccessContextChange czysci rozmowe, przestrzen, zasob, zaznaczenie, filtry, viewport, szkice, stan kart, zalaczniki, stany widokow i uruchomienia poprzedniego wlasciciela (platform-ui/src/state/appState.ts). (2) Przestrzen: setSpace czysci zaznaczenie, viewport i powiadomienia poprzedniej przestrzeni; ustawienie tej samej przestrzeni nic nie czysci. (3) Rozmowa: ConversationSync.followConversationSpace stosuje przestrzen rozmowy TAKZE gdy jest null, ale tylko gdy czat opuszcza inna rozmowe (leavesAnotherConversation w chat/sessionRestore.ts) — wczesniejszy warunek if (conv.spaceId) zostawial przestrzen i zaznaczenie rozmowy poprzedniej, a warunek bez zadnego ograniczenia kasowal przestrzen rozmowie tworzonej dla wysylanego polecenia. Zasob przestaje byc czescia kontekstu, gdy jego ekran znika (CaseDetailPage czysci resource przy odmontowaniu) — to jedyne miejsce, ktore go ustawia; dowod: e2e/app-context.spec.ts „L6.12: wyjscie z ekranu rekordu zdejmuje rekord z kontekstu nastepnego polecenia” (ta sama rozmowa, ten sam wlasciciel, bez przeladowania). Skutek uboczny przyjety swiadomie: ekran pochodzenia wartosci (/items/:itemId/provenance) nie niesie juz zadnego rekordu — wczesniej dziedziczyl sprawe po ekranie, z ktorego przyszedl, choc jej nie pokazuje; agent poznaje ten ekran z opisu interfejsu (ui_state: adres i widok), a nie z odziedziczonego identyfikatora. Dowod: e2e/app-context.spec.ts „L6.12: zmiana przestrzeni nie przenosi zaznaczonych kart do nastepnego polecenia”, „L6.12: po zmianie wlasciciela bez przeladowania kolejne polecenie nie niesie niczego poprzedniego” (ta sama karta przegladarki, bez reloadu; pierwszy wlasciciel wysyla polecenie, wiec jest co wyniesc, a wektorami przeciekow sa trzy rzeczy, ktore naprawde przezywaja wedrowke po aplikacji: przestrzen, zaznaczona w niej karta i nieposlany szkic formularza wpisany z klawiatury — warunek wstepny sprawdza, ze polecenie pierwszego wlasciciela nioslo wszystkie trzy; identyfikator sprawy nie jest juz wektorem, bo zeszedl z kontekstu razem ze swoim ekranem, i to ma osobny dowod) i „L6.12: przejscie do rozmowy bez przestrzeni nie zabiera ze soba przestrzeni ani zaznaczenia poprzedniej” (rozmowa wybrana z szuflady mysza, z ekranu modulu — canvas ma swiadomy fallback na ostatnia przestrzen; warunek wstepny: polecenie w rozmowie A nioslo przestrzen A i zaznaczona w niej karte); tests/app-context.test.ts: dwa testy sklepu stanu i test reguly leavesAnotherConversation. Nie obejmuje: (a) przecieku identyfikatora rozmowy przez ADRES po zmianie wlasciciela — test zaczyna wtedy nowa rozmowe (obejscie defektu panelu czatu, ktory trzyma rozmowe poprzedniego wlasciciela), co zdejmuje ?c= z adresu; ten wektor pokrywa e2e/ui-state.spec.ts „przelaczenie tozsamosci na Ustawieniach”; (b) wyboru rozmowy BEZ wlasnej przestrzeni w chwili, gdy czat nie jest na zadnej rozmowie (lastSynced === null). To nie tylko swieze wczytanie bez ?c=: decideRestore zwraca 'new' i zeruje lastSynced za kazdym razem, gdy ?c= znika z adresu w trakcie sesji — przycisk nowej rozmowy w panelu czatu, Wstecz na wpis sprzed rozmowy, zdjecie parametru po powiadomieniu. Nastepny wybor rozmowy bez przestrzeni zostawia wtedy przestrzen i zaznaczenie rozmowy, ktora uzytkownik przed chwila porzucil. Swiadome i takie zostaje: bez zapamietanej rozmowy nie ma zakresu, ktory uzytkownik opuszcza, a kasowanie zabieraloby mu przestrzen, na ktora patrzy, gdy pisal polecenie. Testy tego przypadku nie obejmuja, stad ten zapis.",
+      "gap": "—",
       "scenarios": [
         "T12",
         "T22"
@@ -1181,12 +1162,11 @@
       ]
     },
     "L6.14": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/ui-navigation.spec.ts „zadanie w tle nie przejmuje widoku innej rozmowy” (ścieżka bez zmian, inactive_conversation w historii właściwej rozmowy); shell/UiCommandRunner.tsx odmawia polecenia z nieoglądanej rozmowy; tests/agui-stream.test.ts „zakonczenie poza ogladana rozmowa jest oznaczone jako niezobaczone” (bez zmiany conversationId); shell/BackgroundTasks.tsx: przejście do zadania tylko kliknięciem.",
-      "gap": "Brak testu, że zadanie A po zmianie przez użytkownika zaznaczenia lub przestrzeni nadal operuje na przestrzeni i zaznaczeniu ze startu — wynika to tylko z niezmiennego snapshotu kontekstu (analiza kodu), bez próby T22 z nowym zaznaczeniem.",
-      "backlog": "BL-11",
+      "proof": "Kontekst polecenia jest niezmienny, a nowy kanal biezacego kontekstu jest przypisany do rozmowy wykonania, wiec zadanie rozmowy A nie dostaje nawet opisu karty pokazujacej B (reason other_conversation). Dowod: e2e/app-context.spec.ts „L6.14: zadanie rozmowy A nie przejmuje przestrzeni ani zaznaczenia wybranego pozniej” — w trakcie zadania uzytkownik przechodzi do innej przestrzeni i zaznacza w niej karte; kontekst zadania nadal ma przestrzen ze startu i puste zaznaczenie, a karta dopisana przez zadanie trafia do przestrzeni A (dokladnie jedna nowa) i nie ma jej w B; tests/app-context.test.ts „opis karty pokazujacej INNA rozmowe nie jest podany jako biezacy kontekst” (zadnego identyfikatora drugiej rozmowy w odpowiedzi). Wczesniejsze e2e/ui-navigation.spec.ts i tests/agui-stream.test.ts bez zmian.",
+      "gap": "—",
       "scenarios": [
         "T22",
         "T27"
@@ -1370,11 +1350,11 @@
       "scenarios": []
     },
     "L7.13": {
-      "status": "niespelnione",
-      "evidence": "kod",
+      "status": "czesciowe",
+      "evidence": "symulacja",
       "origin": "szablon",
-      "proof": "Analiza kodu: runtime.ts #execute woła resumeStream z conversation.claudeSessionId bez sprawdzenia istnienia transkryptu; hookCallback przy odmiennym session_id po cichu przepina rozmowę (bindSession), a błąd wznowienia trafia do classifyModelError jako integration_failed i ustawia stan dostępu failed. Brak testu i brak kodu obsługi; raport wykonawcy §6 i §7 pkt 3 wymienia ten przypadek jako niewywołany.",
-      "gap": "Aplikacja nie wykrywa brakującego transkryptu SDK i nie daje jawnego wyniku odzyskiwania: zależnie od niesprawdzonego zachowania SDK nowa sesja zostaje podpięta bez informacji (historia UI sugeruje zachowaną pamięć) albo polecenia kończą się ogólnym błędem, a zapisany claude_session_id nie jest czyszczony.",
+      "proof": "tests/session-transcript.test.ts (18 testów, stand-in modelu na granicy adaptera): odmowa wznowienia rozpoznana jako brak transkryptu daje własny kod błędu `session_transcript_lost` i komunikat „pamięć NIE została odtworzona”, powiązanie z martwą sesją jest czyszczone, żadna odpowiedź z nowej sesji nie zostaje podstawiona (stand-in ma gotową odpowiedź i nie zostaje wywołany), zdarzenie CUSTOM platform.session_transcript_lost niesie lostSessionId i memoryRestored=false, dokładnie jedno RUN_ERROR. Druga ścieżka: wznowienie, które po cichu odpowiada z innej sesji, jest wykryte po niezgodności session_id, opisane tym samym zdarzeniem (detectedBy=session_id_mismatch) i przepina rozmowę na sesję, która istnieje. Kontrole: inny błąd wznowienia (reset połączenia) zostaje integration_failed i NIE kasuje powiązania; wznowienie tej samej sesji nie zgłasza niczego; 10 przypadków rozpoznawania komunikatu (5 rozpoznanych, 5 odrzuconych, w tym „Rekord nie zostal znaleziony” i „Tool result not found”). packages/platform-server/src/agent/runtime.ts #resumeOrReportLostTranscript, isMissingSessionTranscript, bindSession; forgetClaudeSession warunkowy na identyfikatorze (nie kasuje nowszego powiązania).",
+      "gap": "Nie sprawdzono na prawdziwym SDK, którą z dwóch reakcji daje faktycznie brak transkryptu (odmowa wznowienia czy cicha nowa sesja) — zadanie nie miało budżetu tur, a przypadku nie da się wywołać bez usunięcia transkryptu prawdziwej sesji; rozpoznanie opiera się na wzorcach komunikatów, więc nieznane brzmienie z nowszej wersji SDK wpadnie w integration_failed zamiast we własny kod. Dla ścieżki „cicha nowa sesja” jawny wynik to zdarzenie, wpis w run_events i ostrzeżenie serwera — uruchomienie celowo nie jest przerywane (przerwanie przy hipotetycznym rozwidlaniu sesji przez SDK zepsułoby każdą kontynuację), więc użytkownik nie widzi wtedy komunikatu w wątku.",
       "backlog": "BL-07",
       "scenarios": [
         "T16"
@@ -1712,23 +1692,21 @@
       ]
     },
     "L9.11": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "Kontrakty: platform-contracts/src/module.ts ServerModule (migrations, tools, readOperations, cardComponents, uiTargets, routes, defaultComposition) i platform-ui/src/catalog/registry.tsx UiModule (cardRenderers, openuiComponents, artifactRenderers, menu). tests/platform-boundary.test.ts „bez modulu nie ma tabel domenowych zakupowych” i „przyjmuje dowolny modul testowy: migracja, narzedzie, trasa, komponent”; odczyty live i cele UI modułu przykładowego w tests/live-artifacts.test.ts i tests/ui-navigation.test.ts; pnpm check:module-swap: brak tabel pc_* i kart dla zakresu procurement_case po wymianie.",
-      "gap": "Ekrany modułu nie są rejestrowane kontraktem: trasy tworzy ręcznie apps/web/src/router.tsx, a typowane Link w module-procurement/src/ui/pages.tsx zależą od globalnej rejestracji routera aplikacji, przez co próba wymiany musiała usunąć połówkę UI modułu; moduł kontrolny nie ma połówki UI, odczytów live ani celów UI, więc te kontrakty nie są sprawdzone na drugim module.",
-      "backlog": "BL-06",
+      "proof": "Kontrakty: platform-contracts/src/module.ts ServerModule (migrations, tools, readOperations, cardComponents, openuiComponents, views, uiTargets, routes, defaultComposition) i ModuleScreenContribution; platform-ui/src/catalog/registry.tsx UiModule (cardRenderers, openuiComponents, artifactRenderers, menu, screens). Ekrany modułu nie są już montowane ręcznie: apps/web/src/router.tsx buduje trasy z registry.screens i nie nazywa żadnego modułu, a strony modułu czytają parametry przez useScreenParams() i linkują przez AppLink z @platform/ui. tests/module-contract.test.ts (10 testów) sprawdza wszystkie te kontrakty na module kontrolnym: migrację, narzędzia, odczyt live z deskryptorem przez POST /api/read, kartę i komponent OpenUI w obu katalogach, cel UI, widok, trasy, menu i ekrany, konflikt ścieżek ekranów oraz brak tabel, widoków, kart i narzędzi przy pustym rejestrze. Statycznie: scripts/check-boundaries.mjs wyprowadza nazwy tabel z migracji modułów i odmawia, gdy jakikolwiek plik platformy — kod lub konfiguracja — je nazywa. pnpm check:module-swap potwierdza to samo na zbudowanej aplikacji (docs/evidence/z1-bl06/01-check-module-swap.txt). Próby zdolności wykrycia: 03 (renderer karty), 05 (tabela modułu w kodzie i w konfiguracji), 06 (deklaracja komponentu OpenUI). Etykiety widoczne w interfejsie też są kontraktem modułu: nagłówek sekcji nawigacji pochodzi z UiModule.menuSections, a sekcja nienazwana przez żaden moduł dostaje neutralny nagłówek (platform-ui NEUTRAL_MENU_SECTION_LABELS) — żaden tekst powłoki widoczny dla użytkownika — nagłówki sekcji, etykiety, stany puste — nie zawiera już rzeczownika cudzej domeny (komentarze w kodzie platformy nazywają ten leak, żeby go wyjaśnić; kontrola słownika wyłącza linie komentarza z obu skanów). Próba zdolności wykrycia 08. Komplet prób na drzewie scalanym: docs/evidence/z1-bl06/09-proby-na-HEAD.txt.",
+      "gap": "—",
       "scenarios": [
         "T20"
       ]
     },
     "L9.12": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "scripts/check-module-swap.mjs (pnpm check:module-swap): na kopii repozytorium zmienia tylko apps/ i usuwa połówkę UI modułu przykładowego; sumy SHA-256 packages/platform-* bez zmian; install z lockfile, check-boundaries, typecheck, build, start serwera, rejestr wyłącznie probe, narzędzia probe_*, trasa /api/m/probe/notes, kompozycja probe.noteList, tabela probe_notes bez pc_*, powłoka i /files, /settings w Chromium bez błędów strony. scripts/check-boundaries.mjs sprawdza deklaracje package.json, importy i słownik w kodzie platformy; tests/platform-boundary.test.ts wywołuje probe_add_note.",
-      "gap": "Moduł kontrolny ma tylko połówkę serwerową, więc UI drugiego modułu (renderer karty, menu, ekrany) nie działa w próbie, a połówka UI przykładu nie kompiluje się bez tras aplikacji; kontrola zależności nie skanuje konfiguracji poza package.json (CSS, JSON, konfiguracja Vite i TS) i bierze słownik tylko z modułów, które go deklarują (module-devkit-probe nie deklaruje); testy platformy w tests/ zależą od modułu przykładowego.",
-      "backlog": "BL-06",
+      "proof": "scripts/check-module-swap.mjs (pnpm check:module-swap, log: docs/evidence/z1-bl06/01-check-module-swap.txt): na kopii repozytorium zmienia WYŁĄCZNIE dwa pliki warstwy składania (apps/server/src/compose.ts, apps/web/src/compose.tsx); router aplikacji zostaje bajt w bajt, a packages/platform-* i packages/module-procurement mają niezmienione sumy SHA-256 — moduł przykładowy nie jest już usuwany, żeby kopia się skompilowała. Dalej: install z lockfile, check-boundaries, typecheck, build, regresja jednostkowa na kopii jako test dymny podmiany (552 testy; testy w tests/ budują platformę same i nie przechodzą przez warstwę składania, więc nie dowodzą uruchomienia regresji NA module kontrolnym — to robi tests/module-contract.test.ts), start serwera, rejestr wyłącznie probe, narzędzia probe_*, operacja odczytu probe.notes z deskryptorem, cel UI i widok probe.notes, trasy GET/POST /api/m/probe/notes i /notes/:noteId, tabela probe_notes bez pc_*, a w Chromium: pozycja menu modułu, karta probe.noteList wyrenderowana z katalogu treścią z trasy modułu, ekran /probe-notes wypełniony kompozycją OpenUI (komponent modułu + DataTable platformy na jego operacji odczytu) i ekran /probe-notes/$noteId czytający własny parametr trasy. scripts/check-boundaries.mjs sprawdza deklaracje, importy, słownik, a od BL-06 także konfigurację (json, css, js, yaml), nazwy tabel modułów i zakaz zależności modułu od biblioteki routera — w manifeście i w importach. pnpm typecheck:modules kompiluje każdy moduł we własnym programie, bez apps/. Kontrole negatywne próby wymiany (narzędzia, katalog, odczyty, baza, zakresy canvasu, nawigacja) biorą słownik, nazwy tabel i zakresy z manifestów oraz migracji modułów, których kopia nie składa, więc wymiana modułu przykładowego nie czyni ich bezgłośnymi; osobny krok oblewa, gdy moduł niescalany nie dostarcza czego sprawdzać. Próby zdolności wykrycia: docs/evidence/z1-bl06/03 (renderer karty), 04 (ekran modułu sięgający po rejestrację tras aplikacji), 05 (granica w kodzie i w konfiguracji). Kontrola słownika obejmuje także etykiety widoczne w interfejsie: agenticApp.domainLabels (całe słowa i frazy, osobno od przedrostkowego domainVocabulary), skanowane w kodzie i w konfiguracji platformy; obie listy muszą być niepuste u jakiegoś modułu. Próba wymiany sprawdza, że nagłówek sekcji w przeglądarce pochodzi od modułu kontrolnego i że w nawigacji nie ma słownika modułu przykładowego. Próba zdolności wykrycia 08 (etykieta w kodzie powłoki, w stanie pustym i w konfiguracji platformy). Komplet prób zdolności wykrycia na drzewie scalanym: docs/evidence/z1-bl06/09-proby-na-HEAD.txt (A, A2, B, C1–C3, D, E1–E4, F1–F3).",
+      "gap": "—",
       "scenarios": [
         "T20"
       ]
@@ -1793,12 +1771,12 @@
       }
     },
     "L10.2": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "tests/migration.test.ts „zachowuje rozmowy, wiadomosci uzytkownika, kompozycje i dane domenowe”, „powtorne uruchomienie nie dubluje danych”, „uruchomienie bez zachowanych zdarzen zostawia stara wiadomosc nietknieta”, „migracja na pustym katalogu tworzy kompletny schemat”: baza z samą platform-0001 migrowana przez createPlatform; zachowane rozmowy, wiadomości użytkownika, karty, claude_session_id, odtworzona tura, brak zmian po powtórnym starcie (odciski wszystkich tabel). tests/runtime.test.ts „skopiowany katalog danych otwiera sie z kompletnym stanem”: checkpoint WAL w procesie, cpSync katalogu, ponowne otwarcie z artefaktem, plikiem i kartą. Nie obejmuje: platform-0003-file-versions na niepustej tabeli files (fikstura nie ma plików), skryptów scripts/backup-state.mjs i scripts/migration-rehearsal.mjs (niewykonywane w testach ani w verify), odtworzenia według docs/odzyskiwanie-stanu.md.",
-      "gap": "Migracja platform-0003 nie jest sprawdzona na danych z plikami, a próba migracji na kopii sprzed 0003 z plikami zgłosiłaby fałszywą zmianę tabeli files (brak w EXPECTED_TO_CHANGE, analiza kodu). W szablonie nie wykonano kopii, próby migracji ani odtworzenia na żadnej kopii (brak danych użytkownika, próby syntetycznej nie przeprowadzono), więc zachowanie istniejących danych przy migracji do tej wersji nie jest wykazane.",
-      "backlog": "BL-07",
+      "proof": "tests/backup-migration.test.ts: dla kopii sprzed KAŻDEJ migracji platformy (etapy czytane ze scripts/synthetic-state.mjs --list, więc nowa migracja wchodzi do pętli sama) pełny przebieg kopia → próba migracji → porównanie → drugie uruchomienie; report.problems puste, migrationsApplied zawiera migrację danego etapu, liczby rozmów, plików, kart i zdarzeń bez zmian. Dane syntetyczne (scripts/synthetic-state.mjs) obejmują rozmowę, wiadomości, uruchomienie z 10 zdarzeniami, kartę, 2 pliki z bajtami na dysku i artefakt; kolumny użyte przy wstawianiu odpowiadają etapowi, więc fikstura jest naprawdę starą bazą. Odtworzenie trwałego stanu: scripts/restore-state.mjs wykonany w regresji — stan sprzed próby odłożony i nietknięty (odcisk wszystkich tabel), kopia odtworzona wraz z zapisem, który leżał wyłącznie w WAL, aplikacja wstaje na odtworzonym katalogu (composeApp). tests/migration.test.ts nadal pilnuje migracji na bazie budowanej w teście.",
+      "gap": "—",
+      "backlog": null,
       "scenarios": [
         "T18"
       ],
@@ -1973,45 +1951,45 @@
       ]
     },
     "L10.16": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "tests/runtime.test.ts „skopiowany katalog danych otwiera sie z kompletnym stanem”: wal_checkpoint(TRUNCATE) na otwartym połączeniu, cpSync całego katalogu danych, ponowne otwarcie kopii i odczyt artefaktu, pliku i karty. Analiza kodu scripts/backup-state.mjs: kopiuje app.db, app.db-wal i app.db-shm jako bajty bez otwierania źródła, zwija WAL w kopii, kopiuje files i workspaces z SHA-256, zapisuje manifest i weryfikuje kopię (sumy, liczby i odciski tabel, integrity_check), odmawia przy bazie trzymanej przez proces. Nie obejmuje: wykonania skryptu w szablonie.",
-      "gap": "scripts/backup-state.mjs nie jest wykonywany przez żaden test ani pnpm verify i w szablonie nie wykonano żadnej kopii (brak danych użytkownika, próby syntetycznej nie przeprowadzono); test Vitest używa innego mechanizmu bez integrity_check i manifestu, a wykrywanie uszkodzonej kopii lub niespójnego manifestu nie jest sprawdzone.",
-      "backlog": "BL-07",
+      "proof": "tests/backup-migration.test.ts „kopia zachowuje zatwierdzony stan SQLite wraz z WAL”: fikstura powstaje przez zabicie procesu bez punktu kontrolnego, więc zatwierdzona rozmowa leży wyłącznie w app.db-wal (kontrola: kopia samego app.db jej nie ma). scripts/backup-state.mjs wykonany naprawdę — kopia zawiera ten zapis, jest jednym plikiem app.db (WAL zwinięty, brak -wal i -shm sprawdzony przed pierwszym otwarciem kopii), manifest niesie integrity_check ok, listę migracji i sumy SHA-256 plików, session.secret nie jest kopiowany. Ponowny odczyt: --verify kod 0. Kontrole negatywne: dopisany bajt do pliku w kopii, usunięty wiersz w bazie kopii, podmieniona liczba w manifeście i usunięty plik wymieniony w manifeście — każda daje kod 1 z nazwanym powodem.",
+      "gap": "—",
+      "backlog": null,
       "scenarios": [
         "T18"
       ]
     },
     "L10.17": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "tests/migration.test.ts „zachowuje rozmowy, wiadomosci uzytkownika, kompozycje i dane domenowe” (tożsamość rozmowy, treść wiadomości, odciski canvas_cards, canvas_spaces i run_events) i „powtorne uruchomienie nie dubluje danych” (liczby i odciski wszystkich tabel po drugim i trzecim starcie) — na bazie zbudowanej w teście, nie na kopii. Analiza kodu scripts/migration-rehearsal.mjs: kopia do katalogu tymczasowego, spis z odciskami, prawdziwy composeApp, porównanie z listą EXPECTED_TO_CHANGE, sprawdzenie tożsamości rozmów, wiadomości, kart, plików i artefaktów, drugi start z wymogiem identycznego spisu.",
-      "gap": "Próba na kopii nie jest wykonywana w szablonie, a EXPECTED_TO_CHANGE nie zawiera tabeli files zmienianej przez platform-0003-file-versions przy porównaniu wszystkich kolumn: dla kopii sprzed 0003 z plikami próba zgłosi fałszywą zmianę (analiza kodu, bez próby), więc nie może dziś potwierdzić gotowości migracji takich danych. Test Vitest nie ma jawnej listy dopuszczonych zmian i nie zawiera plików.",
-      "backlog": "BL-07",
+      "proof": "scripts/migration-rehearsal.mjs wykonany w regresji na kopii sprzed każdej migracji platformy (tests/backup-migration.test.ts). Tożsamość i treść: identyfikatory rozmów, treść i przypisanie wiadomości użytkownika, kompozycje kart, identyfikatory plików i artefaktów. Jawnie dopuszczone zmiany mają dwie siły: tabele tylko poszerzone (agent_runs.enqueued_at, files.derived_from_file_id i files.version) muszą zachować identyczną treść kolumn sprzed migracji, tę samą liczbę wierszy i żadnych nieopisanych nowych kolumn; tabele przepisywane (schema_migrations, messages) są nazwane z powodem. To zamyka fałszywą zmianę tabeli files: przebieg na kopii z 2 plikami raportuje „dodane kolumny …; dane bez zmian” i kończy się kodem 0. Drugie uruchomienie: skrypt wymaga identycznego spisu, a test dodatkowo bierze własny odcisk wszystkich tabel wokół TRZECIEGO uruchomienia, więc nie polega na werdykcie skryptu.",
+      "gap": "—",
+      "backlog": null,
       "scenarios": [
         "T18"
       ]
     },
     "L10.18": {
-      "status": "czesciowe",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "docs/odzyskiwanie-stanu.md §4 i §5: przed odtworzeniem obecny data przenoszony do data.przed-odtworzeniem-<data>, kopiowanie app.db, files i workspaces, polecenie sprawdzające liczby wierszy i integrity_check przed startem, session.secret poza kopią (sesje przeglądarki wygasają na nowej maszynie), transkrypty SDK poza katalogiem danych, ani kopiowane, ani usuwane. Nie obejmuje: wykonania procedury.",
-      "gap": "Procedura nie była wykonana ani w szablonie, ani w AgenticApp (raport §6: krok kopiowania do data nie był sprawdzony), więc nie jest „sprawdzona”; nie określa zgodności wersji kodu z kopią (kopia nowsza niż build, brak cofania migracji) ani skutku braku transkryptu SDK dla rozmów z zapisanym claude_session_id po odtworzeniu.",
-      "backlog": "BL-07",
+      "proof": "scripts/restore-state.mjs — procedura jako skrypt wykonywany w regresji (tests/backup-migration.test.ts „procedura odtworzenia stanu”, 4 testy). Stan sprzed próby: przeniesiony do data.przed-odtworzeniem-<znacznik>, nigdy nadpisany; test porównuje odcisk wszystkich tabel odłożonego katalogu z odciskiem sprzed odtworzenia. Zgodność wersji kodu: migracje z manifestu zestawione z migracjami, które zna build (czytane przez uruchomienie kompozycji aplikacji, więc obejmują moduł) — kopia z migracją nieznaną buildowi jest ODRZUCONA kodem 3 z uzasadnieniem „migracji nie da się cofnąć”, kopia starsza przechodzi z listą migracji, które zastosuje start. Los sesji aplikacji: session.secret nie jest w kopii, jest przenoszony ze stanu odłożonego (test sprawdza treść po odtworzeniu) — bez niego trzeba zalogować się ponownie. Los transkryptów SDK: nie są kopiowane ani usuwane, a rozmowa z zapisanym claude_session_id bez transkryptu daje jawny wynik (L7.13, symulacja). Kopia, która się nie weryfikuje, jest odrzucana kodem 1 ZANIM cokolwiek zostanie przesunięte; po odtworzeniu liczby wierszy porównane z manifestem i integrity_check, a aplikacja wstaje na odtworzonym katalogu. docs/odzyskiwanie-stanu.md §4 opisuje dokładnie tę procedurę.",
+      "gap": "—",
+      "backlog": null,
       "scenarios": [
         "T18"
       ]
     },
     "L10.19": {
-      "status": "czesciowe",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "Analiza kodu: scripts/backup-state.mjs czyta źródło wyłącznie jako bajty i odmawia pracy przy otwartej bazie; scripts/migration-rehearsal.mjs pracuje na kopii w katalogu tymczasowym i odmawia, gdy --backup wskazuje katalog data repozytorium; tests/migration.test.ts i tests/durability.test.ts używają katalogów tymczasowych przez APP_DATA_DIR. docs/odzyskiwanie-stanu.md §3 i README („Istniejące dane — najpierw kopia”) oddzielają próbę na kopii od uruchomienia na danych. Nie obejmuje: wykonanego sprawdzenia sum źródła przed i po kopii lub próbie.",
-      "gap": "Brak wykonanej w szablonie kontroli, że kopia i próba nie zmieniają aktywnej bazy; ochrona próby porównuje ścieżkę tylko z data w repozytorium, nie z APP_DATA_DIR; pnpm start stosuje zaległe migracje automatycznie bez wymogu wcześniejszej próby, więc rozdział gotowości i zastosowania opiera się tylko na dokumentacji.",
-      "backlog": "BL-07",
+      "proof": "tests/backup-migration.test.ts: sumy SHA-256 app.db i app.db-wal źródła identyczne przed i po wykonaniu kopii (app.db-shm celowo poza asercją — SQLite przebudowuje go także przy połączeniu readonly, nie zawiera danych); scripts/migration-rehearsal.mjs sam liczy odciski wszystkich plików kopii źródłowej przed i po próbie i raportuje sourceUntouched, co test sprawdza dla każdego etapu. Odmowy (kod 2, stan nietknięty — sprawdzony odciskiem tabel): próba na katalogu wskazanym przez APP_DATA_DIR, próba na katalogu zawierającym session.secret (kopia nigdy go nie ma, więc rozpoznanie nie wymaga znajomości ścieżki), --out kopii wewnątrz kopiowanego katalogu, kopia bazy trzymanej przez proces (test trzyma połączenie otwarte), generator danych syntetycznych wycelowany w katalog danych. Rozdział gotowości od zastosowania: próba i odtworzenie to osobne polecenia pracujące na kopii, restore-state.mjs --check nie zmienia niczego i odsyła do próby, gdy kopia jest starsza niż kod.",
+      "gap": "pnpm start nadal stosuje zaległe migracje automatycznie — nic nie wymusza wcześniejszej próby, rozdział opiera się na osobnych poleceniach i dokumentacji, nie na blokadzie w starcie aplikacji.",
+      "backlog": null,
       "scenarios": [
         "T18"
       ]
@@ -2522,18 +2500,18 @@
     },
     "T02": {
       "status": "czesciowe",
-      "proof": "e2e/chat-drawer.spec.ts przy 1680 px i 1120 px: szuflada otwarta i zamknięta, kompozytor dostępny, canvas klikalny; e2e/chat-layout.spec.ts: geometria wątku i przynależność kontrolek.",
-      "gap": "Obie szerokości okna dają ten sam panel czatu 560 px, więc wąski kontener nie jest faktycznie sprawdzony; brak próby zasłoniętej kontrolki przy innej szerokości panelu."
+      "proof": "e2e/chat-drawer.spec.ts przy 1680 px i 1120 px: szuflada otwarta i zamknieta, kompozytor dostepny, canvas klikalny; e2e/chat-layout.spec.ts: geometria watku i przynaleznosc kontrolek; e2e/bl10-shell-canvas.spec.ts na dwoch faktycznie roznych ukladach gotowego czatu (panel 560 px — uklad mobilny biblioteki; panel pelnej szerokosci >768 px — uklad wbudowany): otwarcie i zamkniecie mysza oraz z klawiatury, klikniecie wiersza bez force przy otwartej szufladzie i test trafienia w punkt (elementFromPoint), ktory odrzuca przechwycony klik.",
+      "gap": "Klikalnosc canvasu przy zamknietej szufladzie jest sprawdzona tylko na panelu 560 px; na panelu pelnej szerokosci sprawdzono, ze szuflada nie oddaje swoich klikniec, ale nie ze canvas pod nia pozostaje interaktywny."
     },
     "T03": {
       "status": "czesciowe",
-      "proof": "e2e/session-restore.spec.ts: reload bez klikania listy, kontynuacja sesji, Wstecz/Dalej, przestrzeń wraca z rozmową, usunięta i cudza rozmowa (serwer skryptowany).",
-      "gap": "Opóźniona odpowiedź poprzedniego wyboru nie jest sprawdzona, a analiza kodu wskazuje brak ochrony przed nadpisaniem nowszej przestrzeni (L2.8); kontynuacja sesji potwierdzona na scenariuszu, nie na prawdziwym modelu."
+      "proof": "e2e/session-restore.spec.ts: reload bez klikania listy, kontynuacja sesji, Wstecz/Dalej, przestrzen wraca z rozmowa, usunieta i cudza rozmowa (serwer skryptowany); e2e/bl10-session-context.spec.ts: przejscie przez link zachowuje c i s, Wstecz i Dalej przywracaja przestrzen razem z rozmowa, opozniona o 2,5 s odpowiedz poprzedniego wyboru nie cofa nowszego, a nieudane wczytanie historii ma wlasny stan zastepczy z ponowieniem.",
+      "gap": "Kontynuacja sesji potwierdzona na scenariuszu skryptowanym, nie na prawdziwym modelu."
     },
     "T04": {
       "status": "czesciowe",
-      "proof": "pierwsza odpowiedź po nadaniu ID pozostaje widoczna (L4.10); proza i wynik narzędzia w czacie (e2e/tool-activity.spec.ts, e2e/agent-ui.spec.ts).",
-      "gap": "Brak próby renderowania OpenUI Lang w wiadomości oraz częściowego i błędnego opisu UI; odpowiedź bez tekstu sprawdzona tylko dla strumieniowania."
+      "proof": "pierwsza odpowiedz po nadaniu ID pozostaje widoczna (L4.10); proza i wynik narzedzia w czacie (e2e/tool-activity.spec.ts, e2e/agent-ui.spec.ts); e2e/bl10-composition.spec.ts: proza, poprawny OpenUI i wynik narzedzia obok siebie w jednej wiadomosci, sama proza, opis czesciowy i opis nazywajacy nieznany komponent — kazdy z wlasnym, widocznym rezultatem.",
+      "gap": "Odpowiedz bez tekstu sprawdzona tylko dla strumieniowania. Tekst wypowiedziany przed wywolaniem narzedzia nie jest renderowany przez gotowy czat — zapisany w historii, niewidoczny w panelu (defekt skladania tury, BL-08)."
     },
     "T05": {
       "status": "potwierdzone",
@@ -2601,9 +2579,9 @@
       "gap": "Aplikacja nie odczytuje źródła klucza z SDK, więc przebieg przez OAuth subskrypcji nie jest potwierdzony wprost; wygaśnięcie, odmowa odświeżenia i odwołanie są sprawdzone tylko na klasyfikatorze (L8.2, L8.10–L8.12)."
     },
     "T18": {
-      "status": "czesciowe",
-      "proof": "tests/migration.test.ts: migracja z zachowaniem danych i bez skutku przy drugim uruchomieniu; tests/runtime.test.ts: kopia katalogu danych z checkpointem WAL.",
-      "gap": "scripts/backup-state.mjs i scripts/migration-rehearsal.mjs nie są wykonywane w szablonie; platform-0003 na niepustej tabeli files niesprawdzona, a próba migracji zgłosiłaby fałszywą zmianę; odtworzenie według procedury nie było przećwiczone."
+      "status": "potwierdzone",
+      "proof": "tests/backup-migration.test.ts (24 testy, dane syntetyczne w .e2e-bl07/): kopia z zapisem leżącym wyłącznie w WAL, weryfikacja i ponowny odczyt, próba migracji na kopii sprzed każdej migracji platformy, drugie i trzecie uruchomienie bez skutku, odtworzenie z odłożeniem stanu sprzed próby i startem aplikacji. Kontrole: uszkodzony plik, zmieniona baza, niespójny manifest, brakujący plik, kopia nowsza niż build; źródło bajt w bajt nietknięte.",
+      "gap": "—"
     },
     "T19": {
       "status": "czesciowe",
@@ -2611,9 +2589,9 @@
       "gap": "Ścieżki porównywane tekstowo bez realpath — dowiązanie .e2e* do data/ przeszłoby kontrole (L1.11); pozostawiony serwer skryptowany z tą samą etykietą zostałby zaakceptowany (L1.9); pnpm acceptance i run-agent domyślnie kierują zapisy na 127.0.0.1:8791 (L1.8)."
     },
     "T20": {
-      "status": "czesciowe",
-      "proof": "pnpm check:boundaries (z kontrolami negatywnymi), tests/platform-boundary.test.ts (platforma bez modułu i z modułem kontrolnym), pnpm check:module-swap (wymiana w warstwie składania, platforma bez zmian, build, start, powłoka).",
-      "gap": "Moduł kontrolny nie ma połówki UI; połówka UI przykładu wymaga tras aplikacji do typecheck; testy platformy zależą od modułu przykładowego (BL-06)."
+      "status": "potwierdzone",
+      "proof": "pnpm check:boundaries (deklaracje, importy, słownik, konfiguracja, nazwy tabel modułów, zakaz zależności modułu od routera; z próbami zdolności wykrycia), tests/platform-boundary.test.ts i tests/module-contract.test.ts (platforma bez modułu i z modułem kontrolnym, wszystkie kontrakty rejestracji), pnpm check:module-swap (wymiana w dwóch plikach warstwy składania, platforma i moduł przykładowy bez zmian, typecheck, build, regresja jednostkowa na kopii jako test dymny podmiany — 552 testy, które budują platformę same i nie przechodzą przez warstwę składania, więc nie dowodzą uruchomienia regresji NA module kontrolnym; start, karta i ekrany modułu kontrolnego w przeglądarce; kontrole negatywne — słownik, etykiety, tabele i zakresy canvasu — wyprowadzone z manifestów i migracji modułów, których kopia nie składa), pnpm typecheck:modules (moduł kompiluje się bez aplikacji). Powłoka platformy nie ma już własnych rzeczowników domenowych: nagłówki sekcji nawigacji pochodzą z UiModule.menuSections, a stany puste mówią o rekordzie, nie o sprawie.",
+      "gap": "—"
     },
     "T21": {
       "status": "czesciowe",
@@ -2665,16 +2643,10 @@
       "done": "kontrolowane stand-iny na granicy adaptera SDK dają rozróżnialne stany w UI i zachowują historię bez powtórki mutacji; dowód oznaczony jako symulacja; opis odczytu poświadczeń zgodny z kodem."
     },
     {
-      "id": "BL-06",
-      "title": "Wymienialność modułu domenowego",
-      "summary": "Testy platformy korzystają z modułu przykładowego jako danych testowych (tests/helpers.ts); moduł kontrolny nie ma połówki przeglądarkowej; typowane linki ekranów modułu zależą od globalnej rejestracji routera aplikacji, więc niezłożony moduł z UI nie przechodzi typecheck.",
-      "done": "testy platformy działają na module kontrolnym lub fixture platformy; moduł kontrolny ma połówkę UI z rendererem karty sprawdzanym w przeglądarce przez pnpm check:module-swap; moduł z ekranami przechodzi typecheck niezależnie od tego, czy aplikacja go składa."
-    },
-    {
       "id": "BL-07",
       "title": "Trwałość, kopia i migracje",
-      "summary": "Próba migracji nie uwzględnia platform-0003-file-versions (tabela files) na liście oczekiwanych zmian; kopia i odtworzenie nie zostały przećwiczone w szablonie na danych syntetycznych; brak sprawdzonej obsługi utraty transkryptu SDK.",
-      "done": "migration-rehearsal obejmuje wszystkie migracje platformy z testem na syntetycznej kopii sprzed każdej migracji; kopia, weryfikacja i odtworzenie przećwiczone w szablonie na danych syntetycznych z dowodem; ścieżka utraty transkryptu daje jawny wynik."
+      "summary": "Pozostaje jedno pytanie, na które nie da się odpowiedzieć bez tury modelu: którą z dwóch reakcji daje prawdziwy SDK, gdy transkrypt wznawianej sesji nie istnieje. Obie ścieżki są obsłużone i sprawdzone stand-inem na granicy adaptera; kopia z WAL, próba migracji sprzed każdej migracji platformy i odtworzenie są przećwiczone w szablonie na danych syntetycznych (Z2, 2026-09-18).",
+      "done": "jedna próba na prawdziwym modelu: rozmowa z sesją, usunięcie jej transkryptu, kolejne polecenie — zapisany komunikat SDK rozstrzyga, która ścieżka zachodzi, i potwierdza albo uzupełnia wzorce rozpoznawania w isMissingSessionTranscript."
     },
     {
       "id": "BL-08",
@@ -2687,12 +2659,6 @@
       "title": "Pliki, sandbox i zadania w tle",
       "summary": "Braki dowodu lub implementacji w warstwie 11 niepokryte ponowieniem prób (BL-03), np. izolacja wszystkich klas narzędzi, zakończenie procesów potomnych przy Stop, atomowa publikacja wyników, zachowanie po restarcie.",
       "done": "kryteria pakietu mają dowód wykonywany w regresji szablonu, z kontrolami negatywnymi dla izolacji."
-    },
-    {
-      "id": "BL-10",
-      "title": "Frontend, dostępność i stany UI",
-      "summary": "Braki w warstwach 2 i 3 poza BL-01 i BL-02 oraz narzędzia deweloperskie frontendu (np. proxy Vite na stały port 8791).",
-      "done": "kryteria pakietu mają test GUI w regresji szablonu; tryb deweloperski nie może trafić do obcej instancji."
     },
     {
       "id": "BL-11",

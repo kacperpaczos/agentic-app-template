@@ -1,0 +1,84 @@
+{
+  "at": "2026-09-18T10:42:36.422Z",
+  "backup": "/home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia",
+  "workdir": "/home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/proba",
+  "migrationsBefore": [
+    "platform-0001-init",
+    "platform-0002-run-measurement-points",
+    "procurement-0001-init"
+  ],
+  "migrationsAfter": [
+    "platform-0001-init",
+    "platform-0002-run-measurement-points",
+    "platform-0003-file-versions",
+    "procurement-0001-init"
+  ],
+  "migrationsApplied": [
+    "platform-0003-file-versions"
+  ],
+  "sourceUntouched": true,
+  "countsBefore": {
+    "agent_runs": 1,
+    "app_settings": 0,
+    "artifact_versions": 1,
+    "artifacts": 1,
+    "canvas_cards": 1,
+    "canvas_spaces": 1,
+    "conversations": 2,
+    "files": 2,
+    "idempotency_keys": 0,
+    "messages": 4,
+    "pc_attachments": 0,
+    "pc_cases": 0,
+    "pc_criteria": 0,
+    "pc_offer_items": 0,
+    "pc_offers": 0,
+    "pc_provenance": 0,
+    "pc_requirements": 0,
+    "pc_suppliers": 0,
+    "run_events": 10,
+    "schema_migrations": 3,
+    "users": 2
+  },
+  "countsAfter": {
+    "agent_runs": 1,
+    "app_settings": 0,
+    "artifact_versions": 1,
+    "artifacts": 1,
+    "canvas_cards": 1,
+    "canvas_spaces": 1,
+    "conversations": 2,
+    "files": 2,
+    "idempotency_keys": 0,
+    "messages": 6,
+    "pc_attachments": 0,
+    "pc_cases": 0,
+    "pc_criteria": 0,
+    "pc_offer_items": 0,
+    "pc_offers": 0,
+    "pc_provenance": 0,
+    "pc_requirements": 0,
+    "pc_suppliers": 0,
+    "run_events": 10,
+    "schema_migrations": 4,
+    "users": 2
+  },
+  "expectedChanges": [
+    "files: dodane kolumny derived_from_file_id, version (platform-0003-file-versions dodaje kolumny derived_from_file_id i version; istniejace wiersze zachowuja wszystkie dotychczasowe wartosci); dane bez zmian",
+    "messages: 4 → 6 wierszy (odtworzenie aktywnosci narzedzi zastepuje pojedyncza wiadomosc asystenta pelna tura)",
+    "schema_migrations: 3 → 4 wierszy (migracja dopisuje swoj wpis)"
+  ],
+  "preserved": {
+    "rozmowy": 2,
+    "wiadomosciUzytkownika": 3,
+    "kartyCanvasu": 1,
+    "pliki": 2,
+    "artefakty": 1
+  },
+  "secondBootChangedNothing": true,
+  "problems": [],
+  "bootOutput": [
+    "[platform] odtworzono aktywnosc narzedzi: 1 uruchomien, 3 wiadomosci",
+    ""
+  ]
+}

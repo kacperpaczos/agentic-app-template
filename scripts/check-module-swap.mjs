@@ -8,24 +8,34 @@
  * kopii repozytorium, nie na nim samym:
  *
  *   1. kopiuje śledzone i nieignorowane pliki do katalogu tymczasowego,
- *   2. zmienia WYŁĄCZNIE warstwę składania (`apps/server`, `apps/web`):
- *      serwer rejestruje `@module/devkit-probe` zamiast `@module/procurement`,
- *      przeglądarka nie rejestruje modułu przykładowego ani jego ekranów;
- *      usuwa też połówkę przeglądarkową modułu przykładowego (`src/ui` i eksport
- *      `./ui`) — jej typowane linki wskazują trasy zarejestrowane w routerze
- *      aplikacji, więc bez tych tras nie przechodzi typecheck. Połówka serwerowa
- *      zostaje, bo testy platformy używają jej jako danych testowych,
- *   3. dowodzi sumami SHA-256, że `packages/platform-*` są identyczne jak przed zmianą,
- *   4. instaluje zależności z lockfile, uruchamia kontrolę granicy, typecheck i build,
+ *   2. zmienia WYŁĄCZNIE dwa pliki warstwy składania — `apps/server/src/compose.ts`
+ *      i `apps/web/src/compose.tsx`: obie połówki rejestrują `@module/devkit-probe`
+ *      zamiast `@module/procurement`. Router aplikacji zostaje bajt w bajt taki
+ *      sam (ekrany modułu montuje kontraktem `UiModule.screens`), a połówka
+ *      przeglądarkowa modułu przykładowego zostaje w kopii nietknięta — to jest
+ *      dowód, że moduł z ekranami przechodzi typecheck niezależnie od tego, czy
+ *      aplikacja go składa,
+ *   3. dowodzi sumami SHA-256, że `packages/platform-*` i każdy moduł, którego kopia
+ *      nie składa, są identyczne jak przed zmianą,
+ *   4. instaluje zależności z lockfile, uruchamia kontrolę granicy, typecheck, build
+ *      i regresję jednostkową (test dymny — patrz przy kroku),
  *   5. startuje zbudowany serwer na wolnym porcie z własnym katalogiem danych i sprawdza:
- *      rejestr modułów, narzędzia, trasę modułu, walidację kompozycji komponentem modułu,
- *      brak tabel modułu przykładowego oraz działanie powłoki w przeglądarce.
+ *      rejestr modułów, narzędzia, trasy modułu, operację odczytu, walidację kompozycji
+ *      komponentem modułu, brak tabel nieobecnego modułu, a w przeglądarce —
+ *      kartę modułu kontrolnego wyrenderowaną z katalogu danymi z jego własnej
+ *      trasy, jego ekran z menu i ekran z parametrem trasy.
+ *
+ * Co ta próba nazywa po imieniu, a czego nie: podmiana w warstwie składania musi
+ * wskazać fragment, który zastępuje (`replaceOnce` przerywa próbę, gdy fragmentu
+ * nie ma dokładnie raz — więc nie może zwietrzeć po cichu). Natomiast wszystkie
+ * kontrole negatywne — czego po wymianie nie wolno zobaczyć w narzędziach,
+ * katalogu, bazie i nawigacji — biorą słownik i nazwy tabel z manifestów oraz
+ * migracji modułów, których kopia NIE składa. Wymiana modułu przykładowego w
+ * szablonie nie czyni ich więc bezgłośnymi.
  *
  *   node scripts/check-module-swap.mjs [--keep] [--json <plik>]
  *
- * Nie dotyka katalogu repozytorium ani żadnej działającej instancji. Moduł
- * kontrolny nie ma połówki przeglądarkowej, więc renderer jego karty nie jest
- * tu sprawdzany — to jawne ograniczenie próby.
+ * Nie dotyka katalogu repozytorium ani żadnej działającej instancji.
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -37,6 +47,16 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * Moduł, którym ta próba podmienia domenę, i jego przestrzeń nazw.
+ *
+ * To jedyne dwie nazwy, które próba z natury musi znać — to jest moduł, który
+ * ona wstawia. Wszystko, czego po wymianie NIE wolno zobaczyć, jest wyprowadzone
+ * z manifestów modułów, których kopia nie składa (patrz krok 2).
+ */
+const SWAPPED_IN = 'module-devkit-probe';
+const COMPOSED_ID = 'probe';
 const keep = process.argv.includes('--keep');
 const jsonOut = process.argv.includes('--json') ? process.argv[process.argv.indexOf('--json') + 1] : null;
 
@@ -91,6 +111,8 @@ try {
   /* 1. kopia repozytorium ------------------------------------------------- */
   const listed = run('git', ['ls-files', '-co', '--exclude-standard', '-z'], repo);
   record('lista plików repozytorium', listed.code === 0, listed.code === 0 ? '' : listed.out);
+  const repoCommit = run('git', ['rev-parse', 'HEAD'], repo).out.trim();
+  record('commit, z którego powstaje kopia', /^[0-9a-f]{7,40}$/.test(repoCommit), repoCommit);
   const files = listed.out.split('\0').filter(Boolean);
   for (const f of files) {
     const src = join(repo, f);
@@ -104,8 +126,75 @@ try {
   }
   record('kopia robocza', true, `${files.length} plików → ${work}`);
 
-  const platformDirs = readdirSync(join(work, 'packages')).filter((d) => d.startsWith('platform-')).sort();
-  const before = Object.fromEntries(platformDirs.map((d) => [d, hashTree(join(work, 'packages', d))]));
+  /*
+   * Hashed before and after: the platform packages, and the example module too.
+   * The example module has to survive the swap untouched — an application that
+   * composes a different module must still be able to typecheck and build the
+   * one it is not composing, or "a module works without changes in the
+   * platform" would only mean "after deleting the other module".
+   */
+  const moduleDirs = readdirSync(join(work, 'packages')).filter((d) => d.startsWith('module-')).sort();
+  const absentModules = moduleDirs.filter((d) => d !== SWAPPED_IN);
+  const untouchedDirs = readdirSync(join(work, 'packages'))
+    .filter((d) => d.startsWith('platform-') || absentModules.includes(d))
+    .sort();
+  const platformDirs = untouchedDirs.filter((d) => d.startsWith('platform-'));
+  const before = Object.fromEntries(untouchedDirs.map((d) => [d, hashTree(join(work, 'packages', d))]));
+
+  /*
+   * Czego po wymianie nie wolno zobaczyć — wyprowadzone, nie wpisane.
+   *
+   * Te asercje negatywne wcześniej wymieniały z nazwy słownik modułu
+   * przykładowego („Sprawy zakupowe”, `pc_`, `procurement_`). W szablonie ktoś
+   * ten moduł wymieni — i wtedy każda z nich staje się na zawsze bezgłośna,
+   * a krok raportuje OK, nie sprawdzając niczego. Ta sama wada, którą kontrola
+   * granicy naprawiła przy nazwach tabel. Źródłem jest więc manifest modułu,
+   * którego kopia NIE składa, i jego własne migracje.
+   */
+  const manifestOf = (d) => JSON.parse(readFileSync(join(work, 'packages', d, 'package.json'), 'utf8'));
+  const absentPrefixes = absentModules.flatMap((d) => manifestOf(d).agenticApp?.domainVocabulary ?? []);
+  const absentLabels = absentModules.flatMap((d) => manifestOf(d).agenticApp?.domainLabels ?? []);
+  /*
+   * Zakresy canvasu, na które odpowiada moduł: te, które kopia składa, i te,
+   * których nie. Deklarowane w manifeście (`agenticApp.scopeKinds`), bo wpisana
+   * na sztywno wartość zmyślona sprawdza mniej niż prawdziwy identyfikator
+   * cudzego modułu — zmyślony ciąg mógłby zostać odrzucony z zupełnie innego
+   * powodu. Deklaracja nie może zgnić po cichu: zakres modułu składanego musi
+   * w tej samej próbie WYTWORZYĆ jego kompozycję domyślną (krok niżej).
+   */
+  const composedScopeKinds = manifestOf(SWAPPED_IN).agenticApp?.scopeKinds ?? [];
+  const absentScopeKinds = absentModules.flatMap((d) => manifestOf(d).agenticApp?.scopeKinds ?? []);
+  const absentTables = [];
+  for (const d of absentModules) {
+    const walk = (dir) => {
+      for (const e of readdirSync(dir)) {
+        const p = join(dir, e);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (/\.tsx?$/.test(p)) {
+          for (const m of readFileSync(p, 'utf8').matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)/gi)) {
+            absentTables.push(m[1]);
+          }
+        }
+      }
+    };
+    walk(join(work, 'packages', d, 'src'));
+  }
+  const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  /** Co ze słownika nieobecnego modułu przecieka do podanego tekstu. */
+  const leaks = (text) => [
+    ...absentPrefixes.filter((w) => new RegExp(`\\b${escapeRe(w)}`, 'i').test(text)),
+    ...absentLabels.filter((w) => new RegExp(`\\b${escapeRe(w)}\\b`, 'i').test(text)),
+  ];
+  record(
+    'moduł niescalany dostarcza słownik do kontroli negatywnych',
+    absentModules.length > 0 &&
+      absentPrefixes.length > 0 &&
+      absentLabels.length > 0 &&
+      absentTables.length > 0 &&
+      absentScopeKinds.length > 0 &&
+      composedScopeKinds.length > 0,
+    `${absentModules.join(', ')}: ${absentPrefixes.length} przedrostkow, ${absentLabels.length} etykiet, ${absentTables.length} tabel, zakresy [${absentScopeKinds.join(', ')}]; modul skladany: zakresy [${composedScopeKinds.join(', ')}]`,
+  );
 
   /* 2. zmiana warstwy składania ------------------------------------------- */
   const serverCompose = join(work, 'apps/server/src/compose.ts');
@@ -113,32 +202,26 @@ try {
   replaceOnce(serverCompose, 'modules: (services) => [createProcurementModule(services)],', 'modules: (services) => [createProbeModule(services)],');
 
   const webCompose = join(work, 'apps/web/src/compose.tsx');
-  replaceOnce(webCompose, "import { procurementUiModule } from '@module/procurement/ui';\n", '');
-  replaceOnce(webCompose, 'modules: [procurementUiModule],', 'modules: [],');
+  replaceOnce(webCompose, "import { procurementUiModule } from '@module/procurement/ui';", "import { probeUiModule } from '@module/devkit-probe/ui';");
+  replaceOnce(webCompose, 'modules: [procurementUiModule],', 'modules: [probeUiModule],');
+  record('warstwa składania przełączona na moduł kontrolny', true, 'apps/server/src/compose.ts, apps/web/src/compose.tsx');
 
+  /*
+   * The router is not edited at all — the whole point of `UiModule.screens`.
+   * Asserted rather than assumed: if this file ever went back to importing a
+   * module page by name, the swap would silently need an edit here again.
+   */
   const router = join(work, 'apps/web/src/router.tsx');
-  let routerSrc = readFileSync(router, 'utf8');
-  routerSrc = routerSrc.replace(/^import \{[^}]*\} from '@module\/procurement\/ui';\n/m, '');
-  // Trasy ekranów modułu przykładowego: definicje i ich użycie w drzewie tras.
-  // Blok trasy nie zawiera średników, więc [^;] nie przeskoczy do sąsiedniej definicji.
-  const moduleRoute = /^const (\w+) = createRoute\(\{[^;]*?component: (?:CasesPage|CaseDetailPage|DataPage|ItemProvenancePage),[^;]*?\}\);\n\n?/gm;
-  const moduleRouteNames = [...routerSrc.matchAll(moduleRoute)].map((m) => m[1]);
-  routerSrc = routerSrc.replace(moduleRoute, '');
-  for (const name of moduleRouteNames) routerSrc = routerSrc.replace(new RegExp(`\\s*\\b${name}\\b,?`), '');
-  writeFileSync(router, routerSrc);
-  const leftovers = ['@module/procurement', 'CasesPage', 'CaseDetailPage', 'DataPage', 'ItemProvenancePage'].filter((w) => readFileSync(router, 'utf8').includes(w));
-  const expectedRemoved = ['casesRoute', 'caseDetailRoute', 'dataRoute', 'itemProvenanceRoute'];
-  const platformRoutesKept = ['canvasRoute', 'spacesRoute', 'filesRoute', 'settingsRoute'].every((r) => (routerSrc.match(new RegExp(`\\b${r}\\b`, 'g')) ?? []).length >= 2);
-  record('warstwa składania przełączona na moduł kontrolny', leftovers.length === 0 && platformRoutesKept && JSON.stringify([...moduleRouteNames].sort()) === JSON.stringify([...expectedRemoved].sort()), leftovers.length ? `pozostało: ${leftovers.join(', ')}` : `usunięte trasy: ${moduleRouteNames.join(', ')}`);
+  const routerSrc = readFileSync(router, 'utf8');
+  record(
+    'router aplikacji bez zmian i bez nazwy jakiegokolwiek modułu',
+    readFileSync(join(repo, 'apps/web/src/router.tsx'), 'utf8') === routerSrc && !routerSrc.includes('@module/'),
+    'ekrany modułu montowane z registry.screens',
+  );
 
-  // Połówka przeglądarkowa modułu przykładowego odchodzi razem z jego ekranami (patrz nagłówek).
-  rmSync(join(work, 'packages/module-procurement/src/ui'), { recursive: true, force: true });
-  replaceOnce(join(work, 'packages/module-procurement/package.json'), '"./ui": "./src/ui/index.tsx",\n', '');
-  record('połówka UI modułu przykładowego usunięta z kopii', true, 'packages/module-procurement/src/ui, eksport ./ui');
-
-  const after = Object.fromEntries(platformDirs.map((d) => [d, hashTree(join(work, 'packages', d))]));
-  const changedPlatform = platformDirs.filter((d) => before[d] !== after[d]);
-  record('pakiety platformy bez zmian', changedPlatform.length === 0, changedPlatform.length ? changedPlatform.join(', ') : platformDirs.map((d) => `${d}:${after[d].slice(0, 12)}`).join(' '));
+  const after = Object.fromEntries(untouchedDirs.map((d) => [d, hashTree(join(work, 'packages', d))]));
+  const changedPackages = untouchedDirs.filter((d) => before[d] !== after[d]);
+  record('pakiety platformy i moduł przykładowy bez zmian', changedPackages.length === 0, changedPackages.length ? changedPackages.join(', ') : untouchedDirs.map((d) => `${d}:${after[d].slice(0, 12)}`).join(' '));
 
   const changedFiles = files.filter((f) => {
     try {
@@ -147,11 +230,11 @@ try {
       return true; // usunięty w kopii
     }
   });
-  const allowedChange = (f) => f.startsWith('apps/') || f.startsWith('packages/module-procurement/');
+  const allowedChange = (f) => f === 'apps/server/src/compose.ts' || f === 'apps/web/src/compose.tsx';
   record(
-    'zmienione pliki ograniczone do warstwy składania i modułu przykładowego',
-    changedFiles.length > 0 && changedFiles.every(allowedChange),
-    `${changedFiles.filter((f) => f.startsWith('apps/')).join(', ')}; moduł przykładowy: ${changedFiles.filter((f) => f.startsWith('packages/')).length} plików`,
+    'zmienione pliki ograniczone do dwóch plików warstwy składania',
+    changedFiles.length === 2 && changedFiles.every(allowedChange),
+    changedFiles.join(', '),
   );
 
   /* 3. instalacja, granica, typy, build ------------------------------------ */
@@ -167,6 +250,33 @@ try {
 
   const build = run('pnpm', ['-s', 'build'], work, { DO_NOT_TRACK: '1' });
   record('build frontendu i backendu', build.code === 0, build.code === 0 ? '' : build.out.slice(-1500));
+
+  /*
+   * Regresja jednostkowa na kopii — **test dymny**, i tylko tak wolno go czytać.
+   *
+   * Testy w `tests/` budują platformę same (`createPlatform` / `createHarness`)
+   * i rejestrują moduł wprost, więc nie przechodzą przez warstwę składania w `apps/`
+   * i biegłyby tak samo, gdyby kopia składała cokolwiek innego. Ten krok mówi
+   * zatem: podmiana warstwy składania niczego w repozytorium nie zepsuła — a
+   * NIE: „regresja platformy jest zielona na module kontrolnym”. To drugie
+   * zdanie jest prawdziwe o `tests/module-contract.test.ts`, bo tamte testy
+   * naprawdę biegną na module kontrolnym.
+   */
+  /*
+   * Kopia nie ma `.git` — i nie ma go mieć: kopiowanie repozytorium gita jest
+   * drogie i zmieniłoby sens próby (kopia ma być tym, co widzi autor nowej
+   * aplikacji, a nie klonem). Regresja, która zapisuje w dowodzie wersję kodu,
+   * nie miałaby więc czego odczytać i zapisałaby „nieznany”, oblewając własną
+   * asercję o prawdziwym commicie. Podajemy jej zatem prawdę wprost: commit, z
+   * którego kopia powstała, i to, że kopia różni się od niego — bo różni się
+   * zawsze, o podmianę warstwy składania, którą ta próba właśnie zrobiła.
+   */
+  const unit = run('pnpm', ['-s', 'test'], work, {
+    APP_CODE_COMMIT: repoCommit,
+    APP_CODE_TREE_DIRTY: '1',
+  });
+  const summary = (unit.out.match(/Tests\s+.*$/m) ?? [''])[0].trim();
+  record('regresja jednostkowa na kopii przechodzi (test dymny podmiany)', unit.code === 0, unit.code === 0 ? summary : unit.out.slice(-1500));
 
   /* 4. start i sprawdzenie ------------------------------------------------- */
   const port = await freePort();
@@ -208,26 +318,81 @@ try {
   const moduleIds = (status.body?.modules ?? []).map((m) => m.id);
   const toolNames = (status.body?.tools ?? []).map((t) => t.name);
   record('rejestr: wyłącznie moduł kontrolny', JSON.stringify(moduleIds) === '["probe"]', `moduły=${JSON.stringify(moduleIds)}`);
-  record('narzędzia modułu kontrolnego zarejestrowane', toolNames.includes('probe_add_note') && toolNames.includes('probe_list_notes') && !toolNames.some((n) => n.startsWith('procurement_')), toolNames.join(', '));
-  const componentIds = JSON.stringify(status.body?.components ?? '');
-  record('komponent modułu w katalogu, bez komponentów przykładu', componentIds.includes('probe.noteList') && !componentIds.includes('procurement.'), '');
+  record(
+    'narzędzia: wyłącznie przestrzeń nazw modułu kontrolnego',
+    toolNames.includes(`${COMPOSED_ID}_add_note`) &&
+      toolNames.includes(`${COMPOSED_ID}_list_notes`) &&
+      toolNames.every((n) => n.startsWith(`${COMPOSED_ID}_`)) &&
+      leaks(toolNames.join(' ')).length === 0,
+    toolNames.join(', '),
+  );
+  const componentIds = (status.body?.components ?? []).map((c) => c.id);
+  record(
+    'katalog: komponenty tylko platformy i modułu kontrolnego',
+    componentIds.includes(`${COMPOSED_ID}.noteList`) &&
+      componentIds.every((id) => id.startsWith('platform.') || id.startsWith(`${COMPOSED_ID}.`)) &&
+      leaks(componentIds.join(' ')).length === 0,
+    componentIds.join(', '),
+  );
 
   const notes = await api('/api/m/probe/notes');
   record('trasa modułu /api/m/probe/notes', notes.status === 200 && Array.isArray(notes.body?.notes), `HTTP ${notes.status}`);
 
-  const space = await api('/api/canvas/spaces/for-scope', { method: 'POST', body: JSON.stringify({ kind: 'probe', id: 'swap-1', title: 'Próba wymiany' }) });
-  const card = space.body?.cards?.[0]?.spec;
-  record('kompozycja domyślna modułu walidowana katalogiem', space.status === 200 && card?.component === 'probe.noteList' && card?.props?.limit === 20, `HTTP ${space.status}, karta=${card?.component}`);
+  const reads = await api('/api/read/operations');
+  const readNames = (reads.body?.operations ?? []).map((o) => o.name);
+  record(
+    'operacja odczytu modułu zarejestrowana z deskryptorem',
+    readNames.includes(`${COMPOSED_ID}.notes`) &&
+      readNames.every((n) => n.startsWith(`${COMPOSED_ID}.`)) &&
+      leaks(readNames.join(' ')).length === 0,
+    readNames.join(', '),
+  );
 
-  const unknown = await api('/api/canvas/spaces/for-scope', { method: 'POST', body: JSON.stringify({ kind: 'procurement_case', id: 'x', title: 'x' }) });
-  record('zakres modułu przykładowego nie daje kart', unknown.status === 200 && (unknown.body?.cards ?? []).length === 0, `HTTP ${unknown.status}, karty=${(unknown.body?.cards ?? []).length}`);
+  const targets = await api('/api/ui/targets');
+  const targetIds = (targets.body?.targets ?? []).map((t) => t.id);
+  record('cel nawigacji modułu zarejestrowany', targetIds.includes('probe.notes'), targetIds.join(', '));
+
+  const moduleViews = await api('/api/ui/views');
+  const viewIds = (moduleViews.body?.views ?? []).map((v) => v.id);
+  record('ekran modułu jako kompozycja OpenUI', viewIds.includes('probe.notes'), viewIds.join(', '));
+
+  // Dane dla przeglądarki wchodzą tą samą trasą modułu, którą czyta jego karta.
+  const NOTE_TEXT = `notatka wymiany ${Date.now()}`;
+  const created = await api('/api/m/probe/notes', { method: 'POST', body: JSON.stringify({ text: NOTE_TEXT }) });
+  record('zapis przez trasę modułu', created.status === 201 && typeof created.body?.id === 'string', `HTTP ${created.status}`);
+
+  const space = await api('/api/canvas/spaces/for-scope', { method: 'POST', body: JSON.stringify({ kind: composedScopeKinds[0], id: 'swap-1', title: 'Próba wymiany' }) });
+  const card = space.body?.cards?.[0]?.spec;
+  const spaceId = space.body?.space?.id;
+  record(
+    'zadeklarowany zakres modułu składanego daje jego kompozycję domyślną',
+    space.status === 200 && card?.component === `${COMPOSED_ID}.noteList` && card?.props?.limit === 20 && typeof spaceId === 'string',
+    `zakres=${composedScopeKinds[0]}, HTTP ${space.status}, karta=${card?.component}`,
+  );
+
+  /* Prawdziwe zakresy modułów, których kopia nie składa — to one mają nic nie dać. */
+  const scopeAnswers = [];
+  for (const kind of absentScopeKinds) {
+    const res = await api('/api/canvas/spaces/for-scope', { method: 'POST', body: JSON.stringify({ kind, id: `x-${kind}`, title: 'x' }) });
+    scopeAnswers.push({ kind, status: res.status, cards: (res.body?.cards ?? []).length });
+  }
+  record(
+    'zadeklarowane zakresy nieobecnych modułów nie dają kart',
+    scopeAnswers.length > 0 && scopeAnswers.every((a) => a.status === 200 && a.cards === 0),
+    scopeAnswers.map((a) => `${a.kind}: HTTP ${a.status}, karty=${a.cards}`).join('; '),
+  );
 
   const req = createRequire(join(work, 'packages/platform-server/package.json'));
   const Database = req('better-sqlite3');
   const db = new Database(join(dataDir, 'app.db'), { readonly: true });
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((r) => r.name);
   db.close();
-  record('baza: tabela modułu kontrolnego, brak tabel przykładu', tables.includes('probe_notes') && !tables.some((t) => t.startsWith('pc_')), `tabele=${tables.length}`);
+  const presentAbsentTables = tables.filter((t) => absentTables.includes(t));
+  record(
+    'baza: tabela modułu kontrolnego, żadnej tabeli nieobecnego modułu',
+    tables.includes(`${COMPOSED_ID}_notes`) && presentAbsentTables.length === 0,
+    `tabele=${tables.length}; sprawdzono ${absentTables.length} tabel nieobecnego modułu${presentAbsentTables.length ? `; znalezione: ${presentAbsentTables.join(', ')}` : ''}`,
+  );
 
   // require (nie import po ścieżce pliku): rozwiązany plik CJS w imporcie ESM udostępnia tylko `default`.
   const { chromium } = createRequire(join(work, 'package.json'))('@playwright/test');
@@ -238,9 +403,81 @@ try {
     page.on('pageerror', (e) => errors.push(String(e)));
     await page.goto(`${base}/`);
     await page.getByRole('navigation').first().waitFor({ timeout: 20_000 });
-    const nav = (await page.getByRole('navigation').first().textContent()) ?? '';
-    const shellOk = nav.includes('Canvas') && nav.includes('Pliki') && !nav.includes('Wszystkie sprawy') && !nav.includes('Dostawcy');
-    record('powłoka w przeglądarce: menu platformy bez ekranów przykładu', shellOk, nav.replace(/\s+/g, ' ').slice(0, 160));
+    /*
+     * Nagłówki sekcji czytane jako osobne elementy, nie z tekstu całej
+     * nawigacji: „Notatki” jest podciągiem pozycji „Notatki testowe”, więc
+     * asercja na sklejonym tekście przechodziłaby nawet wtedy, gdyby nagłówek
+     * w ogóle nie pochodził od modułu.
+     */
+    const headings = (await page.locator('.pf-nav__heading').allTextContents()).map((h) => h.trim());
+    const links = (await page.locator('.pf-nav__link').allTextContents()).map((t) => t.trim());
+    /*
+     * Słownika szukamy w rozdzielonych napisach, nie w `textContent` całej
+     * nawigacji: tam „Wszystkie sprawy” i „Pliki i raporty” sklejają się w
+     * „sprawyPliki”, więc dopasowanie całego słowa (`\bsprawy\b`) nie widzi
+     * granicy i przecieka przez kontrolę. Znalezione właśnie próbą F1.
+     */
+    const navParts = [...headings, ...links];
+    const navLeaks = leaks(navParts.join(' | '));
+    const shellOk =
+      links.includes('Canvas') &&
+      links.some((l) => l.startsWith('Pliki')) &&
+      links.includes('Notatki testowe') &&
+      headings.includes('Notatki') &&
+      navLeaks.length === 0;
+    record(
+      'powłoka w przeglądarce: menu i nagłówki sekcji od modułu kontrolnego, bez słownika nieobecnego modułu',
+      shellOk,
+      navLeaks.length
+        ? `slownik nieobecnego modulu w nawigacji: ${navLeaks.join(', ')} — ${navParts.join(' | ')}`
+        : `naglowki=[${headings.join(' | ')}]; pozycje=[${links.join(' | ')}]; sprawdzono ${absentPrefixes.length + absentLabels.length} pojec`,
+    );
+
+    /*
+     * Karta modułu kontrolnego na canvasie.
+     *
+     * To jest krok, którego wcześniej nie było: kompozycja domyślna modułu
+     * trafia na ekran przez katalog przeglądarki, a treść notatki pochodzi z
+     * trasy backendu tego modułu — nie z props karty. Brak renderera nie daje
+     * pustej karty, tylko widoczny komunikat „Brak renderera dla komponentu”,
+     * więc obie możliwe porażki (brak renderera, brak danych) są tu widoczne.
+     */
+    await page.goto(`${base}/?s=${spaceId}`);
+    const cardList = page.locator('[data-testid="probe-note-list"]').first();
+    // Bez renderera karta pokazuje komunikat katalogu, a nie pustkę — więc brak
+    // listy jest odnotowany razem z tym, co naprawdę stanęło na jej miejscu.
+    const rendered = await cardList
+      .waitFor({ timeout: 20_000 })
+      .then(() => true)
+      .catch(() => false);
+    const cardText = rendered ? ((await cardList.textContent()) ?? '') : '';
+    const bodyText = (await page.locator('body').textContent()) ?? '';
+    record(
+      'karta modułu kontrolnego wyrenderowana z katalogu, danymi z trasy modułu',
+      rendered && cardText.includes(NOTE_TEXT) && !bodyText.includes('Brak renderera dla komponentu'),
+      rendered ? cardText.replace(/\s+/g, ' ').slice(0, 120) : `brak listy na canvasie; strona: ${bodyText.replace(/\s+/g, ' ').slice(0, 200)}`,
+    );
+
+    /* Ekran modułu: trasa zamontowana z kontraktu UiModule.screens. */
+    await page.goto(`${base}/probe-notes`);
+    await page.locator('[data-testid="probe-notes-page"]').waitFor({ timeout: 20_000 });
+    await page.locator('[data-testid="composed-view"][data-view-id="probe.notes"][data-state="ready"]').waitFor({ timeout: 20_000 });
+    // Kompozycja ma dwa źródła: komponent modułu i tabelę platformy na jego operacji odczytu.
+    await page.getByRole('table').first().waitFor({ timeout: 20_000 });
+    const screenText = (await page.locator('[data-testid="probe-notes-page"]').textContent()) ?? '';
+    const tableText = (await page.getByRole('table').first().textContent()) ?? '';
+    record(
+      'ekran modułu zamontowany kontraktem i wypełniony kompozycją OpenUI',
+      screenText.includes(NOTE_TEXT) && tableText.includes(NOTE_TEXT),
+      screenText.replace(/\s+/g, ' ').slice(0, 140),
+    );
+
+    /* Ekran z parametrem trasy: moduł czyta $noteId bez nazywania trasy aplikacji. */
+    await page.goto(`${base}/probe-notes/${created.body.id}`);
+    await page.locator('[data-testid="probe-note-page"]').waitFor({ timeout: 20_000 });
+    const detailText = (await page.locator('[data-testid="probe-note-text"]').textContent()) ?? '';
+    record('ekran modułu z parametrem trasy czyta swój $noteId', detailText.trim() === NOTE_TEXT, detailText.trim().slice(0, 120));
+
     await page.goto(`${base}/files`);
     await page.waitForLoadState('networkidle');
     await page.goto(`${base}/settings`);

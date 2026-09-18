@@ -1,0 +1,49 @@
+# Rekord pomiarowy zapisany W KOPII bez .git niesie prawdziwy commit
+# 2026-09-18T13:19:35+02:00; HEAD repozytorium: d5ba1865867229cb31dd96d4e776ba5d17ea26dd
+#
+# Sama asercja 'commit wyglada jak commit' nie wystarcza jako dowod, ze rekord mowi
+# prawde — dlatego ten przebieg. Kopia zrobiona przez 'check-module-swap --keep',
+# w niej uruchomiona regresja pomiarowa z APP_WRITE_EVIDENCE=1.
+
+## kopia nie ma repozytorium gita
+brak /tmp/agentic-module-swap-K7JPlS/.git — potwierdzone
+
+## git w kopii nie ma czego odczytac
+fatal: not a git repository (or any parent up to mount point /)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+
+## wersjaKodu w plikach zapisanych przez TEN przebieg (runda3 = nazwy uzyte przez regresje)
+pomiary-backend-runda3.json -> {
+  "commit": "d5ba1865867229cb31dd96d4e776ba5d17ea26dd",
+  "brudneDrzewo": true,
+  "node": "24.19.0",
+  "pakiety": {
+    "node": "24.19.0",
+    "hono": "4.13.7",
+    "drizzle": "0.45.2",
+    "mastraCore": "1.66.0",
+    "mastraClaude": "0.3.1",
+    "claudeAgentSdk": "0.3.270",
+    "zod": "4.6.5"
+  }
+}
+pomiary-stop-runda3.json -> {
+  "commit": "d5ba1865867229cb31dd96d4e776ba5d17ea26dd",
+  "brudneDrzewo": true,
+  "node": "24.19.0",
+  "pakiety": {
+    "node": "24.19.0",
+    "hono": "4.13.7",
+    "drizzle": "0.45.2",
+    "mastraCore": "1.66.0",
+    "mastraClaude": "0.3.1",
+    "claudeAgentSdk": "0.3.270",
+    "zod": "4.6.5"
+  }
+}
+
+## to samo w repozytorium, dla porownania
+d5ba1865867229cb31dd96d4e776ba5d17ea26dd
+
+# Wniosek: rekord z kopii mowi, z jakiego commita kopia powstala, i ze rozni sie
+# od niego (brudneDrzewo=true) — bo kopia to ten commit PLUS podmiana warstwy skladania.

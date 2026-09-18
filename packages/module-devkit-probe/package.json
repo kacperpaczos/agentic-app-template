@@ -3,10 +3,37 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": { "./server": "./src/server/index.ts" },
+  "agenticApp": {
+    "domainVocabulary": [
+      "probe_notes",
+      "noteList",
+      "ProbeNoteList",
+      "probe-notes",
+      "devkit-probe"
+    ],
+    "domainLabels": [
+      "notatki testowe",
+      "modul testowy"
+    ],
+    "scopeKinds": [
+      "probe"
+    ]
+  },
+  "exports": {
+    "./server": "./src/server/index.ts",
+    "./ui": "./src/ui/index.tsx",
+    "./shared": "./src/shared/index.ts"
+  },
   "dependencies": {
+    "@openuidev/react-lang": "0.2.15",
     "@platform/contracts": "workspace:*",
     "@platform/server": "workspace:*",
+    "@platform/ui": "workspace:*",
+    "react": "19.3.0",
     "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0"
   }
 }

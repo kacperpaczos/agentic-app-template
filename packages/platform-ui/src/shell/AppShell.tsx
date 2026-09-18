@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { Link, useRouterState } from '@tanstack/react-router';
-import { MENU_SECTIONS, authIsUsable, type MenuSection } from '@platform/contracts';
+import { MENU_SECTIONS, authIsUsable } from '@platform/contracts';
 import { useStatus } from '../api/queries.ts';
 import { CanvasHost } from '../canvas/CanvasHost.tsx';
 import { ChatPanel } from '../chat/ChatPanel.tsx';
@@ -13,19 +13,14 @@ import { UiCommandRunner } from './UiCommandRunner.tsx';
 import { UiSnapshotPublisher } from './UiSnapshotPublisher.tsx';
 import { ViewFilterBanner } from './ViewFilterBanner.tsx';
 
-const SECTION_LABELS: Record<MenuSection, string> = {
-  workspace: 'Przestrzen pracy',
-  records: 'Sprawy zakupowe',
-  data: 'Dane',
-  files: 'Pliki i raporty',
-  settings: 'Ustawienia',
-};
-
 /**
  * Collapsible left navigation.
  *
- * Sections are fixed by the platform; their *items* come from the module
- * registry. The platform therefore never names a business screen.
+ * Sections are fixed by the platform; their *items* and their *headings* come
+ * from the module registry. The platform therefore never names a business
+ * screen — and, since `registry.menuSections`, never names a business section
+ * either: it used to call the `records` heading "Sprawy zakupowe", which is the
+ * example module's noun sitting in the shell (see `MenuSectionLabels`).
  */
 function Nav() {
   const registry = useRegistry();
@@ -52,7 +47,7 @@ function Nav() {
             if (items.length === 0) return null;
             return (
               <div className="pf-nav__section" key={section}>
-                <h2 className="pf-nav__heading">{SECTION_LABELS[section]}</h2>
+                <h2 className="pf-nav__heading">{registry.menuSections[section]}</h2>
                 <ul className="pf-nav__list">
                   {items.map((item) => (
                     <li key={item.id}>
@@ -140,8 +135,9 @@ export function AppShell({ children }: { children?: ReactNode }) {
       <UiSnapshotPublisher />
       {/*
         Below the publisher on purpose: a switch of identity has to let the
-        description source record what it was describing before the client's own
-        state is emptied. See `state/accessReset.ts`.
+        description source record what it was describing before anything is
+        emptied. Drops `c` and `s` from the address; the store is cleared by
+        itself. See `state/accessReset.ts`.
       */}
       <AccessContextReset />
       <Nav />

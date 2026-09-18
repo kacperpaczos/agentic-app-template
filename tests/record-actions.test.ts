@@ -125,7 +125,13 @@ describe('POST /api/actions', () => {
     // The handler ran once, as the session's owner and outside any run, with
     // the input built from the re-read record and the parsed form.
     expect(spy.calls).toHaveLength(1);
-    expect(spy.calls[0]!.input).toEqual({ itemId: item.id, unitPrice: 9999.5, operationId });
+    // `expectedVersion` comes from the record the action re-read: the tool requires it.
+    expect(spy.calls[0]!.input).toEqual({
+      itemId: item.id,
+      unitPrice: 9999.5,
+      expectedVersion: before,
+      operationId,
+    });
     expect(spy.calls[0]!.ctx).toMatchObject({ ownerId: h.ownerId, runId: null, conversationId: null });
     // It is the handler the MCP server offers the model under that name.
     const entry = collectToolEntries({ registry: h.platform.registry, platformTools: platformTools(h.platform.services) })

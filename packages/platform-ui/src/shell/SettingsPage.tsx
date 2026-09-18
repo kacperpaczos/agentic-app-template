@@ -224,8 +224,18 @@ export function SettingsPage() {
         </table>
       )}
 
-      <h2>Narzedzia agenta ({data.platformTools.length + data.tools.length})</h2>
-      <table className="pf-table">
+      {/*
+        Collapsed by default, and a real `<details>` rather than a div with a
+        class: the browser gives it a focusable, labelled control that opens on
+        Enter or Space, announces its own state, and — the reason it is here —
+        keeps its contents out of the layout until it is opened. A long list
+        nobody reads on most visits belongs behind one, and it is also the case
+        the agent's "show me X" has to handle: the anchor below is in the
+        document while this is closed, but nothing of it is on screen.
+      */}
+      <details className="pf-details" data-testid="settings-tools-section">
+        <summary>Narzedzia agenta ({data.platformTools.length + data.tools.length})</summary>
+        <table className="pf-table" data-testid="settings-tools">
         <thead>
           <tr>
             <th scope="col">Narzedzie</th>
@@ -272,6 +282,8 @@ export function SettingsPage() {
           ))}
         </tbody>
       </table>
+
+      </details>
 
       {/* Anchor for `platform.settings.chat` in the UI target catalog. */}
       <h2 data-testid="settings-chat-capabilities">Zakres gotowej obslugi rozmow</h2>

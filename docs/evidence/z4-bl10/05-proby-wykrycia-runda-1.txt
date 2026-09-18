@@ -1,0 +1,27 @@
+Proby zdolnosci wykrycia — runda poprawek 1 — 2026-09-18T13:30:50+02:00
+Commit bazowy: b98a6fc (+ niezacommitowane poprawki rundy 1)
+
+=== T1 — sprawdzenie etykiety instancji w proxy trybu deweloperskiego
+  plik: apps/web/src/dev-proxy.ts
+  WYNIK: test OBLAL (exit 1) — zdolnosc wykrycia potwierdzona
+     FAIL  tests/dev-proxy.test.ts > proxy trybu deweloperskiego > cel bez etykiety deweloperskiej jest odrzucony, nic nie jest przekazywane
+    AssertionError: instancja bez etykiety zostala przyjeta: expected null not to be null
+
+=== T3 — walidacja wlasciwosci karty w typedCard
+  plik: packages/platform-ui/src/catalog/registry.tsx
+  WYNIK: test OBLAL (exit 1) — zdolnosc wykrycia potwierdzona
+     FAIL  tests/bl10-card-catalog.test.ts > karty modulu w katalogu OpenUI > karta z niezgodnymi wlasciwosciami renderuje nazwany blad, nie pusta ramke
+    AssertionError: expected { Object (caseId, totalMinor) } to deeply equal { caseId: 'case-1' }
+
+Uwaga do T1: plik apps/web/src/dev-proxy.ts byl w chwili proby nowy (nieznany gitowi),
+wiec przywrocenie linii wykonano edycja, a nie `git checkout --`; zgodnosc z oryginalem
+potwierdzona ponownym przebiegiem obu speców (11 testow zielonych) i `git diff` = pusty
+dla plikow sledzonych.
+
+=== T2 — odtwarzanie szkicu w formularzu zbudowanym od nowa
+  plik: packages/module-procurement/src/ui/cards.tsx
+  WYNIK: test OBLAL (exit 1) — zdolnosc wykrycia potwierdzona
+      ✘  1 [chromium] › e2e/bl10-composition.spec.ts:202:3 › zmiana kompozycji przez agenta › niezapisany szkic wraca do formularza zbudowanego od nowa (18.8s)
+        Error: szkic nie wrocil do odtworzonego formularza
+  drzewo po przywroceniu: `git diff packages/module-procurement/src/ui/cards.tsx` pusty
+  (pozostale zmodyfikowane pliki to niezacommitowane poprawki rundy 1, nie skutek proby)

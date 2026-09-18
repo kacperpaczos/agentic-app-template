@@ -395,7 +395,16 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     await settled(page);
     const table = page.locator('.pf-chat [data-ui-instance][data-component="DataTable"]');
     await expect(table).toHaveAttribute('data-state', 'ready');
-    const { ids: mine } = await suppliers(page);
+    const { ids: mine, all: mineRows } = await suppliers(page);
+    /*
+     * The names, because the names are what the table puts on screen. The
+     * composition asks for `["name", "country"]`, and a record's id reaches the
+     * DOM only as the `data-record-id` attribute — which `toContainText` never
+     * looks at. An assertion over the ids would be empty of content, not just
+     * of rows, and would pass whatever the chat shows.
+     */
+    const mineNames = mineRows.map((r) => r.name);
+    expect(mineNames.length).toBeGreaterThan(0);
     const conversationId = await conversationOnScreen(page);
     const clientId = await clientIdOf(page);
 
@@ -412,19 +421,32 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     await page.getByTestId('switch-access-context').click();
     await expect(owner).not.toHaveText(was);
     /*
-     * The table is gone, and that is a change of behaviour, not of this test's
-     * subject.
+     * Nothing of the first owner's rows is in the chat, and the table they were
+     * in is gone entirely.
      *
      * This line used to assert the opposite — `data-state="ready"`, with the
      * note "not re-rendered: still the first owner's rows". It was a
-     * *precondition*, deliberately describing a known leak (the chat panel was
-     * not rebuilt on a change of identity, so the previous owner's rows stayed
-     * on screen), so that what follows could show the agent is told none of it
-     * even then. Package BL-11c closed that leak: the panel is rebuilt on the
-     * access epoch, so the rows are no longer anywhere. Everything below is
-     * unchanged and still the point of this test.
+     * *precondition*, deliberately describing a known leak: nothing outside the
+     * query cache was reset by a switch and the panel was never rebuilt, so the
+     * rows stayed on screen and what followed showed that the agent is told
+     * none of it even then.
+     *
+     * Two complementary fixes land here. BL-11a clears the shell store, which
+     * empties what the table reads; BL-11c rebuilds `AgentInterface` on the
+     * access epoch, which removes the table itself. With both in, the strongest
+     * true statement is the element being absent — so it is asserted, and the
+     * row-name check stays under it because it says something the element count
+     * does not: not one of those names is anywhere in the panel.
+     *
+     * The names come from `mine`, captured **before** the switch. Reading them
+     * again here would read them as the second owner, who owns none, and the
+     * loop would pass without looking at anything.
      */
     await expect(table).toHaveCount(0);
+    const chat = page.locator('.pf-chat');
+    for (const name of mineNames) {
+      await expect(chat).not.toContainText(name);
+    }
 
     // What the new owner's backend holds for this tab (the page's session is now the new owner's).
     const after = await published(page, (s) => s.target?.id === 'platform.settings');
@@ -443,12 +465,12 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     /*
      * Then the canvas, inside the app.
      *
-     * The line below used to read `toBe(heldSpace)` with the note "the
-     * precondition: still held" — the second of the two assumptions this
-     * package changes: the workspace of the identity we switched away from is
-     * no longer in the address at all. Everything after it is untouched and
-     * still passes, including the description being about no space: the shell
-     * has none to hold, so the canvas opens none.
+     * The space the shell held before the switch is gone from the store
+     * (BL-11a) and from the address (BL-11c clears `c` and `s` through the
+     * router), so the canvas opens on no space at all — where it used to open
+     * on the previous owner's and show a refusal. The line below therefore
+     * reads `not.toBe(heldSpace)`; it used to read `toBe(heldSpace)` with the
+     * note "the precondition: still held".
      */
     await page.locator('.pf-nav__link', { hasText: 'Canvas' }).click();
     await expect.poll(() => new URL(page.url()).pathname).toBe('/');

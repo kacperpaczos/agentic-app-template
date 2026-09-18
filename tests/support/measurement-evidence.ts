@@ -26,17 +26,41 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-/**
- * Evidence directory of the task that introduced this writer.
- *
- * Kept as the default rather than as the only choice: a later package writes its
- * own proofs under its own name (`emit`/`writeEvidence` take a directory), so
- * one task's committed evidence is never overwritten by another's regeneration.
- */
+/** Evidence directory of this task. Named after the task, not after older work. */
 export const EVIDENCE_DIR = 'docs/evidence/z3-bl05';
 
 /** The switch that lets a run write evidence files. */
 export const EVIDENCE_ENV = 'APP_WRITE_EVIDENCE';
+
+/**
+ * The commit this code was copied from, for a run outside a git repository.
+ *
+ * `codeVersion()` asks git, because inside the repository git is the truth and
+ * nothing passed in could be trusted over it. But the regression is also run on
+ * a *copy* of the repository that deliberately has no `.git`
+ * (`scripts/check-module-swap.mjs` builds one to prove the domain module can be
+ * swapped). There `git rev-parse` has nothing to read, the record used to say
+ * `commit: "nieznany"`, and the assertion that a measurement carries a real
+ * commit failed — correctly, because the record was not carrying one.
+ *
+ * So whoever creates such a copy passes the commit it was made from. It is a
+ * *fallback*, never an override: git wins whenever git can answer, and the
+ * value is accepted only if it looks like a commit, so an environment variable
+ * cannot put a different kind of lie into the record. Nothing is weakened: the
+ * assertion stays exactly as sharp, and the record from the copy now says
+ * truthfully which commit it came from.
+ */
+export const CODE_COMMIT_ENV = 'APP_CODE_COMMIT';
+
+/**
+ * Whether the copied tree differed from that commit — again, only for a run
+ * that has no git to ask. A copy made for the swap trial is the commit *plus*
+ * the composition swap, so its creator passes `1`.
+ */
+export const CODE_TREE_DIRTY_ENV = 'APP_CODE_TREE_DIRTY';
+
+/** What a commit looks like, wherever the value came from. */
+const COMMIT_RE = /^[0-9a-f]{7,40}$/;
 
 /**
  * Whether this run may write into the evidence directory.
@@ -65,11 +89,18 @@ export interface EvidenceResult {
   written: boolean;
 }
 
-function emit(fileName: string, body: string, dirName = EVIDENCE_DIR): EvidenceResult {
-  const dir = resolve(process.cwd(), dirName);
-  const path = resolve(dir, fileName);
+/**
+ * `dir` defaults to this file's own task directory. A later task passes its
+ * own: the switch, the "assert always, write on request" rule and the file
+ * format are the mechanism worth sharing — the directory is not, and a second
+ * copy of this module for the sake of one constant would be exactly the
+ * duplication that makes a fix apply to one of the copies.
+ */
+function emit(fileName: string, body: string, dir: string = EVIDENCE_DIR): EvidenceResult {
+  const directory = resolve(process.cwd(), dir);
+  const path = resolve(directory, fileName);
   if (!evidenceWritingRequested()) return { path, body, written: false };
-  mkdirSync(dir, { recursive: true });
+  mkdirSync(directory, { recursive: true });
   writeFileSync(path, body);
   return { path, body, written: true };
 }
@@ -94,14 +125,33 @@ export interface Measurement {
 
 export interface CodeVersion {
   commit: string;
-  /** True when the working tree differed from the commit while measuring. */
-  brudneDrzewo: boolean;
+  /**
+   * Three answers, not two: `true` the tree differed from the commit, `false`
+   * it did not, `null` **nobody could tell**.
+   *
+   * The third one exists because the second used to be given in its place. With
+   * no git and no statement from the caller there is nothing to check, and a
+   * `boolean` has to say something anyway — it said `false`, so the record
+   * asserted a clean tree that had never been examined. That is a false
+   * condition of measurement, which is worse than a missing one: a reader
+   * cannot tell it from a checked result. A condition is true or explicitly
+   * unknown, never favourable by default.
+   */
+  brudneDrzewo: boolean | null;
   node: string;
   pakiety: Record<string, string>;
 }
 
-/** The commit the measurement was taken on, and whether the tree was clean. */
-export function codeVersion(pakiety: Record<string, string> = {}): CodeVersion {
+/**
+ * The commit the measurement was taken on, and whether the tree was clean.
+ *
+ * `evidenceDirs` are the directories this regeneration is itself rewriting; a
+ * task writing into its own directory passes it, for the reason below.
+ */
+export function codeVersion(
+  pakiety: Record<string, string> = {},
+  evidenceDirs: readonly string[] = [EVIDENCE_DIR],
+): CodeVersion {
   const git = (args: string[]): string | null => {
     try {
       return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -109,20 +159,44 @@ export function codeVersion(pakiety: Record<string, string> = {}): CodeVersion {
       return null;
     }
   };
+  const fromGit = git(['rev-parse', 'HEAD']);
+  const passedIn = (process.env[CODE_COMMIT_ENV] ?? '').trim();
+  /*
+   * `--porcelain` prints one line per changed path; empty output means clean.
+   *
+   * The evidence directory is excluded, and has to be: these files are
+   * rewritten by the very run that reads this flag, so counting them would
+   * make every measurement report a dirty tree and the flag would stop
+   * meaning anything. Everything else counts.
+   */
+  // `:(top)` so the answer is about the whole repository whatever the
+  // working directory of the runner happens to be.
+  const status = git([
+    'status',
+    '--porcelain',
+    '--',
+    ':(top)',
+    ...evidenceDirs.map((dir) => `:(exclude,top)${dir}`),
+  ]);
+  /*
+   * Same precedence as the commit: git decides wherever it can answer, and only
+   * where it cannot does the caller's statement count. Anything other than an
+   * explicit "1" or "0" is not a statement, so it leaves the question open
+   * instead of closing it in the convenient direction.
+   */
+  const declared = process.env[CODE_TREE_DIRTY_ENV];
+  const dirty: boolean | null =
+    status !== null
+      ? status !== ''
+      : declared === '1'
+        ? true
+        : declared === '0'
+          ? false
+          : null;
   return {
-    commit: git(['rev-parse', 'HEAD']) ?? 'nieznany',
-    /*
-     * `--porcelain` prints one line per changed path; empty output means clean.
-     *
-     * The evidence directory is excluded, and has to be: these files are
-     * rewritten by the very run that reads this flag, so counting them would
-     * make every measurement report a dirty tree and the flag would stop
-     * meaning anything. Everything else counts.
-     */
-    // `:(top)` so the answer is about the whole repository whatever the
-    // working directory of the runner happens to be.
-    brudneDrzewo:
-      (git(['status', '--porcelain', '--', ':(top)', `:(exclude,top)${EVIDENCE_DIR}`]) ?? '') !== '',
+    // git first: where it can answer, nothing passed in may contradict it.
+    commit: fromGit ?? (COMMIT_RE.test(passedIn) ? passedIn : 'nieznany'),
+    brudneDrzewo: dirty,
     node: process.versions.node,
     pakiety,
   };
@@ -174,9 +248,13 @@ export function writeMeasurementRecord(
       'asertuje regresja: kolejnosc punktow pomiaru, ich rozdzielenie i obecnosc albo brak metryki.',
     uwagaOWersjiKodu:
       `Ten plik powstaje na zadanie (${EVIDENCE_ENV}=1, czyli pnpm evidence), nie przy zwyklym ` +
-      'pnpm verify. Pole brudneDrzewo opisuje drzewo robocze w chwili tej regeneracji, z pominieciem ' +
-      'samego katalogu dowodow (ktory ta regeneracja wlasnie przepisuje) — nie mowi nic o stanie ' +
-      'drzewa w chwili czytania pliku.',
+      'pnpm verify. Pole brudneDrzewo ma trzy stany: true — drzewo robocze roznilo sie od commita, ' +
+      'false — nie roznilo sie, null — nie dalo sie tego ustalic (przebieg bez gita i bez ' +
+      `deklaracji ${CODE_TREE_DIRTY_ENV}; tak dzieje sie np. w kopii repozytorium). Null znaczy ` +
+      '„nie wiadomo”, nie „czysto”. Odpowiedz dotyczy chwili tej regeneracji i pomija sam katalog ' +
+      'dowodow, ktory regeneracja wlasnie przepisuje — nie mowi nic o stanie drzewa w chwili ' +
+      'czytania pliku. Pole commit ma wartownika „nieznany” w tej samej sytuacji. Puste pakiety ' +
+      'znacza, ze wersji zaleznosci w tym przebiegu nie zbierano — nie ze ich nie ma.',
     pomiary: Object.fromEntries(
       Object.entries(record.pomiary).map(([k, m]) => [k, { ...m, podsumowanie: summarise(m.probkiMs) }]),
     ),
@@ -184,14 +262,7 @@ export function writeMeasurementRecord(
   return emit(fileName, `${JSON.stringify(body, null, 2)}\n`);
 }
 
-/**
- * Writes a non-measurement proof (correlation, error classes, secret scan).
- *
- * `dirName` names the task's own evidence directory; it defaults to the one this
- * module was written for. The `APP_WRITE_EVIDENCE` rule is the same whatever the
- * directory: an ordinary `pnpm verify` performs every assertion on `body` and
- * writes nothing.
- */
-export function writeEvidence(fileName: string, body: unknown, dirName = EVIDENCE_DIR): EvidenceResult {
-  return emit(fileName, `${JSON.stringify(body, null, 2)}\n`, dirName);
+/** Writes a non-measurement proof (correlation, error classes, secret scan). */
+export function writeEvidence(fileName: string, body: unknown, dir: string = EVIDENCE_DIR): EvidenceResult {
+  return emit(fileName, `${JSON.stringify(body, null, 2)}\n`, dir);
 }

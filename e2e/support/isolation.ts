@@ -185,28 +185,55 @@ export function resolveTestInstance(input: {
 }
 
 /**
- * Confirms that the instance which actually answered is one of ours.
+ * The label an instance gives for itself, or a description of why it could not
+ * be asked.
  *
- * The configuration checks above constrain what this process asks for; this one
- * checks what replied. An unlabelled answer means something else is listening on
- * the test port — the suite stops rather than write through it.
+ * Separated from the assertion below because the same question — *who is
+ * actually listening there?* — is asked by two callers with different powers to
+ * act on the answer: a test suite, which must stop, and the development proxy
+ * (`apps/web/src/dev-proxy.ts`), which must refuse to forward a request and say
+ * so in the response. One reading of `/api/health`, two policies.
  */
-export async function assertIsolatedInstance(baseUrl: string): Promise<void> {
-  let body: { ok?: boolean; instanceLabel?: string | null };
+export async function readInstanceLabel(
+  baseUrl: string,
+): Promise<{ label: string | null } | { unreachable: string }> {
   try {
     const res = await fetch(`${baseUrl}/api/health`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    body = (await res.json()) as typeof body;
+    const body = (await res.json()) as { ok?: boolean; instanceLabel?: string | null };
+    return { label: body.instanceLabel ?? null };
   } catch (e) {
+    return { unreachable: (e as Error).message };
+  }
+}
+
+/**
+ * Confirms that the instance which actually answered carries the expected
+ * label.
+ *
+ * The configuration checks above constrain what this process asks for; this one
+ * checks what replied. An unlabelled answer means something else is listening on
+ * that port — the caller stops rather than write through it.
+ */
+export async function assertInstanceLabel(
+  baseUrl: string,
+  expected: string,
+  what: string,
+): Promise<void> {
+  const answer = await readInstanceLabel(baseUrl);
+  if ('unreachable' in answer) {
+    throw new TestIsolationError(`${what} pod ${baseUrl} nie odpowiada na /api/health (${answer.unreachable}).`);
+  }
+  if (answer.label !== expected) {
     throw new TestIsolationError(
-      `Instancja testowa pod ${baseUrl} nie odpowiada na /api/health (${(e as Error).message}).`,
+      `Pod ${baseUrl} odpowiada instancja z inna etykieta ` +
+        `(instanceLabel=${JSON.stringify(answer.label)}, oczekiwano ${JSON.stringify(expected)}). ` +
+        'To moze byc instancja uzytkownika — nie bedziemy przez nia pisac.',
     );
   }
-  if (body.instanceLabel !== TEST_INSTANCE_LABEL) {
-    throw new TestIsolationError(
-      `Pod ${baseUrl} odpowiada instancja bez etykiety testowej ` +
-        `(instanceLabel=${JSON.stringify(body.instanceLabel)}, oczekiwano ${JSON.stringify(TEST_INSTANCE_LABEL)}). ` +
-        'To moze byc instancja uzytkownika — testy nie beda przez nia pisac.',
-    );
-  }
+}
+
+/** The test suites' own policy: only an instance this repository's tests started. */
+export async function assertIsolatedInstance(baseUrl: string): Promise<void> {
+  await assertInstanceLabel(baseUrl, TEST_INSTANCE_LABEL, 'Instancja testowa');
 }

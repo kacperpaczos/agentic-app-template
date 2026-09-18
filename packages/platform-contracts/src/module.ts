@@ -35,6 +35,50 @@ export interface MenuItemContribution {
 }
 
 /**
+ * What a module calls the navigation sections it puts items in.
+ *
+ * The *set* of sections is the platform's — it decides how a workspace is
+ * arranged — but what one of them is **called** is a word about somebody's
+ * business, and the platform has none. It used to have one anyway: the shell
+ * hard-coded the `records` heading as "Sprawy zakupowe", the example module's
+ * noun, so an application composing any other module read "Sprawy zakupowe →
+ * Notatki testowe". That is the same leak as a hard-coded table name, only
+ * visible on screen instead of in a query.
+ *
+ * So a module names the sections it uses, and a section nobody named keeps a
+ * neutral heading. Two modules naming one section differently is refused when
+ * the registry is built: the composition root has to decide, rather than the
+ * order of the `modules` array deciding for it.
+ */
+export type MenuSectionLabels = Partial<Record<MenuSection, string>>;
+
+/**
+ * A screen this module contributes to the application's router.
+ *
+ * Declared, not hand-mounted. Before this contract existed the application's
+ * `router.tsx` imported each module page by name and wrote a route for it, so
+ * the composition root knew every screen of every module — and swapping the
+ * module meant editing the router. Worse, a module page read its route
+ * parameters with the *application's* registered route id
+ * (`useParams({ from: '/cases/$caseId' })`), which made the module's own types
+ * depend on which modules the application happens to compose: an application
+ * that did not mount that route could not typecheck the module at all.
+ *
+ * So a screen is data here, exactly like a card: `path` may contain `$param`
+ * segments, the composition root turns the list into routes generically, and
+ * the screen reads its parameters through the platform (`useScreenParams()`),
+ * which names no route. Adding, removing or replacing a module therefore
+ * changes no platform file and no router file.
+ */
+export interface ModuleScreenContribution<TComponent = unknown> {
+  /** Stable id, namespaced by the module id; used in conflict reports. */
+  id: string;
+  /** Router path relative to the app root, e.g. `/cases/$caseId`. */
+  path: string;
+  component: TComponent;
+}
+
+/**
  * A suggested opening command for the chat.
  *
  * Contributed by the module, never written into the platform: a starter that
@@ -203,6 +247,57 @@ export type ModuleEmittedEvent =
   | { type: 'artifact_created'; artifactId: string };
 
 /* -------------------------------------------------------------------------- */
+/*  What became of the resource the user is on                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Why the agent has, or has not, a description of the resource in the context.
+ *
+ *  - `none` — the command carried no resource; the user is not on a record;
+ *  - `described` — `summary` is the module's description of it;
+ *  - `not_described` — the resource exists as far as this is concerned, but no
+ *    module describes this `kind`. Nothing is known about it, and nothing about
+ *    it may be assumed;
+ *  - `not_found` — the record named by the context is not there (deleted, or
+ *    never existed under this id);
+ *  - `forbidden` — it exists and belongs to somebody else; the signed-in owner
+ *    may not read it;
+ *  - `failed` — describing it broke for another reason. Also not a licence to
+ *    invent one.
+ *
+ * The four last states used to be one `null`, which read as "no description" and
+ * was indistinguishable from "no resource". That is precisely the confusion
+ * L6.11 is about: a missing record, a record of another owner and an empty
+ * result are three different answers.
+ */
+export const RESOURCE_DESCRIPTION_STATES = [
+  'none',
+  'described',
+  'not_described',
+  'not_found',
+  'forbidden',
+  'failed',
+] as const;
+export type ResourceDescriptionState = (typeof RESOURCE_DESCRIPTION_STATES)[number];
+
+/** The resource of a command's context, as far as the platform could resolve it. */
+export interface ResourceDescription {
+  state: ResourceDescriptionState;
+  /** The resource the context named, verbatim; null when it named none. */
+  resource: { kind: string; id: string } | null;
+  /** The module's description — only ever present with `state: 'described'`. */
+  summary: string | null;
+  /** The error code a failure arrived with, for `not_found` / `forbidden` / `failed`. */
+  errorCode: string | null;
+  /** One sentence saying what this state means, addressed to the agent. */
+  note: string;
+}
+
+/** True when the description is an honest statement that nothing is known. */
+export const resourceIsUnknown = (d: ResourceDescription): boolean =>
+  d.state === 'not_described' || d.state === 'not_found' || d.state === 'forbidden' || d.state === 'failed';
+
+/* -------------------------------------------------------------------------- */
 /*  Server-side module contract                                               */
 /* -------------------------------------------------------------------------- */
 
@@ -307,6 +402,15 @@ export interface ServerModule {
   /**
    * Resolves the opaque `resource` of an AppContext into a short, human readable
    * summary the agent can use without loading the database.
+   *
+   * **Answer only about a resource you can describe.** `null` means "not a kind
+   * this module describes" — it is *not* the answer for a record that is gone or
+   * belongs to somebody else. Those are failures, and the module raises them
+   * (`AppError` with `not_found` / `forbidden`, which the services already
+   * throw); the platform turns them into the matching {@link ResourceDescription}
+   * state. Swallowing them into `null` is what makes a deleted record, another
+   * owner's record and an undescribed kind indistinguishable — and a context the
+   * agent then fills in from imagination.
    */
   describeResource?: (
     resource: { kind: string; id: string },
@@ -338,7 +442,7 @@ export interface ServerModule {
  * Everything the browser half of a module contributes. Kept structural (no React
  * types here) so this package stays framework-neutral; `@platform/ui` narrows it.
  */
-export interface ClientModule<TComponentDef = unknown, TElement = unknown, TRoute = unknown> {
+export interface ClientModule<TComponentDef = unknown, TElement = unknown> {
   meta: ModuleMeta;
   /** OpenUI component definitions added to the shared catalog. */
   components: Record<string, TComponentDef>;
@@ -347,5 +451,8 @@ export interface ClientModule<TComponentDef = unknown, TElement = unknown, TRout
   /** Artifact renderers, keyed by `rendererType`. */
   artifactRenderers?: Record<string, TElement>;
   menu: MenuItemContribution[];
-  routes: TRoute[];
+  /** What this module calls the sections its menu items go in. */
+  menuSections?: MenuSectionLabels;
+  /** Screens mounted by the composition root. See {@link ModuleScreenContribution}. */
+  screens?: ModuleScreenContribution<TElement>[];
 }

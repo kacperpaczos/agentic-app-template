@@ -1,0 +1,71 @@
+# OBLANIE PRZED POPRAWKA — pnpm check:module-swap na drzewie z BL-01..BL-06 + BL-05
+# HEAD d5ba186 (po scaleniu domkniecie/integracja), 2026-09-18T13:11:25+02:00
+
+OK   lista plików repozytorium
+OK   kopia robocza — 396 plików → /tmp/agentic-module-swap-94s9GD
+OK   moduł niescalany dostarcza słownik do kontroli negatywnych — module-procurement: 12 przedrostkow, 8 etykiet, 8 tabel, zakresy [case]; modul skladany: zakresy [probe]
+OK   warstwa składania przełączona na moduł kontrolny — apps/server/src/compose.ts, apps/web/src/compose.tsx
+OK   router aplikacji bez zmian i bez nazwy jakiegokolwiek modułu — ekrany modułu montowane z registry.screens
+OK   pakiety platformy i moduł przykładowy bez zmian — module-procurement:3606a7905a18 platform-contracts:ea968d2a3dd1 platform-server:b56e806ecf85 platform-ui:26de08064599
+OK   zmienione pliki ograniczone do dwóch plików warstwy składania — apps/server/src/compose.ts, apps/web/src/compose.tsx
+OK   pnpm install --frozen-lockfile
+OK   kontrola granicy platforma–domena
+OK   typecheck
+OK   build frontendu i backendu
+BLAD regresja jednostkowa na kopii przechodzi (test dymny podmiany) — s lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/durability.test.ts > przerwana operacja wieloetapowa nie zostawia polowicznego stanu > kopia bazy otwiera sie z tym samym stanem, ktory zglosil backend
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/measurements.test.ts > pomiary rozdzielone na punkty, zapisane z warunkami i wersja kodu > kolejka, start wykonania, pierwszy tekst i zakonczenie sa osobnymi punktami; brak tekstu daje brak metryki
+AssertionError: expected 'nieznany' to match /^[0-9a-f]{7,40}$/
+
+- Expected:
+/^[0-9a-f]{7,40}$/
+
++ Received:
+"nieznany"
+
+ ❯ tests/measurements.test.ts:272:39
+    270|     expect(written.pomiary.czasDoPierwszegoTekstu.podsumowanie.brakMet…
+    271|     expect(written.pomiary.czasDoPierwszegoTekstu.podsumowanie.zMetryk…
+    272|     expect(written.wersjaKodu.commit).toMatch(/^[0-9a-f]{7,40}$/);
+       |                                       ^
+    273|     expect(record.path).toContain(EVIDENCE_DIR);
+    274|     // The switch decides the write, and nothing else does.
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+regresja jednostkowa na kopii przechodzi (test dymny podmiany): s lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/durability.test.ts > przerwana operacja wieloetapowa nie zostawia polowicznego stanu > kopia bazy otwiera sie z tym samym stanem, ktory zglosil backend
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/measurements.test.ts > pomiary rozdzielone na punkty, zapisane z warunkami i wersja kodu > kolejka, start wykonania, pierwszy tekst i zakonczenie sa osobnymi punktami; brak tekstu daje brak metryki
+AssertionError: expected 'nieznany' to match /^[0-9a-f]{7,40}$/
+
+- Expected:
+/^[0-9a-f]{7,40}$/
+
++ Received:
+"nieznany"
+
+ ❯ tests/measurements.test.ts:272:39
+    270|     expect(written.pomiary.czasDoPierwszegoTekstu.podsumowanie.brakMet…
+    271|     expect(written.pomiary.czasDoPierwszegoTekstu.podsumowanie.zMetryk…
+    272|     expect(written.wersjaKodu.commit).toMatch(/^[0-9a-f]{7,40}$/);
+       |                                       ^
+    273|     expect(record.path).toContain(EVIDENCE_DIR);
+    274|     // The switch decides the write, and nothing else does.
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+EXIT=1

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { AppError, type CardComponentDescriptor, type ServerModule } from '@platform/contracts';
 import type { PlatformServices } from '@platform/server';
 import { MODULE_ID } from '../shared/index.ts';
+import { PROCUREMENT_CARD_COMPONENTS } from '../shared/cards.ts';
 import { PROCUREMENT_OPENUI_COMPONENTS } from '../shared/openui-components.ts';
 import { updateOfferItemInput } from './inputs.ts';
 import { PROCUREMENT_MIGRATIONS } from './schema.ts';
@@ -27,57 +28,20 @@ const caseRef = z.object({ caseId: z.string().max(128) });
 /**
  * Card components this module contributes to the shared catalog.
  *
- * Props carry *references* (which case, which offer) and view options only.
- * A component never receives business values as props — it fetches them from the
- * backend — so a composition an agent writes can never become a second, stale
- * copy of the data.
+ * The declarations live in `shared/cards.ts`, beside the OpenUI ones, so the
+ * card catalog, the OpenUI catalog and the browser's renderers cannot describe
+ * the same component three different ways. Props carry *references* (which
+ * case, which offer) and view options only — a component never receives
+ * business values as props, it fetches them from the backend — so a composition
+ * an agent writes can never become a second, stale copy of the data.
  */
 function cardComponents(): CardComponentDescriptor[] {
-  return [
-    {
-      id: 'procurement.caseSummary',
-      description: 'Podsumowanie sprawy zakupowej: podstawa porownania, liczba ofert i pozycji.',
-      usage: 'props: { caseId }',
-      propsSchema: caseRef,
-    },
-    {
-      id: 'procurement.offerList',
-      description: 'Lista ofert w sprawie z dostawca, referencja i liczba pozycji.',
-      usage: 'props: { caseId }',
-      propsSchema: caseRef,
-    },
-    {
-      id: 'procurement.comparisonTable',
-      description:
-        'Tabela porownawcza ofert wyliczona przez backend: sumy, kompletnosc, ranking i oferty wykluczone z przyczyna.',
-      usage: 'props: { caseId, showExcluded?: boolean }',
-      propsSchema: caseRef.extend({ showExcluded: z.boolean().default(true) }),
-    },
-    {
-      id: 'procurement.costChart',
-      description: 'Wykres slupkowy kosztu calkowitego porownywalnych ofert.',
-      usage: 'props: { caseId }',
-      propsSchema: caseRef,
-    },
-    {
-      id: 'procurement.deliveryTerms',
-      description: 'Zestawienie warunkow dostawy i waznosci ofert.',
-      usage: 'props: { caseId }',
-      propsSchema: caseRef,
-    },
-    {
-      id: 'procurement.offerItemForm',
-      description: 'Formularz edycji pozycji oferty (ilosc, cena jednostkowa, jednostka, notatka).',
-      usage: 'props: { offerId, itemId? }',
-      propsSchema: z.object({ offerId: z.string().max(128), itemId: z.string().max(128).optional() }),
-    },
-    {
-      id: 'procurement.provenance',
-      description: 'Pochodzenie wartosci pozycji: oferta, dostawca, zalacznik zrodlowy i miejsce w pliku.',
-      usage: 'props: { itemId }',
-      propsSchema: z.object({ itemId: z.string().max(128) }),
-    },
-  ];
+  return PROCUREMENT_CARD_COMPONENTS.map(({ id, description, usage, propsSchema }) => ({
+    id,
+    description,
+    usage,
+    propsSchema,
+  }));
 }
 
 /**
@@ -248,13 +212,15 @@ export function createProcurementModule(platform: PlatformServices): ServerModul
       '- Pochodzenie wartosci sprawdzaj narzedziem procurement_find_price_provenance.',
     ].join('\n'),
 
+    /*
+     * `null` only for a kind this module does not describe. A case that is gone
+     * or belongs to someone else raises (`not_found` / `forbidden` from the
+     * service), and the platform reports that state — swallowing it here made
+     * a deleted case, another owner's case and an unknown kind the same answer.
+     */
     describeResource: async (resource, ownerId) => {
       if (resource.kind !== 'case') return null;
-      try {
-        return service.describeCase(resource.id, ownerId);
-      } catch {
-        return null;
-      }
+      return service.describeCase(resource.id, ownerId);
     },
 
     /**

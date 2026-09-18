@@ -1,13 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import {
-  qk,
-  registerAccessContextReset,
-  resetAccessContext,
-  scopedAppState,
-  setAccessContext,
-  useAppState,
-} from '@platform/ui';
+import { qk, resetAccessContext, setAccessContext, useAppState } from '@platform/ui';
 import { createHarness, login, type Harness } from './helpers.ts';
 import { codeVersion, writeEvidence } from './support/measurement-evidence.ts';
 
@@ -94,21 +87,42 @@ describe('dowod pakietu BL-11c', () => {
 
     const qc = new QueryClient();
     resetAccessContext();
-    const stop = registerAccessContextReset();
     setAccessContext(qc, 'local-user');
     qc.setQueryData(qk.artifact(meta.id), { id: meta.id });
+
+    /*
+     * The scoped fields are read from the store, not from a list written here.
+     *
+     * A hard-coded list is a promise that somebody keeps it in step; enumerating
+     * the store means a field added tomorrow and cleared by nobody shows up as a
+     * named failure. Everything on the store that is not a function is state,
+     * and `navOpen` is the one piece of it that belongs to the window rather
+     * than to whoever is signed in.
+     *
+     * The reference for "cleared" is taken by clearing: whatever the one
+     * implementation (`clearScopedContext`) leaves behind *is* the cleared
+     * state, so this cannot drift from it the way a second copy of the defaults
+     * would.
+     */
+    const scopedKeys = Object.entries(useAppState.getState())
+      .filter(([key, value]) => typeof value !== 'function' && key !== 'navOpen')
+      .map(([key]) => key)
+      .sort();
+    useAppState.getState().clearScopedContext();
+    const snapshot = useAppState.getState() as unknown as Record<string, unknown>;
+    const czyste = Object.fromEntries(scopedKeys.map((key) => [key, JSON.stringify(snapshot[key])]));
 
     /*
      * Every scoped field is dirtied first, and that is the whole point of this
      * block.
      *
-     * An earlier version set five fields and then counted how many of the
-     * fifteen *matched their default* after the switch. Ten of them matched
-     * because they had never been touched, so the evidence file listed them as
-     * "cleared" for free and would have gone on listing them if the reset had
-     * missed one. Here each field is given a value that is **not** the default,
-     * the completeness of that list is checked against `scopedAppState()`, and
-     * only then is "cleared" a statement about the reset.
+     * An earlier version set five fields and then counted how many *matched
+     * their default* after the switch. Ten of them matched because they had
+     * never been touched, so the evidence file listed them as "cleared" for free
+     * and would have gone on listing them if the reset had missed one. Here each
+     * field is given a value that is **not** the cleared one, the completeness
+     * of that list is checked against the store, and only then is "cleared" a
+     * statement about the switch.
      */
     const dirty: Record<string, unknown> = {
       spaceId: 'spc_poprzedniego',
@@ -153,26 +167,24 @@ describe('dowod pakietu BL-11c', () => {
       },
       runs: { cnv_poprzedniego: { ...useAppState.getState().runFor(null), phase: 'running', runId: 'run_poprzedniego' } },
     };
-    const scopedKeys = Object.keys(scopedAppState()).sort();
     expect(Object.keys(dirty).sort(), 'nie kazde pole zakresu zostalo zabrudzone').toEqual(scopedKeys);
     useAppState.setState(dirty as never);
-    // None of them is its default any more — otherwise "cleared" below would be
-    // true of a field nobody ever touched.
+    // None of them is in its cleared state any more — otherwise "cleared" below
+    // would be true of a field nobody ever touched.
     for (const key of scopedKeys) {
       expect(
         JSON.stringify((useAppState.getState() as unknown as Record<string, unknown>)[key]),
         `pole ${key} nie zostalo zabrudzone`,
-      ).not.toBe(JSON.stringify((scopedAppState() as Record<string, unknown>)[key]));
+      ).not.toBe(czyste[key]);
     }
 
     setAccessContext(qc, 'other-user');
-    const cleared = scopedKeys.filter((key) => {
-      const now = (useAppState.getState() as unknown as Record<string, unknown>)[key];
-      return JSON.stringify(now) === JSON.stringify((scopedAppState() as Record<string, unknown>)[key]);
-    });
+    const cleared = scopedKeys.filter(
+      (key) => JSON.stringify((useAppState.getState() as unknown as Record<string, unknown>)[key]) === czyste[key],
+    );
     const cacheEntries = qc.getQueryCache().getAll().length;
-    stop();
-    useAppState.setState({ ...scopedAppState(), navOpen: true });
+    useAppState.getState().clearScopedContext();
+    useAppState.setState({ navOpen: true });
     resetAccessContext();
 
     expect(cacheEntries).toBe(0);
@@ -197,9 +209,9 @@ describe('dowod pakietu BL-11c', () => {
       },
       zmianaWlasciciela: {
         metoda:
-          'kazde pole zakresu (scopedAppState) zostaje przed przelaczeniem ustawione na wartosc ' +
-          'INNA niz domyslna i to jest sprawdzane osobno; dopiero potem "wyczyszczone" znaczy, ze ' +
-          'zrobil to reset, a nie ze pola nikt nie dotknal.',
+          'kazde pole zakresu (wyliczone ze sklepu, bez navOpen) zostaje przed przelaczeniem ustawione ' +
+          'na wartosc INNA niz stan po clearScopedContext i to jest sprawdzane osobno; dopiero potem ' +
+          '"wyczyszczone" znaczy, ze zrobilo to przelaczenie, a nie ze pola nikt nie dotknal.',
         wpisyCachePoPrzelaczeniu: cacheEntries,
         wyczyszczonePolaStanuKlienta: cleared.sort(),
         niewyczyszczone: ['navOpen — wlasciwosc okna, nie tozsamosci'],

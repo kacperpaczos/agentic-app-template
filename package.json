@@ -11,8 +11,9 @@
     "dev": "concurrently -n server,web -c blue,green \"pnpm --filter @app/server dev\" \"pnpm --filter @app/web dev\"",
     "build": "pnpm --filter @app/web build && pnpm --filter @app/server build",
     "start": "pnpm --filter @app/server start",
-    "typecheck": "pnpm typecheck:src && pnpm typecheck:e2e",
+    "typecheck": "pnpm typecheck:src && pnpm typecheck:modules && pnpm typecheck:e2e",
     "typecheck:src": "tsc -p tsconfig.json --noEmit",
+    "typecheck:modules": "node scripts/typecheck-modules.mjs",
     "typecheck:e2e": "tsc -p tsconfig.e2e.json --noEmit",
     "migrate": "pnpm --filter @app/server migrate",
     "seed": "pnpm --filter @app/server seed",
@@ -22,7 +23,8 @@
     "test:e2e": "playwright test",
     "test:e2e:model": "APP_E2E_MODEL=1 playwright test",
     "evidence": "APP_WRITE_EVIDENCE=1 vitest run tests/measurements.test.ts tests/diagnostics.test.ts tests/cache-evidence.test.ts",
-    "evidence:e2e": "APP_WRITE_EVIDENCE=1 playwright test e2e/measurements.spec.ts",
+    "evidence:z5": "APP_WRITE_EVIDENCE=1 vitest run tests/app-context.test.ts",
+    "evidence:e2e": "APP_WRITE_EVIDENCE=1 playwright test e2e/measurements.spec.ts e2e/streaming.spec.ts e2e/view-filter.spec.ts",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "check:acceptance": "node scripts/acceptance-matrix.mjs --check",
     "acceptance:render": "node scripts/acceptance-matrix.mjs",
@@ -34,7 +36,10 @@
     "check:closure": "node scripts/closure-matrix.mjs --summary > /dev/null",
     "backup": "node scripts/backup-state.mjs",
     "backup:verify": "node scripts/backup-state.mjs --verify",
-    "migration:rehearsal": "node scripts/migration-rehearsal.mjs"
+    "migration:rehearsal": "node scripts/migration-rehearsal.mjs",
+    "restore": "node scripts/restore-state.mjs",
+    "restore:check": "node scripts/restore-state.mjs --check",
+    "synthetic:state": "node scripts/synthetic-state.mjs"
   },
   "devDependencies": {
     "@app/server": "workspace:*",

@@ -118,7 +118,7 @@ describe('powiazanie rozmowy z wykonaniem, narzedziem, mutacja i artefaktem', ()
       {
         kind: 'call',
         name: 'procurement_update_offer_item',
-        input: { itemId: item.id, quantity: 11 },
+        input: { itemId: item.id, quantity: 11, expectedVersion: item.version },
       },
       { kind: 'call', name: 'procurement_save_comparison', input: { caseId } },
       { kind: 'text', text: 'Zmienilem pozycje i zapisalem zestawienie.' },
@@ -324,7 +324,7 @@ describe('klasy bledow sa rozroznialne w zapisanym uruchomieniu', () => {
       {
         kind: 'call',
         name: 'procurement_update_offer_item',
-        input: { itemId: item.id, unitPrice: -5 },
+        input: { itemId: item.id, unitPrice: -5, expectedVersion: item.version },
       },
       { kind: 'text', text: 'Regula domeny odmowila.' },
     ]);

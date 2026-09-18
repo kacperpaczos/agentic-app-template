@@ -1,11 +1,19 @@
 import { defineComponent } from '@openuidev/react-lang';
-import type { ConversationStarterContribution, MenuItemContribution } from '@platform/contracts';
-import type { UiModule } from '@platform/ui';
+import type {
+  ConversationStarterContribution,
+  MenuItemContribution,
+  MenuSectionLabels,
+} from '@platform/contracts';
+import type { ModuleScreen, UiModule } from '@platform/ui';
 import { MODULE_ID } from '../shared/index.ts';
 import { PROCUREMENT_OPENUI_COMPONENTS } from '../shared/openui-components.ts';
 import {
+  CaseSummaryCard,
   ComparisonTableCard,
   CostChartCard,
+  DeliveryTermsCard,
+  OfferItemFormCard,
+  OfferListCard,
   procurementArtifactRenderers,
   procurementCardRenderers,
 } from './cards.tsx';
@@ -19,6 +27,31 @@ export * from './detailComponents.tsx';
 const menu: MenuItemContribution[] = [
   { id: 'procurement.cases', section: 'records', label: 'Wszystkie sprawy', to: '/cases', order: 10 },
   { id: 'procurement.suppliers', section: 'data', label: 'Dostawcy', to: '/data', order: 10 },
+];
+
+/**
+ * What this module calls the sections it puts those items in.
+ *
+ * "Sprawy zakupowe" is a sentence about somebody's business, so it belongs
+ * here and not in the shell — which is exactly where it used to live
+ * (`AppShell.tsx`, `SECTION_LABELS.records`), with the result that an
+ * application composing any other module still read "Sprawy zakupowe".
+ */
+const menuSections: MenuSectionLabels = { records: 'Sprawy zakupowe' };
+
+/**
+ * This module's screens, declared for the composition root to mount.
+ *
+ * The paths and their `$segments` are the module's own: no file outside this
+ * package names `/cases/$caseId`, and the pages read those segments through
+ * `useScreenParams()` rather than through the application's route registration,
+ * so this list compiles whether or not the application mounts it.
+ */
+const screens: ModuleScreen[] = [
+  { id: 'procurement.cases', path: '/cases', component: CasesPage },
+  { id: 'procurement.case.detail', path: '/cases/$caseId', component: CaseDetailPage },
+  { id: 'procurement.data', path: '/data', component: DataPage },
+  { id: 'procurement.item.provenance', path: '/items/$itemId', component: ItemProvenancePage },
 ];
 
 const starters: ConversationStarterContribution[] = [
@@ -46,9 +79,55 @@ const starters: ConversationStarterContribution[] = [
  * `shared/openui-components.ts`, which the server half declares too — see there
  * for why.
  */
-const { OfferComparison, OfferCostChart } = PROCUREMENT_OPENUI_COMPONENTS;
+const { CaseSummary, DeliveryTerms, OfferComparison, OfferCostChart, OfferItemForm, OfferList } =
+  PROCUREMENT_OPENUI_COMPONENTS;
 const openuiComponents = [
   ...procurementDetailOpenuiComponents,
+  /*
+   * Every canvas card of this module is also a catalog component.
+   *
+   * Four of them (`caseSummary`, `offerList`, `deliveryTerms`, `offerItemForm`)
+   * used to exist only in the card catalog, so they could be put on the canvas
+   * and nowhere else — not in an agent's view, not in an answer — and their
+   * renderers took untyped props. Declared here from the same schemas as the
+   * card, they are one component with one contract, wherever it is composed;
+   * `shared/cards.ts` holds the binding and the catalog tests check it.
+   */
+  defineComponent({
+    name: CaseSummary.name,
+    description: CaseSummary.description,
+    props: CaseSummary.propsSchema,
+    component: ({ props }) => (
+      <CaseSummaryCard cardId={`openui-summary-${String(props.caseId)}`} props={{ caseId: props.caseId }} />
+    ),
+  }),
+  defineComponent({
+    name: OfferList.name,
+    description: OfferList.description,
+    props: OfferList.propsSchema,
+    component: ({ props }) => (
+      <OfferListCard cardId={`openui-offers-${String(props.caseId)}`} props={{ caseId: props.caseId }} />
+    ),
+  }),
+  defineComponent({
+    name: DeliveryTerms.name,
+    description: DeliveryTerms.description,
+    props: DeliveryTerms.propsSchema,
+    component: ({ props }) => (
+      <DeliveryTermsCard cardId={`openui-delivery-${String(props.caseId)}`} props={{ caseId: props.caseId }} />
+    ),
+  }),
+  defineComponent({
+    name: OfferItemForm.name,
+    description: OfferItemForm.description,
+    props: OfferItemForm.propsSchema,
+    component: ({ props }) => (
+      <OfferItemFormCard
+        cardId={`openui-item-form-${String(props.offerId)}`}
+        props={{ offerId: props.offerId, itemId: props.itemId }}
+      />
+    ),
+  }),
   defineComponent({
     name: OfferComparison.name,
     description: OfferComparison.description,
@@ -82,5 +161,7 @@ export const procurementUiModule: UiModule = {
   artifactRenderers: procurementArtifactRenderers,
   openuiComponents,
   menu,
+  menuSections,
+  screens,
   starters,
 };

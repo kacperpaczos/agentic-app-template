@@ -1,0 +1,83 @@
+PROBY ZDOLNOSCI WYKRYCIA (G16) — zadanie Z2 / BL-07
+Procedura: commit najpierw (a140f89), proba na czystym drzewie, wycofanie linii,
+test oblewa, git checkout -- <plik>, drzewo znow czyste.
+
+=== stan wyjsciowy
+zmienionych plikow: 1
+(jedyna zmiana w drzewie to nowy, nieśledzony katalog docs/evidence/z2-bl07/)
+
+=== PROBA 1 — kopia obejmuje WAL (L10.16)
+wycofana linia: scripts/backup-state.mjs, DB_PARTS bez 'app.db-wal'
+     × kopia zawiera zapis lezacy w WAL i jest jednym samowystarczalnym plikiem 579ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: kopia zgubila zapis, ktory lezal w WAL: expected +0 to be 1 // Object.is equality
+    172|       'kopia zgubila zapis, ktory lezal w WAL',
+      Tests  1 failed | 23 skipped (24)
+przywrocono: git checkout -- scripts/backup-state.mjs; drzewo czyste
+
+=== PROBA 2 — tabela files na liscie zmian opisanych kolumnowo (L10.17)
+wycofany wpis: scripts/migration-rehearsal.mjs, EXPECTED_TO_CHANGE.files
+     × kopia sprzed platform-0003-file-versions: migracja zachowuje dane i nie dubluje ich 6013ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: [proba] kopia zrodlowa: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-okNzZG/etap-platform-0003-file-versions-kopia
+  - tabela files zmieniona nieoczekiwanie (2 → 2 wierszy)
+      Tests  1 failed | 23 skipped (24)
+przywrocono: git checkout -- scripts/migration-rehearsal.mjs; drzewo czyste
+(bez wpisu proba zglasza dokladnie falszywy blad z opisu braku w BACKLOG)
+
+=== PROBA 3 — dopuszczenie nowych kolumn nie przepuszcza zmiany danych (L10.17)
+wstawiona linia: platform-0003-file-versions dodatkowo UPDATE files SET filename = filename || '.bak'
+     × kopia sprzed platform-0003-file-versions: migracja zachowuje dane i nie dubluje ich 4404ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: [proba] kopia zrodlowa: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-toMJjw/etap-platform-0003-file-versions-kopia
+  - tabela files: zmieniona tresc w kolumnach sprzed migracji
+      Tests  1 failed | 23 skipped (24)
+przywrocono: git checkout -- packages/platform-server/src/db/migrations.ts; drzewo czyste
+(dopuszczenie kolumn jest wezsze niz dopuszczenie tabeli: zmiana wartosci w starej kolumnie oblewa)
+
+=== PROBA 4 — brak transkryptu SDK (L7.13)
+wycofana linia: runtime.ts, wznowienie znow przez goly agent.resumeStream
+     × rozmowa bez transkryptu konczy sie wlasnym kodem bledu, nie ogolnym 35ms
+     × jawne zdarzenie nazywa utracona sesje i stwierdza brak pamieci 12ms
+     × martwe powiazanie z sesja zostaje usuniete, wiec kolejna proba startuje czysto 12ms
+AssertionError: expected 'integration_failed' to be 'session_transcript_lost' // Object.is equality
+AssertionError: brak jawnego zdarzenia o utracie transkryptu: expected undefined to be defined
+AssertionError: expected 'sess_zgubiona' to be null
+      Tests  3 failed | 15 passed (18)
+przywrocono: git checkout -- packages/platform-server/src/agent/runtime.ts; drzewo czyste
+(bez obslugi: ogolny integration_failed, brak zdarzenia, zapisany claude_session_id zostaje — dokladnie opis braku z ACCEPTANCE)
+
+=== PROBA 5 — odmowa proby na katalogu z APP_DATA_DIR (L10.19)
+wycofana linia: migration-rehearsal.mjs, APP_DATA_DIR usuniete z liveDirs
+     × proba migracji na katalogu wskazanym przez APP_DATA_DIR jest odrzucona 97ms
+AssertionError: expected '[proba] /home/paczos/Documents/agenti…' to match /odmawiam proby na katalogu danych apl…/
+      Tests  1 failed | 1 passed | 22 skipped (24)
+przywrocono: git checkout -- scripts/migration-rehearsal.mjs; drzewo czyste
+(bez tej linii odmowa opiera sie tylko na session.secret — komunikat inny, test oblewa)
+
+=== PROBA 6 — drugie uruchomienie bez dodatkowego skutku (L10.17)
+wycofana linia: packages/platform-server/src/db/backfill.ts, 'if (projected) continue;'
+     × kopia sprzed platform-0003-file-versions: migracja zachowuje dane i nie dubluje ich 14004ms
+     × kopia sprzed platform-0003 z niepustymi plikami: zmiana jest nazwana, dane nietkniete 1ms
+AssertionError: [proba] kopia zrodlowa: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-IIDfJu/etap-platform-0003-file-versions-kopia
+      Tests  2 failed | 22 skipped (24)
+(powod: 'powtorna migracja zmienila liczbe wierszy w messages' — backfill przestal byc idempotentny)
+przywrocono: git checkout -- packages/platform-server/src/db/backfill.ts; drzewo czyste
+
+=== PROBA 7 — kopia nie zmienia zrodla (L10.19)
+wstawiona linia: backup-state.mjs zwija WAL w ZRODLE zamiast tylko w kopii
+      Tests  1 passed | 23 skipped (24)
+PIERWSZE PODEJSCIE: test przeszedl mimo wycofanej linii — i to bylo wykrycie wady TESTU,
+nie kodu: kopie wykonywal inny test w tym samym opisie, wiec uruchomiony osobno (-t)
+test niczego nie mierzyl. Test poprawiony (commit 7d01ec3) i proba powtorzona:
+     × wykonanie kopii nie zmienia zrodla 733ms
+AssertionError: app.db zmieniony przez wykonanie kopii: expected '173fa778f94f8b62899d2c8cfe411082090c3…' to be '829a2cb310176eceb25209c947f8e798a22b6…' // Object.is equality
+    223|       expect(sha256(resolve(dane, file)), `${file} zmieniony przez wyk…
+      Tests  1 failed | 23 skipped (24)
+przywrocono: git checkout -- scripts/backup-state.mjs; drzewo czyste
+
+=== PODSUMOWANIE
+7 prob, 7 razy test oblal po wycofaniu/zmianie linii i przeszedl po przywroceniu.
+Proba 7 przy pierwszym podejsciu ujawnila wade testu, a nie kodu — test poprawiony,
+proba powtorzona i zakonczona oblaniem, zgodnie z procedura.
+Po kazdej probie: git status --porcelain pokazywal wylacznie nowy katalog docs/evidence/z2-bl07/.

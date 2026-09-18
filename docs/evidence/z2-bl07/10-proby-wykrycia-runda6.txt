@@ -1,0 +1,28 @@
+PROBY ZDOLNOSCI WYKRYCIA — runda poprawek 6, zadanie Z2 / BL-07
+commit: 3c8d835
+
+=== PROBA 6/1 — skrypt nie zostawia sladu w cudzej kopii (regresja rundy 5)
+wycofane linie: backup-state.mjs i restore-state.mjs znow uzywaja tidy(), ktore po cichu
+                pomija katalogi niezatwierdzone
+-- recznie:
+kopia przed:   app.db  files  manifest.json 
+[backup] kopia /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/p61/kopia sprawdzona: bez zastrzezen
+kopia po:      app.db  app.db-shm  app.db-wal  files  manifest.json 
+-- test:
+     × odczyt cudzej kopii nie zostawia w niej sladu — z plikami pomocniczymi wlacznie 2278ms
+AssertionError: --verify zostawilo pliki w sprawdzanej kopii: expected 'app.db,app.db-shm,app.db-wal,files,ma…' to be 'app.db,files,manifest.json|636ad65ec0…' // Object.is equality
+      Tests  1 failed | 22 skipped (23)
+przywrocono: git checkout -- scripts/backup-state.mjs scripts/restore-state.mjs
+(przed poprawka: --verify wypisywal 'sprawdzona: bez zastrzezen', zostawiajac w cudzej
+ kopii app.db-wal i app.db-shm)
+
+=== PROBA 6/2 — approveOwnTemp zatwierdza cokolwiek (furtka do gardla)
+wycofane linie: approveOwnTemp bez wymogu pustego katalogu i bez assertAwayFromLiveData
+     × approveOwnTemp nie zatwierdza katalogu, ktorego nie utworzylismy 10ms
+AssertionError: expected [Function] to throw an error
+      Tests  1 failed | 22 skipped (23)
+przywrocono: git checkout -- scripts/lib/state-tools.mjs
+
+PODSUMOWANIE RUNDY 6: dwie proby, obie oblaly.
+6/1 pokazuje przypadek, ktorego odcisk() z testu flag nie widzi (celowo pomija oba pliki
+pomocnicze) — dlatego ma wlasny test porownujacy pelna zawartosc katalogu.

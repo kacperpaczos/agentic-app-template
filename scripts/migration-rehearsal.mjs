@@ -29,76 +29,74 @@
  * It never runs against `data/`. The `--backup` argument must name a directory
  * holding a backup manifest, and the rehearsal works on a copy of that.
  */
-import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import {
+  REPO,
+  approveOwnTemp,
+  approveTarget,
+  assertAwayFromLiveData,
+  census,
+  kopiujDrzewo,
+  usun,
+  utworzKatalog,
+  zapisz,
+  fingerprint,
+  makeArgs,
+  prepareScratchDir,
+  realResolve,
+  refuse,
+  runScript,
+} from './lib/state-tools.mjs';
 
-const require_ = createRequire(
-  resolve(import.meta.dirname, '../packages/platform-server/package.json'),
-);
-const Database = require_('better-sqlite3');
-
-const args = process.argv.slice(2);
-const flag = (name, fallback = null) => {
-  const i = args.indexOf(`--${name}`);
-  return i >= 0 && args[i + 1] ? args[i + 1] : fallback;
-};
-
-const REPO = resolve(import.meta.dirname, '..');
 
 /* ------------------------------- the census ------------------------------- */
 
-function census(dbFile) {
-  const db = new Database(dbFile, { readonly: true });
-  try {
-    const tables = db
-      .prepare(
-        `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`,
-      )
-      .all()
-      .map((r) => r.name);
-    const counts = {};
-    const digests = {};
-    for (const t of tables) {
-      counts[t] = db.prepare(`SELECT COUNT(*) AS n FROM "${t}"`).get().n;
-      const rows = db.prepare(`SELECT * FROM "${t}"`).all();
-      const canonical = rows
-        .map((r) => JSON.stringify(Object.keys(r).sort().map((k) => [k, r[k]])))
-        .sort();
-      digests[t] = createHash('sha256').update(canonical.join('\n')).digest('hex');
-    }
-    return {
-      tables,
-      counts,
-      digests,
-      migrations: tables.includes('schema_migrations')
-        ? db.prepare('SELECT id FROM schema_migrations ORDER BY id').all().map((r) => r.id)
-        : [],
-      integrity: db.pragma('integrity_check', { simple: true }),
-      /* The rows a user would notice missing, identified rather than counted. */
-      conversationIds: tables.includes('conversations')
-        ? db.prepare('SELECT id FROM conversations ORDER BY id').all().map((r) => r.id)
-        : [],
-      userMessages: tables.includes('messages')
-        ? db
-            .prepare(`SELECT id, conversation_id, content, seq FROM messages WHERE role='user' ORDER BY id`)
-            .all()
-        : [],
-      cardIds: tables.includes('canvas_cards')
-        ? db.prepare('SELECT id, space_id, spec FROM canvas_cards ORDER BY id').all()
-        : [],
-      fileIds: tables.includes('files') ? db.prepare('SELECT id FROM files ORDER BY id').all().map((r) => r.id) : [],
-      artifactIds: tables.includes('artifacts')
-        ? db.prepare('SELECT id FROM artifacts ORDER BY id').all().map((r) => r.id)
-        : [],
-    };
-  } finally {
-    db.close();
-  }
-}
+/**
+ * Every flag of this script that takes a path, and what it does with it.
+ *
+ * This is not documentation of the flags — it is where they come from.
+ * `makeArgs(process.argv, FLAGS)` refuses any flag that is not in this list and
+ * any positional argument, and `tests/script-path-flags.test.ts` runs this
+ * script once per declared flag to check that its behaviour matches the kind.
+ *
+ * It is the *second* line, though, and worth reading as such. The one that
+ * actually holds is in `lib/state-tools.mjs`: every operation that deletes,
+ * moves or overwrites checks its path at the moment of the call, so a path that
+ * arrives some way nobody anticipated is still refused. Five rounds of guarding
+ * the argument were walked around five times; guarding the operation is what
+ * stopped it.
+ *
+ *   zapis-chroniony  — writes; must refuse a live data directory
+ *   odczyt-chroniony — only reads, but still refuses one (here: because the
+ *                      rehearsal would boot the application against it)
+ *   zapis-docelowy   — writes *into* a data directory on purpose
+ *   odczyt           — only reads; a live data directory is allowed, and `why`
+ *                      has to say why that is safe
+ *   wartosc          — not a path at all
+ */
+export const FLAGS = {
+  backup: {
+    kind: 'odczyt-chroniony',
+    why: 'Kopia, z ktorej bierze sie proba: czytana i kopiowana gdzie indziej, a na koniec skrypt '
+      + 'sprawdza sumy SHA-256 wszystkich jej plikow, zeby pokazac, ze jej nie tknal. Mimo to '
+      + 'przechodzi przez ochrone — proba na zywym katalogu nie bylaby proba, tylko migracja '
+      + 'wykonana na danych uzytkownika pod nazwa, ktora mowi co innego.',
+  },
+  out: {
+    kind: 'zapis-chroniony',
+    why: 'Katalog roboczy jest KASOWANY przed wypelnieniem, a potem startuje na nim aplikacja.',
+  },
+  json: {
+    kind: 'zapis-chroniony',
+    why: 'Raport nadpisuje wskazany plik i tworzy katalogi po drodze. Do 2026-09-18 nic nie pytalo, '
+      + 'gdzie ten plik laduje — --json <katalog danych>/app.db niszczylo baze.',
+  },
+};
+
 
 /**
  * Starts the platform once against `dataDir`, then shuts it down.
@@ -126,21 +124,98 @@ function bootOnce(dataDir) {
 /* ------------------------------ the comparison ---------------------------- */
 
 /**
- * Tables the migration is *expected* to change, and why.
+ * Tables the migration is *expected* to change, and in what way.
  *
  * Anything not listed here must come out byte-identical. Naming the exceptions
  * explicitly is what stops "the totals still add up" from passing for
  * "nothing was lost": a rebuilt assistant turn genuinely changes the `messages`
  * digest, and a check that tolerated any change to any table would also
  * tolerate a dropped conversation.
+ *
+ * The two kinds of exception are deliberately different in strength:
+ *
+ *  - `addedColumns` — the migration widens the table and nothing else. The
+ *    columns that existed before must still hold exactly the same values, the
+ *    row count must be unchanged, and the only new columns allowed are the ones
+ *    named here. This is a *stronger* check than an untouched digest would be
+ *    on a table that cannot change at all, and it is why `files` can be listed
+ *    without weakening anything: `platform-0003-file-versions` adds two columns
+ *    to it, which used to be reported as an unexplained change and made the
+ *    rehearsal unusable on any copy that actually contained files.
+ *  - `rowsMayChange` — the migration or the boot rewrites rows (the migration
+ *    log grows, a turn is rebuilt from its events). Here the digest cannot say
+ *    anything, so the guarantee comes from the identity checks below: every
+ *    conversation, user message, card, file and artifact is followed by id.
  */
-const EXPECTED_TO_CHANGE = {
+/**
+ * Tables whose **rows** the boot rewrites, and why.
+ *
+ * Hand-written, and it has to be: nothing in the schema says that the migration
+ * log grows by a row or that the tool-activity backfill replaces one assistant
+ * message with a whole turn. These are statements about behaviour, and a person
+ * has to make them.
+ *
+ * Widened tables are **not** listed here — see `addedColumnsFromMigrations`.
+ */
+const ROWS_MAY_CHANGE = {
   schema_migrations: 'migracja dopisuje swoj wpis',
-  agent_runs: 'platform-0002 dodaje kolumne enqueued_at i wypelnia ja z started_at',
   messages: 'odtworzenie aktywnosci narzedzi zastepuje pojedyncza wiadomosc asystenta pelna tura',
 };
 
-function compare(before, after) {
+/**
+ * Columns the migrations themselves say they add — read from their SQL.
+ *
+ * This list used to be written by hand, and the cost showed up the first time
+ * somebody else's package added a migration: `platform-0004-artifact-run-link`
+ * widened `artifacts`, and every rehearsal reported "tabela artifacts zmieniona
+ * nieoczekiwanie" until a human edited this file. A check that needs an edit
+ * every time the thing it checks changes is a check that will one day be
+ * silenced instead of updated.
+ *
+ * So the sanction comes from the DDL: a column may appear **because a migration
+ * says `ADD COLUMN`**, and for no other reason. Everything else about the table
+ * is still compared — row counts and the values in the columns that existed
+ * before — so a migration that adds a column *and* rewrites data still fails,
+ * which is the property this file exists to keep.
+ */
+function addedColumnsFromMigrations() {
+  const script = `
+    import { PLATFORM_MIGRATIONS } from ${JSON.stringify(resolve(REPO, 'packages/platform-server/src/db/migrations.ts'))};
+    import { composeApp } from ${JSON.stringify(resolve(REPO, 'apps/server/src/compose.ts'))};
+    const probe = ${JSON.stringify(resolve(tmpdir(), `agentic-ddl-${process.pid}`))};
+    const p = composeApp({ dataDir: probe });
+    const all = [...PLATFORM_MIGRATIONS, ...p.registry.migrations()];
+    p.close();
+    console.log('DDL ' + JSON.stringify(all.map((m) => ({ id: m.id, sql: m.sql }))));
+  `;
+  const probe = approveOwnTemp(mkdtempSync(resolve(tmpdir(), 'agentic-ddl-')));
+  let out;
+  try {
+    out = execFileSync(
+      process.execPath,
+      ['--experimental-transform-types', '--no-warnings=ExperimentalWarning', '--input-type=module', '-e', script],
+      { cwd: REPO, env: { ...process.env, APP_DATA_DIR: probe }, stdio: ['ignore', 'pipe', 'pipe'] },
+    ).toString();
+  } finally {
+    usun(probe, { recursive: true, force: true });
+  }
+  const line = out.split('\n').find((l) => l.startsWith('DDL '));
+  if (!line) throw new Error(`nie udalo sie odczytac SQL migracji:\n${out}`);
+
+  const dodane = {};
+  for (const { id, sql } of JSON.parse(line.slice('DDL '.length))) {
+    const re = /ALTER\s+TABLE\s+["'`]?(\w+)["'`]?\s+ADD\s+COLUMN\s+["'`]?(\w+)["'`]?/gi;
+    for (const m of sql.matchAll(re)) {
+      const [, tabela, kolumna] = m;
+      dodane[tabela] ??= { columns: [], migrations: [] };
+      dodane[tabela].columns.push(kolumna);
+      if (!dodane[tabela].migrations.includes(id)) dodane[tabela].migrations.push(id);
+    }
+  }
+  return dodane;
+}
+
+function compare(before, after, poszerzone) {
   const problems = [];
   const notes = [];
 
@@ -151,12 +226,45 @@ function compare(before, after) {
   }
 
   for (const t of before.tables.filter((t) => after.tables.includes(t))) {
+    const dodane = poszerzone[t];
+
+    /* --- a table the migrations widen is checked column by column --- */
+    if (dodane) {
+      const lost = before.columns[t].filter((c) => !after.columns[t].includes(c));
+      const added = after.columns[t].filter((c) => !before.columns[t].includes(c));
+      const unannounced = added.filter((c) => !dodane.columns.includes(c));
+      if (lost.length) problems.push(`tabela ${t}: zniknely kolumny ${lost.join(', ')}`);
+      if (unannounced.length) {
+        problems.push(
+          `tabela ${t}: kolumny ${unannounced.join(', ')} pojawily sie bez ALTER TABLE ... ADD COLUMN ` +
+            'w zadnej migracji',
+        );
+      }
+      if (before.counts[t] !== after.counts[t]) {
+        problems.push(
+          `tabela ${t}: zmieniona liczba wierszy (${before.counts[t]} → ${after.counts[t]}), ` +
+            'a migracje tylko dodaja do niej kolumny',
+        );
+      }
+      /*
+       * The values that were there before, over exactly the columns that were
+       * there before. This is what keeps the derived allowance honest: a
+       * migration may widen the table, and may not touch what is already in it.
+       */
+      if (after.restrictedDigests[t] !== before.digests[t]) {
+        problems.push(`tabela ${t}: zmieniona tresc w kolumnach sprzed migracji`);
+      } else if (added.length) {
+        notes.push(
+          `${t}: dodane kolumny ${added.join(', ')} przez ${dodane.migrations.join(', ')}; dane bez zmian`,
+        );
+      }
+      continue;
+    }
+
     const changed = before.digests[t] !== after.digests[t];
     if (!changed) continue;
-    if (t in EXPECTED_TO_CHANGE) {
-      notes.push(
-        `${t}: ${before.counts[t]} → ${after.counts[t]} wierszy (${EXPECTED_TO_CHANGE[t]})`,
-      );
+    if (ROWS_MAY_CHANGE[t]) {
+      notes.push(`${t}: ${before.counts[t]} → ${after.counts[t]} wierszy (${ROWS_MAY_CHANGE[t]})`);
     } else {
       problems.push(
         `tabela ${t} zmieniona nieoczekiwanie (${before.counts[t]} → ${after.counts[t]} wierszy)`,
@@ -213,99 +321,185 @@ function compareIdempotent(first, second) {
 
 /* --------------------------------- main ---------------------------------- */
 
-const backupDir = resolve(flag('backup', resolve(REPO, 'backups/data-2026-09-15')));
-if (!existsSync(resolve(backupDir, 'manifest.json'))) {
-  console.error(
-    `[proba] ${backupDir} nie wyglada na kopie (brak manifest.json).\n` +
-      'Wykonaj najpierw: node scripts/backup-state.mjs --data data --out backups/<nazwa>',
+function main() {
+  /*
+   * Inside `main`, so that a refusal over an unknown flag is reported the way
+   * every other refusal is (exit 2) instead of escaping module evaluation as an
+   * uncaught error.
+   */
+  const { flag } = makeArgs(process.argv, FLAGS);
+
+  const backupDir = realResolve(flag('backup', resolve(REPO, 'backups/data-2026-09-15')));
+
+  /*
+   * The refusals, before anything is read — because this script *boots the
+   * application* against what it is given: migrations are applied, a session
+   * secret is written, the backfill runs, and the working directory is deleted
+   * first. Pointed at a live directory it would not be a rehearsal at all; it
+   * would be the migration, performed on the user's data, under a name that says
+   * otherwise.
+   *
+   * `assertAwayFromLiveData` is shared with the other state scripts and compares
+   * by containment in both directions, through symlinks, plus `session.secret`
+   * anywhere at or above the path. The comparison here used to be equality
+   * against two known paths, which meant `--backup <dane>/files` and
+   * `--out <dane>/files` both passed — the second one deleting the directory
+   * before any refusal could fire.
+   */
+  assertAwayFromLiveData(backupDir, { what: 'Kopia zrodlowa' });
+
+  if (!existsSync(resolve(backupDir, 'manifest.json'))) {
+    refuse(
+      `${backupDir} nie wyglada na kopie (brak manifest.json).\n` +
+        'Wykonaj najpierw: node scripts/backup-state.mjs --data <dane> --out backups/<nazwa>',
+    );
+  }
+
+  /*
+   * The report file is a *write*, and until this check nothing asked where it
+   * would land. It creates directories and overwrites whatever file it names,
+   * so `--json <katalog danych>/app.db` would have destroyed a database from a
+   * flag nobody thinks of as dangerous. Checked here, with the other arguments,
+   * rather than at the moment of writing: an argument that will be refused
+   * should be refused before the work starts, not after.
+   */
+  if (flag('json')) assertAwayFromLiveData(resolve(flag('json')), { what: 'Plik raportu' });
+
+  const backupBefore = fingerprint(backupDir);
+
+  /*
+   * The working directory is emptied before it is filled, so it goes through the
+   * guard that refuses to delete a directory these scripts did not create.
+   */
+  const work = prepareScratchDir(
+    flag('out') ? flag('out') : approveOwnTemp(mkdtempSync(resolve(tmpdir(), 'agentic-rehearsal-'))),
+    { what: 'Katalog proby' },
   );
-  process.exit(2);
+  kopiujDrzewo(backupDir, work, { recursive: true });
+  usun(resolve(work, 'manifest.json'), { force: true });
+
+  const dbFile = resolve(work, 'app.db');
+  const before = census(dbFile, { identity: true });
+
+  console.log(`[proba] kopia zrodlowa: ${backupDir}`);
+  console.log(`[proba] katalog proby:  ${work}`);
+  console.log(`[proba] przed:  migracje=[${before.migrations.join(', ')}]`);
+  console.log(
+    `[proba]         rozmowy=${before.counts.conversations ?? 0} wiadomosci=${before.counts.messages ?? 0} ` +
+      `uruchomienia=${before.counts.agent_runs ?? 0} zdarzenia=${before.counts.run_events ?? 0} ` +
+      `karty=${before.counts.canvas_cards ?? 0} pliki=${before.counts.files ?? 0}`,
+  );
+
+  const bootLog1 = bootOnce(work);
+  // Restricted to the columns that existed before, so a widened table can be
+  // judged on its old values instead of being written off as "changed".
+  const after = census(dbFile, { restrict: before.columns, identity: true });
+  console.log(`[proba] po:     migracje=[${after.migrations.join(', ')}]`);
+  console.log(
+    `[proba]         rozmowy=${after.counts.conversations ?? 0} wiadomosci=${after.counts.messages ?? 0} ` +
+      `uruchomienia=${after.counts.agent_runs ?? 0} zdarzenia=${after.counts.run_events ?? 0} ` +
+      `karty=${after.counts.canvas_cards ?? 0} pliki=${after.counts.files ?? 0}`,
+  );
+  for (const line of bootLog1.split('\n').filter((l) => l.includes('[platform]'))) {
+    console.log(`[proba] boot:   ${line.trim()}`);
+  }
+
+  const poszerzone = addedColumnsFromMigrations();
+  const { problems, notes } = compare(before, after, poszerzone);
+  for (const n of notes) console.log(`[proba] zmiana oczekiwana — ${n}`);
+
+  const bootLog2 = bootOnce(work);
+  const again = census(dbFile, { identity: true });
+  const idempotency = compareIdempotent(after, again);
+
+  /*
+   * The throw-away installation secret that booting wrote into the working
+   * copy. It is meaningless here — it signs cookies for an installation that
+   * exists for a few seconds — and leaving it behind makes a scratch directory
+   * look like a data directory to the very guards that protect data
+   * directories. Removed as soon as the last boot is done.
+   */
+  usun(resolve(work, 'session.secret'), { force: true });
+
+  /* --- and the copy this was rehearsed from is still exactly a copy --- */
+  const backupAfter = fingerprint(backupDir);
+  const touched = [
+    ...Object.keys(backupAfter).filter((f) => backupBefore[f] !== backupAfter[f]),
+    ...Object.keys(backupBefore).filter((f) => !(f in backupAfter)),
+  ];
+  const sourceProblems = touched.map((f) => `proba zmienila plik w kopii zrodlowej: ${f}`);
+
+  const report = {
+    at: new Date().toISOString(),
+    backup: backupDir,
+    workdir: work,
+    migrationsBefore: before.migrations,
+    migrationsAfter: after.migrations,
+    migrationsApplied: after.migrations.filter((m) => !before.migrations.includes(m)),
+    sourceUntouched: sourceProblems.length === 0,
+    countsBefore: before.counts,
+    countsAfter: after.counts,
+    expectedChanges: notes,
+    preserved: {
+      rozmowy: before.conversationIds.length,
+      wiadomosciUzytkownika: before.userMessages.length,
+      kartyCanvasu: before.cardIds.length,
+      pliki: before.fileIds.length,
+      artefakty: before.artifactIds.length,
+    },
+    secondBootChangedNothing: idempotency.length === 0,
+    problems: [...problems, ...idempotency, ...sourceProblems],
+    bootOutput: [bootLog1, bootLog2].map((l) =>
+      l.split('\n').filter((x) => x.includes('[platform]')).join(' | '),
+    ),
+  };
+
+  const jsonOut = flag('json');
+  if (jsonOut) {
+    /*
+     * The report's directory is approved on its own terms — it was already
+     * checked against live data with the other arguments, above. `sprawdzPonizej`
+     * is off here: writing one file into a directory that happens to contain a
+     * data directory somewhere below harms nothing, and refusing it would fail
+     * on most home directories.
+     */
+    approveTarget(resolve(jsonOut, '..'), { what: 'Katalog raportu', sprawdzPonizej: false });
+    utworzKatalog(resolve(jsonOut, '..'), { recursive: true });
+    zapisz(resolve(jsonOut), JSON.stringify(report, null, 2));
+    console.log(`[proba] raport: ${resolve(jsonOut)}`);
+  }
+
+  console.log(
+    `[proba] zachowane: ${report.preserved.rozmowy} rozmow, ` +
+      `${report.preserved.wiadomosciUzytkownika} wiadomosci uzytkownika (tresc i przypisanie), ` +
+      `${report.preserved.kartyCanvasu} kart canvasu (kompozycje bez zmian), ` +
+      `${report.preserved.pliki} plikow, ${report.preserved.artefakty} artefaktow`,
+  );
+  console.log(
+    `[proba] powtorne uruchomienie: ${idempotency.length === 0 ? 'nic nie zmienilo (brak dublowania)' : 'ZMIENILO STAN'}`,
+  );
+  console.log(
+    `[proba] kopia zrodlowa: ${sourceProblems.length === 0 ? `${Object.keys(backupBefore).length} plikow bez zmian (sumy SHA-256)` : 'ZMIENIONA'}`,
+  );
+  console.log(
+    `[proba] zastosowane migracje: ${report.migrationsApplied.join(', ') || '(zadnych — kopia byla juz aktualna)'}`,
+  );
+
+  if (report.problems.length) {
+    console.error(`[proba] PROBA NIEUDANA (${report.problems.length}):`);
+    for (const p of report.problems) console.error(`  - ${p}`);
+    process.exit(1);
+  }
+  console.log('[proba] wynik: migracja i odtworzenie aktywnosci narzedzi zachowaly caly stan');
 }
-if (resolve(backupDir) === resolve(REPO, 'data')) {
-  console.error('[proba] odmawiam proby na katalogu danych aplikacji. Uzyj kopii.');
-  process.exit(2);
+
+/*
+ * Exit codes are a contract here, because this script is called from tests and
+ * from other scripts: 0 nothing to report, 1 the rehearsal found problems,
+ * 2 refused, 4 crashed. Before this wrapper, a crash also exited 1 and was
+ * indistinguishable from "the migration would lose data" — the one verdict
+ * nobody may misread.
+ */
+if (process.argv[1] && realResolve(process.argv[1]) === realResolve(fileURLToPath(import.meta.url))) {
+  runScript('proba', main);
 }
-
-const work = flag('out') ? resolve(flag('out')) : mkdtempSync(resolve(tmpdir(), 'agentic-rehearsal-'));
-rmSync(work, { recursive: true, force: true });
-mkdirSync(work, { recursive: true });
-cpSync(backupDir, work, { recursive: true });
-rmSync(resolve(work, 'manifest.json'), { force: true });
-
-const dbFile = resolve(work, 'app.db');
-const before = census(dbFile);
-
-console.log(`[proba] kopia zrodlowa: ${backupDir}`);
-console.log(`[proba] katalog proby:  ${work}`);
-console.log(`[proba] przed:  migracje=[${before.migrations.join(', ')}]`);
-console.log(
-  `[proba]         rozmowy=${before.counts.conversations ?? 0} wiadomosci=${before.counts.messages ?? 0} ` +
-    `uruchomienia=${before.counts.agent_runs ?? 0} zdarzenia=${before.counts.run_events ?? 0} ` +
-    `karty=${before.counts.canvas_cards ?? 0} pliki=${before.counts.files ?? 0}`,
-);
-
-const bootLog1 = bootOnce(work);
-const after = census(dbFile);
-console.log(`[proba] po:     migracje=[${after.migrations.join(', ')}]`);
-console.log(
-  `[proba]         rozmowy=${after.counts.conversations ?? 0} wiadomosci=${after.counts.messages ?? 0} ` +
-    `uruchomienia=${after.counts.agent_runs ?? 0} zdarzenia=${after.counts.run_events ?? 0} ` +
-    `karty=${after.counts.canvas_cards ?? 0} pliki=${after.counts.files ?? 0}`,
-);
-for (const line of bootLog1.split('\n').filter((l) => l.includes('[platform]'))) {
-  console.log(`[proba] boot:   ${line.trim()}`);
-}
-
-const { problems, notes } = compare(before, after);
-for (const n of notes) console.log(`[proba] zmiana oczekiwana — ${n}`);
-
-const bootLog2 = bootOnce(work);
-const again = census(dbFile);
-const idempotency = compareIdempotent(after, again);
-
-const report = {
-  at: new Date().toISOString(),
-  backup: backupDir,
-  workdir: work,
-  migrationsBefore: before.migrations,
-  migrationsAfter: after.migrations,
-  countsBefore: before.counts,
-  countsAfter: after.counts,
-  expectedChanges: notes,
-  preserved: {
-    rozmowy: before.conversationIds.length,
-    wiadomosciUzytkownika: before.userMessages.length,
-    kartyCanvasu: before.cardIds.length,
-    pliki: before.fileIds.length,
-    artefakty: before.artifactIds.length,
-  },
-  secondBootChangedNothing: idempotency.length === 0,
-  problems: [...problems, ...idempotency],
-  bootOutput: [bootLog1, bootLog2].map((l) =>
-    l.split('\n').filter((x) => x.includes('[platform]')).join(' | '),
-  ),
-};
-
-const jsonOut = flag('json');
-if (jsonOut) {
-  mkdirSync(resolve(jsonOut, '..'), { recursive: true });
-  writeFileSync(resolve(jsonOut), JSON.stringify(report, null, 2));
-  console.log(`[proba] raport: ${resolve(jsonOut)}`);
-}
-
-console.log(
-  `[proba] zachowane: ${report.preserved.rozmowy} rozmow, ` +
-    `${report.preserved.wiadomosciUzytkownika} wiadomosci uzytkownika (tresc i przypisanie), ` +
-    `${report.preserved.kartyCanvasu} kart canvasu (kompozycje bez zmian), ` +
-    `${report.preserved.pliki} plikow, ${report.preserved.artefakty} artefaktow`,
-);
-console.log(
-  `[proba] powtorne uruchomienie: ${idempotency.length === 0 ? 'nic nie zmienilo (brak dublowania)' : 'ZMIENILO STAN'}`,
-);
-
-if (report.problems.length) {
-  console.error(`[proba] PROBA NIEUDANA (${report.problems.length}):`);
-  for (const p of report.problems) console.error(`  - ${p}`);
-  process.exit(1);
-}
-console.log('[proba] wynik: migracja i odtworzenie aktywnosci narzedzi zachowaly caly stan');

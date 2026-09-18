@@ -33,8 +33,9 @@ Mapa wszystkich dokumentów: [`docs/DOCUMENTATION-MAP.md`](docs/DOCUMENTATION-MA
 - `packages/platform-*` nie importują i nie deklarują `@module/*` i nie zawierają słownika domeny.
   Sprawdza to `pnpm check:boundaries` (słownik pochodzi z `agenticApp.domainVocabulary` modułów).
 - Moduł domenowy dostaje usługi platformy przez fabrykę i kontrakty z `platform-contracts`.
-- Moduły łączy wyłącznie warstwa składania: `apps/server/src/compose.ts`, `apps/web/src/compose.tsx`,
-  `apps/web/src/router.tsx`.
+- Moduły łączy wyłącznie warstwa składania: `apps/server/src/compose.ts` i `apps/web/src/compose.tsx`.
+  `apps/web/src/router.tsx` nie nazywa żadnego modułu — montuje ekrany z `registry.screens`, a moduł
+  nie importuje `@tanstack/react-router` (parametry trasy: `useScreenParams()`, linki: `AppLink`).
 - Dane biznesowe należą do serwisów backendu. MCP udostępnia operacje, AG-UI przenosi zdarzenia,
   OpenUI opisuje i renderuje kompozycje. Żaden z tych mechanizmów nie jest bazą danych.
 - Brak potrzebnej funkcji platformy rozszerza się w platformie w sposób neutralny domenowo, a nie
@@ -62,7 +63,10 @@ Mapa wszystkich dokumentów: [`docs/DOCUMENTATION-MAP.md`](docs/DOCUMENTATION-MA
   cudzych danych bez wyraźnej zgody — najpierw kopia i próba (`docs/odzyskiwanie-stanu.md`).
 - `pnpm acceptance` i `scripts/run-agent.mjs` zapisują dane w instancji pod `APP_BASE` (domyślnie
   port 8791) i nie sprawdzają etykiety instancji testowej — kieruj je wyłącznie na własną instancję
-  z osobnym katalogiem danych. `pnpm dev` ma proxy na stały port 8791.
+  z osobnym katalogiem danych. `pnpm dev` uruchamia backend na porcie z `APP_DEV_API_PORT`
+  (domyślnie 8790, nigdy 8791 ani portu testowego), a proxy Vite sprawdza etykietę instancji na
+  `/api/health`, zanim cokolwiek do niej wyśle — odpowiedź bez etykiety `agenticapp-dev` kończy się
+  odmową, nie przekazaniem żądania.
 - Zależności instaluj z lockfile (`pnpm install --frozen-lockfile`). Aktualizacja zależności to
   zmiana wymagająca regresji, nie skutek uboczny.
 - Nie wyłączaj kontroli (`check:*`, testów, asercji), żeby przeszedł build. Jeśli kontrola jest
@@ -97,6 +101,7 @@ pnpm test:e2e        # przeglądarka na istniejącym buildzie produkcyjnym (po v
 pnpm test:e2e:model  # tylko testy z prawdziwym modelem; koszt: 11 tur subskrypcji na przebieg
 pnpm check:module-swap   # przy zmianach kontraktu modułu lub warstwy składania
 pnpm evidence            # regeneracja plików dowodowych z regresji (APP_WRITE_EVIDENCE=1) — na żądanie
+pnpm evidence:z5         # to samo dla dowodu kontekstu aplikacji (tests/app-context.test.ts)
 pnpm evidence:e2e        # to samo dla pomiarów przeglądarkowych
 ```
 
@@ -112,8 +117,9 @@ Po regeneracji sprawdź `git status` i zatwierdź dowód razem z kodem, na któr
 `brudneDrzewo` w rekordzie opisuje drzewo w chwili regeneracji (bez samego katalogu dowodów), a nie
 w chwili czytania pliku.
 
-`pnpm typecheck` sprawdza dwie konfiguracje: `tsconfig.json` (pakiety, aplikacje, `tests/`, `scripts/`)
-i `tsconfig.e2e.json` (`e2e/` i `playwright.config.ts`). Playwright uruchamia TypeScript bez sprawdzania
+`pnpm typecheck` sprawdza trzy konfiguracje: `tsconfig.json` (pakiety, aplikacje, `tests/`, `scripts/`),
+osobny program każdego modułu (`pnpm typecheck:modules` — moduł musi się skompilować bez `apps/`, bo
+inaczej zależy od tego, co akurat składa aplikacja) i `tsconfig.e2e.json` (`e2e/` i `playwright.config.ts`). Playwright uruchamia TypeScript bez sprawdzania
 typów, więc bez tej drugiej bramki błąd typu w specu wychodzi dopiero w trakcie przebiegu — przy testach
 modelowych kosztuje turę.
 

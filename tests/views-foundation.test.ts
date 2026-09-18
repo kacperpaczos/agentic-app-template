@@ -280,6 +280,8 @@ describe('procurement.case_offer_items', () => {
       'quantityMilli',
       'unitPriceMinor',
       'currency',
+      // Declared so the record action can map it to `expectedVersion`; no composition lists it as a column.
+      'version',
     ]);
   });
 });

@@ -43,7 +43,10 @@ function Boot() {
   if (error) {
     return (
       <div className="pf-state pf-state--error" role="alert">
-        Nie udalo sie nawiazac sesji aplikacji: {error}. Sprawdz, czy backend dziala na porcie 8791.
+        Nie udalo sie nawiazac sesji aplikacji: {error}. Sprawdz, czy backend odpowiada pod tym
+        samym adresem co ta strona: produkcyjnie serwuje ja sam backend (<code>pnpm start</code>), a
+        w trybie deweloperskim proxy Vite kieruje <code>/api</code> na port z
+        <code>APP_DEV_API_PORT</code> (<code>pnpm dev</code>).
       </div>
     );
   }

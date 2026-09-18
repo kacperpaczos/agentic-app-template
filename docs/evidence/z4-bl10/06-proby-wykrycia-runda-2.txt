@@ -1,0 +1,18 @@
+Proby zdolnosci wykrycia — runda poprawek 2 — 2026-09-18T14:00:21+02:00
+Commit bazowy: 1e89610 (drzewo czyste; „NIE” w pierwotnym zapisie dotyczylo tego pliku dowodowego,
+ktory powstal sekunde wczesniej przez przekierowanie — zadnego pliku zrodlowego)
+
+=== T4 — nazwanie przypadku czesciowego (opis urwany w polowie identyfikatora odczytu)
+  plik: packages/platform-ui/src/views/useReadOperation.ts
+  wycofane: komunikat readGate przestaje nazywac operacje i wypisywac dostepne
+  wycofano linie (diff niepusty)
+  WYNIK: test OBLAL (exit 1) — zdolnosc wykrycia potwierdzona
+      ✘  1 [chromium] › e2e/bl10-composition.spec.ts:485:3 › rodzaje odpowiedzi w czacie › czesciowy opis nie kasuje tego, co juz powiedziano (17.2s)
+        Error: expect(locator).toContainText(expected) failed
+        Received string:    "Nie udalo sie wczytac danychNie udalo sie wczytac danych.Nie udalo sie wczytac danych."
+  drzewo po przywroceniu: `git diff packages/platform-ui/src/views/useReadOperation.ts` pusty,
+  `git status --porcelain` wskazuje wylacznie ten plik dowodowy (jw.)
+
+Wniosek: bez nazwania operacji przez readGate wszystkie trzy przypadki OpenUI wygladalyby tak samo
+(„Nie udalo sie wczytac danych”), a test to wychwytuje — rozroznienie czesciowego opisu nie opiera sie
+na tym, ze proza przezyla, tylko na tym, ze awaria mowi, czego brakuje.

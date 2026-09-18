@@ -304,10 +304,32 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
     const input = parsed.data;
     const forwarded = (input.forwardedProps ?? {}) as Record<string, unknown>;
 
-    // The frontend's context selects what to look at; it never carries identity.
-    const { context: appContext, uiRejected } = parseRunAppContext(
-      (input.context as unknown) ?? forwarded.appContext ?? EMPTY_APP_CONTEXT,
-    );
+    /*
+     * The frontend's context selects what to look at; it never carries identity.
+     *
+     * A context the contract refuses is a *client* error and is reported as one.
+     * It used to leave `parseRunAppContext` as a bare `ZodError`, which the error
+     * shaper could only classify as `internal` — a 500 saying "something broke
+     * here" for a request that was simply malformed, and one that told whoever
+     * sent it nothing about which field was wrong.
+     */
+    let parsedContext: ReturnType<typeof parseRunAppContext>;
+    try {
+      parsedContext = parseRunAppContext(
+        (input.context as unknown) ?? forwarded.appContext ?? EMPTY_APP_CONTEXT,
+      );
+    } catch (err) {
+      const issues =
+        err instanceof z.ZodError
+          ? err.issues.slice(0, 20).map((i) => ({ path: i.path.join('.'), message: i.message }))
+          : undefined;
+      if (!issues) throw err;
+      throw new AppError('validation_failed', 'Nieprawidlowy kontekst aplikacji (appContext).', {
+        reason: 'invalid_app_context',
+        issues,
+      });
+    }
+    const { context: appContext, uiRejected } = parsedContext;
     if (uiRejected) {
       /*
        * A malformed screen marker must not refuse the command: the run starts
@@ -325,6 +347,22 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
       | undefined;
     const prompt = typeof lastUser?.content === 'string' ? lastUser.content : '';
     if (!prompt.trim()) throw new AppError('validation_failed', 'Puste polecenie.');
+
+    /*
+     * A space named by the context has to be this owner's before anything is
+     * written that refers to it.
+     *
+     * The context grants nothing — reads and writes are checked against the
+     * session everywhere else — but an unchecked `spaceId` still did damage of
+     * its own: it was stored on the conversation (at creation and by
+     * `bindSpace`), so a forged one left the owner's conversation permanently
+     * pointing at a space they cannot open. `getSpace` refuses another owner's
+     * with `forbidden` and a missing one with `not_found`, which is exactly the
+     * answer the caller should get.
+     */
+    if (appContext.spaceId) {
+      services.canvas.getSpace(appContext.spaceId, ownerId);
+    }
 
     let conversationId = input.threadId ?? appContext.conversationId ?? null;
     if (!conversationId) {

@@ -4,10 +4,12 @@ import type {
   DataSort,
   RejectedSort,
   UiRevealAdjustment,
+  UiSnapshotContext,
   ViewFilterPredicate,
   ViewPage,
   ViewStateContext,
 } from '@platform/contracts';
+import { onAccessContextChange } from '../api/accessContext.ts';
 import { uiSnapshotSession } from './uiSnapshot.ts';
 
 export type RunPhase =
@@ -138,6 +140,16 @@ export interface DraftRecord {
   dirtyFields: string[];
   /** Raw values, kept client-side only; never sent as if they were stored data. */
   values: Record<string, unknown>;
+  /**
+   * The canvas card the form is drawn in, when it is drawn in one.
+   *
+   * The platform does not know what the form is for and does not need to — but
+   * it does need to know which card's disappearance would take it off screen.
+   * A composition change that removes that card is a conflict with unsaved
+   * work, and a conflict has to be put to the user rather than resolved by the
+   * data quietly vanishing (`CanvasHost`, the draft notice).
+   */
+  cardId?: string | null;
 }
 
 interface AppState {
@@ -228,61 +240,23 @@ interface AppState {
   /** Withdraws a view's report, if it is still this instance's. */
   dropViewState: (targetId: string, instanceId: string) => void;
   setRevealNotice: (notice: RevealNotice | null) => void;
+  /** The live part of the command context, as the screen description carries it. */
+  toLiveContext: () => UiSnapshotContext;
+  /**
+   * Everything that belonged to the previous access scope, dropped.
+   *
+   * Called on an identity switch (below) — see `clearScopedContext` for what
+   * counts as scoped and why the whole of it has to go.
+   */
+  clearScopedContext: () => void;
   /** Merges a patch into one conversation's run record, creating it if absent. */
   patchRun: (conversationId: string, patch: Partial<ConversationRun>) => void;
   /** Reads one conversation's run record, or an empty one. */
   runFor: (conversationId: string | null) => ConversationRun;
   /** Clears the "finished while you were elsewhere" marker. */
   acknowledgeRun: (conversationId: string) => void;
-  /**
-   * Drops everything that belonged to the identity the application was acting
-   * as. See {@link scopedAppState}.
-   */
-  resetForAccessChange: () => void;
   toAppContext: () => AppContext;
 }
-
-/**
- * The part of this store that belongs to *one* access context.
- *
- * Emptying the query cache is not enough, and this is what was left over: the
- * conversation on screen, the runs being followed, the attached files, the
- * half-typed forms, the selection, the resource and the space are all the
- * previous owner's, and all of them are read again the moment the next command
- * is composed — `toAppContext()` sends every one of them to the agent. Clearing
- * the cache and leaving these behind means the rows disappear while the context
- * they described is still on its way to the backend.
- *
- * Written as a value rather than as a list of setter calls so that a field
- * added to the store is a compile error here until somebody decides which side
- * of the line it is on.
- *
- * `navOpen` is deliberately absent: a collapsed menu is a property of the
- * window, not of who is signed in, and re-opening it on every switch would be
- * an unexplained jump.
- */
-export const scopedAppState = (): Omit<AppState, keyof AppActions | 'navOpen'> => ({
-  spaceId: null,
-  conversationId: null,
-  resource: null,
-  selection: [],
-  filters: {},
-  viewport: null,
-  drafts: {},
-  cardState: {},
-  lastRunId: null,
-  attachments: [],
-  agentFilterKey: null,
-  filterOutcome: null,
-  viewStates: {},
-  revealNotice: null,
-  runs: {},
-});
-
-/** Everything on the store that is a function; the rest is the state itself. */
-type AppActions = {
-  [K in keyof AppState as AppState[K] extends (...args: never[]) => unknown ? K : never]: AppState[K];
-};
 
 /**
  * Client-side application state.
@@ -296,12 +270,36 @@ type AppActions = {
  * to the model as stored data.
  */
 export const useAppState = create<AppState>((set, get) => ({
-  // The initial state is the same as the state after a switch: one definition,
-  // so a field cannot start empty and then survive a change of identity.
-  ...scopedAppState(),
+  spaceId: null,
+  conversationId: null,
+  resource: null,
+  selection: [],
+  filters: {},
+  viewport: null,
+  drafts: {},
+  cardState: {},
   navOpen: true,
+  lastRunId: null,
+  attachments: [],
+  agentFilterKey: null,
+  filterOutcome: null,
+  viewStates: {},
+  revealNotice: null,
+  runs: {},
 
-  setSpace: (id) => set({ spaceId: id }),
+  /*
+   * A space is a scope, so what was picked inside the old one does not survive
+   * the move. The cards selected in the previous space are not cards of this
+   * one, and the viewport is that canvas's, not this one's — sent with the next
+   * command they would name a scope the user has left (L6.12). `setResource`
+   * has always cleared the selection for the same reason, one level down.
+   */
+  setSpace: (id) =>
+    set((s) =>
+      s.spaceId === id
+        ? s
+        : { spaceId: id, selection: [], viewport: null, revealNotice: null, filterOutcome: null },
+    ),
   setConversation: (id) => set({ conversationId: id }),
   setResource: (resource) => set({ resource, selection: [] }),
   toggleSelection: (item) =>
@@ -354,6 +352,55 @@ export const useAppState = create<AppState>((set, get) => ({
       return { viewStates: next };
     }),
   setRevealNotice: (revealNotice) => set({ revealNotice }),
+
+  toLiveContext: () => {
+    const s = get();
+    return {
+      resource: s.resource,
+      selection: s.selection,
+      drafts: Object.values(s.drafts).map((d) => ({
+        formId: d.formId,
+        entity: d.entity,
+        entityId: d.entityId,
+        dirtyFields: d.dirtyFields,
+      })),
+    };
+  },
+
+  /*
+   * An identity switch empties the query cache and aborts the previous
+   * identity's requests (`api/accessContext.ts`) — and left this store exactly
+   * as it was. Every field below names something of the previous owner: their
+   * conversation and space, the record they were on, the rows they had
+   * selected, the forms they were typing, the files they had attached, the view
+   * states their screens reported, their runs. The backend refuses each of them
+   * on sight, so nothing of theirs could be *read* — but the next command still
+   * carried them in its context and therefore into the prompt, which is the
+   * leak L6.12 is about. `cardState` goes too: it is keyed by card id, and the
+   * cards belong to the previous owner's spaces.
+   *
+   * Left alone: `navOpen`, which is a preference of the window rather than of
+   * the owner.
+   */
+  clearScopedContext: () =>
+    set({
+      spaceId: null,
+      conversationId: null,
+      resource: null,
+      selection: [],
+      filters: {},
+      viewport: null,
+      drafts: {},
+      cardState: {},
+      lastRunId: null,
+      attachments: [],
+      agentFilterKey: null,
+      filterOutcome: null,
+      viewStates: {},
+      revealNotice: null,
+      runs: {},
+    }),
+
   patchRun: (conversationId, patch) =>
     set((s) => ({
       runs: { ...s.runs, [conversationId]: { ...(s.runs[conversationId] ?? emptyRun()), ...patch } },
@@ -365,8 +412,6 @@ export const useAppState = create<AppState>((set, get) => ({
         ? { runs: { ...s.runs, [conversationId]: { ...s.runs[conversationId]!, unseenResult: false } } }
         : s,
     ),
-
-  resetForAccessChange: () => set(scopedAppState()),
 
   toAppContext: () => {
     const s = get();
@@ -396,3 +441,14 @@ export const useAppState = create<AppState>((set, get) => ({
     };
   },
 }));
+
+/*
+ * The switch itself, wired once for the life of the page.
+ *
+ * Here rather than in a component, because the leak it closes does not depend
+ * on anything being mounted: the store outlives every screen, and a switch made
+ * from Settings has to clear it whether or not the screen that put something
+ * there is still rendered. `onAccessContextChange` fires only for a real switch
+ * (the boot path, which records the same identity, is not one).
+ */
+onAccessContextChange(() => useAppState.getState().clearScopedContext());

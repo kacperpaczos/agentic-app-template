@@ -1,0 +1,50 @@
+PROBY ZDOLNOSCI WYKRYCIA — runda poprawek 4, zadanie Z2 / BL-07
+commit: 5bf0eb5
+Proby 4/1 i 4/2 sa POWTORZENIEM UCIECZEK RECENZENTA na biezacym kodzie.
+
+=== PROBA 4/1 — flaga w PODWOJNYCH cudzyslowach, niechroniona (ucieczka recenzenta nr 1)
+dodane linie: backup-state.mjs czyta flag("raport") i zapisuje do wskazanego katalogu;
+              flaga NIE jest dopisana do FLAGS
+-- najpierw recznie, zeby pokazac, co robi ta flaga:
+Ten skrypt przyjmuje wylacznie: --data, --out, --verify.
+Kazda flaga musi byc zadeklarowana w FLAGS razem z rodzajem — inaczej nic nie wiadomo o tym, czy jej sciezka jest chroniona.
+exit=2; baza uzytkownika: BAZA UZYTKOWNIKA
+-- a teraz test:
+AssertionError: expected 4 to be +0 // Object.is equality
+      Tests  15 skipped (15)
+przywrocono: git checkout -- scripts/backup-state.mjs
+WYNIK 4/1: ucieczka jest martwa juz na wierszu polecen — --raport odrzucone (kod 2), baza
+uzytkownika nietknieta, bez udzialu testu. Sam test takze czerwony: skrypt, ktory czyta
+niezadeklarowana flage, konczy sie kodem 4 i cala suita nie wstaje.
+
+=== PROBA 4/2 — ta sama flaga ZADEKLAROWANA jako rodzaj wyjety spod kontroli (ucieczka nr 2)
+dodane linie: flag("raport") jak wyzej + wpis w FLAGS jako kind: wartosc + przepis w tescie
+     × backup-state.mjs: zachowanie kazdej flagi zgadza sie z jej rodzajem 751ms
+AssertionError: backup-state.mjs --raport (wartosc) ZMIENILO katalog, na ktory je wskazano: expected { …(3) } to deeply equal { …(3) }
+    271|       expect(odcisk(cel), `${opis} ZMIENILO katalog, na ktory je wskaz…
+      Tests  1 failed | 14 passed (15)
+przywrocono: git checkout -- scripts/backup-state.mjs tests/script-path-flags.test.ts
+WYNIK 4/2: rodzaj 'wartosc' zwalnia z kontroli ochrony, ale NIE z niezmiennika — odcisk
+katalogu, na ktory flage wskazano, musi byc ten sam. Deklaracja nie kupuje juz przejscia.
+
+=== PROBA 4/3 — znacznik autoryzujacy kasowanie (ucieczka nr 3, ta kasujaca dane)
+wycofana linia: state-tools.mjs, prepareScratchDir bramkuje usuniecie golym existsSync(marker)
+      Tests  1 passed | 39 skipped (40)      <-- TEST PRZESZEDL MIMO WYCOFANEJ LINII
+-- recznie, zeby pokazac skutek:
+exit=0; plik uzytkownika: SKASOWANY
+przywrocono: git checkout -- scripts/lib/state-tools.mjs
+
+WYNIK 4/3 (pierwsze podejscie): test przeszedl mimo wycofanej linii, a katalog uzytkownika
+zniknal — bo istniejacy test 'znacznik skopiowany...' sprawdzal WYLACZNIE backup-state --out
+(nadpisanie przez assertOwnOrEmptyDir). Sciezka KASUJACA (synthetic-state --out przez
+prepareScratchDir) nie miala zadnego testu; dlatego ucieczka recenzenta przezyla poprzednia
+poprawke. Dopisany test 'skopiowany znacznik nie autoryzuje SKASOWANIA katalogu' i proba
+powtorzona:
+     × skopiowany znacznik nie autoryzuje SKASOWANIA katalogu 4587ms
+AssertionError: [syntetyk] katalog: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-d2GM07/kasowanie-kopia
+      Tests  1 failed | 40 skipped (41)
+przywrocono: git checkout -- scripts/lib/state-tools.mjs
+
+PODSUMOWANIE RUNDY 4: trzy proby. 4/1 i 4/2 to doslowne powtorzenia ucieczek recenzenta —
+obie sa dzis martwe (4/1 juz na wierszu polecen, bez udzialu testu). 4/3 przy pierwszym
+podejsciu ujawnila brak testu na sciezce kasujacej; test dopisany, proba powtorzona i oblala.

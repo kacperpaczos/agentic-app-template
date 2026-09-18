@@ -1,0 +1,31 @@
+# Proba zdolnosci wykrycia D — deklaracja komponentu OpenUI po stronie serwera modulu
+# HEAD f43ac88; drzewo przed proba (pomijajac nowe dowody):
+(pusto = czyste)
+
+## wycofana linia (packages/module-devkit-probe/src/server/index.ts)
++++ b/packages/module-devkit-probe/src/server/index.ts
+@@ -118 +118 @@ export function createProbeModule(platform: PlatformServices): ServerModule {
+-    openuiComponents: Object.values(PROBE_OPENUI_COMPONENTS),
++    openuiComponents: [],
+
+## vitest tests/module-contract.test.ts
+     × polowka serwerowa: migracja, narzedzia, odczyt live, komponenty, nawigacja, trasy 24ms
+     × odczyt live modulu przechodzi przez platforme z jego wlasnym deskryptorem 5ms
+     ✓ polowka przegladarkowa: renderer karty, komponent OpenUI, menu i ekrany 10ms
+     × katalog przegladarki i katalog serwera znaja ten sam komponent modulu 2ms
+     ✓ ekran modulu nie moze przejac sciezki platformy ani sciezki innego modulu 2ms
+     × kompozycja domyslna modulu jest walidowana katalogiem platformy 4ms
+     × pusty rejestr: zadna tabela zadnego modulu nie powstaje 3ms
+     ✓ kontrola granicy obejmuje kod i konfiguracje platformy 155ms
+     ✓ kazdy modul przechodzi typecheck bez warstwy skladania 2449ms
+Error: Modul probe, widok probe.notes: Kompozycja OpenUI odrzucona: Instrukcja summary: nieznany komponent ProbeNoteList.
+Error: Modul probe, widok probe.notes: Kompozycja OpenUI odrzucona: Instrukcja summary: nieznany komponent ProbeNoteList.
+Error: Modul probe, widok probe.notes: Kompozycja OpenUI odrzucona: Instrukcja summary: nieznany komponent ProbeNoteList.
+Error: Modul probe, widok probe.notes: Kompozycja OpenUI odrzucona: Instrukcja summary: nieznany komponent ProbeNoteList.
+Error: Modul probe, widok probe.notes: Kompozycja OpenUI odrzucona: Instrukcja summary: nieznany komponent ProbeNoteList.
+ Test Files  1 failed (1)
+      Tests  5 failed | 4 passed (9)
+EXIT=1
+
+## przywrocenie
+(pusto = drzewo znow czyste)

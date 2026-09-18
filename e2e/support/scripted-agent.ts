@@ -281,6 +281,17 @@ export function scriptedAgent(
             lastResult = outcome;
             const sorted = outcome.sorted as { field: string; direction: string } | null | undefined;
             const paged = outcome.page as { index: number; count: number } | undefined;
+            /*
+             * Changes of presentation the client made to show the target — a
+             * narrowing cleared, a page turned, a collapsed section opened.
+             * Echoed by kind because the acknowledgement carries them and the
+             * user is told about them: a test that only sees `executed=true`
+             * cannot tell "it was already on screen" from "we opened something
+             * to get to it".
+             */
+            const adjusted = (outcome.adjustments as Array<{ kind: string }> | undefined)
+              ?.map((a) => a.kind)
+              .join(',');
             yield {
               type: 'text-delta',
               payload: {
@@ -290,6 +301,7 @@ export function scriptedAgent(
                   (counted ? `pokazane=${counted.matched}/${counted.total} ` : '') +
                   (sorted !== undefined ? `sortowanie=${sorted ? `${sorted.field}:${sorted.direction}` : '-'} ` : '') +
                   (paged ? `strona=${paged.index}/${paged.count} ` : '') +
+                  (adjusted ? `zmiany=${adjusted} ` : '') +
                   (outcome.uiVersion !== undefined ? `uiVersion=${outcome.uiVersion} ` : '') +
                   (outcome.uiClientId !== undefined ? `uiClientId=${outcome.uiClientId} ` : ''),
               },

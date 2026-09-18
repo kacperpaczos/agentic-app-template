@@ -3,12 +3,15 @@ import { useSessionLocation } from '../state/sessionLocation.ts';
 import { registerAccessContextReset } from '../state/accessReset.ts';
 
 /**
- * Renders nothing; makes an identity switch clear the client's own state.
+ * Renders nothing; makes an identity switch drop the session ids the address
+ * bar carries.
  *
  * A component because the address bar is only reachable through the router's
  * hooks, and the rule itself lives in `state/accessReset.ts` where it can be
- * tested without a browser. Mounted *after* `UiSnapshotPublisher` in the shell —
- * see the note there on why the order of the two listeners is not arbitrary.
+ * tested without a browser. The client store is cleared elsewhere, by the store
+ * itself — see `state/accessReset.ts`. Mounted *after* `UiSnapshotPublisher` in
+ * the shell; the note there says why the order of the listeners is not
+ * arbitrary.
  */
 export function AccessContextReset() {
   const { setConversation, setSpace } = useSessionLocation();

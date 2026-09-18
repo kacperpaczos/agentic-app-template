@@ -5,7 +5,12 @@ import { apiGet } from '../api/client.ts';
 import { useChatSlots } from './chatSlots.ts';
 import { useSessionLocation } from '../state/sessionLocation.ts';
 import { useAppState } from '../state/appState.ts';
-import { classifyThreadFailure, decideRestore, type ThreadFailure } from './sessionRestore.ts';
+import {
+  classifyThreadFailure,
+  decideRestore,
+  leavesAnotherConversation,
+  type ThreadFailure,
+} from './sessionRestore.ts';
 
 /**
  * Keeps the address bar and the ready-made chat's thread selection in step.
@@ -65,12 +70,40 @@ export function ConversationSync() {
    * Only when the chat moved — picking a conversation should bring its canvas
    * space with it. When the *URL* moved it already carries the space, and
    * overriding it here would undo a restored or shared address.
+   *
+   * **A conversation without a space, and why `leaving` decides.** When the user
+   * moves *from one conversation to another*, the target's space is applied
+   * whatever it is, `null` included: skipping the call for a space-less
+   * conversation — which this did — left the previous conversation's workspace
+   * in the shell, and with it the cards selected in that workspace, so the next
+   * command carried a scope the user had left (L6.12). `setSpace` clears the
+   * selection with the move, so one call covers both.
+   *
+   * But the same branch also fires for the conversation the chat *just created*
+   * for the command being sent, and that one legitimately has no space yet —
+   * the backend binds the one it is sent with. Clearing there wiped the
+   * workspace the user was looking at the moment they typed, which is how the
+   * first version of this broke sending from the canvas (caught by
+   * `e2e/app-context.spec.ts`). `leaving` is false in exactly that case: the
+   * chat was on no conversation (a new thread, or the first sync after a load),
+   * so there is no previous scope to leave behind.
    */
   const followConversationSpace = useCallback(
-    async (threadId: string) => {
+    async (threadId: string, leaving: boolean) => {
       try {
         const conv = await apiGet<{ spaceId: string | null }>(`/api/conversations/${threadId}`);
-        if (conv.spaceId) setSpace(conv.spaceId);
+        /*
+         * A late answer must not undo a newer choice.
+         *
+         * This lookup is one request behind the click that started it. Pick
+         * conversation A and then B before A's answer arrives, and this used to
+         * move the workspace to A's space — over the one B had already put on
+         * screen, with nothing on screen saying why. The conversation selected
+         * *now* is the only one whose workspace may be adopted; anything else
+         * is an answer about a choice the user has already left.
+         */
+        if (useAppState.getState().conversationId !== threadId) return;
+        if (conv.spaceId || leaving) setSpace(conv.spaceId);
       } catch {
         // Whether the conversation is reachable at all is decided below, from
         // the chat's own load error; a space lookup is not the place to report.
@@ -99,13 +132,16 @@ export function ConversationSync() {
         switchToNewThread();
         setConversationState(null);
         return;
-      case 'publish':
+      case 'publish': {
+        // Read before it moves: was the chat on another conversation, or on none?
+        const leaving = leavesAnotherConversation(lastSynced.current, decision.threadId);
         lastSynced.current = decision.threadId;
         setProblem(null);
         setConversation(decision.threadId, { replace: decision.replace });
         setConversationState(decision.threadId);
-        if (decision.threadId) void followConversationSpace(decision.threadId);
+        if (decision.threadId) void followConversationSpace(decision.threadId, leaving);
         return;
+      }
       case 'idle':
         return;
     }

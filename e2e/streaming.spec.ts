@@ -9,6 +9,7 @@ import {
   startStreamProbe,
   type StreamVerdict,
 } from './support/streamProbe.ts';
+import { evidenceWritingRequested } from '../tests/support/measurement-evidence.ts';
 import { type Page } from '@playwright/test';
 
 /**
@@ -96,12 +97,35 @@ test.describe('strumieniowanie odpowiedzi (scenariusz zamiast modelu)', () => {
     scripted.prepareDatabase();
   });
   test.afterEach(() => scripted.stop());
+  /**
+   * The verdicts of the three scenarios, written **on request only** (G18).
+   *
+   * They used to be written on every run, which made `21-strumien.json` — a
+   * committed record of the closure phase — a trace of whoever last ran the
+   * browser suite, and left the repository dirty after the very regression that
+   * is supposed to judge it. The file was untracked for a while, so the damage
+   * was invisible; once it was committed, an ordinary `pnpm test:e2e` started
+   * overwriting a reviewed proof.
+   *
+   * Nothing about the test changes: every assertion in all three cases runs
+   * either way, the record is assembled either way, and its shape is asserted
+   * here. `APP_WRITE_EVIDENCE=1` decides only whether it reaches the disk.
+   *
+   * Regenerated deliberately, with `pnpm evidence:e2e`, or on its own with
+   * `APP_WRITE_EVIDENCE=1 pnpm exec playwright test e2e/streaming.spec.ts`.
+   */
   test.afterAll(() => {
-    mkdirSync(OUT_DIR, { recursive: true });
-    writeFileSync(
-      resolve(OUT_DIR, '21-strumien.json'),
-      JSON.stringify({ at: new Date().toISOString(), scenariusze: verdicts }, null, 2),
+    const record = { at: new Date().toISOString(), scenariusze: verdicts };
+    const body = `${JSON.stringify(record, null, 2)}\n`;
+    // Asserted on the value, not on a file that may not exist: what would be
+    // written has all three scenarios in it, whether or not anything is written.
+    expect(Object.keys(record.scenariusze).sort()).toEqual(
+      ['burst-at-end', 'text-only', 'tool-only-silent'].sort(),
     );
+    expect(body).toContain('"streamed"');
+    if (!evidenceWritingRequested()) return;
+    mkdirSync(OUT_DIR, { recursive: true });
+    writeFileSync(resolve(OUT_DIR, '21-strumien.json'), body);
   });
 
   test('tekst dociera fragmentami i jest widoczny przed koncem wykonania', async ({ page }) => {

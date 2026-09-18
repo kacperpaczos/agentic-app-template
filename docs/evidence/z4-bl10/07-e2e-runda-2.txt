@@ -1,0 +1,31 @@
+[e2e] potwierdzono instancje testowa pod http://127.0.0.1:8799
+[e2e] pominieto spece z prawdziwym modelem: bl01-bl02-model.spec.ts (7), agent-ui.spec.ts (2), files-agent.spec.ts (2). Kosztuja 11 tur subskrypcji na przebieg — uruchamia sie je swiadomie: pnpm test:e2e:model.
+
+Running 24 tests using 1 worker
+
+  ✓   1 [chromium] › e2e/app.spec.ts:29:3 › powloka aplikacji › lewa nawigacja, canvas i czat wspolistnieja (680ms)
+  ✓   2 [chromium] › e2e/app.spec.ts:37:3 › powloka aplikacji › hamburger zwija i rozwija menu (703ms)
+  ✓   3 [chromium] › e2e/app.spec.ts:47:3 › powloka aplikacji › menu jest obslugiwalne z klawiatury i ma widoczny fokus (642ms)
+  ✓   4 [chromium] › e2e/app.spec.ts:56:3 › powloka aplikacji › nawigacja Wstecz/Dalej przywraca wlasciwy widok (1.0s)
+  ✓   5 [chromium] › e2e/app.spec.ts:68:3 › powloka aplikacji › ustawienia pokazuja tryb subskrypcji i nie ujawniaja sekretow (697ms)
+  ✓   6 [chromium] › e2e/app.spec.ts:82:3 › canvas i kompozycja › otwarcie sprawy tworzy uzyteczna przestrzen domyslna (1.1s)
+  ✓   7 [chromium] › e2e/app.spec.ts:93:3 › canvas i kompozycja › tabela porownawcza pokazuje wartosci z backendu i przyczyny wykluczen (868ms)
+  ✓   8 [chromium] › e2e/app.spec.ts:110:3 › canvas i kompozycja › brakujace dane sa oznaczone jako brakujace (1.1s)
+  ✓   9 [chromium] › e2e/app.spec.ts:124:3 › canvas i kompozycja › przesuniecie karty jest trwale i nie zmienia jej tresci (2.9s)
+  ✓  10 [chromium] › e2e/app.spec.ts:174:3 › canvas i kompozycja › zmiana widoku karty przezywa przejscie miedzy ekranami (1.6s)
+  ✓  11 [chromium] › e2e/app.spec.ts:214:3 › dane i pliki › pochodzenie ceny prowadzi do pliku zrodlowego (1.7s)
+  ✓  12 [chromium] › e2e/app.spec.ts:222:3 › dane i pliki › pliki zrodlowe sa do pobrania (1.1s)
+  ✓  13 [chromium] › e2e/app.spec.ts:228:3 › dane i pliki › odrzucony typ pliku daje czytelny blad (1.4s)
+  ✓  14 [chromium] › e2e/app.spec.ts:238:3 › dane i pliki › wgranie poprawnego pliku dziala (1.7s)
+  ✓  15 [chromium] › e2e/bl10-composition.spec.ts:135:3 › zmiana kompozycji przez agenta › dodanie karty zachowuje zaznaczenie, stan widoku karty i niezapisany szkic (4.5s)
+  ✓  16 [chromium] › e2e/bl10-composition.spec.ts:177:3 › zmiana kompozycji przez agenta › podmiana karty zachowuje niezapisany szkic, ktory wraca do formularza (4.1s)
+  ✓  17 [chromium] › e2e/bl10-composition.spec.ts:202:3 › zmiana kompozycji przez agenta › niezapisany szkic wraca do formularza zbudowanego od nowa (3.7s)
+  ✓  18 [chromium] › e2e/bl10-composition.spec.ts:247:3 › zmiana kompozycji przez agenta › usuniecie karty ze szkicem nie gubi go po cichu — konflikt jest rozstrzygany jawnie (3.9s)
+  ✓  19 [chromium] › e2e/bl10-composition.spec.ts:301:3 › zmiana kompozycji przez agenta › notatka agenta nie zastepuje wartosci z backendu (3.3s)
+  ✓  20 [chromium] › e2e/bl10-composition.spec.ts:360:3 › zmiana kompozycji przez agenta › widok agenta z wpisanymi liczbami jest odrzucony, nic nie zostaje zapisane (2.4s)
+  ✓  21 [chromium] › e2e/bl10-composition.spec.ts:415:3 › rodzaje odpowiedzi w czacie › proza, poprawny OpenUI i wynik narzedzia widoczne obok siebie w jednej wiadomosci (1.9s)
+  ✓  22 [chromium] › e2e/bl10-composition.spec.ts:450:3 › rodzaje odpowiedzi w czacie › sama proza pozostaje proza (1.2s)
+  ✓  23 [chromium] › e2e/bl10-composition.spec.ts:461:3 › rodzaje odpowiedzi w czacie › bledny opis jest czytelna awaria, a proza obok niego zostaje (1.8s)
+  ✓  24 [chromium] › e2e/bl10-composition.spec.ts:485:3 › rodzaje odpowiedzi w czacie › czesciowy opis nie kasuje tego, co juz powiedziano (1.9s)
+
+  24 passed (1.1m)

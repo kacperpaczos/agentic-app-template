@@ -14,7 +14,7 @@ import {
   WorkspacePage,
 } from '@platform/ui';
 import { parseAddressSearch, stringifyAddressSearch } from '@platform/contracts';
-import { CaseDetailPage, CasesPage, DataPage, ItemProvenancePage } from '@module/procurement/ui';
+import { registry } from './compose.tsx';
 
 /**
  * Routes.
@@ -123,29 +123,23 @@ const settingsRoute = createRoute({
 
 /* ---- module screens; mounted by the composition root, not by the platform --- */
 
-const casesRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/cases',
-  component: CasesPage,
-});
-
-const caseDetailRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/cases/$caseId',
-  component: CaseDetailPage,
-});
-
-const dataRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/data',
-  component: DataPage,
-});
-
-const itemProvenanceRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/items/$itemId',
-  component: ItemProvenancePage,
-});
+/**
+ * Every screen the composed modules declared, turned into a route.
+ *
+ * This file used to import each module page by name and write a route for it,
+ * which meant the router — the one place an application is supposed to be able
+ * to swap a module — had to be edited to swap a module, and the module's pages
+ * had to name routes registered here (see `ModuleScreenContribution`). Now the
+ * list is data: no module is named, and an application composing none of them
+ * simply mounts none.
+ */
+const moduleScreenRoutes = registry.screens.map((screen) =>
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: screen.path,
+    component: screen.component,
+  }),
+);
 
 const routeTree = rootRoute.addChildren([
   canvasRoute,
@@ -153,10 +147,7 @@ const routeTree = rootRoute.addChildren([
   agentViewsRoute,
   filesRoute,
   settingsRoute,
-  casesRoute,
-  caseDetailRoute,
-  dataRoute,
-  itemProvenanceRoute,
+  ...moduleScreenRoutes,
 ]);
 
 export const router = createRouter({

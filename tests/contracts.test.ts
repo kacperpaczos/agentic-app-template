@@ -258,7 +258,7 @@ describe('kontrakty: walidacja, uprawnienia, konflikty, powtorzenia', () => {
     await expect(
       h.platform.registry.callTool(
         'procurement_update_offer_item',
-        { itemId: item.id, unitPrice: -5 },
+        { itemId: item.id, unitPrice: -5, expectedVersion: item.version },
         toolCtx(h),
       ),
     ).rejects.toMatchObject({ code: 'domain_rule_violated' });

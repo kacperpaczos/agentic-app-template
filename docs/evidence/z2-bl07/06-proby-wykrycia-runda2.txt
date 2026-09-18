@@ -1,0 +1,62 @@
+PROBY ZDOLNOSCI WYKRYCIA — runda poprawek 2, zadanie Z2 / BL-07
+commit: a8e726b — Runda poprawek 2: kopia nie moze byc zapisana do zywego katalogu danych (A)
+Procedura: commit najpierw, proba na czystym drzewie, wycofanie linii, test oblewa,
+git checkout -- <plik>, drzewo znow czyste.
+
+=== ODTWORZENIE DEFEKTU A PRZED POPRAWKA (dla porzadku, na kodzie sprzed a8e726b)
+polecenie: node scripts/backup-state.mjs --data <katalog roboczy> --out <zywy katalog danych>
+wynik przed poprawka:
+  przed:  app.db=4b953db221506dcb migracje=2   (baza uzytkownika)
+  [backup] weryfikacja: kopia odczytana ponownie, sumy i census zgodne, integrity_check ok
+  EXIT=0
+  po:     app.db=deb68c19127050a5 migracje=4   (baza uzytkownika NADPISANA kopia)
+  plus dwa pliki syntetyczne dopisane do files/local-user obok pliku uzytkownika
+
+=== PROBA A/1 — --out sprawdzany wobec ZYWYCH katalogow danych
+wycofane linie: backup-state.mjs, assertAwayFromLiveData(out) i assertOwnOrEmptyDir(out)
+     ↓ zmieniony plik uzytkownika w kopii
+     × kopia NIE MOZE byc zapisana do zywego katalogu danych 2466ms
+     × kopia NIE MOZE nadpisac cudzego niepustego katalogu 2329ms
+AssertionError: [backup] brak app.db-wal — baza byla zamknieta czysto
+AssertionError: [backup] brak app.db-wal — baza byla zamknieta czysto
+      Tests  2 failed | 37 skipped (39)
+(oba testy oblaly na kodzie wyjscia: skrypt wraca 0 i wchodzi w katalog danych)
+przywrocono: git checkout -- scripts/backup-state.mjs
+
+=== PROBA B/1 — proba kasuje po sobie session.secret w katalogu roboczym
+wycofana linia: migration-rehearsal.mjs, rmSync(work/session.secret)
+     × proba jest powtarzalna do tego samego --out, mimo ze boot zapisuje tam session.secret 4934ms
+AssertionError: proba zostawila sekret po sobie: expected true to be false // Object.is equality
+      Tests  1 failed | 38 skipped (39)
+przywrocono: git checkout -- scripts/migration-rehearsal.mjs
+
+=== PROBA B/2 — znacznik ma pierwszenstwo przed regula session.secret
+wycofana linia: state-tools.mjs, dataDirAtOrAbove bez '&& !isOurs(cursor)'
+     × proba jest powtarzalna do tego samego --out, mimo ze boot zapisuje tam session.secret 6428ms
+AssertionError: [proba] ODMAWIAM: Katalog proby /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-Sb9m8t/powtorka-proba lezy w katalogu danych aplikacji /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-Sb9m8t/powtorka-proba (rozpoznany po pliku session.secret, ktorego kopia nigdy nie zawiera). Nie tkne go.
+      Tests  1 failed | 38 skipped (39)
+(druga proba pokazuje dokladnie zgloszona regresje: katalog utworzony przed chwila przez
+ ten sam skrypt zostaje uznany za katalog danych aplikacji)
+przywrocono: git checkout -- scripts/lib/state-tools.mjs
+
+=== PROBA C — dataDirBelow jako osobna regula
+wycofana linia: state-tools.mjs, assertAwayFromLiveData bez wywolania dataDirBelow
+     × katalog danych ukryty POD celem jest wykryty osobna regula 1039ms
+AssertionError: [syntetyk] katalog: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-FNEI3X/nad-danymi
+      Tests  1 failed | 38 skipped (39)
+przywrocono: git checkout -- scripts/lib/state-tools.mjs
+
+=== PODSUMOWANIE RUNDY 2
+4 proby (A/1, B/1, B/2, C). Kazda oblala po wycofaniu linii i przeszla po przywroceniu.
+Proba C potwierdza, ze dataDirBelow ma wlasny test: cel ma znacznik (wiec regula znacznika
+odpada) i nie ma sekretu w sobie ani nad soba, wiec zadna inna ochrona nie moze zadzialac.
+Po kazdej probie git status --porcelain pokazywal wylacznie nowe pliki dowodow.
+
+=== PROBA D — znacznik zwiazany ze sciezka (dziura znaleziona przy nagrywaniu dowodu)
+wycofana linia: state-tools.mjs, isOurs bez porownania zapisanej sciezki
+     × znacznik skopiowany do innego katalogu nic nie znaczy 2489ms
+AssertionError: [backup] brak app.db-wal — baza byla zamknieta czysto
+      Tests  1 failed | 39 skipped (40)
+przywrocono: git checkout -- scripts/lib/state-tools.mjs
+
+PODSUMOWANIE: 5 prob w rundzie 2 (A/1, B/1, B/2, C, D), kazda oblala po wycofaniu linii.

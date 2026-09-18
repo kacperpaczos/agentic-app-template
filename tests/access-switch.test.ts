@@ -8,9 +8,7 @@ import {
   createChatStorage,
   platformAguiAdapter,
   qk,
-  registerAccessContextReset,
   resetAccessContext,
-  scopedAppState,
   setAccessContext,
   useAppState,
 } from '@platform/ui';
@@ -200,15 +198,22 @@ describe('strumien uruchomienia konczy sie na zmianie tozsamosci', () => {
 });
 
 describe('stan klienta poza pamiecia podreczna jest czyszczony', () => {
-  let stop: () => void;
-
+  /*
+   * Nothing is registered here on purpose.
+   *
+   * The store subscribes to identity switches itself, once for the life of the
+   * module (`state/appState.ts`), because the leak it closes does not depend on
+   * anything being mounted. This suite used to register a second listener of
+   * its own; after the two packages met, one rule has one implementation and
+   * the test drives it the way the application does — by switching the
+   * identity and looking at the store.
+   */
   beforeEach(() => {
     resetAccessContext();
-    stop = registerAccessContextReset();
   });
   afterEach(() => {
-    stop();
-    useAppState.setState({ ...scopedAppState(), navOpen: true });
+    useAppState.getState().clearScopedContext();
+    useAppState.setState({ navOpen: true });
   });
 
   it('przelaczenie zostawia pusty kontekst polecenia', () => {

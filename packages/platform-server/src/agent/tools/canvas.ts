@@ -1,8 +1,13 @@
 import { z } from 'zod';
 import {
   AppError,
+  applyReadWindow,
   cardGeometrySchema,
   cardSpecSchema,
+  READ_WINDOW_DEFAULT_LIMIT,
+  READ_WINDOW_MAX_LIMIT,
+  readWindowInput,
+  readWindowNote,
   type ModuleToolDefinition,
   type ToolCallContext,
 } from '@platform/contracts';
@@ -40,20 +45,26 @@ export function canvasTools(services: PlatformServices): Array<ModuleToolDefinit
   return [
     {
       name: 'canvas_list_cards',
-      description: 'Zwraca karty aktualnej przestrzeni canvas wraz z ich pozycja i trescia.',
+      description:
+        'Zwraca karty aktualnej przestrzeni canvas wraz z ich pozycja i trescia. ' +
+        `Odczyt jest stronicowany: domyslnie ${READ_WINDOW_DEFAULT_LIMIT} kart, najwyzej ${READ_WINDOW_MAX_LIMIT}. ` +
+        'window.truncated=true znaczy, ze to nie sa wszystkie karty — po kolejne wywolaj z window.nextOffset.',
       effect: 'read',
-      inputSchema: z.object({ spaceId: z.string().optional() }),
-      handler: async (input: { spaceId?: string }, ctx: ToolCallContext) => {
+      inputSchema: z.object({ spaceId: z.string().optional(), ...readWindowInput }),
+      handler: async (input: { spaceId?: string; limit?: number; offset?: number }, ctx: ToolCallContext) => {
         const state = services.canvas.getState(spaceFor(ctx, requireSpace(ctx, input.spaceId)).id, ctx.ownerId);
+        const { items, window } = applyReadWindow(state.cards, input);
         return {
           space: { id: state.space.id, title: state.space.title },
-          cards: state.cards.map((c) => ({
+          cards: items.map((c) => ({
             id: c.id,
             title: c.title,
             spec: c.spec,
             geometry: c.geometry,
             specVersion: c.specVersion,
           })),
+          window,
+          windowNote: readWindowNote(window, 'kart'),
         };
       },
     },
@@ -92,13 +103,26 @@ export function canvasTools(services: PlatformServices): Array<ModuleToolDefinit
     {
       name: 'canvas_update_card',
       description:
-        'Zmienia tresc istniejacej karty. Nie zmienia jej polozenia - pozycja karty nalezy do uzytkownika.',
+        'Zmienia tresc istniejacej karty. Nie zmienia jej polozenia - pozycja karty nalezy do uzytkownika. ' +
+        'expectedSpecVersion jest wymagane: podaj specVersion z canvas_list_cards. Jesli ktos zmienil karte ' +
+        'w miedzyczasie, dostaniesz conflict zamiast cichego nadpisania jego zmiany.',
       effect: 'write',
       inputSchema: z.object({
         cardId: z.string(),
         title: z.string().max(200).optional(),
         spec: cardSpecSchema,
-        expectedSpecVersion: z.number().int().nonnegative().optional(),
+        /*
+         * Required, not optional. Optional meant that a write which simply left
+         * it out was compared against the row it was about to overwrite — that
+         * is, not compared at all — so an agent working from a reading taken
+         * minutes earlier would quietly replace whatever the user had done
+         * since. Naming the version is the whole of the check (L6.10, L9.6).
+         */
+        expectedSpecVersion: z
+          .number()
+          .int()
+          .nonnegative()
+          .describe('specVersion karty, na ktorej pracujesz (z canvas_list_cards)'),
         operationId: z.string().min(8).max(200).optional(),
       }),
       handler: async (input: any, ctx: ToolCallContext) => {

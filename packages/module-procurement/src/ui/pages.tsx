@@ -1,11 +1,12 @@
-import { Link, useParams } from '@tanstack/react-router';
 import { useEffect } from 'react';
 import {
   apiPost,
+  AppLink,
   ComposedView,
   useAppState,
   useModuleData,
   useReadOperation,
+  useScreenParams,
   QueryErrorState,
 } from '@platform/ui';
 import { MODULE_ID } from '../shared/index.ts';
@@ -48,7 +49,7 @@ export function CasesPage() {
  * the same cached response, so this is one request, not two.
  */
 export function CaseDetailPage() {
-  const { caseId } = useParams({ from: '/cases/$caseId' });
+  const { caseId = '' } = useScreenParams();
   const setResource = useAppState((s) => s.setResource);
   const setSpace = useAppState((s) => s.setSpace);
 
@@ -70,6 +71,18 @@ export function CaseDetailPage() {
     })();
     return () => {
       cancelled = true;
+      /*
+       * The record is named only while its screen is on display.
+       *
+       * Nothing else clears it: this is the one place that sets it, so without
+       * this line the case stayed in the context long after the user walked
+       * away from it — into every later command, on every other screen, in
+       * every other conversation (L6.12). "The record the user is looking at"
+       * has to stop being true when they stop looking at it. Navigating from
+       * one case to another runs this before the next effect, so the field is
+       * never briefly empty for a move that has a successor.
+       */
+      setResource(null);
     };
   }, [caseId, setResource, setSpace]);
 
@@ -82,9 +95,9 @@ export function CaseDetailPage() {
   return (
     <div className="pf-page" data-testid="case-detail-page">
       <p>
-        <Link to="/" className="pf-btn">
+        <AppLink to="/" className="pf-btn">
           Otworz przestrzen pracy na canvasie
-        </Link>
+        </AppLink>
       </p>
       <ComposedView viewId="procurement.case.detail" params={{ caseId }} />
     </div>
@@ -116,7 +129,7 @@ export function DataPage() {
  * cached response.
  */
 export function ItemProvenancePage() {
-  const { itemId } = useParams({ from: '/items/$itemId' });
+  const { itemId = '' } = useScreenParams();
   const { data, isLoading, error } = useModuleData<unknown>(MODULE_ID, `/items/${itemId}/provenance`);
 
   if (isLoading) return <div className="pf-state">Wczytywanie…</div>;
