@@ -189,6 +189,7 @@ export function procurementTools(service: ProcurementService): ModuleToolDefinit
           caseId: i.caseId,
           ownerId: ctx.ownerId,
           conversationId: ctx.conversationId,
+          runId: ctx.runId,
           title: i.title,
           operationId: i.operationId,
         });

@@ -3,13 +3,12 @@
 > Plik generowany przez `node scripts/acceptance-matrix.mjs` z `docs/acceptance/assessment.json`.
 > Każde otwarte kryterium macierzy (`docs/ACCEPTANCE.md`) należy do dokładnie jednego pakietu.
 
-Otwartych kryteriów: **123** z 200, w 10 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.
+Otwartych kryteriów: **118** z 200, w 9 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.
 
 | Pakiet | Tytuł | Kryteria | Liczba |
 |---|---|---|---|
 | BL-03 | Powtarzalne próby na prawdziwym modelu w szablonie | L1.6, L2.13, L3.2, L3.10, L3.13, L5.8, L6.5, L6.6, L7.3, L7.11, L8.5, L9.4, L9.13, L9.16, L11.3, L11.4, L11.5, L11.9, L11.11 | 19 |
 | BL-04 | Uwierzytelnienie subskrypcyjne i limity — próby graniczne | L8.2, L8.3, L8.6, L8.7, L8.8, L8.9, L8.10, L8.11, L8.12, L8.13, L8.14 | 11 |
-| BL-05 | Pomiary i obserwowalność | L11.14, L12.1, L12.2, L12.3, L12.13 | 5 |
 | BL-06 | Wymienialność modułu domenowego | L9.11, L9.12 | 2 |
 | BL-07 | Trwałość, kopia i migracje | L7.13, L10.2, L10.16, L10.17, L10.18, L10.19 | 6 |
 | BL-08 | Czat, zdarzenia i historia | L4.3, L4.5, L4.6, L4.7, L4.8, L4.9, L4.11, L4.13, L4.15, L5.2, L5.3, L5.4, L5.5, L5.6, L5.11, L5.12, L5.13, L5.14, L5.15 | 19 |
@@ -65,20 +64,6 @@ Zachowanie przy wygaśnięciu i odświeżeniu tokena, odrzuconym odświeżeniu, 
 | L8.12 | Kontrolowane błędy uwierzytelnienia i limitu są sprawdzone na granicy adaptera aż do widocznego UI; symulacja nie jest opisana jako rzeczywiste wyczerpanie limitu. | częściowe | Odwołane logowanie, odmowa odświeżenia i wygaśnięcie nie są przeprowadzone od granicy adaptera do widocznego UI (czat, pasek stanu, Ustawienia); stan Ustawień po symulowanym limicie też nie jest asercjonowany. |
 | L8.13 | Brak sekretów jest sprawdzony w adekwatnych logach, odpowiedziach HTTP, trwałych danych, artefaktach i buildzie frontendu; dwa endpointy nie stanowią dowodu dla wszystkich powierzchni. | częściowe | Nie sprawdzono logów serwera podczas rzeczywistego przebiegu, bazy po przebiegu z modelem (run_events, messages), magazynu plików i artefaktów, katalogów workspace, innych odpowiedzi HTTP (np. /api/runs/:id/events) ani raportów i śladów Playwright; durability.test.ts szuka tokenów tylko w ~/.claude (ignoruje CLAUDE_CONFIG_DIR) i bez pliku przechodzi pusto. |
 | L8.14 | Opis odczytu poświadczeń jest zgodny z kodem; tokeny nie są kopiowane do raportu lub śladów testów, a testy negatywne nie niszczą logowania użytkownika. | częściowe | README.md (Konfiguracja) podaje, że aplikacja czyta z pliku poświadczeń wyłącznie subscriptionType i expiresAt, pomijając przejściowy odczyt tokenów przy parsowaniu całego pliku; tests/runtime.test.ts używa expect(serialized).not.toContain(token), więc przy oblaniu komunikat Vitest wypisałby wartość tokena do logu regresji. |
-
-## BL-05 — Pomiary i obserwowalność
-
-Rozdzielone i powtarzalne pomiary czasu kolejki, startu, pierwszego tekstu, zakończenia, odświeżenia po mutacji i faktycznego anulowania (z zakończeniem procesów potomnych), z warunkami pomiaru; opcjonalny eksport telemetrii z dowodem odbioru śladu, jeśli zostanie włączony.
-
-**Warunek zamknięcia:** pomiary zapisywane przez regresję szablonu w katalogu dowodów o nazwie niezależnej od dawnych prac, z warunkami i wersją kodu; Stop mierzony do zakończenia procesów; brak tekstu daje brak metryki.
-
-| ID | Wymaganie | Stan | Brak |
-|---|---|---|---|
-| L11.14 | Pomiar Stop rozdziela potwierdzenie żądania, zakończenie strumienia i procesów; po zakończeniu nie występują dalsze mutacje, a kolejka działa. | częściowe | Pomiar nie rozdziela potwierdzenia żądania Stop, zakończenia strumienia SSE i zakończenia procesów (jedna liczba do statusu w backendzie, na stand-inie); nie sprawdza braku mutacji domeny po anulowaniu (tylko liczbę zdarzeń) ani tego, że kolejne polecenie w tej samej rozmowie wykonuje się po Stop. |
-| L12.1 | Rozmowę można powiązać z wykonaniem, narzędziem, mutacją i artefaktem w danych diagnostycznych. | częściowe | Żaden test nie odczytuje z danych diagnostycznych powiązania rozmowa–wykonanie–mutacja–artefakt; artefakt ma conversation_id, ale nie run_id, a mutacja domenowa jest identyfikowalna tylko z argumentów i wyniku narzędzia oraz zdarzenia data_changed bez identyfikatorów i wersji rekordów. |
-| L12.2 | Błędy integracji, domeny, modelu i sandboxu są rozróżnialne; sekrety nie występują w logach. | częściowe | Kod model_failed nie jest nigdzie emitowany: ogólny błąd modelu i błąd integracji dostają ten sam kod integration_failed; sandbox_denied z przebiegu wynika tylko z dopasowania słowa sandbox w komunikacie i nie ma testu; logi serwera podczas przebiegu z modelem nie są skanowane na obecność sekretów. |
-| L12.3 | Zmierzone są czas pierwszej odpowiedzi, wykonania, odświeżenia po mutacji i anulowania, z podaniem warunków pomiaru. | częściowe | Czas pierwszej odpowiedzi i wykonania na prawdziwym modelu jest tylko asertowany, nie raportowany jako pomiar z warunkami; anulowanie mierzone na stand-inie, bez procesu SDK; wyniki trafiają do katalogu o historycznej nazwie docs/evidence/closure-2026-09-15 bez wersji kodu. |
-| L12.13 | Pomiary oddzielają czas kolejki, start wykonania, pierwszy tekst, zakończenie, widoczny refetch i faktyczne anulowanie; brak tekstu ma poprawny brak metryki. | częściowe | Faktyczne anulowanie nie jest mierzone: pomiar kończy się na statusie w backendzie na stand-inie, bez zakończenia strumienia i procesów SDK; punkty kolejki, startu, pierwszego tekstu i końca z przebiegu na modelu są tylko w rekordzie uruchomienia, bez raportu pomiaru. |
 
 ## BL-06 — Wymienialność modułu domenowego
 

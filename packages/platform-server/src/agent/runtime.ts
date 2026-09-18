@@ -1,6 +1,7 @@
 import { Mastra } from '@mastra/core';
 import { ClaudeSDKAgent } from '@mastra/claude';
 import {
+  AppError,
   PLATFORM_CUSTOM_EVENTS,
   UI_COMMAND_ACK_TIMEOUT_MS,
   UI_COMMAND_FAILURES,
@@ -598,7 +599,10 @@ export class AgentRuntime {
           openText();
           stream.textDelta(messageId, delta);
         } else if (chunk.type === 'error') {
-          throw chunk.payload?.error ?? new Error('Blad strumienia modelu.');
+          // Wrapped, not rethrown bare: the classifier below has to be able to
+          // tell "the model answered with a failure" from "we never got to the
+          // model", and the message alone cannot say which happened.
+          throw new ModelStreamError(chunk.payload?.error ?? new Error('Blad strumienia modelu.'));
         }
       }
 
@@ -616,7 +620,7 @@ export class AgentRuntime {
     } catch (err) {
       const message = errorMessage(err);
       const cancelled = abort.signal.aborted && !message.includes('run_timeout');
-      const code = cancelled ? 'cancelled' : classifyModelError(message);
+      const code = cancelled ? 'cancelled' : classifyRunFailure(err, message);
       if (textOpened) stream.textEnd(messageId);
       // Partial text is already persisted by the projection, so a failed or
       // cancelled run keeps whatever the model managed to say.
@@ -701,18 +705,51 @@ function errorMessage(err: unknown): string {
   }
 }
 
-/** Distinguishes auth / limit problems from generic integration failures. */
 /**
- * Maps a runtime failure onto the application's error taxonomy.
+ * A failure the **model's own stream** reported.
  *
- * Access failures are classified once, in `classifyAccessFailure`, and mapped
- * here — so what the chat shows, what the run record stores and what Settings
- * reports can never disagree about whether the subscription ran out or the
- * login broke.
+ * The distinction it carries cannot be recovered from the message: "connection
+ * reset" reads the same whether the adapter never produced a stream or the
+ * model produced one and then failed inside it. The first is an integration
+ * failure — something between this application and the SDK broke; the second is
+ * a model failure, and the operator's next step differs.
  */
-function classifyModelError(message: string): AppErrorCode {
+export class ModelStreamError extends Error {
+  constructor(readonly reason: unknown) {
+    super(errorMessage(reason));
+    this.name = 'ModelStreamError';
+  }
+}
+
+/**
+ * Maps a run failure onto the application's error taxonomy.
+ *
+ * Four classes have to stay apart in the stored run record, because each means
+ * a different next step:
+ *
+ *  - **sandbox** (`sandbox_denied`) — the isolation refused, or was unavailable
+ *    and the run was failed rather than silently downgraded;
+ *  - **access** (`rate_limited` / `unauthenticated`) — classified once, in
+ *    `classifyAccessFailure`, so the chat, the run record and Settings can
+ *    never disagree about whether the subscription ran out or the login broke;
+ *  - **model** (`model_failed`) — a stream existed and reported a failure;
+ *  - **integration** (`integration_failed`) — everything else, including a
+ *    timeout and a call that never produced a stream at all.
+ *
+ * An error the application already classified keeps its own code: the sandbox
+ * refuses by code, and downgrading that to a wording match would lose it.
+ *
+ * Exported because the classes are a contract, not an implementation detail —
+ * the taxonomy is asserted directly over realistic failure texts.
+ */
+export function classifyRunFailure(err: unknown, message: string = errorMessage(err)): AppErrorCode {
+  const fromStream = err instanceof ModelStreamError;
+  const raw = fromStream ? err.reason : err;
+  if (raw instanceof AppError && raw.code !== 'internal') return raw.code;
+
   const m = message.toLowerCase();
   if (m.includes('sandbox')) return 'sandbox_denied';
+  // A run this application timed out is its own decision, not the model's.
   if (m.includes('run_timeout')) return 'integration_failed';
 
   switch (classifyAccessFailure(message)) {
@@ -722,7 +759,7 @@ function classifyModelError(message: string): AppErrorCode {
     case 'refresh_refused':
       return 'unauthenticated';
     default:
-      return 'integration_failed';
+      return fromStream ? 'model_failed' : 'integration_failed';
   }
 }
 

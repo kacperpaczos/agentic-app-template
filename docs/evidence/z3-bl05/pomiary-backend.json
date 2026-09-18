@@ -1,0 +1,107 @@
+{
+  "opis": "Punkty pomiaru uruchomienia agenta rozdzielone: kolejka, start wykonania, pierwszy tekst, zakonczenie. Brak tekstu daje brak metryki, nie zero.",
+  "zrodlo": "pnpm test → tests/measurements.test.ts (regresja szablonu)",
+  "zapisano": "2026-09-18T09:30:15.512Z",
+  "wersjaKodu": {
+    "commit": "13f1b3ba78448722ac25a87eef361a94efe6e3d2",
+    "brudneDrzewo": true,
+    "node": "24.19.0",
+    "pakiety": {
+      "node": "24.19.0",
+      "hono": "4.13.7",
+      "drizzle": "0.45.2",
+      "mastraCore": "1.66.0",
+      "mastraClaude": "0.3.1",
+      "claudeAgentSdk": "0.3.270",
+      "zod": "4.6.5"
+    }
+  },
+  "uwagaOJednostkach": "Wartosci w milisekundach zaleza od maszyny i obciazenia. Powtarzalne jest to, co asertuje regresja: kolejnosc punktow pomiaru, ich rozdzielenie i obecnosc albo brak metryki.",
+  "pomiary": {
+    "czasKolejki": {
+      "co": "czas oczekiwania uruchomienia w kolejce rozmowy, gdy nic go nie poprzedza",
+      "od": "zakolejkowanie uruchomienia (agent_runs.enqueued_at)",
+      "do": "start wykonania (agent_runs.started_at)",
+      "warunki": "stand-in modelu na granicy adaptera; 5 uruchomien, kazde we wlasnej rozmowie; baza tymczasowa",
+      "probkiMs": [
+        3,
+        0,
+        1,
+        3,
+        1
+      ],
+      "podsumowanie": {
+        "probek": 5,
+        "zMetryka": 5,
+        "brakMetryki": 0,
+        "minMs": 0,
+        "medianaMs": 1,
+        "maxMs": 3
+      }
+    },
+    "czasKolejkiZaInnymUruchomieniem": {
+      "co": "czas oczekiwania uruchomienia, przed ktorym w tej samej rozmowie trwa inne",
+      "od": "zakolejkowanie uruchomienia",
+      "do": "start wykonania, po zwolnieniu kolejki rozmowy",
+      "warunki": "stand-in modelu; 3 pary uruchomien w jednej rozmowie, pierwsze zajmuje ok. 120 ms; czas wykonania drugiego nie zawiera tego oczekiwania",
+      "probkiMs": [
+        172,
+        127,
+        123
+      ],
+      "podsumowanie": {
+        "probek": 3,
+        "zMetryka": 3,
+        "brakMetryki": 0,
+        "minMs": 123,
+        "medianaMs": 127,
+        "maxMs": 172
+      }
+    },
+    "czasDoPierwszegoTekstu": {
+      "co": "czas do pierwszego przyrostu tekstu odpowiedzi",
+      "od": "start wykonania",
+      "do": "pierwszy niepusty przyrost tekstu ze strumienia modelu",
+      "warunki": "stand-in modelu; 5 uruchomien z tekstem i 1 uruchomienie bez tekstu (wywolanie narzedzia, zadnego slowa)",
+      "probkiMs": [
+        55,
+        43,
+        62,
+        30,
+        33,
+        null
+      ],
+      "uwagi": "Ostatnia probka to null: uruchomienie bez tekstu nie ma czasu pierwszego tekstu. Null jest wynikiem, nie brakiem danych, i nie jest zerem — zero znaczyloby „natychmiast”.",
+      "podsumowanie": {
+        "probek": 6,
+        "zMetryka": 5,
+        "brakMetryki": 1,
+        "minMs": 30,
+        "medianaMs": 43,
+        "maxMs": 62
+      }
+    },
+    "czasWykonania": {
+      "co": "czas wykonania uruchomienia",
+      "od": "start wykonania",
+      "do": "zapisany status koncowy uruchomienia",
+      "warunki": "stand-in modelu; 5 uruchomien z tekstem i 1 bez tekstu; skrypt odpowiedzi ma ok. 45 ms wymuszonych opoznien",
+      "probkiMs": [
+        81,
+        74,
+        87,
+        53,
+        68,
+        28
+      ],
+      "podsumowanie": {
+        "probek": 6,
+        "zMetryka": 6,
+        "brakMetryki": 0,
+        "minMs": 28,
+        "medianaMs": 68,
+        "maxMs": 87
+      }
+    }
+  }
+}

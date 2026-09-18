@@ -1,6 +1,6 @@
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, rmSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, type WriteStream } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { resolveTestInstance, type TestInstanceConfig } from './isolation.ts';
 import { verifyIsolatedInstance } from './fixtures.ts';
 
@@ -22,8 +22,26 @@ import { verifyIsolatedInstance } from './fixtures.ts';
 export class ScriptedInstance {
   readonly config: TestInstanceConfig;
   #process: ChildProcess | null = null;
+  /** Extra environment for the server process, e.g. a canary a test looks for. */
+  readonly #extraEnv: Record<string, string>;
+  /** When set, everything the server writes to stdout and stderr lands here. */
+  readonly #logFile: string | null;
+  #log: WriteStream | null = null;
 
-  constructor(opts: { port: number; dataDirName: string }) {
+  constructor(opts: {
+    port: number;
+    dataDirName: string;
+    /** Added to the server process's environment. Never used to redirect it. */
+    env?: Record<string, string>;
+    /**
+     * Captures the server's stdout and stderr to this path.
+     *
+     * The default is `stdio: 'ignore'`, which is fine for a test that only
+     * drives the interface — and useless for one that has to state what the
+     * server did or did not print. A claim about logs needs the logs.
+     */
+    logFile?: string;
+  }) {
     this.config = resolveTestInstance({
       repoRoot: resolve(import.meta.dirname, '../..'),
       dataDirName: opts.dataDirName,
@@ -32,6 +50,8 @@ export class ScriptedInstance {
       // scripted instance that runs on its own port.
       env: {},
     });
+    this.#extraEnv = opts.env ?? {};
+    this.#logFile = opts.logFile ? resolve(this.config.repoRoot, opts.logFile) : null;
   }
 
   get baseUrl(): string {
@@ -54,6 +74,11 @@ export class ScriptedInstance {
 
   async start(scenario: string): Promise<void> {
     if (this.#process) throw new Error('instancja scenariuszowa juz dziala');
+    if (this.#logFile) {
+      mkdirSync(dirname(this.#logFile), { recursive: true });
+      this.#log = createWriteStream(this.#logFile, { flags: 'a' });
+      this.#log.write(`--- start scenariusza ${scenario} ---\n`);
+    }
     this.#process = spawn(
       'node',
       [
@@ -63,10 +88,16 @@ export class ScriptedInstance {
       ],
       {
         cwd: this.config.repoRoot,
-        env: { ...process.env, ...this.config.env, SCRIPT: scenario },
-        stdio: 'ignore',
+        // `config.env` last: a canary must never be able to redirect the
+        // instance's port or data directory.
+        env: { ...process.env, ...this.#extraEnv, ...this.config.env, SCRIPT: scenario },
+        stdio: this.#log ? ['ignore', 'pipe', 'pipe'] : 'ignore',
       },
     );
+    if (this.#log) {
+      this.#process.stdout?.pipe(this.#log, { end: false });
+      this.#process.stderr?.pipe(this.#log, { end: false });
+    }
     await this.#waitForHealth();
     // Same gate as the shared instance: proceed only against a server that
     // identifies itself as one the tests started.
@@ -98,6 +129,25 @@ export class ScriptedInstance {
         done();
       }, 5000);
     });
+    // Closed after the process is gone, so nothing it printed on the way out is
+    // lost — which is exactly what a log scan would miss.
+    await new Promise<void>((done) => {
+      const log = this.#log;
+      this.#log = null;
+      if (!log) return done();
+      log.end(() => done());
+    });
+  }
+
+  /** Everything the server printed since it started. Empty when not captured. */
+  readLog(): string {
+    if (!this.#logFile || !existsSync(this.#logFile)) return '';
+    return readFileSync(this.#logFile, 'utf8');
+  }
+
+  /** Path of the captured log, for an evidence file to point at. */
+  get logPath(): string | null {
+    return this.#logFile;
   }
 
   async restart(scenario: string): Promise<void> {

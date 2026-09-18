@@ -291,6 +291,8 @@ export class ProcurementService {
     caseId: string;
     ownerId: string;
     conversationId: string | null;
+    /** The agent run that saved it; null when the call did not come from one. */
+    runId?: string | null;
     title?: string;
     operationId?: string;
   }) {
@@ -299,6 +301,7 @@ export class ProcurementService {
     const created = this.platform.artifacts.create({
       ownerId: input.ownerId,
       conversationId: input.conversationId,
+      runId: input.runId ?? null,
       kind: 'table',
       mode: 'snapshot',
       title: input.title ?? `Zestawienie ofert - ${detail.code}`,
