@@ -137,6 +137,20 @@ async function secondSpace(page: Page, title: string): Promise<string> {
   return space.id as string;
 }
 
+/**
+ * The command's half of a `get_context` answer — the whole of it except the
+ * live block.
+ *
+ * Needed for every "nothing of the other scope is in here" assertion: the live
+ * block is *supposed* to carry what the user has now, including the selection
+ * they made after the task started. Searching the whole answer for that id
+ * would fail on the very behaviour the tool exists to provide.
+ */
+const commandHalf = (answer: any) => {
+  const { currentContext: _live, ...command } = answer;
+  return JSON.stringify(command);
+};
+
 /** Selects the first card on the canvas by its title button, and returns its id. */
 async function selectFirstCard(page: Page): Promise<string> {
   const card = page.locator('[data-testid^="card-"]').first();
@@ -257,7 +271,7 @@ test.describe('kontekst aplikacji dla agenta', () => {
     const [context] = await toolResults(page, conversationId, 'get_context');
     // The card of the space the user left is not in the next command's context.
     expect(context.selection).toEqual([]);
-    expect(JSON.stringify(context)).not.toContain(cardId);
+    expect(commandHalf(context)).not.toContain(cardId);
     expect(context.spaceId).toBe(otherSpace);
   });
 
@@ -290,7 +304,7 @@ test.describe('kontekst aplikacji dla agenta', () => {
     const conversationId = await conversationOnScreen(page);
     const [context] = await toolResults(page, conversationId, 'get_context');
 
-    const text = JSON.stringify(context);
+    const text = commandHalf(context);
     for (const leaked of [caseId, cardId, spaceId!, firstConversation].filter(Boolean) as string[]) {
       expect(text, `wyciek ${leaked}`).not.toContain(leaked);
     }
@@ -343,8 +357,14 @@ test.describe('kontekst aplikacji dla agenta', () => {
     expect(last.spaceId).toBe(spaceA);
     expect(last.selection).toEqual([]);
     // … and the selection made afterwards is nowhere in its context.
-    expect(JSON.stringify(last)).not.toContain(cardInB);
-    expect(JSON.stringify(last)).not.toContain(spaceB);
+    expect(commandHalf(last)).not.toContain(cardInB);
+    expect(commandHalf(last)).not.toContain(spaceB);
+    // The live block, by contrast, is where that selection legitimately appears:
+    // the agent may see what the user is doing now, and must not act on it.
+    expect(last.currentContext.selection).toEqual([{ kind: 'card', id: cardInB }]);
+    expect(last.currentContext.changedSinceCommand).toEqual(
+      expect.arrayContaining(['selection', 'spaceId']),
+    );
 
     /* The visible consequence: the card it added is in A's space, not in B's. */
     const stateA = await getJson(page, `/api/canvas/spaces/${spaceA}`);
