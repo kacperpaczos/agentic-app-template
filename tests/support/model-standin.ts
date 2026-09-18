@@ -68,7 +68,19 @@ export type Step =
    * the file** — which is what makes the refusal a testable property rather
    * than a returned object: without the deny, the bytes end up in the answer.
    */
-  | { kind: 'fileTool'; name: string; input: Record<string, unknown> }
+  | {
+      kind: 'fileTool';
+      name: string;
+      input: Record<string, unknown>;
+      /**
+       * Played as a **subagent's** call: the hook payload carries `agent_id`,
+       * exactly as the SDK marks work done by a subagent rather than by the
+       * main thread. Its own step kind would have hidden the point — the whole
+       * question is whether the *same* call is decided the same way when that
+       * one field is present.
+       */
+      subagent?: boolean;
+    }
   /** The model's stream reports a failure — a stream existed and then failed. */
   | { kind: 'streamError'; message: string }
   /**
@@ -260,6 +272,7 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
               tool_use_id: `tu_file_${callSeq}`,
               tool_name: step.name,
               tool_input: step.input,
+              ...(step.subagent ? { agent_id: 'agent_podwykonawca' } : {}),
             });
             handle.fileTools.push({ name: step.name, denied: refusal !== null, reason: refusal });
             if (refusal !== null) {

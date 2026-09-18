@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -7,7 +7,9 @@ import {
   claudeConfigDir,
   collectToolEntries,
   platformTools,
+  protectedDirsFor,
   protectedPathRefusal,
+  realResolve,
   sandboxSettings,
 } from '@platform/server';
 import { createHarness, type Harness } from './helpers.ts';
@@ -287,6 +289,80 @@ describe('uruchomienie nie moze odczytac poswiadczenia (symulacja na granicy ada
       { kind: 'text', text: 'Koniec.' },
     ]);
     expect(stand.fileTools[0]).toMatchObject({ denied: true });
+  });
+
+  it('podwykonawca NIE omija odmowy — ta sama sciezka, to samo rozstrzygniecie', async () => {
+    /*
+     * Regresja na dziurę znalezioną w recenzji. Most hookowy wychodził wcześniej
+     * dla ruchu podwykonawcy (`agent_id`), żeby nie dublować aktywności w
+     * czacie — i wychodził **przed** odmową. Efekt: dla podwykonawcy warstwa 2
+     * wychodziła bez decyzji, warstwa 3 jest przesłonięta przez `allowedTools`,
+     * a warstwa 1 nie obejmuje wewnętrznych narzędzi plikowych SDK. Wszystkie
+     * trzy naraz. Narzędzie uruchamiające podwykonawcę trafia do bramki zgód,
+     * więc wystarczyło jedno „tak" użytkownika.
+     */
+    const { stand, events } = await startRun([
+      { kind: 'text', text: 'Zlecam podwykonawcy. ' },
+      {
+        kind: 'fileTool',
+        name: 'Read',
+        input: { file_path: join(configDir, '.credentials.json') },
+        subagent: true,
+      },
+      { kind: 'text', text: 'Koniec.' },
+    ]);
+
+    const text = answerText(events);
+    expect(text.includes(CANARY), 'podwykonawca odczytal poswiadczenie').toBe(false);
+    expect(stand.fileTools[0]).toMatchObject({ denied: true });
+    expect(stand.fileTools[0]?.reason).toContain('poswiadczen Claude');
+    // Odmowa jest widoczna, mimo że zwykła aktywność podwykonawcy jest wyciszona.
+    expect(text).toContain('odmowa');
+  });
+
+  it('dowiazanie w workspace wskazujace na katalog poswiadczen nie omija odmowy', async () => {
+    /*
+     * `path.resolve` odpowiada na pytanie o tekst, nie o system plików: link
+     * leżący w workspace i wskazujący na katalog logowania rozwiązuje się na
+     * ścieżkę **wewnątrz** workspace i przechodzi przez porównanie prefiksu.
+     */
+    const linkDir = mkdtempSync(join(tmpdir(), 'kanarek-ws-'));
+    const link = join(linkDir, 'skrot');
+    symlinkSync(configDir, link, 'dir');
+    try {
+      const { stand, events } = await startRun([
+        { kind: 'fileTool', name: 'Read', input: { file_path: join(link, '.credentials.json') } },
+        { kind: 'text', text: 'Koniec.' },
+      ]);
+      expect(answerText(events).includes(CANARY), 'dowiazanie ominelo odmowe').toBe(false);
+      expect(stand.fileTools[0]).toMatchObject({ denied: true });
+    } finally {
+      rmSync(linkDir, { recursive: true, force: true });
+    }
+  });
+
+  it('realResolve podaza za dowiazaniem, a nieistniejacy plik ocenia po rodzicu', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kanarek-real-'));
+    const link = join(dir, 'skrot');
+    symlinkSync(configDir, link, 'dir');
+    try {
+      // Istniejące dowiązanie jest rozwinięte…
+      expect(realResolve(dir, 'skrot/.credentials.json')).toBe(join(configDir, '.credentials.json'));
+      // …a plik, którego jeszcze nie ma, jest oceniany po najbliższym istniejącym rodzicu.
+      expect(realResolve(dir, 'skrot/jeszcze-nie-ma.txt')).toBe(join(configDir, 'jeszcze-nie-ma.txt'));
+      // Ścieżka bez żadnego istniejącego przodka nie wywraca funkcji.
+      expect(realResolve(dir, 'a/b/c.txt')).toBe(join(dir, 'a/b/c.txt'));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('plik konfiguracji obok katalogu logowania tez jest chroniony', () => {
+    // `~/.claude.json` leży OBOK `~/.claude`, więc reguła o katalogu go omija.
+    const guards = protectedDirsFor('/tmp/dane', '/home/ktos/.claude');
+    expect(protectedPathRefusal('Read', { file_path: '/home/ktos/.claude.json' }, guards)).toBeTruthy();
+    expect(protectedPathRefusal('Read', { file_path: '/home/ktos/.claude/.credentials.json' }, guards)).toBeTruthy();
+    expect(protectedPathRefusal('Read', { file_path: '/home/ktos/.claude-notatki/plan.md' }, guards)).toBeNull();
   });
 
   it('plik w workspace uruchomienia pozostaje dostepny', async () => {

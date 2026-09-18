@@ -1,3 +1,7 @@
+import { realpathSync } from 'node:fs';
+import { basename, dirname, resolve } from 'node:path';
+import { claudeConfigDir } from './auth.ts';
+
 /**
  * The permission matrix for the Claude Agent SDK's **built-in** tools.
  *
@@ -120,6 +124,62 @@ const PATH_ARGUMENTS: Record<string, readonly string[]> = {
   Glob: ['path'],
   Grep: ['path'],
 };
+
+/**
+ * Directories and files a run may never open, given the application's data directory.
+ *
+ * One list, built in one place, because it is used by three mechanisms and a
+ * copy that drifted would silently open a hole in whichever one kept the old
+ * list. `claudeConfigDir()` is read per call, not at import: a test that
+ * redirects `CLAUDE_CONFIG_DIR` must redirect the protection with it.
+ *
+ * `<configDir>.json` is protected as well as the directory. `~/.claude.json`
+ * sits **beside** `~/.claude`, not inside it, so a rule about the directory
+ * misses it entirely. It holds no token — its field names were checked — but it
+ * does hold account and project data, which is the same class of thing the
+ * session probe goes out of its way never to copy.
+ */
+export function protectedDirsFor(
+  dataDir: string,
+  configDir: string = claudeConfigDir(),
+): Array<{ dir: string; what: string }> {
+  return [
+    { dir: dataDir, what: 'danych aplikacji' },
+    { dir: configDir, what: 'poswiadczen Claude' },
+    { dir: `${configDir}.json`, what: 'konfiguracji Claude' },
+  ];
+}
+
+/**
+ * Resolves a path the way the filesystem would, symbolic links included.
+ *
+ * `path.resolve` alone answers a question about *text*: it flattens `..` and
+ * makes the path absolute, and that is all. A symlink planted inside the run
+ * workspace and pointing at the credential directory therefore resolves to a
+ * path under the workspace and walks straight through a prefix comparison —
+ * the check says "this is inside the workspace" and the open() says otherwise.
+ *
+ * `realpathSync` answers the question about the filesystem, but throws on a
+ * path that does not exist yet, which is the normal case for `Write`. So the
+ * nearest existing ancestor is resolved and the remainder appended: an existing
+ * symlink anywhere along the path is followed, and a not-yet-created leaf is
+ * still judged by where it would really land.
+ */
+export function realResolve(base: string, candidate: string): string {
+  let abs = resolve(base, candidate);
+  let rest = '';
+  for (let i = 0; i < 64; i += 1) {
+    try {
+      return rest ? resolve(realpathSync(abs), rest) : realpathSync(abs);
+    } catch {
+      const parent = dirname(abs);
+      if (parent === abs) return resolve(base, candidate);
+      rest = rest ? `${basename(abs)}/${rest}` : basename(abs);
+      abs = parent;
+    }
+  }
+  return resolve(base, candidate);
+}
 
 /** True when `candidate` is `dir` itself or sits inside it. */
 function isInside(candidate: string, dir: string): boolean {

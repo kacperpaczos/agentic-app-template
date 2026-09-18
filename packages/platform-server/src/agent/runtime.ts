@@ -15,7 +15,6 @@ import {
 } from '@platform/contracts';
 import type { PlatformServices } from '../services/index.ts';
 import {
-  claudeConfigDir,
   classifyAccessFailure,
   isAccessRelevantFailure,
   recordVerification,
@@ -34,7 +33,9 @@ import {
   FORBIDDEN_TOOLS,
   decideTool,
   forbiddenToolMessage,
+  protectedDirsFor,
   protectedPathRefusal,
+  realResolve,
 } from './permissions.ts';
 
 export interface StartRunInput {
@@ -665,17 +666,32 @@ export class AgentRuntime {
      * test that redirects it — which is exactly the shape of the defect in the
      * secret scan this package also repairs.
      */
-    const protectedDirs = [
-      { dir: this.services.config.dataDir, what: 'danych aplikacji' },
-      { dir: claudeConfigDir(), what: 'poswiadczen Claude' },
-    ];
+    const protectedDirs = protectedDirsFor(this.services.config.dataDir);
 
     /* -------------------- SDK hook bridge (see class doc) ------------------ */
     const hookCallback = async (raw: unknown) => {
       const input = raw as Record<string, any>;
       if (typeof input.session_id === 'string') bindSession(input.session_id);
-      // Subagent traffic would double-report the main thread's work.
-      if (input.agent_id) return { continue: true };
+      /*
+       * A call made by a **subagent**, not by the main thread.
+       *
+       * It used to return here, before anything else, because subagent traffic
+       * would double-report the main thread's work in the chat. That was right
+       * about the stream and catastrophic about the refusal below: every one of
+       * the three protections for the credential directory came off at once for
+       * a subagent. The hook (layer 2) left before deciding; the gate (layer 3)
+       * is shadowed for `Read` by `allowedTools`; and the sandbox (layer 1)
+       * does not constrain the SDK's own file tools at all. The tool that
+       * starts a subagent is neither allowed nor forbidden, so it goes to the
+       * consent prompt — one "yes" and the credential was readable again.
+       *
+       * The exact shape of the hole this package was written to close: a
+       * category that bypasses the gate meeting a mechanism that does not cover
+       * it. So the flag is now carried, not acted on immediately: the refusal is
+       * decided for subagents too, and only the *reporting* of ordinary tool
+       * activity stays silent.
+       */
+      const fromSubagent = Boolean(input.agent_id);
 
       if (input.hook_event_name === 'Stop') return { continue: true };
 
@@ -698,9 +714,16 @@ export class AgentRuntime {
           String(input.tool_name ?? ''),
           input.tool_input,
           protectedDirs,
-          (p) => resolve(args.workspace.dir, p),
+          (p) => realResolve(args.workspace.dir, p),
         );
         if (refusal) {
+          /*
+           * Announced even when it came from a subagent. The silence above
+           * exists so the chat is not told the same *work* twice; a blocked
+           * credential read is not work and is not duplicated — it is the only
+           * report there will be, and L8.7's visible half is precisely that the
+           * user learns the agent reached for the login and was refused.
+           */
           stream.toolStart(id, String(input.tool_name ?? 'tool'), messageId);
           stream.toolArgs(id, JSON.stringify(input.tool_input ?? {}));
           stream.toolEnd(id);
@@ -714,6 +737,8 @@ export class AgentRuntime {
             },
           };
         }
+        // Nothing was refused: ordinary subagent activity stays out of the chat.
+        if (fromSubagent) return { continue: true };
         /*
          * Deliberately does *not* open a text message.
          *
@@ -731,9 +756,11 @@ export class AgentRuntime {
         stream.toolArgs(id, JSON.stringify(input.tool_input ?? {}));
         stream.toolEnd(id);
       } else if (input.hook_event_name === 'PostToolUse') {
+        if (fromSubagent) return { continue: true };
         const raw = String(input.tool_use_id ?? '');
         if (raw) stream.toolResult(scopeToolId(raw), summariseToolResponse(input.tool_response));
       } else if (input.hook_event_name === 'PostToolUseFailure') {
+        if (fromSubagent) return { continue: true };
         // This hook carries `error`, not `tool_response` — reporting the latter
         // produced a literal "null" in the chat instead of the reason.
         const raw = String(input.tool_use_id ?? '');
@@ -766,10 +793,22 @@ export class AgentRuntime {
       sandbox: sandboxSettings({
         workspaceDir: args.workspace.dir,
         dataDir: this.services.config.dataDir,
-        credentialDirs: [claudeConfigDir()],
+        /*
+         * Ta sama lista, co w hooku i w bramce — bez katalogu danych, który
+         * `sandboxSettings` dokłada osobno. Jedna lista w jednym miejscu:
+         * kopia, która się rozjedzie, otwiera dziurę w tej warstwie, która
+         * została przy starej.
+         */
+        credentialDirs: protectedDirs
+          .filter((d) => d.dir !== this.services.config.dataDir)
+          .map((d) => d.dir),
       }),
       maxTurns: 40,
-      canUseTool: this.#makeCanUseTool(stream, { runId, ownerId: args.ownerId }),
+      canUseTool: this.#makeCanUseTool(stream, {
+        runId,
+        ownerId: args.ownerId,
+        workspaceDir: args.workspace.dir,
+      }),
       hooks: {
         SessionStart: [{ hooks: [hookCallback] }],
         PreToolUse: [{ hooks: [hookCallback] }],
@@ -1000,7 +1039,10 @@ export class AgentRuntime {
    * was waiting for it. The status is what `GET /api/runs/active` reports and
    * what the background-task list shows as "czeka na zgode".
    */
-  #makeCanUseTool(stream: RunEventStream, run: { runId: string; ownerId: string }) {
+  #makeCanUseTool(
+    stream: RunEventStream,
+    run: { runId: string; ownerId: string; workspaceDir: string },
+  ) {
     return async (
       toolName: string,
       input: Record<string, unknown>,
@@ -1019,10 +1061,18 @@ export class AgentRuntime {
        * `FORBIDDEN_TOOLS` is refused here as well as removed from the model's
        * context.
        */
-      const guarded = protectedPathRefusal(toolName, input, [
-        { dir: this.services.config.dataDir, what: 'danych aplikacji' },
-        { dir: claudeConfigDir(), what: 'poswiadczen Claude' },
-      ]);
+      const guarded = protectedPathRefusal(
+        toolName,
+        input,
+        protectedDirsFor(this.services.config.dataDir),
+        /*
+         * The same resolver as the hook. Without it a relative path reached the
+         * gate unresolved and was compared as written, so `../../.claude/...`
+         * only ever got caught one layer up — which makes "defence in depth"
+         * one layer, not two, for exactly the input an attacker controls.
+         */
+        (p) => realResolve(run.workspaceDir, p),
+      );
       if (guarded) return { behavior: 'deny', message: guarded };
 
       const decision = decideTool(toolName, this.#toolNames);
