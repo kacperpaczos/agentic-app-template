@@ -129,6 +129,7 @@ export function buildSystemPrompt(input: PromptInput): string {
       '- Opisuj to, co widac. Nie zgaduj tekstu, ktorego nie da sie odczytac.',
       '## Skoroszyt (XLSX)',
       ...FILE_ANALYSIS.spreadsheet.reads.map((r) => `- czytane: ${r}`),
+      ...FILE_ANALYSIS.spreadsheet.keeps.map((k) => `- zachowywane przy zapisie: ${k}`),
       ...FILE_ANALYSIS.spreadsheet.limits.map((l) => `- OGRANICZENIE: ${l}`),
       '- Formule opisuj jako "formula X, ostatnia zapisana wartosc Y". NIGDY nie podawaj',
       '  zapisanej wartosci jako wyniku przeliczenia — plik moze byc nieaktualny.',

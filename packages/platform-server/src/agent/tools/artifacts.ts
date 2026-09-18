@@ -101,6 +101,7 @@ export function artifactTools(services: PlatformServices): Array<ModuleToolDefin
         // `files_publish_version`, because it is the same operation — what is
         // published is the content of a workspace file, and two calls naming one
         // path can carry different bytes.
+        // One read serves both: the bytes hashed are the bytes published.
         const bytes = readFileSync(abs);
         const { result } = await services.idempotency.once(
           input.operationId,
@@ -109,63 +110,51 @@ export function artifactTools(services: PlatformServices): Array<ModuleToolDefin
           async () => {
             const filename = basename(abs);
             const mediaType = MEDIA_BY_EXT[extname(filename).toLowerCase()] ?? 'text/plain';
-            const stored = services.files.store({
-              ownerId: ctx.ownerId,
-              filename,
-              mediaType,
-              bytes,
-              scopeKind: 'artifact',
-              scopeId: ctx.runId,
-            });
             /*
-             * Two writes, one publication.
+             * One publication, not two writes with a compensation between them.
              *
-             * The file row and its bytes land first, the artifact that gives
-             * them a name lands second, and they cannot share a transaction
-             * because the first one also writes to disk. A failure in between
-             * used to leave the file in the user's file list with nothing
-             * pointing at it — an orphan from an operation that reported
-             * failure. The compensation is explicit: the file this call stored,
-             * and only that one, is removed again before the failure is
-             * re-raised (L9.8).
+             * The file row and the artifact that names it are inserted in the
+             * **same transaction**, and the bytes are renamed into place before
+             * either is written. That removes the case the explicit `try/catch`
+             * + `delete` here used to cover — a file left in the user's list
+             * with nothing pointing at it — and removes it in a way that cannot
+             * itself half-succeed: a rollback needs no cleanup of its own, while
+             * a compensating delete can fail and did have to log when it did.
              */
-            let created;
-            try {
-              created = services.artifacts.create({
+            const { file: stored, result: created } = services.files.storeWith(
+              {
                 ownerId: ctx.ownerId,
-                conversationId: ctx.conversationId,
-                runId: ctx.runId,
-                kind: input.kind ?? 'file',
-                mode: 'snapshot',
-                title: input.title,
-                rendererType: input.rendererType ?? 'platform.file',
-                content: {
-                  fileId: stored.id,
-                  filename: stored.filename,
-                  mediaType: stored.mediaType,
-                  byteSize: stored.byteSize,
-                  sha256: stored.sha256,
-                },
-                fileId: stored.id,
-              });
-            } catch (err) {
-              try {
-                services.files.delete(stored.id, ctx.ownerId);
-              } catch (cleanupErr) {
-                // Reported, never swallowed: a compensation that failed leaves
-                // the very orphan this block exists to prevent.
-                console.error(
-                  `[artifact_publish_file] nie usunieto pliku ${stored.id} po nieudanej publikacji:`,
-                  cleanupErr,
-                );
-              }
-              throw err;
-            }
+                filename,
+                mediaType,
+                bytes,
+                scopeKind: 'artifact',
+                scopeId: ctx.runId,
+              },
+              (file) =>
+                services.artifacts.create({
+                  ownerId: ctx.ownerId,
+                  conversationId: ctx.conversationId,
+                  runId: ctx.runId,
+                  kind: input.kind ?? 'file',
+                  mode: 'snapshot',
+                  title: input.title,
+                  rendererType: input.rendererType ?? 'platform.file',
+                  content: {
+                    fileId: file.id,
+                    filename: file.filename,
+                    mediaType: file.mediaType,
+                    byteSize: file.byteSize,
+                    sha256: file.sha256,
+                  },
+                  fileId: file.id,
+                }),
+            );
             return {
               artifactId: created.meta.id,
               fileId: stored.id,
               filename: stored.filename,
               byteSize: stored.byteSize,
+              sha256: stored.sha256,
               downloadUrl: `/api/files/${stored.id}/content`,
             };
           },

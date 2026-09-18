@@ -184,6 +184,7 @@ describe('serwer odmawia startu przy niezgodnej konfiguracji', () => {
       webDistDir: null,
       model: 'm',
       runTimeoutMs: 1,
+      consentTimeoutMs: 1,
       maxUploadBytes: 1,
       instanceLabel: TEST_INSTANCE_LABEL,
       ...over,

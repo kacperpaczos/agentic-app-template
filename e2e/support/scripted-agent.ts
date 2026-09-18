@@ -9,6 +9,9 @@
  *
  * Results obtained with it are simulations and are reported as such.
  */
+import { execFileSync, spawn } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   invokeTool,
   mcpToolName,
@@ -49,6 +52,51 @@ export type Step =
     }
   /** Time passing with nothing emitted — lets the browser settle and repaint. */
   | { kind: 'wait'; delayMs: number }
+  /**
+   * Time passing that a cancellation **interrupts**, as a real await would.
+   *
+   * Separate from `wait` on purpose. `wait` finishes its delay before the abort
+   * signal is looked at, which is what the existing cancellation measurements
+   * were taken against: they assert that the run's workspace still exists at the
+   * moment the Stop request is acknowledged, and an instantly-waking wait would
+   * narrow that window to nothing and make somebody else's green test flaky.
+   * Scenarios that have to sit idle for minutes — a run waiting to be stopped or
+   * to hit its ceiling — use this one.
+   */
+  | { kind: 'idle'; delayMs: number }
+  /**
+   * Asks the runtime's permission gate, exactly where the SDK asks it.
+   *
+   * The stand-in calls `sdkOptions.canUseTool(toolName, input)` — the real gate,
+   * which emits the real request into the real stream and waits for the real
+   * HTTP answer — and plays `then` **only if it was allowed**. Without this the
+   * consent path could not be driven from a browser test at all: a scripted run
+   * that never called the gate made "Odmowa leaves the operation undone"
+   * untestable without spending a model turn.
+   *
+   * The answer is echoed into the conversation as `[zgoda:<tool>] allowed=…`, so
+   * the decision is visible to the test as well as its effect.
+   */
+  | { kind: 'ask'; toolName: string; input?: Record<string, unknown>; then?: Step[] }
+  /** Writes a file into `output/` of the run workspace, as sandboxed code would. */
+  | { kind: 'writeOutput'; path: string; content: string }
+  /**
+   * Runs a real Node script inside the run workspace — what `Bash` would do.
+   *
+   * The script is written into the workspace and executed with the workspace as
+   * its working directory, so it resolves the analysis libraries exactly as
+   * model-authored code does. Its standard output is echoed into the answer, so
+   * a browser test reads facts the script derived from the actual file bytes.
+   */
+  | { kind: 'workspaceScript'; script: string; maxChars?: number }
+  /**
+   * Starts a real OS child process bound to the run's abort signal.
+   *
+   * Stands in for a shell command the run left behind: it exists so a Stop
+   * measurement can count the server's descendant processes before, during and
+   * after, instead of stopping at a status in the database.
+   */
+  | { kind: 'spawnChild' }
   /**
    * Asks the browser to move the interface, through the real runtime gate, and
    * records what the client reported back.
@@ -157,31 +205,43 @@ export function scriptedAgent(
     await fire('SessionStart', { session_id: 'sess_scripted' });
 
     let seq = 0;
-    const emissions: Array<Record<string, unknown>> = [];
-    for (const step of steps) {
-      if (step.kind === 'tool') {
-        seq += 1;
-        const id = `tu_${seq}`;
-        await fire('PreToolUse', { tool_use_id: id, tool_name: step.name, tool_input: step.input });
-        if (step.error !== undefined) {
-          await fire('PostToolUseFailure', { tool_use_id: id, error: step.error });
+    /**
+     * Turns steps into the emission list the generator below plays.
+     *
+     * `tool` steps are the exception and are fired here, before the stream
+     * opens, which is how they have always behaved — the announced-only tool
+     * activity of the existing scenarios depends on it. Everything else is
+     * performed in order *while* the answer streams, because a call may depend
+     * on what an earlier step did to the interface, the data or the workspace.
+     */
+    const expand = async (list: Step[]): Promise<Array<Record<string, unknown>>> => {
+      const out: Array<Record<string, unknown>> = [];
+      for (const step of list) {
+        if (step.kind === 'tool') {
+          seq += 1;
+          const id = `tu_${seq}`;
+          await fire('PreToolUse', { tool_use_id: id, tool_name: step.name, tool_input: step.input });
+          if (step.error !== undefined) {
+            await fire('PostToolUseFailure', { tool_use_id: id, error: step.error });
+          } else {
+            await fire('PostToolUse', { tool_use_id: id, tool_response: step.result ?? 'ok' });
+          }
+        } else if (step.kind === 'text') {
+          out.push({ type: 'text-delta', payload: { text: step.text }, delayMs: step.delayMs ?? 0 });
+        } else if (step.kind === 'wait') {
+          out.push({ type: 'wait', delayMs: step.delayMs });
+        } else if (step.kind === 'ui') {
+          out.push({ type: 'ui', step });
+        } else if (step.kind === 'fail') {
+          out.push({ type: 'error', payload: { error: new Error(step.message) } });
         } else {
-          await fire('PostToolUse', { tool_use_id: id, tool_response: step.result ?? 'ok' });
+          // `call`, `ask`, `writeOutput`, `workspaceScript`, `spawnChild`.
+          out.push({ type: step.kind, step });
         }
-      } else if (step.kind === 'text') {
-        emissions.push({ type: 'text-delta', payload: { text: step.text }, delayMs: step.delayMs ?? 0 });
-      } else if (step.kind === 'wait') {
-        emissions.push({ type: 'wait', delayMs: step.delayMs });
-      } else if (step.kind === 'ui') {
-        emissions.push({ type: 'ui', step });
-      } else if (step.kind === 'call') {
-        // Performed in order while the answer streams, not up front: a call may
-        // depend on what an earlier step did to the interface or the data.
-        emissions.push({ type: 'call', step });
-      } else {
-        emissions.push({ type: 'error', payload: { error: new Error(step.message) } });
       }
-    }
+      return out;
+    };
+    const emissions = await expand(steps);
     await fire('Stop', { session_id: 'sess_scripted' });
 
     /** What the previous `ui` or `call` step answered, for `$last.` placeholders. */
@@ -193,9 +253,14 @@ export function scriptedAgent(
      * cancellation test measure nothing.
      */
     const signal: AbortSignal | undefined = options?.signal;
-    return {
-      fullStream: (async function* () {
-        for (const e of emissions) {
+    const canUseTool = options?.sdkOptions?.canUseTool as
+      | ((name: string, input: Record<string, unknown>) => Promise<{ behavior: string; message?: string }>)
+      | undefined;
+    /* Recursive, so an `ask` can carry the steps its approval unlocks. */
+    const perform = async function* (
+      list: Array<Record<string, unknown>>,
+    ): AsyncGenerator<Record<string, unknown>> {
+        for (const e of list) {
           // Deltas are spaced out so the browser can observe growth, which is
           // what a streaming assertion has to see.
           if (e.delayMs) await new Promise((r) => setTimeout(r, e.delayMs as number));
@@ -243,6 +308,100 @@ export function scriptedAgent(
               type: 'text-delta',
               payload: { text: `[call:${localName}] ${shorten(text, step.maxChars ?? CALL_ECHO_CHARS)} ` },
             };
+            continue;
+          }
+          if (e.type === 'idle') {
+            const step = e.step as Extract<Step, { kind: 'idle' }>;
+            await new Promise<void>((done) => {
+              if (signal?.aborted) return done();
+              const timer = setTimeout(() => {
+                signal?.removeEventListener('abort', onAbort);
+                done();
+              }, step.delayMs);
+              const onAbort = () => {
+                clearTimeout(timer);
+                done();
+              };
+              signal?.addEventListener('abort', onAbort, { once: true });
+            });
+            if (signal?.aborted) throw signal.reason ?? new Error('run cancelled');
+            continue;
+          }
+          if (e.type === 'writeOutput') {
+            const step = e.step as Extract<Step, { kind: 'writeOutput' }>;
+            const dir = options?.toolContext?.workspaceDir;
+            if (!dir) throw new Error('scenariusz: brak workspace uruchomienia');
+            writeFileSync(resolve(dir, 'output', step.path), step.content, 'utf8');
+            continue;
+          }
+          if (e.type === 'workspaceScript') {
+            const step = e.step as Extract<Step, { kind: 'workspaceScript' }>;
+            const dir = options?.toolContext?.workspaceDir;
+            if (!dir) throw new Error('scenariusz: brak workspace uruchomienia');
+            const file = resolve(dir, 'przetworz.mjs');
+            writeFileSync(file, step.script, 'utf8');
+            let out: string;
+            try {
+              out = execFileSync(process.execPath, [file], {
+                cwd: dir,
+                encoding: 'utf8',
+                stdio: ['ignore', 'pipe', 'pipe'],
+              }).trim();
+            } catch (err) {
+              // A script that fails is reported as a failure, not as a result:
+              // the corrupt-file case has to be distinguishable from success.
+              const reason = (err as { stderr?: Buffer | string }).stderr?.toString() ?? String(err);
+              yield {
+                type: 'text-delta',
+                payload: { text: `[skrypt] blad=${shorten(reason.replace(/\s+/g, ' '), 300)} ` },
+              };
+              continue;
+            }
+            yield {
+              type: 'text-delta',
+              payload: { text: `[skrypt] ${shorten(out, step.maxChars ?? CALL_ECHO_CHARS)} ` },
+            };
+            continue;
+          }
+          if (e.type === 'spawnChild') {
+            /*
+             * A real process of the server, bound to the run's abort signal the
+             * way the SDK binds its own — so "the run's processes ended" is
+             * something an outside observer can count, not a flag.
+             */
+            /*
+             * Long-lived, but not immortal: it exits by itself after five
+             * minutes. A run's child is supposed to die with the run, and it
+             * does — but a *broken* version of that binding (which is exactly
+             * what a detection trial installs) would otherwise leave a process
+             * spinning on the machine for ever once the test server is gone.
+             * Five minutes is far longer than any assertion here waits, so it
+             * weakens nothing and bounds the damage of a failing trial.
+             */
+            const child = spawn(
+              process.execPath,
+              ['-e', 'setTimeout(() => process.exit(0), 300000)'],
+              { stdio: 'ignore' },
+            );
+            const kill = () => {
+              if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+            };
+            if (signal?.aborted) kill();
+            else signal?.addEventListener('abort', kill, { once: true });
+            yield { type: 'text-delta', payload: { text: `[proces] pid=${child.pid} ` } };
+            continue;
+          }
+          if (e.type === 'ask') {
+            const step = e.step as Extract<Step, { kind: 'ask' }>;
+            if (!canUseTool) throw new Error('scenariusz: runtime nie przekazal bramki canUseTool');
+            const outcome = await canUseTool(step.toolName, step.input ?? {});
+            const allowed = outcome.behavior === 'allow';
+            yield {
+              type: 'text-delta',
+              payload: { text: `[zgoda:${step.toolName}] allowed=${allowed} ` },
+            };
+            // The work happens only on an allow — that is the whole property.
+            if (allowed && step.then) yield* perform(await expand(step.then));
             continue;
           }
           if (e.type === 'ui') {
@@ -310,8 +469,8 @@ export function scriptedAgent(
           }
           yield e;
         }
-      })(),
     };
+    return { fullStream: perform(emissions) };
   };
   return { stream: (p, o) => play(promptOf(p), o), resumeStream: (i, o) => play(promptOf(i), o) };
 }

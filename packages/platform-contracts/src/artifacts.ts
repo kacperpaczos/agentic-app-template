@@ -103,7 +103,18 @@ export type ArtifactMeta = z.infer<typeof artifactSchema>;
  * artifacts announce themselves through the `artifact_created` event instead —
  * the platform cannot name them without learning the domain.
  */
-export const ARTIFACT_PRODUCING_TOOLS = ['artifact_create', 'artifact_publish_file'] as const;
+export const ARTIFACT_PRODUCING_TOOLS = [
+  'artifact_create',
+  'artifact_publish_file',
+  /*
+   * A produced version of a user's file is an artifact too, and its answer
+   * carries `artifactId` like the other two. Left out of this list it stayed
+   * invisible in the conversation — the artifact existed and nothing under the
+   * call that made it showed a preview, which is exactly the failure this
+   * constant's note warns about.
+   */
+  'files_publish_version',
+] as const;
 
 export const artifactVersionSchema = z.object({
   artifactId: z.string(),
@@ -138,6 +149,31 @@ export const storedFileSchema = z.object({
   version: z.number().int().positive(),
 });
 export type StoredFile = z.infer<typeof storedFileSchema>;
+
+/**
+ * A command a file was attached to.
+ *
+ * Kept out of {@link storedFileSchema} because it is not a property of the file
+ * but of its use: one upload can be sent with several commands, and a file that
+ * was never attached to anything has an empty list rather than a null field.
+ */
+export const attachedCommandSchema = z.object({
+  messageId: z.string(),
+  conversationId: z.string(),
+  conversationTitle: z.string(),
+  /** The run that received the file, when a run made the link. */
+  runId: z.string().nullable(),
+  at: z.string(),
+  /** Beginning of the command's text — what identifies it to a person. */
+  prompt: z.string(),
+});
+export type AttachedCommand = z.infer<typeof attachedCommandSchema>;
+
+/** A stored file as the files screen reads it: with the commands it was sent with. */
+export const storedFileWithUseSchema = storedFileSchema.extend({
+  attachedTo: z.array(attachedCommandSchema).default([]),
+});
+export type StoredFileWithUse = z.infer<typeof storedFileWithUseSchema>;
 
 export const FILE_LIMITS = {
   maxBytes: 8 * 1024 * 1024,
@@ -178,15 +214,36 @@ export const FILE_ANALYSIS = {
       'scalone komorki i zakres uzyty w arkuszu',
     ],
     /**
+     * What survives a save, checked against the parser rather than assumed.
+     *
+     * The list used to say images were lost; they are not — the parser models
+     * them and writes them back, which a test now shows. A declaration that
+     * overstates the damage is as misleading as one that hides it: a user told
+     * their pictures will disappear will not send the file at all.
+     */
+    keeps: [
+      'arkusze, ich kolejnosc, wartosci i typy komorek',
+      'obrazy osadzone w arkuszu',
+      'formatowanie komorek czytane przez parser: czcionka i format liczb',
+    ],
+    /**
      * The honest half. A formula is stored next to the value Excel last wrote;
      * nothing here recalculates it, so a formula whose inputs changed carries a
      * stale result — and it must be reported as "zapisana wartosc", never as
-     * "wynik".
+     * "wynik". A formula the run writes itself carries no value at all.
      */
     limits: [
       'formuly NIE sa przeliczane — zapis formuly nie jest jej wynikiem',
-      'formatowanie warunkowe, wykresy, obrazy i tabele przestawne nie sa zachowywane przy zapisie',
-      'formatowanie komorek jest zachowywane tylko w zakresie, ktory czyta parser (format liczb, pogrubienie, obramowanie)',
+      /*
+       * Named example first, and only the one that is actually checked: a chart
+       * part put into the archive disappears when the workbook is saved
+       * (`tests/file-analysis.test.ts`). Other unmodelled parts go the same way
+       * for the same reason, but this list does not name what no test has seen —
+       * a declaration that overstates the damage is as misleading as one that
+       * hides it.
+       */
+      'czesci, ktorych parser nie modeluje — sprawdzone na wykresie — znikaja przy zapisie: ' +
+        'zapisany skoroszyt powstaje z modelu parsera, a nie z kopii pliku wejsciowego',
       'makra nie sa uruchamiane; pliki .xlsm i .xls nie sa przyjmowane',
       'plik zapisany przez agenta jest NOWA wersja — oryginal pozostaje nienaruszony',
     ],

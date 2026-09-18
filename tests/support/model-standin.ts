@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { invokeTool, type ModelAgentLike, type ToolEntry } from '@platform/server';
+import { writeFileSync } from 'node:fs';
+import { invokeTool, resolveInWorkspace, type ModelAgentLike, type ToolEntry } from '@platform/server';
 import type { ToolCallContext } from '@platform/contracts';
 
 /**
@@ -26,6 +27,26 @@ export type Step =
   /** A real tool call: the handler runs with the run's context, through `invokeTool`. */
   | { kind: 'call'; name: string; input?: unknown }
   /**
+   * Writes a file into the run's workspace, the way sandboxed code would.
+   *
+   * The publication criteria are about what happens to a file *produced by the
+   * run*, so the file has to exist in the workspace — not be handed to the tool
+   * from outside. `content` may be a function so a test can build bytes (a
+   * workbook, say) at the moment the step plays.
+   */
+  | { kind: 'writeOutput'; path: string; content: string | Uint8Array | (() => Uint8Array) }
+  /**
+   * Asks the permission gate, exactly as the SDK does.
+   *
+   * The stand-in calls `sdkOptions.canUseTool(toolName, input)` and plays
+   * `then` **only if it was allowed** — which is the property the consent
+   * criteria are about: a refusal must leave the operation undone, and one
+   * approval must not run it twice. What the gate answered is recorded in
+   * `handle.gate`, so a test asserts on the decision and on its effect
+   * separately.
+   */
+  | { kind: 'ask'; toolName: string; input?: Record<string, unknown>; then?: Step[] }
+  /**
    * A tool the run is not allowed to use unattended, asked for the way the SDK
    * asks: through the `canUseTool` callback in `sdkOptions`.
    *
@@ -51,6 +72,8 @@ export interface StandInHandle {
   childPid: number | null;
   /** Names of `call` steps that actually reached a tool handler. */
   performed: string[];
+  /** Every gate question this run asked, with the decision it came back with. */
+  gate: Array<{ toolName: string; allowed: boolean; message?: string }>;
   /**
    * What each `call` step got back, in order.
    *
@@ -80,6 +103,7 @@ export const newStandInHandle = (): StandInHandle => ({
   childExitedAt: null,
   childPid: null,
   performed: [],
+  gate: [],
   results: [],
   consents: [],
   resumedFrom: null,
@@ -133,11 +157,39 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
     await fire('SessionStart', { session_id: 'sess_pomiar' });
 
     let callSeq = 0;
-    return {
-      fullStream: (async function* () {
+    const canUseTool = options?.sdkOptions?.canUseTool as
+      | ((
+          name: string,
+          input: Record<string, unknown>,
+        ) => Promise<{ behavior: string; message?: string }>)
+      | undefined;
+    /* Recursive so an `ask` can carry the steps its approval unlocks. */
+    const playSteps = async function* (script: Step[]): AsyncGenerator<Record<string, unknown>> {
         for (const step of script) {
           if (signal?.aborted) throw signal.reason ?? new Error('cancelled_by_user');
 
+          if (step.kind === 'writeOutput') {
+            if (!ctx?.workspaceDir) throw new Error('stand-in: brak workspace uruchomienia');
+            const bytes =
+              typeof step.content === 'function'
+                ? step.content()
+                : typeof step.content === 'string'
+                  ? Buffer.from(step.content, 'utf8')
+                  : step.content;
+            writeFileSync(resolveInWorkspace(ctx.workspaceDir, `output/${step.path}`), bytes);
+            continue;
+          }
+          if (step.kind === 'ask') {
+            if (!canUseTool) throw new Error('stand-in: runtime nie przekazal bramki canUseTool');
+            const outcome = await canUseTool(step.toolName, step.input ?? {});
+            const allowed = outcome.behavior === 'allow';
+            handle.gate.push({ toolName: step.toolName, allowed, message: outcome.message });
+            // The whole point: the work happens only on an allow. A refusal —
+            // including the one an unanswered request expires into — leaves the
+            // nested steps unplayed.
+            if (allowed && step.then) yield* playSteps(step.then);
+            continue;
+          }
           if (step.kind === 'wait') {
             await sleep(step.ms, signal);
             continue;
@@ -204,8 +256,8 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
           if (signal?.aborted) throw signal.reason ?? new Error('cancelled_by_user');
           yield { type: 'text-delta', payload: { text: step.text } };
         }
-      })(),
     };
+    return { fullStream: playSteps(script) };
   };
 
   /** The user's message as the adapter receives it: a string, or `{ message }`. */

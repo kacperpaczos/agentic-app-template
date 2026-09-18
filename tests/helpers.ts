@@ -26,15 +26,16 @@ export async function createHarness(
     withModule?: boolean;
     seed?: boolean;
     /**
-     * Installs a stand-in model in the platform's **own** runtime.
+     * Installs a stand-in model in the platform's **own** runtime — the one
+     * `platform.app` is wired to.
      *
      * Necessary whenever a test drives runs *and* calls the HTTP API about
-     * them: `platform.app` is wired to `platform.runtime`, so a runtime built
-     * beside it has different pending consents, different live streams and a
-     * different conversation queue — and an endpoint asked about a run of that
-     * other runtime answers about nothing.
+     * them: a runtime built beside the platform has different pending consents,
+     * different live streams and a different conversation queue, so an endpoint
+     * asked about a run of that other runtime answers about nothing — quietly,
+     * which is the worst way to be wrong.
      *
-     * without a model. Results obtained this way are simulations and are reported as such.
+     * Results obtained this way are simulations and are reported as such.
      */
     modelAgent?: ModelAgentLike | null;
   } = {},

@@ -121,6 +121,11 @@ export function fileTools(services: PlatformServices): Array<ModuleToolDefinitio
          * the sentence "a repeat with a different file is refused" would be true
          * of a different path and false of different bytes. It is now true of
          * both.
+         *
+         * Read **once**, above the guard, and used for both: the bytes that are
+         * fingerprinted are the bytes that get published. A second read inside
+         * the closure would hash one file and store another whenever the two
+         * differ, and the guard would be answering about something it never saw.
          */
         const bytes = readFileSync(abs);
         const { result } = await services.idempotency.once(
@@ -137,13 +142,46 @@ export function fileTools(services: PlatformServices): Array<ModuleToolDefinitio
            */
           async () => {
             const filename = input.filename ?? basename(abs);
-            const { original, version } = services.files.storeVersion({
-              ownerId: ctx.ownerId,
-              originalFileId: input.originalFileId,
-              filename,
-              mediaType: MEDIA_BY_EXT[extname(filename).toLowerCase()],
-              bytes,
-            });
+            /*
+             * A produced version is also an **artifact** of this conversation.
+             *
+             * It used to be only a row in `files`, which made it invisible where
+             * a user looks for what a run produced: the conversation's artifact
+             * tab showed nothing, and the only route to the result was the files
+             * screen. The artifact is created inside the same transaction as the
+             * version it describes, so the two cannot come apart — and it
+             * carries the run, so "which execution produced this" is answerable
+             * afterwards.
+             */
+            const { original, version, result: artifact } = services.files.storeVersion(
+              {
+                ownerId: ctx.ownerId,
+                originalFileId: input.originalFileId,
+                filename,
+                mediaType: MEDIA_BY_EXT[extname(filename).toLowerCase()],
+                bytes,
+              },
+              (produced, source) =>
+                services.artifacts.create({
+                  ownerId: ctx.ownerId,
+                  conversationId: ctx.conversationId,
+                  runId: ctx.runId,
+                  kind: 'file',
+                  mode: 'snapshot',
+                  title: `${produced.filename} (wersja ${produced.version})`,
+                  rendererType: 'platform.file',
+                  content: {
+                    fileId: produced.id,
+                    filename: produced.filename,
+                    mediaType: produced.mediaType,
+                    byteSize: produced.byteSize,
+                    sha256: produced.sha256,
+                    version: produced.version,
+                    derivedFromFileId: source.id,
+                  },
+                  fileId: produced.id,
+                }),
+            );
             return {
               fileId: version.id,
               filename: version.filename,
@@ -151,6 +189,7 @@ export function fileTools(services: PlatformServices): Array<ModuleToolDefinitio
               byteSize: version.byteSize,
               sha256: version.sha256,
               downloadUrl: `/api/files/${version.id}/content`,
+              artifactId: artifact.meta.id,
               original: {
                 fileId: original.id,
                 filename: original.filename,
@@ -165,6 +204,8 @@ export function fileTools(services: PlatformServices): Array<ModuleToolDefinitio
         // A new version is a file change, not a canvas change: the files screen
         // and any open list must re-read, which is what this event drives.
         ctx.emit({ type: 'data_changed', resources: ['files'] });
+        // …and it is an artifact, so the conversation's artifact tab re-reads too.
+        ctx.emit({ type: 'artifact_created', artifactId: result.artifactId });
         return result;
       },
     },

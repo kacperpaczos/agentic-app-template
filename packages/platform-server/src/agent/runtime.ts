@@ -22,20 +22,12 @@ import { platformTools, stageFileIntoWorkspace } from './tools/index.ts';
 import { buildSystemPrompt } from './prompt.ts';
 import { createRunWorkspace, sandboxSettings, type RunWorkspace } from './sandbox.ts';
 import { analysisToolkit } from './toolkit.ts';
-
-/**
- * Built-in Claude tools the run may use inside the sandboxed workspace, split by
- * how they are approved.
- *
- * `allowedTools` is an *allow-rule* list: a bare name there auto-approves the
- * tool before `canUseTool` is ever consulted (the SDK emits
- * CLAUDE_SDK_CAN_USE_TOOL_SHADOWED when this happens). Listing `Bash` there
- * would therefore have made the consent gate dead code. Shell access is left
- * out of the list on purpose so it falls through to `canUseTool` and reaches
- * the user as a real question.
- */
-const AUTO_APPROVED_FILE_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep'] as const;
-const CONSENT_REQUIRED_TOOLS = ['Bash'] as const;
+import {
+  AUTO_APPROVED_FILE_TOOLS,
+  FORBIDDEN_TOOLS,
+  decideTool,
+  forbiddenToolMessage,
+} from './permissions.ts';
 
 export interface StartRunInput {
   ownerId: string;
@@ -44,6 +36,14 @@ export interface StartRunInput {
   appContext: AppContext;
   /** Uploaded files staged into the run workspace before the model starts. */
   attachFileIds?: string[];
+  /**
+   * The user message this run answers, when the caller knows it.
+   *
+   * Carried so the attachment link can name the *command*, not just the
+   * conversation: "which file did I send with this instruction" is the question
+   * the record has to answer later, and a conversation may hold many.
+   */
+  userMessageId?: string | null;
 }
 
 export interface StartedRun {
@@ -56,8 +56,18 @@ export interface StartedRun {
 interface PendingPermission {
   resolve: (allow: boolean) => void;
   toolName: string;
-  /** The run that asked. An answer addressed to any other run is not this one's. */
+  /**
+   * The run that asked, and the owner it belongs to.
+   *
+   * Carried because the answer arrives on a *separate* HTTP request, and the
+   * only thing tying the two together used to be the request id itself. The
+   * endpoint checked that the run named in its path belonged to the caller and
+   * then handed the id to a process-wide map, so an answer posted to run A's
+   * address with run B's request id resolved B — including when B was somebody
+   * else's run. Both fields are compared before anything is resolved.
+   */
   runId: string;
+  ownerId: string;
 }
 
 /**
@@ -165,33 +175,66 @@ export class AgentRuntime {
   }
 
   /**
-   * Answers a consent request of **one** run.
+   * Answers one pending permission request of one run.
    *
-   * `runId` is the run the answer was addressed to — the one in the URL the
-   * browser posted to, whose ownership the endpoint has already checked. It is
-   * compared here because the request id alone does not say which run is being
-   * answered: the map is process-wide, several conversations can be waiting at
-   * once, and an answer meant for one of them used to resolve whichever request
-   * carried that id. Ownership was checked against the run in the address while
-   * the consent that was actually granted belonged to a different run.
+   * Returns `false` — and changes nothing — when the request id is unknown,
+   * when it belongs to a different run, or when it belongs to a different
+   * owner. That is three separate ways of saying the same thing: a decision is
+   * an answer to *this* question in *this* execution, and anything else is not
+   * an answer at all.
    *
-   * A mismatch resolves nothing and leaves the pending request pending, so the
-   * run that asked still waits for its own answer (and still times out into a
-   * denial if none comes).
+   * A repeat of an answer already given also returns `false`, because the entry
+   * is removed when it is resolved. That is what stops a retried request (a
+   * double click, a replayed POST, a client reconnecting and re-sending) from
+   * letting the operation run a second time: the gate resolves once, the tool
+   * executes once, and the second answer has nothing left to decide.
    *
-   * The argument is required, not optional. An optional one would make the
-   * binding a convention — every caller has to remember it, and a caller that
-   * forgets gets the old, unbound behaviour back without a word from the
-   * compiler. Required, the guarantee is structural: there is no way to answer
-   * a consent request without saying which run is being answered.
+   * The fields are required, not optional — the point made when the orchestration
+   * package bound this to the run as well. An optional argument would make the
+   * binding a convention every caller has to remember, and a caller that forgot
+   * would get the old, unbound behaviour back without a word from the compiler.
+   * Required, there is no way to answer a request without saying which execution,
+   * and whose, is being answered. A mismatch leaves the pending request pending,
+   * so the run that asked still waits for its own answer — and still times out
+   * into a denial if none comes.
    */
-  answerPermission(requestId: string, allow: boolean, runId: string): boolean {
-    const pending = this.#pendingPermissions.get(requestId);
+  answerPermission(input: {
+    runId: string;
+    ownerId: string;
+    requestId: string;
+    allow: boolean;
+  }): boolean {
+    const pending = this.#pendingPermissions.get(input.requestId);
     if (!pending) return false;
-    if (pending.runId !== runId) return false;
-    this.#pendingPermissions.delete(requestId);
-    pending.resolve(allow);
+    if (pending.runId !== input.runId || pending.ownerId !== input.ownerId) return false;
+    this.#pendingPermissions.delete(input.requestId);
+    pending.resolve(input.allow);
     return true;
+  }
+
+  /** Request ids still awaiting a decision. Exposed for assertions and diagnostics. */
+  pendingPermissionIds(): string[] {
+    return [...this.#pendingPermissions.keys()];
+  }
+
+  /**
+   * Refuses everything this run was still waiting to be told, and says why.
+   *
+   * Called when the run is aborted — Stop, the hard timeout, a shutdown. Without
+   * it a cancelled run stayed alive inside the gate: the abort signal reaches
+   * the model's stream, but a run parked on `canUseTool` is not *in* the stream,
+   * it is awaiting a promise nobody is going to settle, so Stop took effect only
+   * when the consent timeout expired — up to two minutes later, with the
+   * workspace still on disk. Refusal rather than allowance, for the same reason
+   * expiry is a refusal: an operation nobody approved must not run because the
+   * run was being stopped.
+   */
+  #refusePendingPermissions(runId: string): void {
+    for (const [requestId, pending] of [...this.#pendingPermissions]) {
+      if (pending.runId !== runId) continue;
+      this.#pendingPermissions.delete(requestId);
+      pending.resolve(false);
+    }
   }
 
   /**
@@ -351,6 +394,20 @@ export class AgentRuntime {
         path: `input/${meta.filename}`,
         filename: meta.filename,
         mediaType: meta.mediaType,
+      });
+    }
+    /*
+     * Written after staging, not before: the link states which files this
+     * execution actually received. A file the owner check refused never gets
+     * here, so it never appears as an attachment of the command either.
+     */
+    if (input.userMessageId && staged.length > 0) {
+      this.services.conversations.linkAttachments({
+        conversationId: conversation.id,
+        ownerId: input.ownerId,
+        messageId: input.userMessageId,
+        runId: run.id,
+        fileIds: staged.map((s) => s.fileId),
       });
     }
 
@@ -642,15 +699,22 @@ export class AgentRuntime {
       mcpServers: { app: server },
       systemPrompt: { type: 'preset', preset: 'claude_code', append: systemPrompt },
       // Only the application's own tools and the workspace file tools are
-      // pre-approved; Bash is deliberately absent (see the constant above).
+      // pre-approved; Bash is deliberately absent (see `permissions.ts`).
       allowedTools: [...this.#toolNames, ...AUTO_APPROVED_FILE_TOOLS],
+      /*
+       * The forbidden category. These reach the network from inside the SDK
+       * process, where the shell sandbox's empty domain allowlist does not
+       * apply, so they are removed from the model's context rather than left to
+       * a prompt the user could answer with "yes".
+       */
+      disallowedTools: [...FORBIDDEN_TOOLS],
       permissionMode: 'default',
       sandbox: sandboxSettings({
         workspaceDir: args.workspace.dir,
         dataDir: this.services.config.dataDir,
       }),
       maxTurns: 40,
-      canUseTool: this.#makeCanUseTool(stream),
+      canUseTool: this.#makeCanUseTool(stream, { runId, ownerId: args.ownerId }),
       hooks: {
         SessionStart: [{ hooks: [hookCallback] }],
         PreToolUse: [{ hooks: [hookCallback] }],
@@ -666,6 +730,9 @@ export class AgentRuntime {
       () => abort.abort(new Error('run_timeout')),
       this.services.config.runTimeoutMs,
     );
+    // A stopped run must not stay parked on a question nobody will answer.
+    const releaseGate = () => this.#refusePendingPermissions(runId);
+    abort.signal.addEventListener('abort', releaseGate, { once: true });
 
     /**
      * Writes the run's terminal status, and tolerates the run no longer having
@@ -779,6 +846,10 @@ export class AgentRuntime {
       stream.runError(message, code);
     } finally {
       clearTimeout(timeout);
+      abort.signal.removeEventListener('abort', releaseGate);
+      // Also on an ordinary end: a question left open by a stream that stopped
+      // for any other reason would keep this run in the pending map for ever.
+      this.#refusePendingPermissions(runId);
       this.services.uiSnapshots.forgetRun(runId);
       stream.close();
     }
@@ -851,12 +922,22 @@ export class AgentRuntime {
   }
 
   /**
-   * Permission gate. Read tools and the app's own write tools run unattended;
-   * anything that reaches the shell asks the user through the chat, and an
-   * unanswered request is a denial, never a silent allow.
+   * Permission gate — the third of the three SDK mechanisms described in
+   * `permissions.ts`, and the only one this application implements itself.
+   *
+   * Read tools and the app's own write tools run unattended; a forbidden tool is
+   * refused here **without asking**, so the policy holds even if the deny rule
+   * passed to the SDK ever stopped being honoured; anything else asks the user
+   * through the chat. An unanswered request is a denial, never a silent allow.
+   *
+   * While the question is open the run's stored status is `awaiting_consent`.
+   * It used to live only in the event log and in this process's memory, so a
+   * client that was not watching — the panel closed, another conversation on
+   * screen, a tab reopened after a while — had no way to learn that something
+   * was waiting for it. The status is what `GET /api/runs/active` reports and
+   * what the background-task list shows as "czeka na zgode".
    */
-  #makeCanUseTool(stream: RunEventStream) {
-    const alwaysAllow = new Set<string>([...this.#toolNames, ...AUTO_APPROVED_FILE_TOOLS]);
+  #makeCanUseTool(stream: RunEventStream, run: { runId: string; ownerId: string }) {
     return async (
       toolName: string,
       input: Record<string, unknown>,
@@ -864,11 +945,21 @@ export class AgentRuntime {
       | { behavior: 'allow'; updatedInput: Record<string, unknown> }
       | { behavior: 'deny'; message: string }
     > => {
-      if (alwaysAllow.has(toolName)) return { behavior: 'allow', updatedInput: input };
+      const decision = decideTool(toolName, this.#toolNames);
+      if (decision === 'auto') return { behavior: 'allow', updatedInput: input };
+      if (decision === 'forbidden') {
+        return { behavior: 'deny', message: forbiddenToolMessage(toolName) };
+      }
 
-      const requestId = `perm_${Math.random().toString(36).slice(2, 12)}`;
+      const requestId = newId('perm');
+      this.services.runs.markAwaitingConsent(run.runId);
       const allowed = await new Promise<boolean>((resolve) => {
-        this.#pendingPermissions.set(requestId, { resolve, toolName, runId: stream.runId });
+        this.#pendingPermissions.set(requestId, {
+          resolve,
+          toolName,
+          runId: run.runId,
+          ownerId: run.ownerId,
+        });
         stream.custom(PLATFORM_CUSTOM_EVENTS.permissionRequest, {
           requestId,
           toolName,
@@ -876,9 +967,13 @@ export class AgentRuntime {
           runId: stream.runId,
         });
         setTimeout(() => {
+          // Expiry is a refusal. The branch is deliberately the same `resolve`
+          // path as a user's "Odmowa", so an unattended request can never end
+          // up on the permissive side by omission.
           if (this.#pendingPermissions.delete(requestId)) resolve(false);
-        }, 120_000);
+        }, this.services.config.consentTimeoutMs);
       });
+      this.services.runs.markConsentAnswered(run.runId);
 
       return allowed
         ? { behavior: 'allow', updatedInput: input }

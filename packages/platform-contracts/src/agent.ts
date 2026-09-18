@@ -98,11 +98,29 @@ export const runStatusSchema = z.enum([
   /** Accepted, waiting for the conversation's previous run to finish. */
   'queued',
   'running',
+  /**
+   * Executing, but stopped at the consent gate: a tool call is waiting for the
+   * user's decision.
+   *
+   * A stored status rather than a screen state, because the whole point of the
+   * criterion behind it (L11.19) is the case where nobody is looking: a client
+   * that reloads, opens another conversation or comes back later asks
+   * `GET /api/runs/active`, and a run parked on a question has to be in that
+   * answer. It is *active* — cancellable, still holding its workspace — so it
+   * is not a terminal status.
+   */
+  'awaiting_consent',
   'succeeded',
   'failed',
   'cancelled',
 ]);
 export type RunStatus = z.infer<typeof runStatusSchema>;
+
+/** Statuses that mean the run is still the backend's work. */
+export const ACTIVE_RUN_STATUSES = ['queued', 'running', 'awaiting_consent'] as const;
+
+/** The resolving statuses; exactly one of them is ever recorded per run. */
+export type TerminalRunStatus = Exclude<RunStatus, (typeof ACTIVE_RUN_STATUSES)[number]>;
 
 export const agentRunSchema = z.object({
   id: z.string(),

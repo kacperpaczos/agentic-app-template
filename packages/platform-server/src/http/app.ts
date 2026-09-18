@@ -13,6 +13,7 @@ import {
   cardSpecSchema,
   CHAT_CAPABILITIES,
   EMPTY_APP_CONTEXT,
+  PLATFORM_CUSTOM_EVENTS,
   runAgentInputSchema,
   updateCardGeometryInputSchema,
   updateCardSpecInputSchema,
@@ -195,7 +196,24 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
       }
       return;
     }
+    /*
+     * A **resolved** run's replay carries no interface commands.
+     *
+     * An interface command is a question the run is waiting on: it asks the
+     * browser to move the screen and does not resolve until the browser answers
+     * or the runtime times it out. Once the run has ended nothing is waiting for
+     * that answer — the agent was already told `no_client` — so performing it
+     * now would move the user's screen for a question settled minutes ago, and
+     * answer it to nobody. A client that *did* see it live refuses the repeat by
+     * `commandId` (`UiCommandRunner`); this covers the other case, where the
+     * client never saw it because it was away while the run was ending.
+     *
+     * Only this path filters. A run still executing is served from its live
+     * stream above, where a command may genuinely still be waiting.
+     */
     for (const { seq, payload } of services.runs.eventsAfter(runId, ownerId, from)) {
+      const event = payload as { type?: string; name?: string } | null;
+      if (event?.type === 'CUSTOM' && event.name === PLATFORM_CUSTOM_EVENTS.uiCommand) continue;
       await sse.writeSSE({ id: String(seq), data: JSON.stringify(payload) });
     }
     /*
@@ -390,7 +408,23 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
   app.get('/api/threads/get/:id', (c) => {
     const ownerId = c.get('ownerId');
     const messages = services.conversations.messages(c.req.param('id'), ownerId);
-    return json(c, messages.map(toAguiMessage));
+    return json(
+      c,
+      messages.map((m) => {
+        const base = toAguiMessage(m);
+        if (m.role !== 'user') return base;
+        /*
+         * The files this command was sent with, added to the message itself.
+         *
+         * `restStorage` passes the array straight into the chat's store, so an
+         * extra field travels with the message and is available wherever the
+         * message is — including after a reload, which is precisely when the
+         * in-flight `attachFileIds` were gone.
+         */
+        const attachments = services.conversations.attachmentsOfMessage(m.id, ownerId);
+        return attachments.length > 0 ? { ...base, attachments } : base;
+      }),
+    );
   });
 
   app.patch('/api/threads/update/:id', async (c) => {
@@ -593,7 +627,7 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
       }
     }
     // Idempotent by message id: a reconnect replaying the same turn is a no-op.
-    services.conversations.appendMessage(conversationId, ownerId, {
+    const userMessage = services.conversations.appendMessage(conversationId, ownerId, {
       id: lastUser?.id,
       role: 'user',
       content: prompt,
@@ -614,6 +648,8 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
       prompt,
       appContext: { ...appContext, conversationId },
       attachFileIds,
+      // The command the files were attached to, so the link survives the run.
+      userMessageId: userMessage.id,
     });
     if (runKey) {
       startingRuns.set(
@@ -849,13 +885,22 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
   });
 
   /**
-   * Answers a consent request of the run in the address.
+   * A decision about one pending question of one run.
    *
-   * Both halves matter and neither used to be complete: the body was read with
-   * a bare `c.req.json()`, so a malformed or absent body became an unhandled
-   * exception and a 500 `internal` rather than a validation failure; and the
-   * request id was passed on without the run, so the ownership check on the
-   * address and the consent actually granted could be about different runs.
+   * Two halves, and neither used to be complete. The **body** was read with a
+   * bare `c.req.json()`, so a malformed or absent one became an unhandled
+   * exception and a 500 `internal` instead of a validation failure. The
+   * **binding** was missing: the request id went on without the run, so the
+   * ownership check on the address and the consent actually granted could be
+   * about different runs — an answer posted to a run of one's own, carrying the
+   * request id of somebody else's, decided theirs. The run in the path is
+   * therefore not decoration: `answerPermission` compares it, and the owner,
+   * with the run that actually asked.
+   *
+   * `answered: false` is the honest answer to every case where nothing was
+   * decided: an unknown id, an id belonging to another run, an expired request,
+   * and a repeat of an answer already given. The operation runs at most once
+   * because the gate resolves at most once.
    */
   app.post('/api/runs/:id/permission', async (c) => {
     const ownerId = c.get('ownerId');
@@ -869,7 +914,12 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
         issues: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
       });
     }
-    const answered = runtime.answerPermission(parsed.data.requestId, parsed.data.allow === true, runId);
+    const answered = runtime.answerPermission({
+      runId,
+      ownerId,
+      requestId: parsed.data.requestId,
+      allow: parsed.data.allow === true,
+    });
     return json(c, { answered });
   });
 
@@ -1065,11 +1115,23 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
 
   /* -------------------------------- files ------------------------------- */
 
+  /**
+   * The owner's files, each with the commands it was attached to.
+   *
+   * `attachedTo` is what makes an attachment traceable after the run: the link
+   * used to exist only while the request was in flight, so a file on this screen
+   * could not say which instruction it had been sent with.
+   */
   app.get('/api/files', (c) => {
     const ownerId = c.get('ownerId');
     const kind = c.req.query('scopeKind');
     const id = c.req.query('scopeId');
-    return json(c, { files: services.files.list(ownerId, kind && id ? { kind, id } : undefined) });
+    const attachments = services.conversations.attachmentsByFile(ownerId);
+    return json(c, {
+      files: services.files
+        .list(ownerId, kind && id ? { kind, id } : undefined)
+        .map((f) => ({ ...f, attachedTo: attachments[f.id] ?? [] })),
+    });
   });
 
   app.post('/api/files', async (c) => {
@@ -1086,7 +1148,9 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
       scopeKind: (form.get('scopeKind') as string | null) ?? null,
       scopeId: (form.get('scopeId') as string | null) ?? null,
     });
-    return json(c, stored, 201);
+    // `attachedTo` is empty and stated rather than absent: a file just uploaded
+    // has been sent with no command yet, which is a fact, not missing data.
+    return json(c, { ...stored, attachedTo: [] }, 201);
   });
 
   app.get('/api/files/:id/content', (c) => {

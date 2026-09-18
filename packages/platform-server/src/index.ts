@@ -36,6 +36,7 @@ export * from './agent/runtime.ts';
 export * from './agent/auth.ts';
 export * from './agent/events.ts';
 export * from './agent/sandbox.ts';
+export * from './agent/permissions.ts';
 export * from './agent/toolkit.ts';
 export * from './agent/tools/index.ts';
 export * from './agent/projection.ts';
@@ -46,6 +47,7 @@ export * from './auth/session.ts';
 export * from './http/app.ts';
 export * from './registry/platform-components.ts';
 export * from './util/id.ts';
+export * from './util/managed-fs.ts';
 
 export interface PlatformInstance {
   config: PlatformConfig;

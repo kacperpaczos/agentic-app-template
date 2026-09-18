@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useThread, useThreadList } from '@openuidev/react-headless';
 import { apiGet } from '../api/client.ts';
 import { useChatSlots } from './chatSlots.ts';
+import { setReattachedRunHandler } from './runStreams.ts';
 import { useSessionLocation } from '../state/sessionLocation.ts';
 import { useAppState } from '../state/appState.ts';
 import {
@@ -56,6 +57,7 @@ export function ConversationSync() {
    * list has not arrived yet.
    */
   const threadError = useThread((s) => s.threadError);
+  const setMessages = useThread((s) => s.setMessages);
 
   const { conversationId: urlThreadId, setConversation } = useSessionLocation();
   const setConversationState = useAppState((s) => s.setConversation);
@@ -154,6 +156,40 @@ export function ConversationSync() {
     setConversationState,
     followConversationSpace,
   ]);
+
+  /*
+   * A run this client only *watched* has finished: re-read the conversation.
+   *
+   * The ready-made chat commits an answer it streamed itself. It knows nothing
+   * about a run picked up by re-attachment — after a reload, after the network
+   * came back, after the panel was closed and reopened — so the finished answer
+   * sat in the database while the thread on screen still ended at the command.
+   * Leaving and re-entering the conversation showed it, which is precisely the
+   * manual workaround the acceptance criteria forbid as a substitute for the
+   * function (L11.18).
+   *
+   * Only the conversation on screen is refreshed, and only from the backend:
+   * `setMessages` is the library's own action and the payload is the same
+   * endpoint its storage adapter reads, so this adds a re-read and nothing else.
+   */
+  const selectedRef = useRef<string | null>(null);
+  selectedRef.current = selectedThreadId;
+  useEffect(() => {
+    setReattachedRunHandler((conversationId) => {
+      if (selectedRef.current !== conversationId) return;
+      void (async () => {
+        try {
+          const messages = await apiGet<unknown[]>(`/api/threads/get/${conversationId}`);
+          // The user may have moved on while the request was in flight.
+          if (selectedRef.current !== conversationId) return;
+          setMessages(messages as never);
+        } catch {
+          // Not fatal: the conversation re-reads on the next visit anyway.
+        }
+      })();
+    });
+    return () => setReattachedRunHandler(null);
+  }, [setMessages]);
 
   /*
    * Classify a failed load by asking the API directly.

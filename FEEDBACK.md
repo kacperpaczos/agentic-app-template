@@ -484,3 +484,85 @@ Dwie kolizje, obie widoczne dopiero w drzewie, w którym istnieją oba pakiety.
 
 Sprawdzone próbą przed zmianą asercji (`180 → 200/len 120`, `400 → 400 validation_failed`, tytuł w
 bazie nietknięty), a nie dopasowane do tego, co akurat przechodzi.
+
+---
+
+## T5 — 2026-09-18 — BL-09: pliki, sandbox i praca w tle (L11.7, L11.10, L11.12, L11.13, L11.15, L11.16, L11.18, L11.19, L11.20, L11.22, L11.23, L11.24)
+
+Pakiet o tym, co się dzieje, gdy coś idzie nie tak albo zostaje przerwane: odmowa zgody, odpowiedź
+wysłana dwa razy, zamknięty panel, zerwana sieć, awaria w połowie publikacji, uszkodzony plik.
+Ścieżka „wszystko się udało” była pokryta próbą z modelem; jej rodzeństwo nie było pokryte wcale.
+
+### Co było zepsute (nie tylko nieudowodnione)
+
+- **Odpowiedź na zgodę nie była związana z wykonaniem.** `answerPermission` rozstrzygał po samym
+  `requestId` z mapy procesu, a punkt HTTP sprawdzał właściciela uruchomienia **z adresu**. Odpowiedź
+  wysłana pod adres własnego uruchomienia, z `requestId` cudzego, rozstrzygała cudze. `requestId`
+  pochodził z `Math.random`.
+- **Stop nie docierał do wykonania czekającego na zgodę.** Sygnał przerwania trafia do strumienia
+  modelu, a przebieg stojący w `canUseTool` nie jest *w* strumieniu — czekał na obietnicę, której nikt
+  nie zamierzał rozstrzygnąć. Zatrzymanie skutkowało dopiero po wygaśnięciu prośby (do 120 s), z
+  katalogiem roboczym wciąż na dysku.
+- **Status `awaiting_consent` nie był zapisywany.** `listActive` wymieniał go w SQL, ale nikt go nie
+  ustawiał, więc zadanie czekające na decyzję zgłaszało się klientowi jako `running`. Klient, który
+  nie oglądał tej rozmowy — po przeładowaniu, w innej rozmowie, po powrocie — nie miał skąd
+  dowiedzieć się, że coś na niego czeka.
+- **Dokończony wynik zadania, do którego klient tylko dołączył, nie pojawiał się na ekranie.** Gotowy
+  czat zatwierdza odpowiedź, którą sam odebrał; o przebiegu przejętym przez ponowne podłączenie nic
+  nie wie. Odpowiedź leżała w bazie, a wątek na ekranie kończył się na poleceniu — aż do wyjścia z
+  rozmowy i powrotu. Test, który po przeładowaniu ręcznie otwierał rozmowę, brał tę lukę za normę.
+- **Publikacja wyniku nie była atomowa.** Bajty szły prosto pod nazwę docelową, wiersz `files`
+  wstawiał się po zapisie, a artefakt powstawał osobnym wywołaniem: awaria między krokami zostawiała
+  plik bez wiersza albo wiersz bez artefaktu, a awaria w trakcie zapisu — **ucięty plik pod nazwą
+  docelową**, czyli wynik wyglądający na kompletny.
+- **Wynik `files_publish_version` nie był artefaktem.** Był wierszem w `files` i niczym więcej, więc
+  zakładka Artefakty rozmowy nie pokazywała nic, a jedyną drogą do wyniku był ekran Plików.
+- **Narzędzia sieciowe SDK nie były zabronione, tylko „do decyzji”.** `WebFetch` i `WebSearch`
+  działają w procesie SDK, poza sandboxem poleceń, więc pusta lista domen ich nie ogranicza — między
+  odciętą siecią a modelem stało jedno kliknięcie „Zgoda”.
+- **Powiązanie załącznika z poleceniem istniało tylko w locie.** `attachFileIds` przychodziły z
+  żądaniem i nigdzie nie były zapisywane; po przeładowaniu nie dało się powiedzieć, z którym
+  poleceniem plik poszedł.
+- **Deklaracja o skoroszytach była w jednym punkcie nieprawdziwa.** `FILE_ANALYSIS` mówił, że obrazy
+  nie są zachowywane przy zapisie — parser je zachowuje. Wykresy faktycznie znikają, ale z innego
+  powodu, niż mówiła lista: zapisany skoroszyt powstaje z modelu parsera, więc znika każda część,
+  której parser nie modeluje.
+
+### Co zbudowano
+
+- `agent/permissions.ts` — macierz uprawnień z trzecią kategorią (zabronione), zasilająca
+  `disallowedTools` SDK **i** bramkę zgody; nierozpoznane narzędzie trafia do pytania, nie do zgody.
+- Zgoda przypisana do wykonania: `runId` i właściciel zapisane przy prośbie i porównywane przy
+  odpowiedzi, `requestId` z `crypto`. Powtórzona, skrzyżowana i spóźniona odpowiedź nie rozstrzygają
+  niczego. Przerwanie uruchomienia odrzuca jego oczekujące prośby, więc Stop działa natychmiast.
+- `awaiting_consent` jako zapisany status uruchomienia (anulowalny, sprzątany przy restarcie).
+- `FileService.storeWith` — publikacja jako jeden krok: plik tymczasowy + przemianowanie, wiersz i
+  artefakt w jednej transakcji, kompensacja przy awarii.
+- `util/managed-fs.ts` — każda operacja kasująca w serwerze sprawdza ścieżkę **w chwili wykonania**,
+  niezależnie od tego, skąd ścieżka pochodzi (workspace z bazy, `rel_path` z bazy, plik tymczasowy).
+- `files_publish_version` tworzy artefakt rozmowy w tej samej transakcji; narzędzie dopisane do
+  `ARTIFACT_PRODUCING_TOOLS`, więc podgląd pojawia się pod wywołaniem, a pełny widok w zakładce.
+- Trwałe powiązanie załącznika z poleceniem (`message_attachments`, migracja `platform-0005`),
+  widoczne na ekranie Plików i w wiadomości rozmowy.
+- Odświeżenie wiadomości po zakończeniu przebiegu, do którego klient tylko dołączył.
+- `APP_CONSENT_TIMEOUT_MS` i sekcja README „Co kończy wykonanie bez Stop”: jawne Stop, twardy limit
+  czasu, restart backendu — i osobno wygaśnięcie prośby o zgodę, które jest **odmową**.
+
+### Dowody
+
+Nowe: `tests/consent.test.ts`, `tests/publication.test.ts`, trzy próby semantyki zapisu w
+`tests/file-analysis.test.ts`, `e2e/consent-runs.spec.ts`, `e2e/run-continuity.spec.ts`,
+`e2e/sandbox-files.spec.ts`, `e2e/stop-children.spec.ts` (Stop liczony w procesach potomnych serwera
+z `/proc`, pomiar w `docs/evidence/z10-bl09/`, zapis na żądanie: `pnpm evidence:z10`).
+
+Wszystko poza istniejącymi próbami z modelem to **symulacja na granicy adaptera**: scenariusz zamiast
+modelu, prawdziwe wszystko inne — bramka zgody, narzędzia, workspace, publikacja, sprzątanie, procesy.
+
+### Co zostało otwarte
+
+- **L11.7** — proces liczony w próbie jest prawdziwym procesem systemowym, ale stand-inem procesu
+  Claude Agent SDK; bez grantu tur nie wykazano, że Stop kończy proces potomny samego SDK.
+- **L11.12** — kolejności mechanizmów SDK nie da się zaobserwować bez tury modelu; macierz jest
+  zbudowana jako obrona w dwóch miejscach, a nie jako dowód kolejności.
+- **L11.23** — nie sprawdzono na modelu, że odpowiedź agenta nie podaje zapisanej wartości formuły
+  jako wyniku; w szablonie wykazano, że plik nie daje takiej możliwości (formuła bez wartości).

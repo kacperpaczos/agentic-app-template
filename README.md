@@ -111,6 +111,39 @@ Dzięki temu nowa aplikacja to przede wszystkim nowy moduł, a nie przepisana pl
 6. Rozmowa, zdarzenia przebiegu i wyniki narzędzi zostają zapisane w bazie; po odświeżeniu strony albo
    restarcie backendu wracają na swoje miejsce.
 
+### Zgody: co jest automatyczne, o co agent pyta, czego nie wolno
+
+Narzędzia agenta dzielą się na trzy kategorie — macierz jest w kodzie
+(`packages/platform-server/src/agent/permissions.ts`) i to ona zasila konfigurację SDK:
+
+| Kategoria | Co obejmuje | Jak działa |
+|---|---|---|
+| automatyczne | narzędzia MCP aplikacji oraz `Read`, `Write`, `Edit`, `Glob`, `Grep` w katalogu roboczym | wykonują się bez pytania; ogranicza je sandbox, nie lista |
+| wymagające decyzji | `Bash` i każde narzędzie spoza pozostałych dwóch kategorii | pytanie pojawia się w rozmowie i wstrzymuje wykonanie |
+| zabronione | `WebFetch`, `WebSearch` | nie trafiają do modelu (`disallowedTools`) i są odrzucane przez bramkę, bez pytania użytkownika |
+
+Sieć jest odcięta w sandboxie poleceń, ale narzędzia sieciowe SDK działają **poza** nim — dlatego są
+zabronione, a nie zostawione do decyzji. Kolejność mechanizmów SDK ma znaczenie i jest częścią tej
+decyzji: wpis w `allowedTools` zatwierdza narzędzie *zanim* bramka zgody zostanie wywołana, a
+`sandbox.autoAllowBashIfSandboxed` (pozostawione na `false`) zatwierdziłby polecenia powłoki jeszcze
+wcześniej. Dlatego `Bash` celowo nie występuje na liście `allowedTools`.
+
+### Co kończy wykonanie bez Stop
+
+Zamknięcie panelu, przełączenie rozmowy, przeładowanie strony i utrata sieci **nie** przerywają
+zadania — odłączają tylko obserwację, a klient dołącza z powrotem przez `GET /api/runs/:id/stream`.
+Wykonanie kończą dokładnie trzy rzeczy:
+
+1. **jawne Stop** (przycisk przy uruchomieniu albo na liście zadań w tle) — status `cancelled`;
+2. **twardy limit czasu** `APP_RUN_TIMEOUT_MS` (domyślnie 300 s) — status `failed`
+   z kodem `integration_failed`; to nie jest anulowanie i nie jest tak raportowane;
+3. **restart backendu** — `reconcileOnBoot` oznacza przerwane uruchomienia jako `failed`
+   z komunikatem o restarcie, zamiast udawać, że trwają.
+
+Osobno: prośba o zgodę bez odpowiedzi przez `APP_CONSENT_TIMEOUT_MS` (domyślnie 120 s) kończy się
+**odmową** — nie zgodą — i wykonanie idzie dalej z odmową narzędzia. Zadanie czekające na decyzję ma
+status `awaiting_consent`, widać je na liście zadań w tle i można je zatrzymać.
+
 Pełny opis architektury i kontraktów: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Technologie i dlaczego te
@@ -182,7 +215,8 @@ Zanim to zrobisz, wykonaj kopię i próbę migracji na kopii:
 | `APP_DATA_DIR` | `<repo>/data` | baza, pliki i katalogi robocze agenta |
 | `APP_ALLOWED_ORIGINS` | adresy `localhost` i `127.0.0.1` na portach 5173 i 8791 | dozwolone originy, po przecinku |
 | `APP_MODEL` | `claude-sonnet-4-5` | model agenta |
-| `APP_RUN_TIMEOUT_MS` | `300000` | limit czasu jednego uruchomienia agenta |
+| `APP_RUN_TIMEOUT_MS` | `300000` | twardy limit czasu jednego uruchomienia agenta (patrz „Co kończy wykonanie bez Stop”) |
+| `APP_CONSENT_TIMEOUT_MS` | `120000` | ile prośba o zgodę czeka na decyzję, zanim zostanie **odrzucona** |
 | `APP_MAX_UPLOAD_BYTES` | `8388608` | maksymalny rozmiar pliku |
 | `APP_SKIP_BASE_DATA` | — | `1` wyłącza dane przykładowe |
 | `APP_DEV_API_PORT` | `8790` | port backendu w trybie deweloperskim; cel proxy Vite. Odrzuca 8791 i 8792–8799 |

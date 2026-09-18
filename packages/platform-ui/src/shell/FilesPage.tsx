@@ -82,16 +82,37 @@ export function FilesPage() {
               <th scope="col">Typ</th>
               <th scope="col">Rozmiar</th>
               <th scope="col">Zakres</th>
+              {/*
+                Which command the file was sent with. The link is stored when
+                the file is staged into a run, so it survives the run, a reload
+                and a restart — before that, an attachment stopped being
+                traceable the moment the request ended.
+              */}
+              <th scope="col">Dolaczony do</th>
               <th scope="col" />
             </tr>
           </thead>
           <tbody>
             {files.data.files.map((f) => (
-              <tr key={f.id}>
+              <tr key={f.id} data-testid={`file-row-${f.id}`}>
                 <td>{f.filename}</td>
                 <td className="pf-muted">{f.mediaType}</td>
                 <td className="pf-num">{f.byteSize} B</td>
                 <td className="pf-muted">{f.scopeKind ? `${f.scopeKind}:${f.scopeId?.slice(-6)}` : '—'}</td>
+                <td className="pf-muted" data-testid={`file-attached-${f.id}`}>
+                  {f.attachedTo?.length ? (
+                    <ul className="pf-filelist__uses">
+                      {f.attachedTo.map((use) => (
+                        <li key={`${use.messageId}`} data-conversation={use.conversationId}>
+                          <span className="pf-filelist__conv">{use.conversationTitle}</span>
+                          {use.prompt && <span className="pf-filelist__prompt">: „{use.prompt}”</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    '—'
+                  )}
+                </td>
                 <td>
                   <a className="pf-link" href={`/api/files/${f.id}/content`} download>
                     pobierz

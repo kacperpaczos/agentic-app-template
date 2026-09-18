@@ -103,6 +103,7 @@ pnpm check:module-swap   # przy zmianach kontraktu modułu lub warstwy składani
 pnpm evidence            # regeneracja plików dowodowych z regresji (APP_WRITE_EVIDENCE=1) — na żądanie
 pnpm evidence:z5         # to samo dla dowodu kontekstu aplikacji (tests/app-context.test.ts)
 pnpm evidence:e2e        # to samo dla pomiarów przeglądarkowych
+pnpm evidence:z10        # to samo dla pomiaru Stop liczonego w procesach (e2e/stop-children.spec.ts)
 ```
 
 **Regresja nie zapisuje dowodów przy zwykłym przebiegu.** Warunek odbioru brzmi „`pnpm verify` = 0

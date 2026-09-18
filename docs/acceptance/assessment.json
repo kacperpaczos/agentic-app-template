@@ -2067,8 +2067,8 @@
       "status": "czesciowe",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/background-tasks.spec.ts „jawne Stop konczy wskazane wykonanie” i „zadanie z innej rozmowy da sie zatrzymac z listy zadan”: status cancelled, brak aktywnych zadań. e2e/measurements.spec.ts „zatrzymanie z interfejsu konczy wykonanie i nie zostawia zapisow”: czas od kliknięcia do stanu końcowego w backendzie zapisany z warunkami, liczba zdarzeń nie rośnie po zakończeniu. tests/background-runs.test.ts „konczy wskazane wykonanie i nie rusza pozostalych”. Wszystko na stand-inie modelu honorującym sygnał przerwania; historyczny pomiar procesów potomnych (raport §5, raw-probe-stop.log) nie jest częścią szablonu.",
-      "gap": "Brak w szablonie próby Stop na prawdziwym procesie Claude SDK z liczeniem procesów potomnych przed, w trakcie i po (w tym poleceń powłoki w sandboxie); pomiar anulowania kończy się na statusie w backendzie, więc osierocone procesy nie zostałyby wykryte.",
+      "proof": "e2e/stop-children.spec.ts „proces potomny uruchomienia konczy sie razem z zatrzymanym zadaniem” (instancja scenariuszowa, build produkcyjny): uruchomienie startuje prawdziwy proces systemowy związany z sygnałem przerwania; potomkowie procesu serwera liczeni z /proc przed poleceniem, w trakcie i po zakończeniu (0/1/0 względem stanu wyjściowego), Stop z interfejsu mierzony jako trzy momenty (potwierdzenie POST /cancel, stan końcowy w karcie, zniknięcie procesu potomnego i workspace) — pomiar w docs/evidence/z10-bl09/pomiary-stop-procesy.json, zapisywany na żądanie (APP_WRITE_EVIDENCE=1, pnpm evidence:z10). tests/consent.test.ts „oczekiwanie na zgode mozna zatrzymac, a uruchomienie konczy sie jako anulowane”: Stop dociera także do wykonania czekającego na zgodę — wcześniej bramka zgody nie była związana z sygnałem przerwania i zatrzymanie skutkowało dopiero po wygaśnięciu prośby (do 120 s). Wcześniejsze dowody bez zmian: e2e/background-tasks.spec.ts, e2e/measurements.spec.ts, tests/background-runs.test.ts, tests/measurements.test.ts.",
+      "gap": "Proces liczony w próbie jest prawdziwym procesem systemowym, ale stand-inem procesu Claude Agent SDK na granicy adaptera — bez grantu tur modelu nie wykazano, że Stop kończy proces potomny samego SDK ani poleceń powłoki uruchomionych w sandboxie. Pozostała część kryterium (pomiar anulowania liczony w procesach, nie tylko w statusie) jest w regresji szablonu.",
       "backlog": "BL-09",
       "scenarios": [
         "T16"
@@ -2108,12 +2108,11 @@
       }
     },
     "L11.10": {
-      "status": "czesciowe",
-      "evidence": "model",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/files-agent.spec.ts „wynik jest dostepny po powrocie do rozmowy” (po zakończonym przebiegu, gdy runtime usuwa workspace w finally w agent/runtime.ts): wersja pliku na liście i GET /api/files/:id/content zwraca 200. tests/runtime.test.ts „tworzy workspace z katalogami input/output i sprzata po sobie” (dispose usuwa katalog). Analiza kodu: files_publish_version i artifact_publish_file kopiują bajty do magazynu plików przed sprzątaniem.",
-      "gap": "Żaden test nie sprawdza jawnie, że workspace został usunięty przed pobraniem, ani nie porównuje sumy kontrolnej wyniku po sprzątaniu (test sprawdza tylko status 200); ścieżka artifact_publish_file nie jest wykonywana w żadnym teście.",
-      "backlog": "BL-09",
+      "proof": "tests/publication.test.ts „artefakt opublikowany z output/ jest pobieralny, gdy workspace juz nie istnieje” (symulacja modelu na granicy adaptera, reszta prawdziwa): uruchomienie zapisuje plik w output/, publikuje go przez artifact_publish_file, po zakończeniu katalog workspace NIE istnieje (asercja przed pobraniem), a GET /api/files/:id/content zwraca te same bajty i tę samą sumę sha256 co przed sprzątnięciem; „cudzy wynik jest nie do pobrania i nie do zobaczenia jako artefakt” (403 na pliku i na artefakcie). e2e/sandbox-files.spec.ts „skoroszyt: wiele arkuszy i typow komorek…”: po zakończeniu przebiegu katalog workspace uruchomienia zniknął z dysku, a wynik pobrany w przeglądarce otwiera się jako skoroszyt. Ścieżka artifact_publish_file jest wykonywana w regresji (wcześniej nie była w żadnym teście).",
+      "gap": "—",
       "scenarios": [
         "T14"
       ],
@@ -2135,22 +2134,21 @@
     },
     "L11.12": {
       "status": "czesciowe",
-      "evidence": "model",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "e2e/files-agent.spec.ts (prawdziwy model): uruchomienie skryptu przez Bash przeszło przez bramkę zgody w GUI (asercja na zatwierdzenie Bash), więc ciche auto-zatwierdzenie powłoki oblałoby test. tests/runtime.test.ts „konfiguracja sandboxa odcina siec i chroni katalog danych aplikacji”: autoAllowBashIfSandboxed false. Analiza kodu agent/runtime.ts (AUTO_APPROVED_FILE_TOOLS, CONSENT_REQUIRED_TOOLS, opis CLAUDE_SDK_CAN_USE_TOOL_SHADOWED) i docs/NEW-APPLICATION.md §7 (allowedTools omija canUseTool).",
-      "gap": "Brak jawnej macierzy uprawnień z kategorią operacji zabronionych: disallowedTools nie jest ustawione, więc np. WebFetch i WebSearch trafiają do pytania o zgodę zamiast być zabronione; auto-zatwierdzanie części poleceń powłoki przez klasyfikator SDK przed canUseTool (np. echo) jest opisane tylko w archiwum (FEEDBACK #23, raport §7 pkt 9), nie w dokumentacji szablonu, i nie ma testu tej kolejności.",
+      "proof": "Macierz uprawnień jest jawna i ma trzy kategorie (packages/platform-server/src/agent/permissions.ts): automatyczne (narzędzia MCP aplikacji + Read/Write/Edit/Glob/Grep), wymagające decyzji (Bash i wszystko nierozpoznane) oraz ZABRONIONE (WebFetch, WebSearch) — te ostatnie trafiają do disallowedTools SDK i są dodatkowo odrzucane przez bramkę bez pytania użytkownika. tests/consent.test.ts: „trzy kategorie sa rozlaczne i kazda ma tresc”, „decyduje o narzedziu po nazwie, a nieznane trafia do pytania”, „uruchomienie przekazuje SDK reguly zgodne z macierza” (disallowedTools = kategoria zabroniona; żadne narzędzie z kategorii „decyzja” nie jest w allowedTools, bo wpis tam omija canUseTool), „narzedzie zabronione jest odrzucone bez pytania uzytkownika” (brak zdarzenia prośby o zgodę i brak skutku). e2e/consent-runs.spec.ts: Bash realnie przechodzi przez bramkę w GUI, a odmowa nie wykonuje operacji. tests/runtime.test.ts: autoAllowBashIfSandboxed=false. Kolejność mechanizmów opisana w README („Zgody: co jest automatyczne…”) i docs/NEW-APPLICATION.md §7.",
+      "gap": "Kolejność mechanizmów SDK (allowedTools zatwierdza przed canUseTool; klasyfikator SDK auto-zatwierdza część poleceń powłoki) to zachowanie cudzego kodu i można je zaobserwować tylko na turze modelu — w szablonie nie ma takiej próby. Macierz jest więc zbudowana jako obrona w dwóch miejscach (reguła SDK + odmowa w bramce), a nie jako dowód kolejności.",
       "backlog": "BL-09",
       "scenarios": [
         "T15"
       ]
     },
     "L11.13": {
-      "status": "niespelnione",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "Analiza kodu: POST /api/runs/:id/permission (packages/platform-server/src/http/app.ts) sprawdza tylko właściciela uruchomienia z adresu, a AgentRuntime.answerPermission rozstrzyga oczekującą prośbę po samym requestId z globalnej mapy, bez porównania z runId; powtórna odpowiedź zwraca answered false (wpis usunięty), brak odpowiedzi po 120 s daje odmowę. tests/agui-stream.test.ts „prosba o zgode trafia do rozmowy zadania, nie do ogladanej” dotyczy tylko stanu klienta. Brak testu ponowionej lub spóźnionej odpowiedzi.",
-      "gap": "Backend nie wiąże odpowiedzi z konkretnym wykonaniem: odpowiedź wysłana na adres uruchomienia A z requestId uruchomienia B (także innego właściciela) rozstrzyga prośbę B, a ochroną jest tylko losowy requestId z Math.random; brak testu, że ponowiona i spóźniona odpowiedź nie wykonuje operacji.",
-      "backlog": "BL-09",
+      "proof": "Backend wiąże odpowiedź z wykonaniem: AgentRuntime.answerPermission porównuje runId i właściciela zapisane przy prośbie, a POST /api/runs/:id/permission przekazuje oba; requestId pochodzi z crypto (newId), nie z Math.random. tests/consent.test.ts: „odpowiedz z requestId innego uruchomienia nie rozstrzyga niczego” (także dla innego właściciela — prośba nadal czeka), „zgoda wykonuje operacje dokladnie raz, a powtorzona odpowiedz nie wykonuje jej drugi raz”, „brak odpowiedzi konczy sie odmowa, nie zgoda” (spóźniona odpowiedź zwraca answered=false), „punkt HTTP…” (403 dla cudzego uruchomienia, answered=false przy powtórce). e2e/consent-runs.spec.ts (GUI, bez modelu): „odmowa nie wykonuje operacji” — po kliknięciu Odmowa nie ma artefaktu ani w rozmowie, ani w magazynie; „zgoda wykonuje operacje raz, a powtorzona odpowiedz nie wykonuje jej drugi raz”; „odpowiedz z requestId innego uruchomienia nie rozstrzyga prosby” — dwie rozmowy czekają jednocześnie, skrzyżowana odpowiedź nie rozstrzyga żadnej.",
+      "gap": "—",
       "scenarios": [
         "T15"
       ]
@@ -2165,24 +2163,22 @@
       ]
     },
     "L11.15": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/background-tasks.spec.ts „przelaczenie rozmowy i przeladowanie nie anuluja zadania”: odpięcie obserwacji przez zmianę rozmowy i przeładowanie nie zmienia statusu w backendzie; tests/background-runs.test.ts „przerwanie odczytu strumienia nie zatrzymuje pracy” (symulacja). Analiza kodu chat/chatWiring.ts: abort strumienia nie jest przekazywany do /cancel, anulowanie tylko przez stopRun. Kontrola siły (przywrócenie mapowania abort na cancel oblewa test) opisana w raporcie §4c, wykonana w AgenticApp.",
-      "gap": "Nie symulowano utraty sieci ani zamknięcia panelu bez przeładowania; warunki zakończenia bez Stop nie są opisane jako takie: twardy limit APP_RUN_TIMEOUT_MS (domyślnie 300 s) przerywa długie zadanie w tle, a prośba o zgodę bez odpowiedzi przez 120 s kończy się odmową — widać to tylko w kodzie i tabeli konfiguracji README.",
-      "backlog": "BL-09",
+      "proof": "e2e/run-continuity.spec.ts (instancja scenariuszowa, build produkcyjny): „zamkniecie panelu nie przerywa zadania, a nowa karta pokazuje wynik” — karta zamknięta w trakcie pracy, status pytany spoza przeglądarki nadal running, nowa karta pokazuje dokończony wynik i jedno uruchomienie; „utrata sieci zrywa strumien, zadanie konczy sie bez obserwatora, a klient wraca do wyniku” — przeglądarka rozmawia z instancją przez pośrednika (e2e/support/cuttable-proxy.ts), który na żądanie NISZCZY wszystkie połączenia i odrzuca nowe, bo BrowserContext.setOffline nie zrywa nawiązanego strumienia (zmierzone w recenzji: strumień dostawał dalsze fragmenty i zdarzenie końcowe po przejściu w offline); asercje: po zerwaniu strona NIE sięga serwera, wynik NIE pojawia się na ekranie, a uruchomienie kończy się w backendzie bez obserwatora; „twardy limit czasu konczy zadanie bez Stop” (instancja z APP_RUN_TIMEOUT_MS=5000) — nikt nie klika Stop, uruchomienie kończy się jako failed. Warunki zakończenia bez Stop są opisane jako takie w README („Co kończy wykonanie bez Stop”: jawne Stop, APP_RUN_TIMEOUT_MS, restart backendu; osobno wygaśnięcie prośby o zgodę = odmowa, APP_CONSENT_TIMEOUT_MS). tests/background-runs.test.ts „przerwanie odczytu strumienia nie zatrzymuje pracy” (symulacja).",
+      "gap": "—",
       "scenarios": [
         "T22",
         "T16"
       ]
     },
     "L11.16": {
-      "status": "czesciowe",
-      "evidence": "model",
+      "status": "potwierdzone",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "e2e/files-agent.spec.ts (prawdziwy model): wersja pliku opublikowana przez files_publish_version jest pobieralna po zakończeniu przebiegu. Analiza kodu services/files.ts store: bajty zapisywane bezpośrednio pod docelową nazwą, wiersz files wstawiany po zapisie; artifact_publish_file (agent/platform-tools.ts) wykonuje files.store i artifacts.create jako dwa osobne kroki poza wspólną transakcją. Nie obejmuje: przerwania zadania w trakcie publikacji.",
-      "gap": "Publikacja nie jest atomowa: brak zapisu do pliku tymczasowego z przemianowaniem i brak transakcji obejmującej plik, wiersz files i artefakt, więc awaria między krokami zostawia osierocony plik lub plik bez artefaktu; brak testu, że przerwane zadanie nie publikuje niekompletnego wyniku jako gotowego.",
-      "backlog": "BL-09",
+      "proof": "Publikacja jest jednym krokiem: FileService.storeWith zapisuje bajty do pliku tymczasowego w tym samym katalogu i przemianowuje je na nazwę docelową (rename w obrębie systemu plików jest atomowy), a wiersz files i artefakt powstają w JEDNEJ transakcji; awaria cofa transakcję i usuwa bajty przez sprawdzaną operację kasującą (util/managed-fs.ts). tests/publication.test.ts — wszystkie trzy klauzule z WYKONANĄ awarią, nie z lektury kodu: „bajty trafiaja pod nazwe docelowa przez zmiane nazwy, nie zapisem wprost” (hak na renameSync pokazuje, że nazwa docelowa powstaje z pliku `<nazwa>.tmp-…` obok), „awaria przy zmianie nazwy nie zostawia ani nazwy docelowej, ani pliku tymczasowego” (wyjątek wstrzyknięty dokładnie na tym kroku), „awaria drugiego kroku nie zostawia ani pliku, ani wiersza, ani artefaktu” (wymuszony błąd artifacts.create), „zatrzymanie po zapisie do output/, a przed publikacja, nie zostawia ani pliku, ani artefaktu” (zerwane zadanie), „publikacja pliku, ktorego w output/ nie ma, jest odmowa z lista dostepnych”. e2e/sandbox-files.spec.ts „uszkodzony skoroszyt konczy sie bledem, a nic nie zostaje opublikowane” (GUI). Usunięcie pliku to też jeden krok: wiersz i bajty znikają w jednej transakcji.",
+      "gap": "—",
       "scenarios": [
         "T14"
       ]
@@ -2198,35 +2194,32 @@
       ]
     },
     "L11.18": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/background-tasks.spec.ts „powrot do rozmowy pokazuje wynik bez ponownego uruchamiania”: po zakończeniu, zmianie rozmowy, powrocie i przeładowaniu odpowiedź widoczna, liczba uruchomień bez zmian; „przelaczenie rozmowy i przeladowanie nie anuluja zadania”: po przeładowaniu w trakcie zadania backend nadal running, lista zadań w tle widoczna. tests/background-runs.test.ts „ponowne podlaczenie od numeru sekwencyjnego nie powtarza zdarzen” i „/api/runs/:id/stream odtwarza zakonczone uruchomienie od kursora”; tests/agui-stream.test.ts „strumien z wyslania zajmuje przebieg, wiec podlaczenie w tle go pomija”.",
-      "gap": "Brak próby przeładowania w trakcie zadania, po którym klient dołącza do strumienia i pokazuje dokończony wynik w rozmowie A bez podwojenia tekstu (ścieżka, w której wcześniej wystąpiło podwojenie odpowiedzi, raport §4c); utrata i powrót sieci nie są symulowane.",
-      "backlog": "BL-09",
+      "proof": "Dwie naprawy, obie po stronie klienta. (1) Uruchomienie, do którego klient tylko DOŁĄCZYŁ, po zakończeniu odświeża wiadomości rozmowy — gotowy czat zatwierdza sam tylko odpowiedź, którą sam odebrał, więc dokończony wynik leżał w bazie i nie był widoczny bez wyjścia z rozmowy (runStreams.setReattachedRunHandler → ConversationSync → setMessages z /api/threads/get/:id). (2) `syncActiveRuns` dołącza także do przebiegów, które ten klient śledził, a których backend NIE wymienia już jako aktywnych: /api/runs/active zwraca wyłącznie statusy aktywne, więc przebieg zakończony podczas awarii sieci nie miał do czego wrócić i nikt nie wołał attachToRun — odtworzenie od kursora (GET /api/runs/:id/stream?from=) przynosi zdarzenie końcowe z dziennika, a za nim ponowny odczyt rozmowy. e2e/run-continuity.spec.ts: „przeladowanie w trakcie zadania dokancza odpowiedz bez jej podwojenia” — marker odpowiedzi występuje DOKŁADNIE RAZ na ekranie i w zapisanej rozmowie, liczba uruchomień = 1; „utrata sieci zrywa strumien…” — to samo po prawdziwym zerwaniu połączenia i powrocie, BEZ przeładowania i bez zmiany rozmowy; „zamkniecie panelu…” — nowa karta pokazuje wynik bez ponownego uruchomienia. tests/background-runs.test.ts: odtworzenie od kursora bez powtórzeń.",
+      "gap": "—",
       "scenarios": [
         "T22"
       ]
     },
     "L11.19": {
-      "status": "czesciowe",
-      "evidence": "test",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "tests/agui-stream.test.ts „prosba o zgode trafia do rozmowy zadania, nie do ogladanej” i „prosba o zgode wstrzymuje wykonanie w odroznialnym stanie”: stan awaiting_consent i pendingPermission przypisane do rozmowy zadania. Analiza kodu: shell/BackgroundTasks.tsx pokazuje „czeka na zgode” przy rozmowie; agent/runtime.ts po 120 s bez odpowiedzi zwraca odmowę, nie zgodę. Nie obejmuje: GUI.",
-      "gap": "Brak testu przeglądarkowego sygnału zgody dla zadania z nieoglądanej rozmowy; status awaiting_consent nie jest zapisywany w agent_runs (tylko w zdarzeniach i pamięci procesu), a widoczność automatycznej odmowy po 120 s przy zamkniętym panelu nie jest sprawdzona, więc oczekiwanie może pozostać niezauważone.",
-      "backlog": "BL-09",
+      "proof": "Status awaiting_consent jest zapisywany w agent_runs (RunRegistry.markAwaitingConsent / markConsentAnswered), więc /api/runs/active zgłasza go klientowi, który nie ogląda tej rozmowy; jest też anulowalny i nie może być nadpisany przez spóźnioną odpowiedź. e2e/consent-runs.spec.ts „zadanie z nieogladanej rozmowy sygnalizuje, ze czeka na decyzje”: po przejściu do innej rozmowy prośba znika z panelu, a lista zadań w tle pokazuje przy rozmowie fazę awaiting_consent (atrybut, nie brzmienie); po przeładowaniu ten sam status przychodzi z backendu; powrót do rozmowy pokazuje prośbę i pozwala ją rozstrzygnąć. „brak odpowiedzi przy zamknietym panelu konczy sie odmowa, nie zgoda” (instancja z APP_CONSENT_TIMEOUT_MS=4000): karta zamknięta w trakcie oczekiwania, po wygaśnięciu uruchomienie kończy się, a operacja NIE została wykonana. tests/consent.test.ts: te same właściwości w backendzie.",
+      "gap": "—",
       "scenarios": [
         "T22",
         "T15"
       ]
     },
     "L11.20": {
-      "status": "czesciowe",
-      "evidence": "model",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/files-agent.spec.ts (prawdziwy model): PNG i XLSX dołączone przez pole załącznika w kompozytorze i odczytane (obraz przez model, skoroszyt skryptem w sandboxie). e2e/app.spec.ts „odrzucony typ pliku daje czytelny blad” (.exe na stronie plików) i „wgranie poprawnego pliku dziala” (CSV na stronie plików, nie jako załącznik); tests/file-analysis.test.ts „xlsx jest przyjmowany, a macro-enabled i legacy nie”.",
-      "gap": "JPEG, CSV i tekst nie są sprawdzone jako załączniki polecenia z odczytem przez agenta; odrzucenie nieobsługiwanego formatu sprawdzone tylko na stronie plików, nie w polu załącznika; powiązanie załącznika z odpowiedzią istnieje tylko w trakcie przebiegu (attachFileIds nie są zapisywane przy wiadomości), więc później nie widać, do którego polecenia dołączono plik.",
-      "backlog": "BL-09",
+      "proof": "e2e/sandbox-files.spec.ts „PNG, JPEG, XLSX, CSV i tekst dolaczone do polecenia sa odczytane z tresci”: pięć formatów dołączonych przez pole załącznika w kompozytorze, odczytanych w workspace prawdziwym skryptem Node (CSV — suma kolumny, tekst — szukane hasło, XLSX — nazwy arkuszy, PNG i JPEG — wymiary z nagłówka); JPEG jest zakodowany przez przeglądarkę (canvas.toDataURL), więc to prawdziwy obraz. „nieobslugiwany format jest odrzucony w polu zalacznika”: .exe daje widoczny błąd z podaniem typu, nie powstaje ani chip załącznika, ani plik w magazynie. Powiązanie z poleceniem jest trwałe: tabela message_attachments (migracja platform-0005) zapisuje plik, wiadomość, rozmowę i uruchomienie w chwili wstawienia pliku do workspace; /api/threads/get/:id niesie je przy wiadomości użytkownika, /api/files zwraca attachedTo, a ekran Pliki ma kolumnę „Dołączony do” — asercje po pełnym przeładowaniu strony. Nie obejmuje: odczytu TREŚCI obrazu przez model (dla PNG potwierdzone na prawdziwym modelu w L11.21); w regresji bez modelu obraz jest czytany kodem.",
+      "gap": "—",
       "scenarios": [
         "T24"
       ]
@@ -2242,12 +2235,11 @@
       ]
     },
     "L11.22": {
-      "status": "czesciowe",
-      "evidence": "model",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/files-agent.spec.ts „agent zmienia skoroszyt w sandboxie, a oryginal zostaje nietkniety” (prawdziwy model): suma 5300 z arkusza Pozycje (ilość razy cena), nowy arkusz Podsumowanie w pobranym pliku, zachowane arkusze Pozycje, Metryka i Pusty, oryginał identyczny bajt w bajt. tests/file-analysis.test.ts „czyta wszystkie arkusze, a formule oddziela od zapisanej wartosci” (exceljs: arkusze, liczby, tekst, data, wartość logiczna, pusta komórka) i „nowa wersja to nowy plik wskazujacy na oryginal”.",
-      "gap": "Próba z modelem wymaga odczytu tylko jednego arkusza i nie sprawdza, że agent odczytuje wiele arkuszy i typy komórek (data, wartość logiczna, formuła), ani że typy komórek są zachowane w pliku wynikowym; uszkodzony plik sprawdzony tylko na poziomie biblioteki.",
-      "backlog": "BL-09",
+      "proof": "e2e/sandbox-files.spec.ts „skoroszyt: wiele arkuszy i typow komorek, wynik z zachowanymi typami, oryginal nietkniety”: skoroszyt dołączony przez GUI, uruchomienie po zgodzie na Bash uruchamia prawdziwy skrypt w workspace, który czyta WSZYSTKIE arkusze i wszystkie typy komórek (liczba, tekst, data, wartość logiczna, formuła, komórka pusta — pusta czytana jawnie, bo iteracja nie obejmuje końca wiersza) i liczy sumę 5300 z komórek. Pobrany w przeglądarce wynik ma arkusze Pozycje|Metryka|Pusty|Podsumowanie, a TYPY są zachowane w pliku wynikowym: data jako Date, wartość logiczna jako boolean, liczba jako liczba, formuła jako formuła. Oryginał identyczny bajt w bajt po pobraniu. „uszkodzony skoroszyt konczy sie bledem, a nic nie zostaje opublikowane”: plik o poprawnym typie MIME i uszkodzonej treści kończy się błędem skryptu, odpowiedź nie podaje arkuszy i nic nie zostaje opublikowane. tests/file-analysis.test.ts (biblioteka). Nie obejmuje: samodzielnego odczytu przez model — skrypt w workspace jest stand-inem na granicy adaptera; próba z prawdziwym modelem (e2e/files-agent.spec.ts) pozostaje bez zmian.",
+      "gap": "—",
       "scenarios": [
         "T24"
       ]
@@ -2256,20 +2248,19 @@
       "status": "czesciowe",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "tests/file-analysis.test.ts „zapisana wartosc formuly moze byc nieaktualna — i dlatego nie jest wynikiem”: formuła i zapisana wartość rozdzielone, FILE_ANALYSIS.spreadsheet.limits zawiera „formuly NIE sa przeliczane”. Analiza kodu: FILE_ANALYSIS (platform-contracts/src/artifacts.ts) trafia do promptu (agent/prompt.ts) i do interfejsu (chat/ComposerAttachments.tsx); README i docs/NEW-APPLICATION.md §7 opisują zakres zachowania skoroszytu.",
-      "gap": "Nie sprawdzono na modelu, że odpowiedź agenta nie podaje zapisanej wartości formuły jako wyniku przeliczenia; e2e/files-agent.spec.ts akceptuje w B1 zarówno liczbę, jak i komórkę formuły z zapisanym result, więc nie odróżnia wyniku policzonego od samego zapisu formuły; utrata wykresów i formatowania przy zapisie nie ma testu.",
+      "proof": "Semantyka jest jawna i zgodna z zachowaniem parsera: FILE_ANALYSIS.spreadsheet ma osobne listy „keeps” i „limits”, błędna deklaracja o utracie obrazów została poprawiona, a lista strat nazywa wyłącznie to, co ma próbę (wykres). tests/file-analysis.test.ts: „czesc, ktorej parser nie modeluje, znika przy zapisie — stad wykresy na liscie strat” (część xl/charts/chart1.xml wstrzyknięta do archiwum razem z wpisem w [Content_Types].xml znika po otwarciu i zapisaniu skoroszytu), „obrazy i formatowanie komorek przezywaja zapis — stad na liscie zachowywanych”, „formula zapisana przez uruchomienie nie niesie wartosci, wiec nie moze udawac wyniku”, „zapisana wartosc formuly moze byc nieaktualna”. e2e/sandbox-files.spec.ts: w opublikowanym pliku formuła B4 ma zapis formuły i NIE ma wartości — nie ma czego odczytać jako „wyniku przeliczenia”. Próba modelowa e2e/files-agent.spec.ts wymaga w B1 LICZBY: komórka formuły z zapisanym `result` nie zalicza, bo biblioteka niczego nie liczy i taka wartość mogłaby pochodzić tylko od modelu piszącego ją obok własnej formuły.",
+      "gap": "Nie sprawdzono na modelu, że odpowiedź agenta nie podaje zapisanej wartości formuły jako wyniku przeliczenia — to zachowanie modelu i wymaga tury. W szablonie wykazano tylko, że plik nie daje takiej możliwości (formuła bez wartości) i że ograniczenia są zadeklarowane zgodnie z faktycznym zachowaniem parsera.",
       "backlog": "BL-09",
       "scenarios": [
         "T24"
       ]
     },
     "L11.24": {
-      "status": "czesciowe",
-      "evidence": "model",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/files-agent.spec.ts „wynik jest dostepny po powrocie do rozmowy”: plik wersji widoczny na ekranie /files i pobieralny (status 200). tests/file-analysis.test.ts „cudzy plik jest niedostepny do odczytu i do wersjonowania” (dostęp do wejścia i do tworzenia wyniku). Analiza kodu: FileService.read sprawdza właściciela także dla pliku wynikowego, attachFileIds przechodzą przez files.meta z ownerId.",
-      "gap": "Wynik files_publish_version jest wersją pliku, a nie artefaktem, więc nie ma podglądu w zakładce artefaktów rozmowy; test nie wraca do rozmowy (przechodzi na /files), nie sprawdza zmiany rozmowy ani restartu, a odmowa odczytu cudzego pliku wynikowego przez HTTP nie jest testowana.",
-      "backlog": "BL-09",
+      "proof": "Wynik files_publish_version jest teraz TAKŻE artefaktem rozmowy (platform.file), tworzonym w tej samej transakcji co wersja pliku i powiązanym z uruchomieniem; narzędzie dopisane do ARTIFACT_PRODUCING_TOOLS, więc podgląd pojawia się pod wywołaniem w rozmowie. e2e/sandbox-files.spec.ts „wynik jest artefaktem z podgladem i pobraniem, takze po zmianie rozmowy i restarcie” (test produkuje własny artefakt, więc da się go uruchomić osobno): podgląd artefaktu pod wiadomością, przejście do innej rozmowy (podgląd znika), RESTART instancji, powrót do rozmowy, zakładka Artefakty, pełny widok tego samego artefaktu, a pobranie jest KLIKNIĘCIEM — zdarzenie pobrania przeglądarki, nazwa pliku z magazynu i zapisany plik otwierany jako skoroszyt z arkuszem Podsumowanie i sumą 5300. Kontrola dostępu po obu stronach: po przełączeniu na innego właściciela GET /api/files/:id/content zwraca 403, a lista artefaktów jest pusta; tests/publication.test.ts „cudzy wynik jest nie do pobrania i nie do zobaczenia jako artefakt” oraz „artefakt i jego plik sa dostepne po restarcie procesu”; tests/file-analysis.test.ts „cudzy plik jest niedostepny do odczytu i do wersjonowania” (wejście).",
+      "gap": "—",
       "scenarios": [
         "T24",
         "T14"
@@ -2545,8 +2536,8 @@
     },
     "T15": {
       "status": "czesciowe",
-      "proof": "e2e/files-agent.spec.ts na prawdziwym modelu: prośba o zgodę na uruchomienie kodu pojawia się w GUI i zgoda wznawia właściwe wykonanie.",
-      "gap": "Odmowa, ponowiona i spóźniona zgoda nie mają próby; rozstrzygnięcie zgody po samym requestId bez powiązania z wykonaniem (L11.13)."
+      "proof": "e2e/files-agent.spec.ts na prawdziwym modelu: prośba o zgodę na uruchomienie kodu pojawia się w GUI i zgoda wznawia właściwe wykonanie. e2e/consent-runs.spec.ts (GUI bez modelu, BL-09): odmowa nie wykonuje operacji, zgoda wykonuje ją dokładnie raz, powtórzona odpowiedź nie wykonuje jej drugi raz, odpowiedź z requestId innego uruchomienia nie rozstrzyga niczego, a brak odpowiedzi przy zamkniętym panelu kończy się odmową. tests/consent.test.ts: macierz uprawnień z kategorią zabronioną i te same właściwości w backendzie.",
+      "gap": "Kolejność mechanizmów SDK (allowedTools zatwierdza przed canUseTool) nie ma próby na modelu (L11.12); L5.5 poza pakietem BL-09."
     },
     "T16": {
       "status": "czesciowe",
@@ -2590,8 +2581,8 @@
     },
     "T24": {
       "status": "czesciowe",
-      "proof": "e2e/files-agent.spec.ts na prawdziwym modelu: treść obrazu pod mylącą nazwą, analiza i zmiana wieloarkuszowego XLSX w sandboxie, oryginał bez zmian, wynik dostępny po powrocie.",
-      "gap": "Uszkodzony plik i nieobsługiwane formuły nie mają próby; asercja komórki przyjmuje formułę z zapisaną wartością; wynik jest wersją pliku bez podglądu artefaktu i nie jest sprawdzany po restarcie; JPEG, CSV i tekst bez próby z modelem."
+      "proof": "e2e/files-agent.spec.ts na prawdziwym modelu: treść obrazu pod mylącą nazwą, analiza i zmiana wieloarkuszowego XLSX w sandboxie, oryginał bez zmian, wynik dostępny po powrocie. e2e/sandbox-files.spec.ts (GUI bez modelu, BL-09): pięć formatów załącznika odczytanych z treści, odrzucenie nieobsługiwanego formatu w polu załącznika, odczyt wszystkich arkuszy i typów komórek, typy zachowane w pliku wynikowym, uszkodzony skoroszyt kończy się błędem, wynik jako artefakt z podglądem i pobraniem po zmianie rozmowy i restarcie. tests/file-analysis.test.ts: semantyka zapisu (wykres znika, obrazy i formatowanie zostają, formuła zapisana przez uruchomienie nie niesie wartości).",
+      "gap": "Odczyt treści obrazu przez model sprawdzony tylko dla PNG (L11.21); odpowiedź modelu o formule nie ma próby (L11.23); L8.1, L8.4 i L10.9 poza pakietem BL-09."
     },
     "T25": {
       "status": "potwierdzone",
@@ -2637,8 +2628,8 @@
     {
       "id": "BL-09",
       "title": "Pliki, sandbox i zadania w tle",
-      "summary": "Braki dowodu lub implementacji w warstwie 11 niepokryte ponowieniem prób (BL-03), np. izolacja wszystkich klas narzędzi, zakończenie procesów potomnych przy Stop, atomowa publikacja wyników, zachowanie po restarcie.",
-      "done": "kryteria pakietu mają dowód wykonywany w regresji szablonu, z kontrolami negatywnymi dla izolacji."
+      "summary": "To, co w warstwie 11 zostało po zamknięciu zgód, publikacji i pracy w tle (2026-09-18): trzy kryteria, których nie da się potwierdzić bez tury modelu — zakończenie procesu potomnego samego Claude Agent SDK przy Stop, faktyczna kolejność mechanizmów uprawnień SDK i to, czy odpowiedź agenta nie podaje zapisanej wartości formuły jako wyniku przeliczenia.",
+      "done": "każde z pozostałych kryteriów ma dowód z przebiegu na prawdziwym modelu, w ramach przyznanego budżetu tur, oznaczony jako rzeczywisty model; części niezależne od modelu są już pokryte regresją szablonu z kontrolami negatywnymi."
     },
     {
       "id": "BL-11",

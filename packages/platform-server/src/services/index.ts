@@ -54,7 +54,7 @@ export function createPlatformServices(input: {
   // One registry, shared: deleting a conversation has to stop the runs it owns
   // (see `ConversationService.delete`), and a second registry would hold no
   // cancel handles for them.
-  const runs = new RunRegistry(input.db);
+  const runs = new RunRegistry(input.db, input.config.workspacesDir);
   return {
     config: input.config,
     db: input.db,

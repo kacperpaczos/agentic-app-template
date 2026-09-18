@@ -216,9 +216,18 @@ test.describe('pliki dolaczone przez interfejs, prawdziwy model', () => {
 
     const summary = wb.getWorksheet('Podsumowanie')!;
     expect(String(summary.getCell('A1').value ?? '').toLowerCase()).toContain('razem');
+    /*
+     * A **number**, and deliberately not "a number or a formula cell carrying a
+     * stored result".
+     *
+     * The parser in the workspace calculates nothing. So a formula cell whose
+     * `result` happens to hold 5300 can only have got that value from the model
+     * writing it next to its own formula — which is exactly the thing L11.23
+     * forbids presenting as a calculation. Accepting it here would let a paid
+     * turn report a pass for the behaviour this criterion exists to rule out.
+     */
     const total = summary.getCell('B1').value;
-    const numeric = typeof total === 'number' ? total : Number((total as { result?: number })?.result);
-    expect(numeric, `B1 zawiera ${JSON.stringify(total)}`).toBe(WORKBOOK_TOTAL);
+    expect(total, `B1 zawiera ${JSON.stringify(total)}`).toBe(WORKBOOK_TOTAL);
   });
 
   test('wynik jest dostepny po powrocie do rozmowy', async ({ page }) => {

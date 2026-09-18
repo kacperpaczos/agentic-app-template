@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FILE_ANALYSIS, AppError } from '@platform/contracts';
 import { analysisToolkit, createRunWorkspace } from '@platform/server';
 import { createHarness, type Harness } from './helpers.ts';
+import { readZipEntry, writeZipWith, zipEntryNames } from './support/zip.ts';
 
 /**
  * Analysing an attached file — the parts that must be true regardless of what
@@ -32,16 +33,20 @@ import { createHarness, type Harness } from './helpers.ts';
  */
 interface Cell {
   value: unknown;
+  font?: Record<string, unknown>;
+  numFmt?: string;
 }
 interface Worksheet {
   name: string;
   addRow: (values: unknown[]) => unknown;
   getCell: (ref: string) => Cell;
+  addImage: (id: number, range: string) => void;
 }
 interface Workbook {
   worksheets: Worksheet[];
   addWorksheet: (name: string) => Worksheet;
   getWorksheet: (name: string) => Worksheet | undefined;
+  addImage: (input: { buffer: Buffer; extension: string }) => number;
   xlsx: {
     writeBuffer: () => Promise<ArrayBuffer>;
     load: (data: ArrayBuffer) => Promise<unknown>;
@@ -185,6 +190,109 @@ describe('odczyt skoroszytu obejmuje arkusze i typy komorek', () => {
     await expect(
       wb.xlsx.load(Buffer.from('to nie jest skoroszyt') as unknown as ArrayBuffer),
     ).rejects.toThrow();
+  });
+});
+
+/**
+ * What a save keeps and what it costs — measured, then compared with what the
+ * platform tells the user and the model it will do.
+ *
+ * The declaration (`FILE_ANALYSIS.spreadsheet`) is the contract the interface
+ * and the prompt both quote, so it is only worth as much as its agreement with
+ * the parser. It used to claim images were lost, which is not true of this
+ * parser; the charts half *is* true, and both are now checked here rather than
+ * asserted in prose.
+ */
+describe('semantyka zapisu skoroszytu', () => {
+  it('czesc, ktorej parser nie modeluje, znika przy zapisie — stad wykresy na liscie strat', async () => {
+    const wb = new ExcelJS.Workbook();
+    wb.addWorksheet('Dane').addRow([1, 2]);
+    const base = Buffer.from(await wb.xlsx.writeBuffer());
+
+    /*
+     * A chart part put into the archive the way a spreadsheet application does:
+     * its own XML part plus a content-type override. The parser has no chart
+     * model, so this is the shape of every part it does not understand.
+     */
+    const contentTypes = readZipEntry(base, '[Content_Types].xml').toString('utf8');
+    const withChart = writeZipWith(base, {
+      'xl/charts/chart1.xml':
+        '<?xml version="1.0"?><c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart/></c:chartSpace>',
+      '[Content_Types].xml': contentTypes.replace(
+        '</Types>',
+        '<Override PartName="/xl/charts/chart1.xml" ' +
+          'ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/></Types>',
+      ),
+    });
+    expect(zipEntryNames(withChart)).toContain('xl/charts/chart1.xml');
+
+    // Exactly what a run does with an attached workbook: open it, save it.
+    const reopened = new ExcelJS.Workbook();
+    await reopened.xlsx.load(withChart as unknown as ArrayBuffer);
+    const saved = Buffer.from(await reopened.xlsx.writeBuffer());
+
+    expect(reopened.worksheets.map((w) => w.name)).toEqual(['Dane']);
+    expect(zipEntryNames(saved), 'wykres przetrwal zapis — deklaracja mowi inaczej').not.toContain(
+      'xl/charts/chart1.xml',
+    );
+    // The declaration names the very case this test just performed.
+    expect(FILE_ANALYSIS.spreadsheet.limits.join(' ')).toMatch(/wykres/);
+  });
+
+  it('obrazy i formatowanie komorek przezywaja zapis — stad na liscie zachowywanych', async () => {
+    const wb = new ExcelJS.Workbook();
+    const sheet = wb.addWorksheet('Dane');
+    sheet.addRow(['pogrubione', 12.5]);
+    sheet.getCell('A1').font = { bold: true };
+    sheet.getCell('B1').numFmt = '0.00 "zl"';
+    // A 1x1 PNG is enough: the claim is about the part surviving, not its size.
+    const imageId = wb.addImage({
+      buffer: Buffer.from(
+        '89504e470d0a1a0a0000000d4948445200000001000000010802000000907724e9' +
+          '0000000c49444154789c6360000002000100ffff030000060005',
+        'hex',
+      ),
+      extension: 'png',
+    });
+    sheet.addImage(imageId, 'D1:E5');
+    const base = Buffer.from(await wb.xlsx.writeBuffer());
+    expect(zipEntryNames(base)).toContain('xl/media/image1.png');
+
+    const reopened = new ExcelJS.Workbook();
+    await reopened.xlsx.load(base as unknown as ArrayBuffer);
+    const saved = Buffer.from(await reopened.xlsx.writeBuffer());
+
+    expect(zipEntryNames(saved), 'obraz zniknal przy zapisie').toContain('xl/media/image1.png');
+    const reread = new ExcelJS.Workbook();
+    await reread.xlsx.load(saved as unknown as ArrayBuffer);
+    const cells = reread.getWorksheet('Dane')!;
+    expect(cells.getCell('A1').font).toMatchObject({ bold: true });
+    expect(cells.getCell('B1').numFmt).toBe('0.00 "zl"');
+    expect(FILE_ANALYSIS.spreadsheet.keeps.join(' ')).toMatch(/obrazy/);
+  });
+
+  it('formula zapisana przez uruchomienie nie niesie wartosci, wiec nie moze udawac wyniku', async () => {
+    /*
+     * The failure this rules out is the quiet one: a run that writes `=B2*C2`
+     * and then reports a number as "the result". A formula written by the
+     * parser carries no cached value at all — there is nothing to mistake for a
+     * calculation, and a reader that wants the number has to compute it.
+     */
+    const wb = new ExcelJS.Workbook();
+    const sheet = wb.addWorksheet('Podsumowanie');
+    sheet.addRow([10, 250, { formula: 'A1*B1' }]);
+    const bytes = Buffer.from(await wb.xlsx.writeBuffer());
+
+    const reread = new ExcelJS.Workbook();
+    await reread.xlsx.load(bytes as unknown as ArrayBuffer);
+    const cell = reread.getWorksheet('Podsumowanie')!.getCell('C1').value as {
+      formula: string;
+      result?: unknown;
+    };
+    expect(cell.formula).toBe('A1*B1');
+    expect(cell.result ?? null, 'zapisana formula dostala wartosc, ktorej nikt nie policzyl').toBeNull();
+    expect(typeof cell).not.toBe('number');
+    expect(FILE_ANALYSIS.spreadsheet.limits.join(' ')).toMatch(/NIE sa przeliczane/);
   });
 });
 

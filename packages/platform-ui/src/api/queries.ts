@@ -10,7 +10,7 @@ import type {
   ReadOperationSummary,
   CardGeometry,
   CardSpec,
-  StoredFile,
+  StoredFileWithUse,
   UiTarget,
   ViewDefinition,
 } from '@platform/contracts';
@@ -140,7 +140,7 @@ export const useFiles = (scope?: { kind: string; id: string }) =>
   useQuery({
     queryKey: qk.files(scope ? `${scope.kind}:${scope.id}` : undefined),
     queryFn: () =>
-      apiGet<{ files: StoredFile[] }>(
+      apiGet<{ files: StoredFileWithUse[] }>(
         scope ? `/api/files?scopeKind=${scope.kind}&scopeId=${scope.id}` : '/api/files',
       ),
   });

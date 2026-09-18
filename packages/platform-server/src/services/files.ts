@@ -1,8 +1,9 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { basename, extname, resolve, sep } from 'node:path';
 import { AppError, FILE_LIMITS, type StoredFile } from '@platform/contracts';
 import type { Db } from '../db/client.ts';
-import { newId, nowIso, sha256 } from '../util/id.ts';
+import { removeManagedFile, renameWithinManagedRoot } from '../util/managed-fs.ts';
+import { newId, nowIso, randomToken, sha256 } from '../util/id.ts';
 
 interface FileRow {
   id: string;
@@ -53,6 +54,18 @@ export function sanitizeFilename(raw: string): string {
   return cleaned;
 }
 
+export interface StoreFileInput {
+  ownerId: string;
+  filename: string;
+  mediaType: string;
+  bytes: Uint8Array;
+  scopeKind?: string | null;
+  scopeId?: string | null;
+  /** Set when this file is a produced version of an existing one. */
+  derivedFromFileId?: string | null;
+  version?: number;
+}
+
 /** Managed file store. Every byte the app persists goes through here. */
 export class FileService {
   constructor(
@@ -61,17 +74,48 @@ export class FileService {
     private readonly maxBytes: number,
   ) {}
 
-  store(input: {
-    ownerId: string;
-    filename: string;
-    mediaType: string;
-    bytes: Uint8Array;
-    scopeKind?: string | null;
-    scopeId?: string | null;
-    /** Set when this file is a produced version of an existing one. */
-    derivedFromFileId?: string | null;
-    version?: number;
-  }): StoredFile {
+  store(input: StoreFileInput): StoredFile {
+    return this.storeWith(input, () => null).file;
+  }
+
+  /** The one directory this service may write into or delete from. */
+  get #root(): { root: string; what: string } {
+    return { root: this.filesDir, what: 'magazynu plikow' };
+  }
+
+  /**
+   * Publishes bytes **and whatever else the publication consists of**, as one
+   * step that either happens completely or not at all.
+   *
+   * Three things used to happen in a row, unprotected: the bytes were written
+   * straight to their final name, a row was inserted, and — for a result coming
+   * out of the sandbox — an artifact was created by a second, separate call. A
+   * failure between any two of them left the store inconsistent in a way nobody
+   * would notice until much later: bytes under a name no row points at, or a
+   * file row with no artifact, published as if it were finished. A crash during
+   * the write left a *truncated file under the final name*, which is worse than
+   * either, because it reads as a complete result.
+   *
+   * What happens instead:
+   *
+   *  1. the bytes go to a temporary name in the same directory and are renamed
+   *     into place. `rename` within one filesystem is atomic, so the final name
+   *     never exists in a half-written state — a reader sees all of the bytes or
+   *     no file at all;
+   *  2. the row, and everything `andThen` does, run inside **one** database
+   *     transaction. `andThen` receives the stored file, so an artifact that
+   *     points at it is written in the same transaction as the row it points at;
+   *  3. if any of that throws, the transaction rolls back and the bytes are
+   *     removed again (through the guarded delete), so a failed publication
+   *     leaves neither an orphaned file nor a dangling row.
+   *
+   * `andThen` must be synchronous: better-sqlite3 transactions are, and a
+   * promise inside one would commit before the work it is waiting for.
+   */
+  storeWith<T>(
+    input: StoreFileInput,
+    andThen: (stored: StoredFile) => T,
+  ): { file: StoredFile; result: T } {
     const filename = sanitizeFilename(input.filename);
     if (input.bytes.byteLength > this.maxBytes) {
       throw new AppError('validation_failed', `Plik przekracza limit ${this.maxBytes} bajtow.`, {
@@ -87,28 +131,50 @@ export class FileService {
     }
     const id = newId('fil');
     const relPath = `${id}${extname(filename) || ''}`;
+    const finalPath = resolve(this.filesDir, relPath);
+    // Same directory as the target, so the rename below stays within one
+    // filesystem and is therefore atomic.
+    const tempPath = `${finalPath}.tmp-${randomToken(8)}`;
     mkdirSync(this.filesDir, { recursive: true });
-    writeFileSync(resolve(this.filesDir, relPath), input.bytes);
-    this.db.$client
-      .prepare(
-        `INSERT INTO files (id, owner_id, filename, media_type, byte_size, sha256, rel_path, scope_kind, scope_id, created_at, derived_from_file_id, version)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        id,
-        input.ownerId,
-        filename,
-        mediaType,
-        input.bytes.byteLength,
-        sha256(input.bytes),
-        relPath,
-        input.scopeKind ?? null,
-        input.scopeId ?? null,
-        nowIso(),
-        input.derivedFromFileId ?? null,
-        input.version ?? 1,
-      );
-    return toFile(this.#row(id, input.ownerId));
+    writeFileSync(tempPath, input.bytes);
+    try {
+      renameWithinManagedRoot(tempPath, finalPath, this.#root);
+    } catch (err) {
+      removeManagedFile(tempPath, this.#root);
+      throw err;
+    }
+
+    try {
+      const tx = this.db.$client.transaction(() => {
+        this.db.$client
+          .prepare(
+            `INSERT INTO files (id, owner_id, filename, media_type, byte_size, sha256, rel_path, scope_kind, scope_id, created_at, derived_from_file_id, version)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            id,
+            input.ownerId,
+            filename,
+            mediaType,
+            input.bytes.byteLength,
+            sha256(input.bytes),
+            relPath,
+            input.scopeKind ?? null,
+            input.scopeId ?? null,
+            nowIso(),
+            input.derivedFromFileId ?? null,
+            input.version ?? 1,
+          );
+        const file = toFile(this.#row(id, input.ownerId));
+        return { file, result: andThen(file) };
+      });
+      return tx();
+    } catch (err) {
+      // The row is gone with the transaction; the bytes have to be taken back
+      // by hand, and the delete is checked at the call like every other.
+      removeManagedFile(finalPath, this.#root);
+      throw err;
+    }
   }
 
   #row(id: string, ownerId: string): FileRow {
@@ -163,25 +229,32 @@ export class FileService {
    * The new version inherits the parent's scope, so a produced file stays
    * attached to the same business record as the upload it came from.
    */
-  storeVersion(input: {
-    ownerId: string;
-    originalFileId: string;
-    filename?: string;
-    mediaType?: string;
-    bytes: Uint8Array;
-  }): { original: StoredFile; version: StoredFile } {
+  storeVersion<T>(
+    input: {
+      ownerId: string;
+      originalFileId: string;
+      filename?: string;
+      mediaType?: string;
+      bytes: Uint8Array;
+    },
+    /** Published together with the version, in the same transaction. */
+    andThen: (version: StoredFile, original: StoredFile) => T = () => null as T,
+  ): { original: StoredFile; version: StoredFile; result: T } {
     const original = this.meta(input.originalFileId, input.ownerId);
-    const version = this.store({
-      ownerId: input.ownerId,
-      filename: input.filename ?? original.filename,
-      mediaType: input.mediaType ?? original.mediaType,
-      bytes: input.bytes,
-      scopeKind: original.scopeKind,
-      scopeId: original.scopeId,
-      derivedFromFileId: original.id,
-      version: original.version + 1,
-    });
-    return { original: this.meta(original.id, input.ownerId), version };
+    const { file: version, result } = this.storeWith(
+      {
+        ownerId: input.ownerId,
+        filename: input.filename ?? original.filename,
+        mediaType: input.mediaType ?? original.mediaType,
+        bytes: input.bytes,
+        scopeKind: original.scopeKind,
+        scopeId: original.scopeId,
+        derivedFromFileId: original.id,
+        version: original.version + 1,
+      },
+      (stored) => andThen(stored, original),
+    );
+    return { original: this.meta(original.id, input.ownerId), version, result };
   }
 
   /** Every file produced from this one, newest first. */
@@ -196,10 +269,24 @@ export class FileService {
     ).map(toFile);
   }
 
+  /**
+   * Removes the row and the bytes together, or neither.
+   *
+   * The two used to be separate statements with the row first, so anything that
+   * stopped the deletion of the bytes — a refused path, a permission error —
+   * left a row pointing at a file that was still there, or the reverse. Both
+   * happen inside one transaction: a throw from the guarded delete rolls the row
+   * back, and the store stays consistent with the disk.
+   *
+   * `rel_path` comes out of the database, so the path is checked at the deletion
+   * rather than inferred from how the value was produced.
+   */
   delete(id: string, ownerId: string): void {
     const row = this.#row(id, ownerId);
-    this.db.$client.prepare('DELETE FROM files WHERE id = ?').run(id);
     const path = resolve(this.filesDir, row.rel_path);
-    if (path.startsWith(this.filesDir + sep) && existsSync(path)) rmSync(path, { force: true });
+    this.db.$client.transaction(() => {
+      this.db.$client.prepare('DELETE FROM files WHERE id = ?').run(id);
+      removeManagedFile(path, this.#root);
+    })();
   }
 }
