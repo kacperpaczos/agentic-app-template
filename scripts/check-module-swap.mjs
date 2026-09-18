@@ -17,7 +17,8 @@
  *      aplikacja go składa,
  *   3. dowodzi sumami SHA-256, że `packages/platform-*` i `packages/module-procurement`
  *      są identyczne jak przed zmianą,
- *   4. instaluje zależności z lockfile, uruchamia kontrolę granicy, typecheck i build,
+ *   4. instaluje zależności z lockfile, uruchamia kontrolę granicy, typecheck, build
+ *      i całą regresję jednostkową (`pnpm test`) na kopii z innym modułem,
  *   5. startuje zbudowany serwer na wolnym porcie z własnym katalogiem danych i sprawdza:
  *      rejestr modułów, narzędzia, trasy modułu, operację odczytu, walidację kompozycji
  *      komponentem modułu, brak tabel modułu przykładowego, a w przeglądarce —
@@ -172,6 +173,15 @@ try {
 
   const build = run('pnpm', ['-s', 'build'], work, { DO_NOT_TRACK: '1' });
   record('build frontendu i backendu', build.code === 0, build.code === 0 ? '' : build.out.slice(-1500));
+
+  /*
+   * Cała regresja jednostkowa i kontraktowa na kopii, w której aplikacja składa
+   * inny moduł. Bez tego „platforma działa z innym modułem” znaczyłoby tylko
+   * „wstaje i odpowiada”: testy platformy są tym, co mówi, że działa tak samo.
+   */
+  const unit = run('pnpm', ['-s', 'test'], work);
+  const summary = (unit.out.match(/Tests\s+.*$/m) ?? [''])[0].trim();
+  record('testy platformy na kopii z innym modułem', unit.code === 0, unit.code === 0 ? summary : unit.out.slice(-1500));
 
   /* 4. start i sprawdzenie ------------------------------------------------- */
   const port = await freePort();
