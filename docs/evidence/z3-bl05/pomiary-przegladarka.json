@@ -1,10 +1,10 @@
 {
   "opis": "Pomiary przez interfejs: widoczne odswiezenie po mutacji oraz Stop rozdzielony na potwierdzenie zadania, koniec strumienia widziany w karcie i koniec procesow uruchomienia.",
   "zrodlo": "pnpm test:e2e → e2e/measurements.spec.ts (regresja szablonu)",
-  "zapisano": "2026-09-18T09:28:47.396Z",
+  "zapisano": "2026-09-18T09:42:06.609Z",
   "wersjaKodu": {
-    "commit": "13f1b3ba78448722ac25a87eef361a94efe6e3d2",
-    "brudneDrzewo": true,
+    "commit": "d3427778fef4662d60fa1748b3803de15fc3aac9",
+    "brudneDrzewo": false,
     "node": "24.19.0",
     "pakiety": {
       "node": "24.19.0",
@@ -24,15 +24,15 @@
       "do": "zmiana widocznych sum w karcie zestawienia (bez przeladowania strony)",
       "warunki": "build produkcyjny serwowany przez backend, instancja e2e na wlasnym katalogu danych, Chromium, jeden worker, bez modelu (mutacja idzie przez formularz, nie przez agenta); 1 probka",
       "probkiMs": [
-        199
+        173
       ],
       "podsumowanie": {
         "probek": 1,
         "zMetryka": 1,
         "brakMetryki": 0,
-        "minMs": 199,
-        "medianaMs": 199,
-        "maxMs": 199
+        "minMs": 173,
+        "medianaMs": 173,
+        "maxMs": 173
       }
     },
     "stopPotwierdzenieZadania": {
@@ -41,15 +41,15 @@
       "do": "odpowiedz HTTP 200 z POST /api/runs/:id/cancel",
       "warunki": "build produkcyjny serwowany przez backend, instancja scenariuszowa na wlasnym porcie 8797 i wlasnym katalogu danych, Chromium, jeden worker; model zastapiony scenariuszem na granicy adaptera (proces Claude Agent SDK nie jest uruchamiany); 1 probka; w tym momencie workspace uruchomienia jeszcze istnieje — asertowane",
       "probkiMs": [
-        56
+        54
       ],
       "podsumowanie": {
         "probek": 1,
         "zMetryka": 1,
         "brakMetryki": 0,
-        "minMs": 56,
-        "medianaMs": 56,
-        "maxMs": 56
+        "minMs": 54,
+        "medianaMs": 54,
+        "maxMs": 54
       }
     },
     "stopKoniecStrumieniaWKarcie": {
@@ -58,15 +58,15 @@
       "do": "pasek stanu w stronie pokazuje faze koncowa (zdarzenie konca doszlo strumieniem AG-UI)",
       "warunki": "build produkcyjny serwowany przez backend, instancja scenariuszowa na wlasnym porcie 8797 i wlasnym katalogu danych, Chromium, jeden worker; model zastapiony scenariuszem na granicy adaptera (proces Claude Agent SDK nie jest uruchamiany); 1 probka",
       "probkiMs": [
-        112
+        155
       ],
       "podsumowanie": {
         "probek": 1,
         "zMetryka": 1,
         "brakMetryki": 0,
-        "minMs": 112,
-        "medianaMs": 112,
-        "maxMs": 112
+        "minMs": 155,
+        "medianaMs": 155,
+        "maxMs": 155
       }
     },
     "stopKoniecProcesow": {
@@ -75,16 +75,16 @@
       "do": "workspace uruchomienia zniknal z dysku i uruchomienie nie wystepuje w /api/runs/active",
       "warunki": "build produkcyjny serwowany przez backend, instancja scenariuszowa na wlasnym porcie 8797 i wlasnym katalogu danych, Chromium, jeden worker; model zastapiony scenariuszem na granicy adaptera (proces Claude Agent SDK nie jest uruchamiany); 1 probka",
       "probkiMs": [
-        127
+        166
       ],
       "uwagi": "Mierzone z zewnatrz procesu serwera: katalog na dysku i lista zadan w locie. Zakonczenia procesu potomnego Claude Agent SDK ten przebieg nie obejmuje, bo SDK nie jest uruchamiany.",
       "podsumowanie": {
         "probek": 1,
         "zMetryka": 1,
         "brakMetryki": 0,
-        "minMs": 127,
-        "medianaMs": 127,
-        "maxMs": 127
+        "minMs": 166,
+        "medianaMs": 166,
+        "maxMs": 166
       }
     }
   }

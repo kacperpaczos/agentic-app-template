@@ -1,10 +1,10 @@
 {
   "opis": "Faktyczne anulowanie rozdzielone na trzy instanty: potwierdzenie zadania Stop, zakonczenie strumienia zdarzen i zakonczenie procesow uruchomienia. Po zakonczeniu sprawdzony brak dalszych mutacji domeny i dzialajaca kolejka rozmowy.",
   "zrodlo": "pnpm test → tests/measurements.test.ts (regresja szablonu)",
-  "zapisano": "2026-09-18T09:41:07.113Z",
+  "zapisano": "2026-09-18T09:41:44.968Z",
   "wersjaKodu": {
-    "commit": "fc6301231b8c203fd0d3121395c1f7cbae8ec272",
-    "brudneDrzewo": true,
+    "commit": "d3427778fef4662d60fa1748b3803de15fc3aac9",
+    "brudneDrzewo": false,
     "node": "24.19.0",
     "pakiety": {
       "node": "24.19.0",
@@ -24,17 +24,17 @@
       "do": "odpowiedz 200 z cancelled=true",
       "warunki": "stand-in modelu na granicy adaptera (AbortSignal przekazany tak jak do Claude Agent SDK); zadanie Stop przez rzeczywista trase POST /api/runs/:id/cancel; 3 uruchomienia, kazde strumieniujace tekst i trzymajace prawdziwy proces potomny zwiazany z sygnalem przerwania; proces potomny zastepuje proces Claude Agent SDK, ktorego ten przebieg nie uruchamia; w tym instancie proces trzymany przez uruchomienie jeszcze zyje — asertowane, nie zalozone",
       "probkiMs": [
-        4,
-        7,
-        2
+        1,
+        2,
+        1
       ],
       "podsumowanie": {
         "probek": 3,
         "zMetryka": 3,
         "brakMetryki": 0,
-        "minMs": 2,
-        "medianaMs": 4,
-        "maxMs": 7
+        "minMs": 1,
+        "medianaMs": 1,
+        "maxMs": 2
       }
     },
     "stopKoniecStrumienia": {
@@ -43,17 +43,17 @@
       "do": "wyczerpanie strumienia AG-UI po jego zamknieciu (koniec odczytu konsumenta)",
       "warunki": "stand-in modelu na granicy adaptera (AbortSignal przekazany tak jak do Claude Agent SDK); zadanie Stop przez rzeczywista trase POST /api/runs/:id/cancel; 3 uruchomienia, kazde strumieniujace tekst i trzymajace prawdziwy proces potomny zwiazany z sygnalem przerwania; proces potomny zastepuje proces Claude Agent SDK, ktorego ten przebieg nie uruchamia",
       "probkiMs": [
-        7,
-        11,
-        5
+        3,
+        5,
+        3
       ],
       "podsumowanie": {
         "probek": 3,
         "zMetryka": 3,
         "brakMetryki": 0,
-        "minMs": 5,
-        "medianaMs": 7,
-        "maxMs": 11
+        "minMs": 3,
+        "medianaMs": 3,
+        "maxMs": 5
       }
     },
     "stopKoniecProcesow": {
@@ -62,17 +62,17 @@
       "do": "ostatni z czterech faktow: rozstrzygnieta obietnica wykonania, usuniety workspace, zakonczony proces potomny i wyrejestrowany strumien uruchomienia",
       "warunki": "stand-in modelu na granicy adaptera (AbortSignal przekazany tak jak do Claude Agent SDK); zadanie Stop przez rzeczywista trase POST /api/runs/:id/cancel; 3 uruchomienia, kazde strumieniujace tekst i trzymajace prawdziwy proces potomny zwiazany z sygnalem przerwania; proces potomny zastepuje proces Claude Agent SDK, ktorego ten przebieg nie uruchamia",
       "probkiMs": [
-        17,
-        21,
-        15
+        13,
+        15,
+        13
       ],
       "podsumowanie": {
         "probek": 3,
         "zMetryka": 3,
         "brakMetryki": 0,
-        "minMs": 15,
-        "medianaMs": 17,
-        "maxMs": 21
+        "minMs": 13,
+        "medianaMs": 13,
+        "maxMs": 15
       }
     },
     "stopWyjscieProcesuPotomnego": {
@@ -81,18 +81,18 @@
       "do": "zdarzenie exit procesu potomnego",
       "warunki": "stand-in modelu na granicy adaptera (AbortSignal przekazany tak jak do Claude Agent SDK); zadanie Stop przez rzeczywista trase POST /api/runs/:id/cancel; 3 uruchomienia, kazde strumieniujace tekst i trzymajace prawdziwy proces potomny zwiazany z sygnalem przerwania; proces potomny zastepuje proces Claude Agent SDK, ktorego ten przebieg nie uruchamia; symulacja procesu potomnego modelu",
       "probkiMs": [
-        7,
-        11,
-        5
+        3,
+        5,
+        3
       ],
       "uwagi": "Proces potomny jest stand-inem procesu Claude Agent SDK. Dowodzi, ze sygnal przerwania dociera na granice adaptera i konczy proces przed zamknieciem uruchomienia; nie dowodzi zachowania samego SDK.",
       "podsumowanie": {
         "probek": 3,
         "zMetryka": 3,
         "brakMetryki": 0,
-        "minMs": 5,
-        "medianaMs": 7,
-        "maxMs": 11
+        "minMs": 3,
+        "medianaMs": 3,
+        "maxMs": 5
       }
     }
   }
