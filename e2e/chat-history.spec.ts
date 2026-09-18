@@ -106,7 +106,19 @@ async function openToolCard(page: Page) {
   if ((await row.getAttribute('aria-expanded')) !== 'true') await row.click();
   const block = items.locator('.openui-tool-call__block').first();
   await expect(block).toBeVisible();
-  return { tray, items, block };
+  /*
+   * Request and result are two `code` elements inside one block, and they have
+   * to be read separately.
+   *
+   * Read as one string they cannot tell each other apart — and that is not
+   * hypothetical: the first version of the argument assertions searched the
+   * whole block for `limit: 3`, which the ui_catalog *answer* also contains (in
+   * its window descriptor). A detection trial that emptied the arguments
+   * entirely still passed. The trial caught the test, not the code.
+   */
+  const request = block.locator('code').first();
+  const result = block.locator('code').nth(1);
+  return { tray, items, block, request, result };
 }
 
 /** Stored results of one tool in a conversation, in call order, parsed. */
@@ -389,22 +401,26 @@ test.describe('czat i historia rozmowy', () => {
     /* -------- the call, its arguments and its result, on screen ------------ */
 
     const readCard = async () => {
-      const { items, block } = await openToolCard(page);
+      const { items, request, result } = await openToolCard(page);
       await expect(items).toContainText('ui_catalog');
-      return (await block.textContent()) ?? '';
+      return {
+        request: (await request.textContent()) ?? '',
+        result: (await result.textContent()) ?? '',
+      };
     };
 
     /*
-     * Arguments: the `limit` the agent actually sent, readable in the request
-     * panel — and demonstrably the one that was used, because the answer under
-     * it carries exactly that many targets and says the window was cut short.
+     * Arguments: the `limit` the agent actually sent, read from the request
+     * panel alone — and demonstrably the one that was used, because the answer
+     * beside it carries exactly that many targets and says the window was cut
+     * short.
      */
     const live = await readCard();
-    expect(live, 'argumenty wywolania nie sa widoczne').toContain('limit');
-    expect(live, 'wartosc argumentu nie jest widoczna').toMatch(/limit"?\s*:\s*3/);
+    expect(live.request, 'argumenty wywolania nie sa widoczne').toContain('limit');
+    expect(live.request, 'wartosc argumentu nie jest widoczna').toMatch(/limit"?\s*:\s*3/);
     // The successful result's content, not only the fact that it succeeded.
-    expect(live, 'tresc udanego wyniku nie jest widoczna').toContain('platform.canvas');
-    expect(live, 'skutek argumentu nie jest widoczny w wyniku').toContain('truncated');
+    expect(live.result, 'tresc udanego wyniku nie jest widoczna').toContain('platform.canvas');
+    expect(live.result, 'skutek argumentu nie jest widoczny w wyniku').toContain('truncated');
 
     const [catalog] = await toolResults(page, conversationId, 'ui_catalog');
     expect(catalog.targets).toHaveLength(3);
@@ -415,8 +431,8 @@ test.describe('czat i historia rozmowy', () => {
     await page.reload();
     await expect(page.locator('.openui-behind-the-scenes').first()).toBeVisible({ timeout: 30_000 });
     const afterReload = await readCard();
-    expect(afterReload).toMatch(/limit"?\s*:\s*3/);
-    expect(afterReload).toContain('platform.canvas');
+    expect(afterReload.request).toMatch(/limit"?\s*:\s*3/);
+    expect(afterReload.result).toContain('platform.canvas');
 
     /* ----------------------------- restart --------------------------------- */
 
@@ -424,8 +440,8 @@ test.describe('czat i historia rozmowy', () => {
     await page.reload();
     await expect(page.locator('.openui-behind-the-scenes').first()).toBeVisible({ timeout: 30_000 });
     const afterRestart = await readCard();
-    expect(afterRestart).toMatch(/limit"?\s*:\s*3/);
-    expect(afterRestart).toContain('platform.canvas');
+    expect(afterRestart.request).toMatch(/limit"?\s*:\s*3/);
+    expect(afterRestart.result).toContain('platform.canvas');
 
     // The identifiers did not move either — the same rows, not a rebuilt turn.
     const history: Array<Record<string, any>> = await getJson(page, `/api/threads/get/${conversationId}`);
@@ -610,6 +626,16 @@ test.describe('czat i historia rozmowy', () => {
     await expect
       .poll(async () => (await getJson(page, '/api/runs/active')).runs.map((r: any) => r.conversationId))
       .toContain(conversationId);
+    /*
+     * The count of runs actually executing in the backend process, from
+     * `/api/status`. It is the only signal here that survives the delete:
+     * `/api/runs/active` reads `agent_runs`, and those rows cascade away with
+     * the conversation — so "the task is no longer listed" is true whether it
+     * was stopped or is still running against a conversation that no longer
+     * exists. A detection trial that removed the cancellation passed on that
+     * assertion alone; this is the assertion it now has to get past.
+     */
+    expect((await getJson(page, '/api/status')).activeRuns).toBe(1);
 
     // Deleted from the row's own menu, as a user would — not over the API.
     await openDrawer(page);
@@ -627,6 +653,14 @@ test.describe('czat i historia rozmowy', () => {
         timeout: 30_000,
       })
       .not.toContain(conversationId);
+    /*
+     * And it really stopped. The scripted task had over ten seconds of work
+     * left when the row was removed, so a run that was merely orphaned would
+     * still be counted here well past this deadline.
+     */
+    await expect
+      .poll(async () => (await getJson(page, '/api/status')).activeRuns, { timeout: 8_000 })
+      .toBe(0);
     expect((await getJson(page, `/api/threads/get/${conversationId}`)).error?.code).toBe('not_found');
 
     // Published work is untouched, and the interface is usable: no error notice
