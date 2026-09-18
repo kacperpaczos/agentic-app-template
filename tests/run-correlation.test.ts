@@ -321,6 +321,28 @@ describe('L5.12 — most tekst / hooki / zdarzenia domeny przy dwoch przebiegach
     expect(requestA.runId).toBe(runA.runId);
     expect(requestB.runId).toBe(runB.runId);
 
+    /*
+     * B's address with A's question decides nothing — and this line is here
+     * because a detection trial said so. Removing the run binding from
+     * `answerPermission` left this test green: with two distinct request ids and
+     * each answered under its own run, the binding is never exercised, so the
+     * test was about the gate resolving once and not about *whose* question it
+     * resolved. The crossed answer is the case that can only pass with the
+     * binding in place.
+     */
+    expect(
+      runtime.answerPermission({
+        runId: runB.runId,
+        ownerId: h.ownerId,
+        requestId: requestA.requestId,
+        allow: true,
+      }),
+      'zgoda pod cudzym adresem rozstrzygnela prosbe',
+    ).toBe(false);
+    expect(runtime.pendingPermissionIds()).toEqual(
+      expect.arrayContaining([requestA.requestId, requestB.requestId]),
+    );
+
     // A's answer, posted under A's run: decides A and only A.
     expect(
       runtime.answerPermission({ runId: runA.runId, ownerId: h.ownerId, requestId: requestA.requestId, allow: true }),
