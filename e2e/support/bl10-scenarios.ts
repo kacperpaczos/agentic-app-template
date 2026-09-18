@@ -143,13 +143,26 @@ export function compositionScript(prompt: string): Step[] {
           const listed = calls.find((c) => c.name === 'canvas_list_cards');
           const cards = (listed?.result?.cards ?? []) as Array<{
             id: string;
+            specVersion: number;
             spec: { component?: string; props?: { caseId?: string } };
           }>;
           const summary = cards.find((c) => c.spec?.component === 'procurement.caseSummary');
           if (!summary) throw new Error('scenariusz: brak karty podsumowania');
+          /*
+           * `expectedSpecVersion` comes from the listing read a step earlier —
+           * the same thing the tool asks a real agent to do: name the version
+           * you worked from, so a change made in the meantime is a conflict
+           * instead of a silent overwrite. The field is required, and a
+           * scenario that leaves it out has its call rejected before the
+           * handler ever runs.
+           */
+          if (typeof summary.specVersion !== 'number') {
+            throw new Error('scenariusz: canvas_list_cards nie podalo specVersion karty podsumowania');
+          }
           return {
             cardId: summary.id,
             title: 'Warunki dostawy',
+            expectedSpecVersion: summary.specVersion,
             spec: {
               kind: 'component',
               component: 'procurement.deliveryTerms',
