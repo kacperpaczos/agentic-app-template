@@ -328,6 +328,52 @@ describe('L4.6 — powtorzone zadanie nie tworzy drugiej odpowiedzi', () => {
     expect(second.events.filter((e) => e.type === 'RUN_FINISHED')).toHaveLength(1);
   });
 
+  it('ten sam runId w istniejacej rozmowie: bez drugiej odpowiedzi asystenta', async () => {
+    /*
+     * The same guarantee, in the case where the repeat cannot fail by accident.
+     *
+     * Without `threadId` a retried POST creates a *second* conversation and then
+     * trips the primary key of `messages` (the client's message id is unique
+     * across the table), so it ends in a 500 — a failure, but not the one the
+     * criterion is about, and it hides the duplicate answer behind an error.
+     * Sent into a conversation that already exists, the pre-fix behaviour is
+     * exactly what L4.6 forbids: a second run, a second assistant message, and
+     * the tool work done again. That is what this pins.
+     */
+    script = () => [
+      { kind: 'text', text: 'Odpowiadam ' },
+      { kind: 'tool', id: 'tu_1', name: 'mcp__app__ui_catalog', input: {}, result: '{"ok":true}' },
+      { kind: 'text', text: 'raz.' },
+    ];
+    const conv = await asJson('/api/threads/create', {
+      method: 'POST',
+      body: JSON.stringify({ messages: [userMessage('Rozmowa na powtorzenie')] }),
+    });
+    const threadId = conv.body.id as string;
+    const body = {
+      threadId,
+      runId: crypto.randomUUID(),
+      messages: [userMessage('Zrob to raz w tej rozmowie.')],
+      context: { ...emptyContext, conversationId: threadId },
+    };
+
+    const first = await command(body);
+    const second = await command(body);
+    expect(second.status).toBe(200);
+    expect(second.replayed).toBe(true);
+    expect(second.runId).toBe(first.runId);
+
+    const history = (await asJson(`/api/threads/get/${threadId}`)).body as any[];
+    // One answer to one command. A second run would add a second assistant
+    // message with its own tool call, and the turn would read as two answers.
+    const assistants = history.filter((m) => m.role === 'assistant');
+    expect(assistants.map((m) => m.content).join('')).toBe('Odpowiadam raz.');
+    expect(history.filter((m) => m.role === 'tool')).toHaveLength(1);
+    expect(history.filter((m) => m.role === 'user')).toHaveLength(2); // zalozycielska + ta
+    expect(model.turns).toBe(1);
+    expect((await asJson(`/api/conversations/${threadId}/runs`)).body.runs).toHaveLength(1);
+  });
+
   it('inny runId to inne polecenie — powtorzenie nie zjada drugiej proby', async () => {
     const conv = await asJson('/api/threads/create', {
       method: 'POST',
