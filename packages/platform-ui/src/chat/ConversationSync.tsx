@@ -5,7 +5,12 @@ import { apiGet } from '../api/client.ts';
 import { useChatSlots } from './chatSlots.ts';
 import { useSessionLocation } from '../state/sessionLocation.ts';
 import { useAppState } from '../state/appState.ts';
-import { classifyThreadFailure, decideRestore, type ThreadFailure } from './sessionRestore.ts';
+import {
+  classifyThreadFailure,
+  decideRestore,
+  leavesAnotherConversation,
+  type ThreadFailure,
+} from './sessionRestore.ts';
 
 /**
  * Keeps the address bar and the ready-made chat's thread selection in step.
@@ -118,7 +123,7 @@ export function ConversationSync() {
         return;
       case 'publish': {
         // Read before it moves: was the chat on another conversation, or on none?
-        const leaving = lastSynced.current !== null && lastSynced.current !== decision.threadId;
+        const leaving = leavesAnotherConversation(lastSynced.current, decision.threadId);
         lastSynced.current = decision.threadId;
         setProblem(null);
         setConversation(decision.threadId, { replace: decision.replace });

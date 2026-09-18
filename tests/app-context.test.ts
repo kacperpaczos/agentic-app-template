@@ -19,6 +19,10 @@ import {
 } from '@platform/server';
 import { setAccessContext, resetAccessContext } from '../packages/platform-ui/src/api/accessContext.ts';
 import { useAppState } from '../packages/platform-ui/src/state/appState.ts';
+import {
+  decideRestore,
+  leavesAnotherConversation,
+} from '../packages/platform-ui/src/chat/sessionRestore.ts';
 import { createHarness, login, type Harness } from './helpers.ts';
 import { dispatchingAgent, type Plan, type StandInHandle } from './support/model-standin.ts';
 import { codeVersion, evidenceWritingRequested, writeEvidence } from './support/measurement-evidence.ts';
@@ -325,74 +329,71 @@ describe('L6.7 — wiekszy zbior jest pobierany oknem, nie w calosci', () => {
     expect(past.window.total).toBe(all.length);
   });
 
-  it('domyslna odpowiedz listujaca miesci sie w tym, co rozmowa przechowuje', async () => {
+  it('kazdy windowany odczyt miesci sie w tym, co rozmowa przechowuje', async () => {
     /*
-     * The coupling worth stating: a tool answer longer than
-     * `TOOL_RESULT_STORED_CHARS` is stored cut in the middle of a value, so
-     * whatever reads the conversation back gets text that no longer parses.
-     * That is what a read window is for — and it is only a remedy while the
-     * default window actually fits. Asserted here so growth shows up as this
-     * sentence rather than as a JSON error in a browser test.
+     * Enumerated from the registry, for the same reason as the window rule
+     * above: a hand-written list of six proved six things and quietly said
+     * nothing about the three unwindowed listings sitting next to it.
      *
-     * The listings that grow with the *user's* data, and only those.
-     * `ui_catalog` grows with what the application declares about itself, which
-     * no window shrinks and no user can enlarge; its answer is over the limit
-     * already, which is a defect of the stored projection rather than of the
-     * window, and is reported as one.
+     * The coupling: a tool answer longer than `TOOL_RESULT_STORED_CHARS` is
+     * stored cut in the middle of a value, so whatever reads the conversation
+     * back gets text that no longer parses. A window is the remedy — and only
+     * while the default window actually fits.
      */
     const caseId = h.service.listCases(h.ownerId)[0]!.id;
-    const answers: Array<[string, unknown]> = [
-      ['procurement_list_cases', await callTool('procurement_list_cases', {})],
-      ['procurement_list_offers', await callTool('procurement_list_offers', { caseId })],
-      ['procurement_get_case', await callTool('procurement_get_case', { caseId })],
-      ['canvas_list_cards', await callTool('canvas_list_cards', { spaceId: await spaceWithCards() })],
-      ['files_list', await callTool('files_list', {})],
-      /*
-       * `get_context` grows with what the user has picked and typed, so it is
-       * in this list too — with a deliberately heavy context: a dozen rows
-       * selected, a narrowed and ordered view, several dirty forms.
-       */
-      [
-        'get_context',
-        await callTool(
-          'get_context',
-          {},
-          {
-            appContext: {
-              ...EMPTY_CONTEXT,
-              spaceId: 'spc_pomiarowa',
-              resource: { kind: 'case', id: caseId },
-              selection: Array.from({ length: 12 }, (_, i) => ({
-                kind: 'offer_item',
-                id: `pci_${i}${'a'.repeat(16)}`,
-              })),
-              filters: {
-                'procurement.data': {
-                  predicates: [{ field: 'country', op: 'eq', value: 'PL' }],
-                  sort: { field: 'name', direction: 'desc' },
-                  page: { index: 1, size: 10, count: 1 },
-                  matched: 5,
-                  total: 7,
-                },
-              },
-              viewport: { x: 12, y: 34, zoom: 1 },
-              drafts: Array.from({ length: 5 }, (_, i) => ({
-                formId: `form_${i}`,
-                entity: 'offer_item',
-                entityId: `pci_${i}`,
-                dirtyFields: ['unitPrice', 'quantity'],
-              })),
-              ui: { version: 12, clientId: 'ui_tab_kontekst', viewId: 'procurement.data', url: '/data?country=PL' },
-            },
-          },
-        ),
-      ],
-    ];
-    for (const [name, answer] of answers) {
-      expect(JSON.stringify(answer).length, `${name} nie miesci sie w zapisie wyniku narzedzia`).toBeLessThan(
-        TOOL_RESULT_STORED_CHARS,
-      );
+    const spaceId = await spaceWithCards();
+    const fileId = h.platform.services.files.store({
+      ownerId: h.ownerId,
+      filename: 'wejscie.csv',
+      mediaType: 'text/csv',
+      bytes: Buffer.from('a,b\n1,2\n'),
+    }).id;
+
+    /** Arguments a tool needs before it can answer at all. */
+    const argsFor: Record<string, Record<string, unknown>> = {
+      procurement_get_case: { caseId },
+      procurement_list_offers: { caseId },
+      canvas_list_cards: { spaceId },
+      files_versions: { fileId },
+    };
+    /**
+     * Windowed reads whose size does not come from the user's data, with the
+     * reason. `ui_catalog` is built from what the application declares about
+     * itself: no window shrinks it and no user can enlarge it. Its answer is
+     * over the limit today, which is a defect of the stored projection rather
+     * than of the window, and is reported as one.
+     */
+    const oversizeAllowed: Record<string, string> = {
+      ui_catalog: 'rozmiar pochodzi z deklaracji aplikacji, nie z danych uzytkownika',
+    };
+
+    // A conversation, because a read scoped to one (agent views) refuses without it.
+    const conversationId = newConversation('Rozmowa pomiarowa');
+    const ctx = {
+      appContext: { ...EMPTY_CONTEXT, spaceId, conversationId },
+      conversationId,
+    };
+    const windowed = tools().filter((t) => {
+      const keys = Object.keys((t.def.inputSchema as any).shape);
+      return t.def.effect === 'read' && keys.includes('limit') && keys.includes('offset');
+    });
+    expect(windowed.length).toBeGreaterThanOrEqual(9);
+
+    const tooBig: string[] = [];
+    for (const entry of windowed) {
+      const answer = await callTool(entry.localName, argsFor[entry.localName] ?? {}, ctx);
+      const size = JSON.stringify(answer).length;
+      if (size < TOOL_RESULT_STORED_CHARS) {
+        expect(oversizeAllowed[entry.localName], `${entry.localName} miesci sie i ma wyjatek`).toBeUndefined();
+        continue;
+      }
+      if (!oversizeAllowed[entry.localName]) tooBig.push(`${entry.localName} (${size})`);
     }
+    expect(tooBig, 'windowane odczyty przekraczajace zapis wyniku narzedzia').toEqual([]);
+
+    // A stale exception is a lie too.
+    const names = new Set(windowed.map((t) => t.localName));
+    expect(Object.keys(oversizeAllowed).filter((n) => !names.has(n))).toEqual([]);
   });
 
   it('limit poza zakresem schematu jest odrzucany, a nie znosi ograniczenia odczytu', async () => {
@@ -761,6 +762,36 @@ describe('L6.12 — przelaczenie zakresu nie zostawia kontekstu poprzedniego', (
     useAppState.getState().toggleSelection({ kind: 'card', id: 'card_z_b' });
     useAppState.getState().setSpace('sp_b');
     expect(useAppState.getState().toAppContext().selection).toHaveLength(1);
+  });
+
+  it('przestrzen rozmowy zastepuje biezaca tylko wtedy, gdy czat OPUSZCZA inna rozmowe', () => {
+    /*
+     * The rule `ConversationSync` applies when a conversation without a
+     * workspace is opened. Pinned here because both cases below reach the same
+     * `publish` decision, and treating them alike breaks one of them:
+     *  - leaving A for B: B's scope wins, `null` included — otherwise A's
+     *    workspace and the cards selected in it travel into B's first command;
+     *  - coming from no conversation: nothing is being left, and the space on
+     *    screen is the user's own. Clearing it there wiped the workspace
+     *    somebody was looking at while they typed (caught by e2e in round 1).
+     */
+    expect(leavesAnotherConversation('cnv_a', 'cnv_b')).toBe(true);
+    // A thread the chat has just created for the command being sent.
+    expect(leavesAnotherConversation(null, 'cnv_nowa')).toBe(false);
+    // First synchronisation after the page loaded, including a pick from the drawer.
+    expect(leavesAnotherConversation(null, null)).toBe(false);
+    // The backend naming the conversation already on screen is not a move either.
+    expect(leavesAnotherConversation('cnv_a', 'cnv_a')).toBe(false);
+    /*
+     * Deliberately not `!decision.replace`, which answers a different question
+     * and only happens to agree for A → B.
+     */
+    expect(decideRestore({ urlThreadId: null, selectedThreadId: 'cnv_1', lastSynced: null })).toEqual({
+      action: 'publish',
+      threadId: 'cnv_1',
+      replace: true,
+    });
+    expect(leavesAnotherConversation(null, 'cnv_1')).toBe(false);
   });
 
   it('zmiana wlasciciela czysci caly zakres: rozmowa, przestrzen, zasob, zaznaczenie, szkice, zalaczniki', () => {

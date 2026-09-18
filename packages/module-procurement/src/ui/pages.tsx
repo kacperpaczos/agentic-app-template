@@ -70,6 +70,18 @@ export function CaseDetailPage() {
     })();
     return () => {
       cancelled = true;
+      /*
+       * The record is named only while its screen is on display.
+       *
+       * Nothing else clears it: this is the one place that sets it, so without
+       * this line the case stayed in the context long after the user walked
+       * away from it — into every later command, on every other screen, in
+       * every other conversation (L6.12). "The record the user is looking at"
+       * has to stop being true when they stop looking at it. Navigating from
+       * one case to another runs this before the next effect, so the field is
+       * never briefly empty for a move that has a successor.
+       */
+      setResource(null);
     };
   }, [caseId, setResource, setSpace]);
 

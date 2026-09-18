@@ -395,7 +395,16 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     await settled(page);
     const table = page.locator('.pf-chat [data-ui-instance][data-component="DataTable"]');
     await expect(table).toHaveAttribute('data-state', 'ready');
-    const { ids: mine } = await suppliers(page);
+    const { ids: mine, all: mineRows } = await suppliers(page);
+    /*
+     * The names, because the names are what the table puts on screen. The
+     * composition asks for `["name", "country"]`, and a record's id reaches the
+     * DOM only as the `data-record-id` attribute — which `toContainText` never
+     * looks at. An assertion over the ids would be empty of content, not just
+     * of rows, and would pass whatever the chat shows.
+     */
+    const mineNames = mineRows.map((r) => r.name);
+    expect(mineNames.length).toBeGreaterThan(0);
     const conversationId = await conversationOnScreen(page);
     const clientId = await clientIdOf(page);
 
@@ -432,8 +441,8 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
      * the chat" is the claim that matters.
      */
     const chat = page.locator('.pf-chat');
-    for (const id of mine) {
-      await expect(chat).not.toContainText(id);
+    for (const name of mineNames) {
+      await expect(chat).not.toContainText(name);
     }
 
     // What the new owner's backend holds for this tab (the page's session is now the new owner's).

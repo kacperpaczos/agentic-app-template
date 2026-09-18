@@ -93,6 +93,30 @@ export function decideRestore(input: RestoreInput): RestoreAction {
 }
 
 /**
+ * Whether moving to `threadId` means *leaving another conversation*.
+ *
+ * The distinction decides whether the workspace of the conversation being
+ * opened replaces the one on screen even when that conversation has none
+ * (`ConversationSync.followConversationSpace`, L6.12). Two situations reach the
+ * same `publish` decision and must not be treated alike:
+ *
+ *  - `lastSynced` names another conversation — the user moved from it, so its
+ *    workspace and what they selected inside it are a scope they have left;
+ *  - `lastSynced` is null — the chat was on no conversation at all: a thread it
+ *    has just created for the command being sent, or the first synchronisation
+ *    after the page loaded. There is no conversation to leave, and the space on
+ *    screen is the user's current one, not a leftover. Clearing it there wipes
+ *    the workspace somebody was looking at while they typed.
+ *
+ * Deliberately not `!decision.replace`: `replace` answers a different question
+ * (should this push a history entry), and the two answers only happen to agree
+ * for A → B.
+ */
+export function leavesAnotherConversation(lastSynced: string | null, threadId: string | null): boolean {
+  return lastSynced !== null && lastSynced !== threadId;
+}
+
+/**
  * Why a conversation could not be opened, from the server's own answer.
  *
  * `gone` and `failed` need different words on screen and different recovery: a
