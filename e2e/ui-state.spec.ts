@@ -438,32 +438,21 @@ test.describe('agent odczytuje wersjonowany opis ekranu', () => {
     expect(after.instances.some((i: any) => i.state === 'ready' && i.matched === mine.length)).toBe(false);
     expect(text).not.toContain(heldSpace);
 
-    // Then the canvas, inside the app. The workspace the shell held before the
-    // switch is gone from the address too (BL-11c), so the description cannot
-    // name it — the same conclusion this part always asserted, now reached
-    // without the previous owner's id surviving anywhere at all.
+    /*
+     * Then the canvas, inside the app.
+     *
+     * The line below used to read `toBe(heldSpace)` with the note "the
+     * precondition: still held" — the second of the two assumptions this
+     * package changes: the workspace of the identity we switched away from is
+     * no longer in the address at all. Everything after it is untouched and
+     * still passes, including the description being about no space: the shell
+     * has none to hold, so the canvas opens none.
+     */
     await page.locator('.pf-nav__link', { hasText: 'Canvas' }).click();
     await expect.poll(() => new URL(page.url()).pathname).toBe('/');
     expect(new URL(page.url()).searchParams.get('s')).not.toBe(heldSpace);
     const onCanvas = await published(page, (s) => s.target?.id === 'platform.canvas');
-    expect(onCanvas).toMatchObject({ cardsState: 'none', cards: [] });
-    /*
-     * `spaceId` and `cardsSpaceId` used to be asserted as `null`, and that is a
-     * **weakening**, stated here rather than left to be noticed.
-     *
-     * `null` was true for one reason only: the shell went on holding the
-     * previous owner's space, the address went on carrying it, and the
-     * description source refused to name what it was holding. With the shell
-     * cleared (BL-11c) the canvas has no space to hold, so it opens one of the
-     * *new* owner's — and the ids are legitimately that owner's, not null.
-     *
-     * What the two fields were guarding is unchanged and asserted below by
-     * name: neither may ever be the space of the identity we switched away
-     * from. Nothing about the previous owner is admitted; only the claim
-     * "no space at all" is gone, because it is no longer the truth.
-     */
-    expect(onCanvas.spaceId).not.toBe(heldSpace);
-    expect(onCanvas.cardsSpaceId).not.toBe(heldSpace);
+    expect(onCanvas).toMatchObject({ spaceId: null, cardsSpaceId: null, cardsState: 'none', cards: [] });
     expect(JSON.stringify(onCanvas)).not.toContain(heldSpace);
   });
 
