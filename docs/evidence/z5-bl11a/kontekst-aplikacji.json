@@ -1,0 +1,36 @@
+{
+  "opis": "Stany opisu zasobu i okno odczytu narzedzi agenta, z regresji tests/app-context.test.ts. Bez modelu i bez przegladarki: prawdziwe serwisy, prawdziwe handlery MCP.",
+  "zrodlo": "pnpm evidence:z5 (APP_WRITE_EVIDENCE=1 vitest run tests/app-context.test.ts)",
+  "wersjaKodu": {
+    "commit": "e9f58cf5d5ab298dac6134d962cc9f6b305d0829",
+    "brudneDrzewo": false,
+    "node": "24.19.0",
+    "pakiety": {
+      "node": "24.19.0",
+      "hono": "4.13.7",
+      "drizzle": "0.45.2",
+      "mastraCore": "1.66.0",
+      "mastraClaude": "0.3.1",
+      "claudeAgentSdk": "0.3.270",
+      "zod": "4.6.5"
+    }
+  },
+  "stanyOpisuZasobu": {
+    "brakZasobu": "none",
+    "opisany": "described",
+    "usuniety": "not_found",
+    "cudzy": "forbidden",
+    "nieopisanyRodzaj": "not_described"
+  },
+  "oknoOdczytu": {
+    "domyslnyLimit": 25,
+    "narzedzia": [
+      "canvas_list_cards",
+      "files_list",
+      "ui_catalog",
+      "procurement_list_cases",
+      "procurement_get_case",
+      "procurement_list_offers"
+    ]
+  }
+}
