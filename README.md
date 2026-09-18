@@ -222,10 +222,38 @@ Zanim to zrobisz, wykonaj kopię i próbę migracji na kopii:
 | `APP_DEV_API_PORT` | `8790` | port backendu w trybie deweloperskim; cel proxy Vite. Odrzuca 8791 i 8792–8799 |
 | `APP_INSTANCE_LABEL` | — | etykieta instancji na `/api/health`; `pnpm dev` ustawia `agenticapp-dev`, testy `agenticapp-test` |
 
-Dostęp do aplikacji chroni lokalna sesja w ciasteczku, niezależna od subskrypcji Claude. Ekran Ustawień
-pokazuje plan i termin ważności logowania — w tym celu aplikacja wczytuje plik
-`~/.claude/.credentials.json`, zachowuje z niego tylko te dwie informacje, a tokenów nie używa, nie
-zapisuje, nie loguje i nie przesyła. Odświeżaniem logowania zajmuje się Claude Agent SDK.
+Dostęp do aplikacji chroni lokalna sesja w ciasteczku, niezależna od subskrypcji Claude.
+
+**Jak aplikacja czyta poświadczenie.** Ekran Ustawień pokazuje plan i termin ważności logowania. Żeby
+je podać, aplikacja **parsuje cały plik** `~/.claude/.credentials.json` (albo `$CLAUDE_CONFIG_DIR/.credentials.json`,
+jeśli zmienna jest ustawiona) — inaczej nie da się sięgnąć po pola, które w nim siedzą. Oznacza to, że
+`accessToken` i `refreshToken` **przechodzą przez pamięć procesu** przy każdym takim odczycie, nawet
+jeśli nic ich stamtąd nie bierze. Wcześniejsza wersja tego akapitu mówiła, że aplikacja „wczytuje z
+pliku tylko plan i termin”, co nie było zgodne z kodem.
+
+Co jest sprawdzalne i sprawdzane:
+
+- z rozparsowanej wartości kopiowane są wyłącznie `subscriptionType` i `expiresAt`; obiekt jest
+  porzucany po zwróceniu wyniku (`packages/platform-server/src/agent/auth.ts`),
+- `accessToken` i `refreshToken` nie są nigdzie zwracane, zapisywane, logowane ani przesyłane —
+  `tests/durability.test.ts` i `tests/runtime.test.ts` biorą prawdziwą wartość z dysku i szukają jej we
+  frontendzie, w bundlu serwera, w bazie, w diagnostyce startowej, w raportach i śladach Playwright
+  oraz w odpowiedziach HTTP; `e2e/auth-limits.spec.ts` przeszukuje log serwera, zdarzenia uruchomień,
+  artefakty i magazyn plików po prawdziwym przebiegu rozmowy,
+- plik jest **tylko czytany**. Odświeżaniem tokena zajmuje się Claude Agent SDK, który czyta i
+  nadpisuje ten sam plik po swojemu; aplikacja nie ma własnego przepływu tokenów,
+- katalog poświadczeń jest niedostępny dla agenta: blokują go ustawienia sandboxa oraz odmowa w hooku
+  `PreToolUse` i w bramce narzędzi, więc `Read`, `Glob` czy `Grep` wycelowane w ten katalog kończą się
+  odmową widoczną w czacie.
+
+Testy negatywne dotyczące logowania **nie dotykają logowania użytkownika**: pracują na syntetycznym
+poświadczeniu w katalogu tymczasowym wskazanym przez `CLAUDE_CONFIG_DIR`.
+
+**Sprawdzenie sesji SDK.** Przycisk „Sprawdź sesję SDK” w Ustawieniach pyta sam Claude Agent SDK,
+w jaki sposób jest uwierzytelniony — żądaniem sterującym `accountInfo()`, które **nie wydaje tury
+modelu**. Odpowiedź rozróżnia subskrypcję OAuth od sesji na kluczu API i pokazuje wykorzystanie limitu
+planu. Raport nie niesie adresu e-mail ani nazwy organizacji konta. Poza aplikacją to samo sprawdzenie
+wykonuje `node scripts/probe-sdk-session.mjs` (patrz „Sprawdzanie zmian”).
 
 ### Sprawdzanie zmian
 
@@ -234,7 +262,15 @@ pnpm verify          # kontrola granicy, spójność dokumentów oceny, typy, bu
 pnpm test:e2e        # testy w przeglądarce na zbudowanej aplikacji; bez testów z prawdziwym modelem
 pnpm test:e2e:model  # tylko testy z prawdziwym modelem — kosztują 11 tur subskrypcji na przebieg
 pnpm check:module-swap   # próba podmiany modułu przykładowego na kontrolny, na kopii repozytorium
+pnpm probe:sdk-session   # pyta SDK, jak jest uwierzytelniony; NIE wydaje tury modelu
 ```
+
+`pnpm probe:sdk-session` otwiera sesję Claude Agent SDK, której strumień wejściowy nie emituje żadnej
+wiadomości, zadaje dwa **żądania sterujące** (`accountInfo()` oraz odczyt limitów planu) i zamyka ją.
+Model nie dostaje polecenia, więc nic nie kosztuje. Wynik trafia do
+`docs/evidence/z12-bl04/sesja-sdk.json`; `tests/sdk-session-evidence.test.ts` pilnuje, żeby zapisany
+dowód dotyczył wersji SDK, adaptera i CLI zainstalowanych w tym drzewie — po aktualizacji którejkolwiek
+z nich test oblewa i trzeba sondę powtórzyć.
 
 `pnpm test:e2e` działa na istniejącym buildzie, więc uruchamiaj go po `pnpm verify` albo `pnpm build`.
 Testy startują własne serwery na portach 8792–8799 z własnymi katalogami danych.

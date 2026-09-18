@@ -19,9 +19,17 @@ import {
  * exists is not evidence that signing in works.
  *
  * **On reading the credential file.** This module does parse
- * `~/.claude/.credentials.json`, in full — there is no way to report the plan
- * and the expiry without parsing the object that contains them. What it
- * guarantees is narrower and checkable:
+ * `~/.claude/.credentials.json` — or `$CLAUDE_CONFIG_DIR/.credentials.json`,
+ * which is the same file moved — **in full**. There is no way to report the
+ * plan and the expiry without parsing the object that contains them, and that
+ * means `accessToken` and `refreshToken` **pass through this process's memory**
+ * on every such read, even though nothing takes them from there. Saying instead
+ * that the application "reads only the plan and the expiry from the file" would
+ * describe a program this is not; README.md says the same thing in the same
+ * words, and L8.14 is about those two agreeing.
+ *
+ * What it guarantees is narrower than "the tokens are never read", and every
+ * part of it is checkable:
  *
  *  - only `subscriptionType` and `expiresAt` are copied out of the parsed value;
  *  - `accessToken` and `refreshToken` are never referenced, returned, stored,
@@ -29,8 +37,13 @@ import {
  *  - the file is only ever *read*. Renewal belongs to the Claude Agent SDK,
  *    which reads and rewrites the same file on its own; this application is
  *    never on that path and must never implement a token flow of its own.
- *  - `tests/runtime.test.ts` takes the real token value from disk and asserts it
- *    appears in no output this application produces.
+ *  - `tests/runtime.test.ts` and `tests/durability.test.ts` take the real token
+ *    value from disk and assert it appears in nothing this application
+ *    produces — and `e2e/auth-limits.spec.ts` does the same with a canary
+ *    credential across the surfaces a real conversation leaves behind;
+ *  - the directory itself is out of the agent's reach: `sandboxSettings` denies
+ *    reads and writes of it, and `protectedPathRefusal` refuses a file tool
+ *    pointed at it both in the `PreToolUse` hook and at the consent gate.
  */
 
 /* --------------------------- last verified access -------------------------- */

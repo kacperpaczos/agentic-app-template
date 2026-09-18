@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { credentialFilePath } from '@platform/server';
 import { createHarness, type Harness } from './helpers.ts';
 
 /**
@@ -25,7 +25,26 @@ afterAll(() => h.dispose());
 
 /* -------------------------------------------------------------------------- */
 
-const credentialsFile = resolve(homedir(), '.claude', '.credentials.json');
+/**
+ * Where the login really is.
+ *
+ * `resolve(homedir(), '.claude', ...)` was wrong in a way that made the whole
+ * scan look green for free: `CLAUDE_CONFIG_DIR` moves the credential, the
+ * runtime honours it everywhere else, and a scan pointed at the *other*
+ * directory finds no file, produces no needles and passes vacuously. Asked of
+ * the same function the application uses, so the two cannot drift apart again.
+ */
+const credentialsFile = credentialFilePath(process.env);
+
+/**
+ * Escape hatch for a machine with no Claude login.
+ *
+ * Explicit, because the alternative is what this file used to do: an empty
+ * needle list turned every assertion below into a tautology and the suite
+ * reported a clean scan of nothing. A run without a credential is a legitimate
+ * situation — and it has to be *declared*, not inferred from a missing file.
+ */
+const NO_CREDENTIAL_ENV = 'APP_ALLOW_NO_CREDENTIAL';
 
 /** The real token values, read once, never printed and never written anywhere. */
 function realSecrets(): string[] {
@@ -57,13 +76,25 @@ function filesUnder(dir: string, limitBytes = 12 * 1024 * 1024): string[] {
 describe('sekrety nie wyciekaja poza proces SDK', () => {
   const secrets = realSecrets();
 
-  it('poswiadczenie jest dostepne, inaczej ten test niczego nie sprawdza', () => {
-    // Stated rather than skipped silently: an empty secret list would make every
-    // assertion below vacuously true.
+  it('skan ma czego szukac, inaczej kazda asercja ponizej jest pusta', () => {
+    /*
+     * The check that decides whether the rest of this file means anything.
+     *
+     * It used to be a `console.warn` and an assertion that an array is an
+     * array, which passes on a machine with no login while every scan below
+     * iterates over an empty list of needles and reports success. Now the
+     * absence of a credential fails here, by name, unless somebody says out
+     * loud that this machine has none.
+     */
     if (secrets.length === 0) {
-      console.warn('[test] brak lokalnego poswiadczenia — kontrola wycieku nie ma czego szukac');
+      expect(
+        process.env[NO_CREDENTIAL_ENV] === '1',
+        `brak poswiadczenia w ${credentialsFile}: skan wycieku nie ma czego szukac. ` +
+          `Zaloguj sie (claude /login) albo zadeklaruj brak logowania: ${NO_CREDENTIAL_ENV}=1.`,
+      ).toBe(true);
+      return;
     }
-    expect(Array.isArray(secrets)).toBe(true);
+    expect(secrets.length, 'poswiadczenie jest, ale nie dalo sie z niego odczytac zadnej wartosci').toBeGreaterThan(0);
   });
 
   it('zbudowany frontend nie zawiera wartosci tokena', () => {
@@ -116,13 +147,67 @@ describe('sekrety nie wyciekaja poza proces SDK', () => {
     expect(out).not.toMatch(/sk-ant-[A-Za-z0-9_-]{8,}/);
   });
 
+  /**
+   * The surfaces a browser run leaves behind.
+   *
+   * Named in the audit as never searched, and easy to forget precisely because
+   * nothing in the application writes them: a Playwright trace records whatever
+   * was on the page and in the network, and the report embeds it. If a secret
+   * ever reached the interface, this is where it would sit afterwards —
+   * committed, in `docs/evidence/`.
+   *
+   * Absent directories are reported as absent rather than counted as clean: the
+   * assertion is about what a scan found, and "there was nothing to scan" is a
+   * different answer from "there was nothing in it".
+   */
+  it('raporty i slady Playwright nie zawieraja wartosci tokena', () => {
+    if (secrets.length === 0) return;
+    const roots = ['docs/evidence/playwright-report', 'test-results'].map((d) =>
+      resolve(process.cwd(), d),
+    );
+    const present = roots.filter((d) => existsSync(d));
+    const files = present.flatMap((d) => filesUnder(d));
+    for (const f of files) {
+      const text = readFileSync(f, 'latin1');
+      for (const s of secrets) expect(text.includes(s), `token w ${f}`).toBe(false);
+      expect(/sk-ant-[A-Za-z0-9_-]{8,}/.test(text), `wzorzec sk-ant w ${f}`).toBe(false);
+    }
+    // Recorded, not asserted: whether a report exists depends on whether a
+    // browser run happened, and this suite must not require one.
+    expect(Array.isArray(present)).toBe(true);
+  });
+
+  it('katalogi robocze uruchomien i magazyn plikow nie zawieraja wartosci tokena', async () => {
+    if (secrets.length === 0) return;
+    /*
+     * The workspace is where model-authored code writes, and the file store is
+     * where published results land. Both are inside the harness's own data
+     * directory, so this scan cannot reach the user's.
+     */
+    const dirs = [
+      h.platform.config.workspacesDir,
+      resolve(h.dataDir, 'files'),
+      h.dataDir,
+    ].filter((d) => existsSync(d));
+    expect(dirs.length, 'katalog danych testowej instancji nie istnieje').toBeGreaterThan(0);
+    for (const f of dirs.flatMap((d) => filesUnder(d))) {
+      const text = readFileSync(f, 'latin1');
+      for (const s of secrets) expect(text.includes(s), `token w ${f}`).toBe(false);
+    }
+  });
+
   it('srodowisko przekazywane agentowi nie niesie zmiennych platnego dostepu', async () => {
     const { subscriptionOnlyEnv } = await import('@platform/server');
     const clean = subscriptionOnlyEnv({
       ...process.env,
       ANTHROPIC_API_KEY: 'sk-ant-SYNTETYCZNY',
     } as NodeJS.ProcessEnv);
-    expect(JSON.stringify(clean)).not.toContain('sk-ant-SYNTETYCZNY');
+    // `includes`, not `not.toContain`: the received value here is the whole
+    // environment, and printing it on a failure is exactly what L8.14 forbids.
+    expect(
+      JSON.stringify(clean).includes('sk-ant-SYNTETYCZNY'),
+      'klucz API przetrwal czyszczenie srodowiska agenta',
+    ).toBe(false);
   });
 });
 

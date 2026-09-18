@@ -126,6 +126,18 @@ export interface ProbeOptions {
   env?: NodeJS.ProcessEnv;
   /** How long the control requests may take before the probe gives up. */
   timeoutMs?: number;
+  /**
+   * Whether to apply the subscription-only policy to the environment.
+   *
+   * On by default, because the probe exists to describe the path a **run**
+   * would take, and a run's environment always goes through
+   * `subscriptionOnlyEnv`. Turning it off has exactly one use, and it is a
+   * diagnostic one: showing that the probe can *see* an API key when there is
+   * one on the path. Without that control, "the application's environment
+   * reports a subscription" could equally mean the probe is blind — and a
+   * check that cannot fail is not a check.
+   */
+  applyPolicy?: boolean;
 }
 
 export async function probeSdkSession(opts: ProbeOptions = {}): Promise<SdkSession> {
@@ -155,7 +167,12 @@ export async function probeSdkSession(opts: ProbeOptions = {}): Promise<SdkSessi
         // for a run — which is what makes this probe an answer about the path
         // a real run would take.
         settingSources: [],
-        env: subscriptionOnlyEnv(opts.env ?? process.env),
+        env:
+          opts.applyPolicy === false
+            ? (Object.fromEntries(
+                Object.entries(opts.env ?? process.env).filter(([, v]) => v !== undefined),
+              ) as Record<string, string>)
+            : subscriptionOnlyEnv(opts.env ?? process.env),
         // A probe does nothing. Listing no allowed tool and forbidding the ones
         // that could act keeps that true even if a future SDK decided to start
         // a turn on its own.
