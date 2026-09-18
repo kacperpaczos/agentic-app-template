@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { MarkDownRenderer } from '@openuidev/react-ui';
 import { Renderer } from '@openuidev/react-lang';
 import type { AnyLibrary } from '../catalog/registry.tsx';
@@ -88,6 +89,60 @@ export function splitMessage(content: string): MessagePart[] {
   return parts;
 }
 
+/**
+ * One composition inside an answer — and a guard against it rendering nothing.
+ *
+ * The OpenUI renderer draws what it recognises and quietly skips what it does
+ * not, so an answer whose composition names a component nobody has produced an
+ * empty box: no error, no words, an answer that looks finished and says
+ * nothing. That is the invisible answer this criterion is about, and it cannot
+ * be caught by a boundary because nothing throws. So the rendered result is
+ * *measured*: an element that ends up with no content, once the answer has
+ * stopped streaming, is replaced by a readable failure and the description
+ * itself, as text, so nothing the agent said is lost.
+ */
+function OpenUiPart({
+  source,
+  library,
+  isStreaming,
+}: {
+  source: string;
+  library: AnyLibrary;
+  isStreaming?: boolean;
+}) {
+  const host = useRef<HTMLDivElement | null>(null);
+  const [empty, setEmpty] = useState(false);
+
+  useEffect(() => {
+    if (isStreaming) {
+      setEmpty(false);
+      return;
+    }
+    // After the frame the renderer painted, not during it.
+    const timer = window.setTimeout(() => {
+      const el = host.current;
+      if (!el) return;
+      setEmpty(el.childElementCount === 0 && !(el.textContent ?? '').trim());
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [source, isStreaming]);
+
+  return (
+    <div data-testid="assistant-openui" data-empty={empty ? 'true' : 'false'}>
+      <div ref={host}>
+        <Renderer response={source} library={library as never} isStreaming={isStreaming} />
+      </div>
+      {empty && (
+        <div className="pf-state pf-state--error" role="alert" data-testid="assistant-openui-empty">
+          Opis interfejsu w tej odpowiedzi nie zostal wyrenderowany — komponent nie pochodzi z
+          katalogu albo opis jest niepelny. Tresc opisu:
+          <pre className="pf-pre">{source.trim()}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export interface AssistantMessageProps {
   message: { content?: string | null };
   isStreaming?: boolean;
@@ -113,9 +168,7 @@ export function makeAssistantMessage(library: AnyLibrary) {
               label="odpowiedz"
               describe={(_name, msg) => `Opis interfejsu w odpowiedzi nie da sie wyrenderowac: ${msg}`}
             >
-              <div data-testid="assistant-openui">
-                <Renderer response={part.content} library={library as never} isStreaming={isStreaming} />
-              </div>
+              <OpenUiPart source={part.content} library={library} isStreaming={isStreaming} />
             </RenderErrorBoundary>
           ) : (
             <div key={i} data-testid="assistant-prose">
