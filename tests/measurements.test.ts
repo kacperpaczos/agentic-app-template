@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -283,7 +284,7 @@ describe('pomiary rozdzielone na punkty, zapisane z warunkami i wersja kodu', ()
     expect([true, false, null]).toContain(written.wersjaKodu.brudneDrzewo);
     expect(
       written.wersjaKodu.brudneDrzewo,
-      'git odpowiada w tym repozytorium, wiec stan drzewa nie moze byc nieustalony',
+      'stan drzewa musi byc ustalony — z gita albo z deklaracji kopii bez gita',
     ).not.toBeNull();
     expect(record.path).toContain(EVIDENCE_DIR);
     // The switch decides the write, and nothing else does.
@@ -346,12 +347,39 @@ describe('warunek pomiaru jest faktem albo jawnym brakiem, nigdy domyslnie korzy
     }
   });
 
-  it('w repozytorium wygrywa git, a nie deklaracja', () => {
-    // Here git can answer, so a caller claiming the opposite must not be heard.
-    const real = codeVersion().brudneDrzewo;
-    expect(typeof real).toBe('boolean');
-    process.env[CODE_TREE_DIRTY_ENV] = real === true ? '0' : '1';
-    expect(codeVersion().brudneDrzewo).toBe(real);
+  it('git wygrywa z deklaracja wszedzie tam, gdzie git moze odpowiedziec', () => {
+    /*
+     * Runs in two worlds: this repository (`pnpm verify`) and the copy without
+     * `.git` that `pnpm check:module-swap` builds. The rule is one, so it is
+     * written here whole and each world checks its own half — instead of the
+     * test assuming git is always there, which is the very assumption that made
+     * this field lie in the first place. The first draft of this test did assume
+     * it, and the copy failed it.
+     */
+    let gitAnswers = true;
+    try {
+      execFileSync('git', ['rev-parse', 'HEAD'], { stdio: ['ignore', 'pipe', 'ignore'] });
+    } catch {
+      gitAnswers = false;
+    }
+
+    if (gitAnswers) {
+      const real = codeVersion().brudneDrzewo;
+      expect(typeof real).toBe('boolean');
+      // A caller claiming the opposite must not be heard.
+      process.env[CODE_TREE_DIRTY_ENV] = real === true ? '0' : '1';
+      expect(codeVersion().brudneDrzewo, 'deklaracja przebila gita').toBe(real);
+      return;
+    }
+
+    // Without git the declaration is the only source — heard when it says
+    // something, and unable to invent an answer when it does not.
+    process.env[CODE_TREE_DIRTY_ENV] = '1';
+    expect(codeVersion().brudneDrzewo).toBe(true);
+    process.env[CODE_TREE_DIRTY_ENV] = '0';
+    expect(codeVersion().brudneDrzewo).toBe(false);
+    delete process.env[CODE_TREE_DIRTY_ENV];
+    expect(codeVersion().brudneDrzewo).toBeNull();
   });
 });
 
