@@ -32,6 +32,69 @@ import { performRecordAction } from '../services/record-actions.ts';
 export const DEFAULT_USER_ID = 'local-user';
 export const SECOND_USER_ID = 'other-user';
 
+/**
+ * Body of a request whose body is optional.
+ *
+ * `await c.req.json().catch(() => ({}))` — which is what these routes used —
+ * makes three different situations one: no body, an empty body, and a body that
+ * is not JSON. The first two are "the caller said nothing", which the thread
+ * routes allow. The third is a client error, and swallowing it meant a request
+ * nobody could parse still created a conversation and answered 200: a route
+ * that cannot fail validation is a route that does not validate (L9.3).
+ */
+async function optionalJsonBody(c: Context): Promise<unknown> {
+  const raw = await c.req.text().catch(() => '');
+  if (raw.trim() === '') return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new AppError('validation_failed', 'Cialo zadania nie jest poprawnym JSON-em.', {
+      reason: 'malformed_json',
+    });
+  }
+}
+
+/**
+ * What the chat's `restStorage` sends to `/api/threads/create` and
+ * `/api/threads/update/:id`.
+ *
+ * Create carries `{ messages: [...] }`; update carries the whole thread object,
+ * so it also brings `id` and `createdAt` — read from nowhere here, and stripped
+ * rather than refused, because a library may add a field without asking us.
+ * What is *not* stripped is a wrong type on a field this route acts on.
+ */
+const threadWriteSchema = z.object({
+  title: z.string().max(200).nullish(),
+  spaceId: z.string().max(128).nullish(),
+  messages: z
+    .array(
+      z.object({
+        id: z.string().max(128).optional(),
+        role: z.string().max(40).optional(),
+        content: z.unknown().optional(),
+      }),
+    )
+    .max(200)
+    .optional(),
+});
+
+/**
+ * A space named by the client is checked before it is bound.
+ *
+ * The same check `/api/agui/run` makes, for the same reason: an id travelling
+ * from a browser is a request to use it, not a right to. Without it a
+ * conversation could be left pointing at a space its owner cannot open — which
+ * leaks nothing (every read of the space checks the owner again) but stores a
+ * binding that is a lie.
+ */
+function assertOwnSpace(
+  services: PlatformServices,
+  spaceId: string | null | undefined,
+  ownerId: string,
+): void {
+  if (spaceId) services.canvas.getSpace(spaceId, ownerId);
+}
+
 export interface PlatformAppDeps {
   services: PlatformServices;
   runtime: AgentRuntime;
@@ -126,7 +189,19 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
    * user back to the first identity.
    */
   app.post('/api/auth/session', async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as { userId?: string };
+    /*
+     * The third route that swallowed a broken body, and the last one.
+     *
+     * A session request with no body is the frontend's "make sure I have a
+     * session" and must keep working — so the distinction is the same one the
+     * thread routes make: nothing said is allowed, something unparseable is a
+     * client error. Left as `.catch(() => ({}))` this route would silently sign
+     * a caller in as the default identity after failing to read what they
+     * asked for, which is the one place where guessing is least acceptable.
+     */
+    const body = z
+      .object({ userId: z.string().max(128).nullish() })
+      .parse(await optionalJsonBody(c));
     const current = auth.verify(getCookie(c, SESSION_COOKIE));
     const requested = body.userId;
     const userId =
@@ -212,16 +287,13 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
 
   app.post('/api/threads/create', async (c) => {
     const ownerId = c.get('ownerId');
-    const body = (await c.req.json().catch(() => ({}))) as {
-      messages?: Array<{ id?: string; role?: string; content?: unknown }>;
-      spaceId?: string;
-      title?: string;
-    };
+    const body = threadWriteSchema.parse(await optionalJsonBody(c));
+    assertOwnSpace(services, body.spaceId, ownerId);
     const first = body.messages?.[0];
     const content = typeof first?.content === 'string' ? first.content : '';
     const conv = services.conversations.create({
       ownerId,
-      title: body.title,
+      title: body.title ?? undefined,
       spaceId: body.spaceId ?? null,
       firstMessage: content ? { id: first?.id, content } : undefined,
     });
@@ -246,7 +318,8 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
 
   app.patch('/api/threads/update/:id', async (c) => {
     const ownerId = c.get('ownerId');
-    const body = (await c.req.json().catch(() => ({}))) as { title?: string; spaceId?: string | null };
+    const body = threadWriteSchema.parse(await optionalJsonBody(c));
+    assertOwnSpace(services, body.spaceId, ownerId);
     const id = c.req.param('id');
     let conv = services.conversations.get(id, ownerId);
     if (typeof body.title === 'string' && body.title.trim()) {
@@ -650,12 +723,28 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
     return json(c, { accepted: runtime.acknowledgeUiCommand(parsed.data) });
   });
 
+  /**
+   * Answers a consent request of the run in the address.
+   *
+   * Both halves matter and neither used to be complete: the body was read with
+   * a bare `c.req.json()`, so a malformed or absent body became an unhandled
+   * exception and a 500 `internal` rather than a validation failure; and the
+   * request id was passed on without the run, so the ownership check on the
+   * address and the consent actually granted could be about different runs.
+   */
   app.post('/api/runs/:id/permission', async (c) => {
     const ownerId = c.get('ownerId');
-    services.runs.get(c.req.param('id'), ownerId); // ownership check
-    const body = (await c.req.json()) as { requestId?: string; allow?: boolean };
-    if (!body.requestId) throw new AppError('validation_failed', 'Brak requestId.');
-    const answered = runtime.answerPermission(body.requestId, body.allow === true);
+    const runId = c.req.param('id');
+    services.runs.get(runId, ownerId); // ownership check
+    const parsed = z
+      .object({ requestId: z.string().min(1), allow: z.boolean().optional() })
+      .safeParse(await c.req.json().catch(() => undefined));
+    if (!parsed.success) {
+      throw new AppError('validation_failed', 'Nieprawidlowa odpowiedz na prosbe o zgode.', {
+        issues: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+      });
+    }
+    const answered = runtime.answerPermission(parsed.data.requestId, parsed.data.allow === true, runId);
     return json(c, { answered });
   });
 

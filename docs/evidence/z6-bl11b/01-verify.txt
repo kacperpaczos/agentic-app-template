@@ -1,0 +1,37 @@
+Bramka G17 — pakiet BL-11b (orkiestracja i domena)
+commit: 9aa474a  galaz: domkniecie/z6-bl11b
+
+== pnpm verify (runda poprawek 2, stan koncowy) ==
+polecenie:    cd <worktree> && pnpm verify
+kod wyjscia:  0
+kroki:        check:boundaries, check:acceptance, check:matrix, check:closure,
+              typecheck (src + kazdy modul osobno + e2e), build, test
+               Test Files  43 passed (43)
+                    Tests  746 passed (746)
+                 Duration  146.23s (tests 64%, import 34%, transform 2%)
+              nowe testy pakietu: tests/orchestration.test.ts 8, tests/domain-guarantees.test.ts 51
+git status --porcelain bezposrednio po przebiegu: PUSTO (drzewo czyste)
+              — zaden test pakietu nie zapisuje plikow dowodowych; zapis wlacza
+                APP_WRITE_EVIDENCE (pnpm evidence), zgodnie z G18.
+
+== wczesniejsze przebiegi verify na tym samym kodzie ==
+  #1 exit 0 — 735 testow (przed dwiema ostatnimi transakcjami L9.8)
+  #2 exit 0 — 737 testow
+  #3 exit 1 — 736/737: tests/measurements.test.ts, podzial kolejka/wykonanie,
+              268 przy oknie +-5 ms. Nie regresja tego pakietu: obie strony
+              porownania pochodza z dwoch zegarow (zapisane instanty vs Date.now()
+              wewnatrz uruchomienia). Okno nazwane SEAM_MS = 25 ms z proba P17,
+              ktora pokazuje, ze szersze okno nadal oblewa (326 vs 223), gdy
+              durationMs liczy sie od zakolejkowania.
+  #4 exit 0 — 737 testow, drzewo czyste (stan przed runda poprawek 1)
+  #5 exit 0 — 744 testy, drzewo czyste (runda poprawek 1)
+  #6 exit 0 — 746 testow, drzewo czyste (runda poprawek 2, przebieg powyzej)
+
+== higiena historii ==
+Historia pakietu zostala przepisana przed oddaniem: plik idempotency.ts byl w osmiu
+commitach blobem binarnym (dwa doslowne bajty NUL w separatorze klucza), przez co
+git show i git log -p dla najwazniejszego pliku pakietu pokazywaly 'Binary files differ'
+zamiast 198 linii zmiany. Zamiast zgniatac zakres (co skasowaloby narracje rund prob)
+poprawiono blob w commicie, ktory go wprowadzil, i usunieto osobny commit naprawczy.
+Kontrola: git diff <stara-koncowka>..<nowa-koncowka> pusty (drzewo bajt w bajt),
+git log -p dla tego pliku: 0 wpisow 'Binary files' (przed: 2).

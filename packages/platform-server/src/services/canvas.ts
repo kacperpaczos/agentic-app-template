@@ -2,6 +2,7 @@ import {
   AGENT_VIEWS_SCOPE_KIND,
   AppError,
   canvasViewportSchema,
+  operationFingerprint,
   type AddCardInput,
   type CanvasCard,
   type CanvasSpace,
@@ -232,7 +233,11 @@ export class CanvasService {
   }
 
   async addCard(input: AddCardInput, ownerId: string): Promise<CanvasCard> {
-    const { result } = await this.idem.once(input.operationId, ownerId, 'canvas.addCard', async () => {
+    const { result } = await this.idem.once(
+      input.operationId,
+      ownerId,
+      'canvas.addCard',
+      async () => {
       this.#spaceRow(input.spaceId, ownerId);
       const id = newId('crd');
       const ts = nowIso();
@@ -243,17 +248,24 @@ export class CanvasService {
         ? this.#nextFreeSlot(input.spaceId)
         : { x: 0, y: 0 };
       const geometry: CardGeometry = { ...DEFAULT_GEOMETRY, ...base, ...(input.geometry ?? {}) };
-      this.db.$client
-        .prepare(
-          `INSERT INTO canvas_cards (id, space_id, title, spec, geometry, spec_version, geometry_version, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)`,
-        )
-        .run(id, input.spaceId, input.title, JSON.stringify(input.spec), JSON.stringify(geometry), ts, ts);
-      this.#touchSpace(input.spaceId);
+      // The card and the space's freshness are one write: a space whose
+      // `updated_at` predates a card it holds is a state nobody asked for, and
+      // the ordering of the library reads from it (L9.8).
+      this.db.$client.transaction(() => {
+        this.db.$client
+          .prepare(
+            `INSERT INTO canvas_cards (id, space_id, title, spec, geometry, spec_version, geometry_version, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)`,
+          )
+          .run(id, input.spaceId, input.title, JSON.stringify(input.spec), JSON.stringify(geometry), ts, ts);
+        this.#touchSpace(input.spaceId);
+      })();
       return toCard(
         this.db.$client.prepare('SELECT * FROM canvas_cards WHERE id = ?').get(id) as CardRow,
       );
-    });
+      },
+      { fingerprint: operationFingerprint(input) },
+    );
     return result;
   }
 
@@ -265,28 +277,41 @@ export class CanvasService {
       'canvas.updateSpec',
       async () => {
         const { card } = this.#cardRow(input.cardId, ownerId);
-        if (
-          input.expectedSpecVersion !== undefined &&
-          input.expectedSpecVersion !== card.spec_version
-        ) {
+        /*
+         * No version, no write. The comparison used to be skipped entirely when
+         * the field was absent, so the one caller that could not be bothered to
+         * read the card first was also the one caller that could overwrite
+         * anything. The check now belongs to the card, not to the door.
+         */
+        if (input.expectedSpecVersion === undefined) {
+          throw new AppError(
+            'validation_failed',
+            'Zmiana tresci karty wymaga expectedSpecVersion — podaj specVersion karty, na ktorej pracujesz.',
+            { reason: 'expected_version_missing', currentSpecVersion: card.spec_version },
+          );
+        }
+        if (input.expectedSpecVersion !== card.spec_version) {
           throw new AppError('conflict', 'Card content changed since it was read.', {
             currentSpecVersion: card.spec_version,
           });
         }
-        this.db.$client
-          .prepare(
-            `UPDATE canvas_cards
-               SET spec = ?, title = COALESCE(?, title), spec_version = spec_version + 1, updated_at = ?
-             WHERE id = ?`,
-          )
-          .run(JSON.stringify(input.spec), input.title ?? null, nowIso(), input.cardId);
-        this.#touchSpace(card.space_id);
+        this.db.$client.transaction(() => {
+          this.db.$client
+            .prepare(
+              `UPDATE canvas_cards
+                 SET spec = ?, title = COALESCE(?, title), spec_version = spec_version + 1, updated_at = ?
+               WHERE id = ?`,
+            )
+            .run(JSON.stringify(input.spec), input.title ?? null, nowIso(), input.cardId);
+          this.#touchSpace(card.space_id);
+        })();
         return toCard(
           this.db.$client
             .prepare('SELECT * FROM canvas_cards WHERE id = ?')
             .get(input.cardId) as CardRow,
         );
       },
+      { fingerprint: operationFingerprint(input) },
     );
     return result;
   }
@@ -322,10 +347,13 @@ export class CanvasService {
       'canvas.removeCard',
       async () => {
         const { card } = this.#cardRow(input.cardId, ownerId);
-        this.db.$client.prepare('DELETE FROM canvas_cards WHERE id = ?').run(input.cardId);
-        this.#touchSpace(card.space_id);
+        this.db.$client.transaction(() => {
+          this.db.$client.prepare('DELETE FROM canvas_cards WHERE id = ?').run(input.cardId);
+          this.#touchSpace(card.space_id);
+        })();
         return { removed: input.cardId };
       },
+      { fingerprint: operationFingerprint(input) },
     );
     return result;
   }

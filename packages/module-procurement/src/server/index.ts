@@ -4,7 +4,7 @@ import type { PlatformServices } from '@platform/server';
 import { MODULE_ID } from '../shared/index.ts';
 import { PROCUREMENT_CARD_COMPONENTS } from '../shared/cards.ts';
 import { PROCUREMENT_OPENUI_COMPONENTS } from '../shared/openui-components.ts';
-import { updateOfferItemInput } from './inputs.ts';
+import { criteriaWeightsInput, searchInput, updateOfferItemInput } from './inputs.ts';
 import { PROCUREMENT_MIGRATIONS } from './schema.ts';
 import { seedProcurement } from './seed.ts';
 import { ProcurementService } from './services.ts';
@@ -24,6 +24,21 @@ export { PROCUREMENT_MIGRATIONS } from './schema.ts';
 export { seedProcurement } from './seed.ts';
 
 const caseRef = z.object({ caseId: z.string().max(128) });
+
+/**
+ * Runs an input through the schema both doors share, and reports a rejection
+ * the way the MCP tool boundary does: `validation_failed` with the issue list,
+ * never an unhandled exception that the error shaper can only call `internal`.
+ */
+function parseOrThrow<T extends z.ZodTypeAny>(schema: T, value: unknown, message: string): z.infer<T> {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) {
+    throw new AppError('validation_failed', message, {
+      issues: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+    });
+  }
+  return parsed.data;
+}
 
 /**
  * Card components this module contributes to the shared catalog.
@@ -273,15 +288,23 @@ export function createProcurementModule(platform: PlatformServices): ServerModul
         body: service.compare(req.params.caseId as string, req.ownerId),
       }));
 
-      register.post('/cases/:caseId/criteria', async (req) => ({
-        body: {
-          criteria: service.setCriterionWeights(
-            req.params.caseId as string,
-            req.ownerId,
-            (req.body as { weights: Array<{ key: string; weight: number }> }).weights,
-          ),
-        },
-      }));
+      /**
+       * Same schema as `set_criteria_weights`, for the same reason the item
+       * route shares `updateOfferItemInput`: a rule that only one door enforces
+       * is not a rule. This one used to hand `body.weights` straight to the
+       * service, so the tool refused a weight of 900 or of `"duzo"` while the
+       * endpoint wrote it (the column has no constraint), and a body without
+       * `weights` became a 500 `internal` instead of a validation failure.
+       */
+      register.post('/cases/:caseId/criteria', async (req) => {
+        const input = parseOrThrow(criteriaWeightsInput, {
+          ...((req.body ?? {}) as Record<string, unknown>),
+          caseId: req.params.caseId,
+        }, 'Nieprawidlowe wagi kryteriow.');
+        return {
+          body: { criteria: service.setCriterionWeights(input.caseId, req.ownerId, input.weights) },
+        };
+      });
 
       register.get('/suppliers', async (req) => ({
         body: { suppliers: service.listSuppliers(req.ownerId) },
@@ -293,25 +316,40 @@ export function createProcurementModule(platform: PlatformServices): ServerModul
 
       /** Same service call the MCP tool makes — one implementation, two doors. */
       register.patch('/items/:itemId', async (req) => {
-        const parsed = updateOfferItemInput.safeParse({
-          ...((req.body ?? {}) as Record<string, unknown>),
-          itemId: req.params.itemId,
-        });
-        if (!parsed.success) {
-          throw new AppError('validation_failed', 'Nieprawidlowe dane pozycji oferty.', {
-            issues: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
-          });
-        }
-        return { body: await service.updateOfferItem(parsed.data, req.ownerId) };
+        const input = parseOrThrow(
+          updateOfferItemInput,
+          { ...((req.body ?? {}) as Record<string, unknown>), itemId: req.params.itemId },
+          'Nieprawidlowe dane pozycji oferty.',
+        );
+        return { body: await service.updateOfferItem(input, req.ownerId) };
       });
 
       register.get('/items/:itemId/provenance', async (req) => ({
         body: service.findProvenance(req.params.itemId as string, req.ownerId),
       }));
 
-      register.get('/search', async (req) => ({
-        body: service.search(req.ownerId, String(req.query.q ?? ''), Number(req.query.limit ?? 20)),
-      }));
+      /**
+       * The same read window the tool is held to.
+       *
+       * A query string carries text, so the numeric field is converted before
+       * the shared schema sees it — the conversion is the only difference, and
+       * it fails loudly rather than producing `NaN`. Previously the limit was
+       * passed through `Number()` and straight into the service, where
+       * `Math.min(limit, 50)` let `-1` (and `NaN`) through and lifted the read
+       * limit the tool enforces.
+       */
+      register.get('/search', async (req) => {
+        const raw = req.query.limit;
+        const input = parseOrThrow(
+          searchInput,
+          {
+            query: String(req.query.q ?? ''),
+            ...(raw === undefined || raw === '' ? {} : { limit: Number(raw) }),
+          },
+          'Nieprawidlowe zapytanie wyszukiwania.',
+        );
+        return { body: service.search(req.ownerId, input.query, input.limit ?? 20) };
+      });
     },
 
     seed: (ctx) => seedProcurement(service, ctx),

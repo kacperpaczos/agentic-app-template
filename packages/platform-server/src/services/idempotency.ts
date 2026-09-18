@@ -1,5 +1,15 @@
+import { AppError } from '@platform/contracts';
 import type { Db } from '../db/client.ts';
 import { nowIso } from '../util/id.ts';
+
+/** Lifecycle of one key. Stored, because a crash has to be tellable from a replay. */
+export type IdempotencyStatus = 'pending' | 'done' | 'interrupted';
+
+interface KeyRow {
+  result: string;
+  status: IdempotencyStatus;
+  fingerprint: string | null;
+}
 
 /**
  * Replay guard for business mutations.
@@ -8,41 +18,213 @@ import { nowIso } from '../util/id.ts';
  * `operationId`. The first execution stores its result; every repeat returns the
  * stored result without touching the domain again. This is what makes
  * "reconnect does not double a mutation" true rather than hopeful.
+ *
+ * Three properties the first version did not have, each of which was a way for
+ * the same operation to happen twice or to lie about having happened:
+ *
+ *  1. **The key is reserved before the work runs**, not written after it. The
+ *     old order was `get -> await fn() -> put`, so two callers that arrived
+ *     while neither had finished both read "no key" and both ran. That it did
+ *     not happen in practice rested on `fn` never yielding before its write —
+ *     a property of the callee, not a guarantee of the guard. The reservation
+ *     is a single `INSERT ... ON CONFLICT DO NOTHING`, so exactly one caller
+ *     can win it, and the loser joins the winner instead of running.
+ *  2. **The request is fingerprinted.** The same key with a different body used
+ *     to return the first request's result, with nothing in the answer saying
+ *     the new values were not applied. It is now a `conflict` naming the reuse,
+ *     because "your change was silently dropped" and "your change was already
+ *     applied" are different facts and the caller acts differently on them.
+ *  3. **A failure releases the key** and a crash leaves it visible. A `fn` that
+ *     throws deletes the reservation, so a genuine retry may run. A process
+ *     that dies mid-operation leaves the row `pending`; `reconcileOnBoot` turns
+ *     those into `interrupted`, and a later call with that key is refused with
+ *     an explicit reason rather than silently re-applying a mutation that may
+ *     already be half in the database.
  */
 export class IdempotencyStore {
+  /**
+   * Operations running *in this process*, by key.
+   *
+   * The database row says "someone is doing this"; this map says "it is us, and
+   * here is the promise to join". Without it, a second concurrent caller could
+   * only be refused — which would turn an ordinary parallel retry into an
+   * error instead of into one shared result.
+   */
+  readonly #inFlight = new Map<string, Promise<unknown>>();
+
   constructor(private readonly db: Db) {}
 
-  get<T>(operationId: string, ownerId: string, scope: string): T | undefined {
-    const row = this.db.$client
-      .prepare(
-        'SELECT result FROM idempotency_keys WHERE operation_id = ? AND owner_id = ? AND scope = ?',
-      )
-      .get(operationId, ownerId, scope) as { result: string } | undefined;
-    return row ? (JSON.parse(row.result) as T) : undefined;
+  static key(operationId: string, ownerId: string, scope: string): string {
+    return `${scope}\u0000${ownerId}\u0000${operationId}`;
   }
 
-  put(operationId: string, ownerId: string, scope: string, result: unknown): void {
+  /** The stored result of a *completed* operation, or undefined. */
+  get<T>(operationId: string, ownerId: string, scope: string): T | undefined {
+    const row = this.#row(operationId, ownerId, scope);
+    if (!row || row.status !== 'done') return undefined;
+    return JSON.parse(row.result) as T;
+  }
+
+  /** The recorded state of a key, for a caller that has to explain itself. */
+  status(operationId: string, ownerId: string, scope: string): IdempotencyStatus | undefined {
+    return this.#row(operationId, ownerId, scope)?.status;
+  }
+
+  put(operationId: string, ownerId: string, scope: string, result: unknown, fingerprint?: string): void {
     this.db.$client
       .prepare(
-        `INSERT INTO idempotency_keys (operation_id, owner_id, scope, result, created_at)
-         VALUES (?, ?, ?, ?, ?)
+        `INSERT INTO idempotency_keys (operation_id, owner_id, scope, result, created_at, status, fingerprint)
+         VALUES (?, ?, ?, ?, ?, 'done', ?)
          ON CONFLICT(operation_id, owner_id, scope) DO NOTHING`,
       )
-      .run(operationId, ownerId, scope, JSON.stringify(result ?? null), nowIso());
+      .run(operationId, ownerId, scope, JSON.stringify(result ?? null), nowIso(), fingerprint ?? null);
   }
 
-  /** Runs `fn` at most once per (operationId, owner, scope). */
+  /**
+   * Called once at startup. A `pending` row belongs to a process that no longer
+   * exists, so the operation it names may have been applied, partly applied or
+   * not applied at all — which is exactly what must not be guessed. The row is
+   * marked `interrupted` and the key is then refused with that reason, so the
+   * caller reads the record and retries under a new key instead of replaying a
+   * mutation whose effect is unknown.
+   */
+  reconcileOnBoot(): number {
+    const res = this.db.$client
+      .prepare("UPDATE idempotency_keys SET status = 'interrupted' WHERE status = 'pending'")
+      .run();
+    return res.changes;
+  }
+
+  /**
+   * Runs `fn` at most once per (operationId, owner, scope).
+   *
+   * `fingerprint` is a stable rendering of the request. Supply it wherever the
+   * caller can: without it a reused key cannot be told from a genuine retry.
+   */
   async once<T>(
     operationId: string | undefined,
     ownerId: string,
     scope: string,
     fn: () => Promise<T>,
+    options: { fingerprint?: string } = {},
   ): Promise<{ result: T; replayed: boolean }> {
     if (!operationId) return { result: await fn(), replayed: false };
-    const existing = this.get<T>(operationId, ownerId, scope);
-    if (existing !== undefined) return { result: existing, replayed: true };
-    const result = await fn();
-    this.put(operationId, ownerId, scope, result);
-    return { result, replayed: false };
+    return this.#once(operationId, ownerId, scope, fn, options.fingerprint ?? null, 0);
+  }
+
+  async #once<T>(
+    operationId: string,
+    ownerId: string,
+    scope: string,
+    fn: () => Promise<T>,
+    fingerprint: string | null,
+    attempt: number,
+  ): Promise<{ result: T; replayed: boolean }> {
+    const key = IdempotencyStore.key(operationId, ownerId, scope);
+
+    if (this.#reserve(operationId, ownerId, scope, fingerprint)) {
+      const work = (async () => {
+        try {
+          const result = await fn();
+          this.#complete(operationId, ownerId, scope, result);
+          return result;
+        } catch (err) {
+          // A failed operation must not become a stored "success" for every
+          // later retry, and must not block the retry either.
+          this.#release(operationId, ownerId, scope);
+          throw err;
+        }
+      })();
+      this.#inFlight.set(key, work);
+      try {
+        return { result: (await work) as T, replayed: false };
+      } finally {
+        this.#inFlight.delete(key);
+      }
+    }
+
+    const row = this.#row(operationId, ownerId, scope);
+    if (!row) {
+      /*
+       * The winner failed and released the key between our INSERT and this
+       * SELECT. That is a genuine retry, so run it — bounded, because two
+       * callers failing in lockstep must not spin.
+       */
+      if (attempt >= 3) {
+        throw new AppError('conflict', `Operacja ${operationId} jest powtarzana i za kazdym razem zwalnia klucz.`, {
+          reason: 'operation_key_unstable',
+        });
+      }
+      return this.#once(operationId, ownerId, scope, fn, fingerprint, attempt + 1);
+    }
+
+    if (fingerprint !== null && row.fingerprint !== null && row.fingerprint !== fingerprint) {
+      throw new AppError(
+        'conflict',
+        `operationId ${operationId} zostal juz uzyty dla innej tresci zadania — tamta operacja zostala wykonana. ` +
+          'Tym zadaniem nie zmieniono nic; odczytaj stan i powtorz zmiane z nowym operationId.',
+        { reason: 'operation_id_reused', scope },
+      );
+    }
+
+    if (row.status === 'done') {
+      return { result: JSON.parse(row.result) as T, replayed: true };
+    }
+
+    if (row.status === 'pending') {
+      const running = this.#inFlight.get(key) as Promise<T> | undefined;
+      // Joining, not re-running: one effect, one result, for both callers.
+      if (running) return { result: await running, replayed: true };
+      throw new AppError(
+        'conflict',
+        `Operacja ${operationId} jest w toku poza tym procesem. Nie zostala powtorzona.`,
+        { reason: 'operation_in_progress', scope },
+      );
+    }
+
+    throw new AppError(
+      'conflict',
+      `Operacja ${operationId} zostala przerwana i jej skutek nie jest znany. Nie zostala powtorzona — ` +
+        'sprawdz stan rekordu i wykonaj zmiane z nowym operationId.',
+      { reason: 'operation_interrupted', scope },
+    );
+  }
+
+  #row(operationId: string, ownerId: string, scope: string): KeyRow | undefined {
+    return this.db.$client
+      .prepare(
+        'SELECT result, status, fingerprint FROM idempotency_keys WHERE operation_id = ? AND owner_id = ? AND scope = ?',
+      )
+      .get(operationId, ownerId, scope) as KeyRow | undefined;
+  }
+
+  /** True when this caller, and only this caller, won the key. */
+  #reserve(operationId: string, ownerId: string, scope: string, fingerprint: string | null): boolean {
+    const res = this.db.$client
+      .prepare(
+        `INSERT INTO idempotency_keys (operation_id, owner_id, scope, result, created_at, status, fingerprint)
+         VALUES (?, ?, ?, '', ?, 'pending', ?)
+         ON CONFLICT(operation_id, owner_id, scope) DO NOTHING`,
+      )
+      .run(operationId, ownerId, scope, nowIso(), fingerprint);
+    return res.changes === 1;
+  }
+
+  #complete(operationId: string, ownerId: string, scope: string, result: unknown): void {
+    this.db.$client
+      .prepare(
+        `UPDATE idempotency_keys SET result = ?, status = 'done'
+          WHERE operation_id = ? AND owner_id = ? AND scope = ?`,
+      )
+      .run(JSON.stringify(result ?? null), operationId, ownerId, scope);
+  }
+
+  #release(operationId: string, ownerId: string, scope: string): void {
+    this.db.$client
+      .prepare(
+        `DELETE FROM idempotency_keys
+          WHERE operation_id = ? AND owner_id = ? AND scope = ? AND status = 'pending'`,
+      )
+      .run(operationId, ownerId, scope);
   }
 }

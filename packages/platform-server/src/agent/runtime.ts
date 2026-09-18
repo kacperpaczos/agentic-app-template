@@ -56,6 +56,8 @@ export interface StartedRun {
 interface PendingPermission {
   resolve: (allow: boolean) => void;
   toolName: string;
+  /** The run that asked. An answer addressed to any other run is not this one's. */
+  runId: string;
 }
 
 /**
@@ -162,9 +164,31 @@ export class AgentRuntime {
     return [...this.#toolNames];
   }
 
-  answerPermission(requestId: string, allow: boolean): boolean {
+  /**
+   * Answers a consent request of **one** run.
+   *
+   * `runId` is the run the answer was addressed to — the one in the URL the
+   * browser posted to, whose ownership the endpoint has already checked. It is
+   * compared here because the request id alone does not say which run is being
+   * answered: the map is process-wide, several conversations can be waiting at
+   * once, and an answer meant for one of them used to resolve whichever request
+   * carried that id. Ownership was checked against the run in the address while
+   * the consent that was actually granted belonged to a different run.
+   *
+   * A mismatch resolves nothing and leaves the pending request pending, so the
+   * run that asked still waits for its own answer (and still times out into a
+   * denial if none comes).
+   *
+   * The argument is required, not optional. An optional one would make the
+   * binding a convention — every caller has to remember it, and a caller that
+   * forgets gets the old, unbound behaviour back without a word from the
+   * compiler. Required, the guarantee is structural: there is no way to answer
+   * a consent request without saying which run is being answered.
+   */
+  answerPermission(requestId: string, allow: boolean, runId: string): boolean {
     const pending = this.#pendingPermissions.get(requestId);
     if (!pending) return false;
+    if (pending.runId !== runId) return false;
     this.#pendingPermissions.delete(requestId);
     pending.resolve(allow);
     return true;
@@ -387,6 +411,29 @@ export class AgentRuntime {
      *   firstTokenMs, durationMs — both relative to execution start, so a run
      *                 that waited behind another is not charged for the wait.
      */
+    /*
+     * Stopped while it was still waiting: it never executes.
+     *
+     * Cancelling a queued run used to abort a signal that nothing was reading
+     * yet, so when the run reached the head of the queue it started anyway —
+     * it was marked `running`, it opened a stream, it built its MCP server and
+     * described its resource, and only the model call then noticed the abort.
+     * The user pressed stop before any of that was asked for. It is refused
+     * here instead, with the one terminal event every other path guarantees.
+     */
+    if (abort.signal.aborted) {
+      this.services.runs.finish(runId, 'cancelled', {
+        errorCode: 'cancelled',
+        errorMessage: 'Zatrzymane przed rozpoczeciem wykonania.',
+        durationMs: 0,
+      });
+      stream.custom(PLATFORM_CUSTOM_EVENTS.runCancelled, { runId });
+      stream.runError('Zatrzymane przed rozpoczeciem wykonania.', 'cancelled');
+      stream.close();
+      this.services.uiSnapshots.forgetRun(runId);
+      return;
+    }
+
     const executionStartedAt = Date.now();
     this.services.runs.markExecutionStart(runId);
     const messageId = `am_${runId}`;
@@ -775,7 +822,7 @@ export class AgentRuntime {
 
       const requestId = `perm_${Math.random().toString(36).slice(2, 12)}`;
       const allowed = await new Promise<boolean>((resolve) => {
-        this.#pendingPermissions.set(requestId, { resolve, toolName });
+        this.#pendingPermissions.set(requestId, { resolve, toolName, runId: stream.runId });
         stream.custom(PLATFORM_CUSTOM_EVENTS.permissionRequest, {
           requestId,
           toolName,
