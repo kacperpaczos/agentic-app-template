@@ -10,10 +10,11 @@ a trzy kontrole negatywne pokazują, co się dzieje, gdy ktoś spróbuje.
 | plik | co zawiera |
 |---|---|
 | `01-przebieg.txt` | Nagrany przebieg odbiorowy: 24 kroki z poleceniami, kodami wyjścia i sumami SHA-256. Kopia z zapisem leżącym wyłącznie w WAL → weryfikacja → próba migracji na kopii → trzecie uruchomienie bez skutku → kontrole negatywne → **osiem odmów** (w tym ścieżka wewnątrz i nad katalogiem danych) → odtworzenie → start aplikacji na odtworzonym stanie → odmowa kopii nowszej niż build → odmowa cudzego `--data` → osobny kod wyjścia awarii. |
-| `02-testy.txt` | Regresja: `tests/backup-migration.test.ts` (40), `tests/session-transcript.test.ts` (19) i `tests/script-path-flags.test.ts` (18), kod wyjścia 0. |
+| `02-testy.txt` | Regresja: `tests/backup-migration.test.ts` (41), `tests/session-transcript.test.ts` (19) i `tests/script-path-flags.test.ts` (15), kod wyjścia 0. |
 | `03-proby-wykrycia.txt` | Siedem prób zdolności wykrycia (G16) z pierwszego przebiegu zadania. Próba 7 przy pierwszym podejściu ujawniła wadę testu, nie kodu; test poprawiono i próbę powtórzono. |
 | `04-raport-proby.json` | Raport `migration-rehearsal --json` z przebiegu z `01-przebieg.txt`. |
 | `05-proby-wykrycia-runda1.txt` | Pięć prób zdolności wykrycia dla poprawek z rundy 1 (trzy ochrony ścieżek, odmowa cudzego `--data`, osobny kod awarii). |
+| `08-proby-wykrycia-runda4.txt` | Powtórzenie dwóch ucieczek recenzenta (flaga w podwójnych cudzysłowach; flaga zadeklarowana jako rodzaj wyjęty spod kontroli) oraz próba dla znacznika autoryzującego kasowanie. Trzecia próba ujawniła brak testu na ścieżce kasującej — test dopisany, próba powtórzona. |
 | `07-proby-wykrycia-runda3.txt` | Dwuetapowa próba dla testu wyliczającego flagi ścieżkowe: flaga dodana bez deklaracji oblewa, a flaga zadeklarowana jako chroniona, lecz bez ochrony w kodzie — oblewa na uruchomieniu skryptu. |
 | `06-proby-wykrycia-runda2.txt` | Odtworzenie defektu A (kopia nadpisująca żywy katalog danych z kodem 0) i pięć prób zdolności wykrycia dla rundy 2. |
 

@@ -158,12 +158,26 @@ aplikację), `zapis-docelowy` (pisze do katalogu danych celowo — `--data` w od
 (wolno wskazać katalog danych; `--data` w `backup-state.mjs` to jedyny taki przypadek, bo
 kopiowanie żywego katalogu jest sensem tego skryptu).
 
-`tests/script-path-flags.test.ts` czyta listę flag **ze źródła** każdego skryptu, porównuje ją z tą
-deklaracją i dla każdej flagi zapisującej uruchamia skrypt wycelowany w katalog wyglądający na żywe
-dane, wymagając odmowy i niezmienionego odcisku katalogu. Nowa flaga ścieżkowa dodana bez wpisu —
-albo z wpisem, ale bez ochrony w kodzie — oblewa ten test. **Ten pakiet trzy razy miał tę samą
-wadę: strażnika pilnującego niewłaściwego argumentu**, i za każdym razem znajdował ją człowiek, a
-nie test; ten test jest odpowiedzią na ten wzorzec, nie na pojedynczy defekt.
+Deklaracja nie jest opisem — jest **jedynym** źródłem, z którego skrypt zna swoje flagi.
+`makeArgs(process.argv, FLAGS)` odmawia każdej flagi spoza niej, więc flagi niezadeklarowanej nie da
+się podać; nie ma znaczenia, jak wygląda kod, który miałby ją czytać. Wcześniejsza wersja próbowała
+odwrotnie — szukała flag w źródle wyrażeniem regularnym — i dało się ją obejść literałem w
+podwójnych cudzysłowach.
+
+`tests/script-path-flags.test.ts` sprawdza sam ten mechanizm (każdy skrypt musi odrzucić flagę,
+której nie zna) i dla **każdej** zadeklarowanej flagi uruchamia skrypt, żądając zachowania zgodnego
+z jej rodzajem. Ponad rodzajami obowiązuje jeden niezmiennik: żaden przebieg nie może zmienić
+katalogu, na który flagę wskazano — z jedynym wyjątkiem `zapis-docelowy`, którego sensem jest tam
+pisać. Dzięki temu flaga zapisująca zadeklarowana jako `wartosc` i tak oblewa.
+
+**Czego to nie obejmuje**, wprost: ścieżki docierającej do skryptu inaczej niż flagą wiersza poleceń
+(zmienna środowiskowa, plik konfiguracyjny, stała w kodzie) oraz skryptu, który w ogóle nie używa
+`scripts/lib/state-tools.mjs` — taki nie ma żadnej z tych ochron i jest poza zakresem tego testu.
+
+**Ten pakiet trzy razy miał tę samą wadę: strażnika pilnującego niewłaściwego argumentu**, i za
+każdym razem znajdował ją człowiek albo nagrany przebieg, nigdy test. To jest odpowiedź na ten
+wzorzec, nie na pojedynczy defekt — a granice tej odpowiedzi są wypisane wyżej, bo szerokie
+zapewnienie, które nie jest prawdziwe, było częścią tej samej choroby.
 
 Kody wyjścia wszystkich czterech skryptów: **0** zrobione, **1** werdykt negatywny (kopia się nie
 weryfikuje, próba znalazła problemy, odtworzony stan nie zgadza się z manifestem), **2** odmowa,

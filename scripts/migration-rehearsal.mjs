@@ -52,16 +52,17 @@ import {
 /**
  * Every flag of this script that takes a path, and what it does with it.
  *
- * Declared here, next to the code, and checked by `tests/script-path-flags.test.ts`:
- * that test reads the flags this script actually uses out of its source, compares
- * them with this list, and then **runs** the script once per writing flag to see
- * the refusal for itself. A flag added without an entry here fails the test; an
- * entry that claims protection the code does not have fails it too.
+ * This is not documentation of the flags — it is where they come from.
+ * `makeArgs(process.argv, FLAGS)` refuses any flag that is not in this list, so
+ * an undeclared flag cannot be passed at all, whatever the code that would read
+ * it looks like. `tests/script-path-flags.test.ts` then runs this script once
+ * per declared flag and requires the behaviour its kind claims, plus one rule
+ * that holds whatever the kind says: the directory a flag is pointed at must
+ * come out byte-for-byte unchanged, unless the flag is `zapis-docelowy`.
  *
- * It exists because this package shipped the same defect twice: a guard that
- * watched the wrong argument. Both times the flag was `--out`, both times the
- * code looked careful, and both times it was someone reading it — not a test —
- * who noticed.
+ * It exists because this package shipped the same defect three times: a guard
+ * that watched the wrong argument. Every time the code looked careful, and every
+ * time it was a person or a recorded run — never a test — that noticed.
  *
  *   zapis-chroniony  — writes; must refuse a live data directory
  *   odczyt-chroniony — only reads, but still refuses one (here: because the
