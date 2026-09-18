@@ -97,6 +97,7 @@ pnpm test:e2e        # przeglądarka na istniejącym buildzie produkcyjnym (po v
 pnpm test:e2e:model  # tylko testy z prawdziwym modelem; koszt: 11 tur subskrypcji na przebieg
 pnpm check:module-swap   # przy zmianach kontraktu modułu lub warstwy składania
 pnpm evidence            # regeneracja plików dowodowych z regresji (APP_WRITE_EVIDENCE=1) — na żądanie
+pnpm evidence:z5         # to samo dla dowodu kontekstu aplikacji (tests/app-context.test.ts)
 pnpm evidence:e2e        # to samo dla pomiarów przeglądarkowych
 ```
 
