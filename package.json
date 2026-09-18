@@ -22,6 +22,7 @@
     "test:e2e": "playwright test",
     "test:e2e:model": "APP_E2E_MODEL=1 playwright test",
     "evidence": "APP_WRITE_EVIDENCE=1 vitest run tests/measurements.test.ts tests/diagnostics.test.ts",
+    "evidence:z5": "APP_WRITE_EVIDENCE=1 vitest run tests/app-context.test.ts",
     "evidence:e2e": "APP_WRITE_EVIDENCE=1 playwright test e2e/measurements.spec.ts",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "check:acceptance": "node scripts/acceptance-matrix.mjs --check",

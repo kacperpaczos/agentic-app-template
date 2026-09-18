@@ -59,11 +59,18 @@ export interface EvidenceResult {
   written: boolean;
 }
 
-function emit(fileName: string, body: string): EvidenceResult {
-  const dir = resolve(process.cwd(), EVIDENCE_DIR);
-  const path = resolve(dir, fileName);
+/**
+ * `dir` defaults to this file's own task directory. A later task passes its
+ * own: the switch, the "assert always, write on request" rule and the file
+ * format are the mechanism worth sharing — the directory is not, and a second
+ * copy of this module for the sake of one constant would be exactly the
+ * duplication that makes a fix apply to one of the copies.
+ */
+function emit(fileName: string, body: string, dir: string = EVIDENCE_DIR): EvidenceResult {
+  const directory = resolve(process.cwd(), dir);
+  const path = resolve(directory, fileName);
   if (!evidenceWritingRequested()) return { path, body, written: false };
-  mkdirSync(dir, { recursive: true });
+  mkdirSync(directory, { recursive: true });
   writeFileSync(path, body);
   return { path, body, written: true };
 }
@@ -94,8 +101,16 @@ export interface CodeVersion {
   pakiety: Record<string, string>;
 }
 
-/** The commit the measurement was taken on, and whether the tree was clean. */
-export function codeVersion(pakiety: Record<string, string> = {}): CodeVersion {
+/**
+ * The commit the measurement was taken on, and whether the tree was clean.
+ *
+ * `evidenceDirs` are the directories this regeneration is itself rewriting; a
+ * task writing into its own directory passes it, for the reason below.
+ */
+export function codeVersion(
+  pakiety: Record<string, string> = {},
+  evidenceDirs: readonly string[] = [EVIDENCE_DIR],
+): CodeVersion {
   const git = (args: string[]): string | null => {
     try {
       return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -116,7 +131,13 @@ export function codeVersion(pakiety: Record<string, string> = {}): CodeVersion {
     // `:(top)` so the answer is about the whole repository whatever the
     // working directory of the runner happens to be.
     brudneDrzewo:
-      (git(['status', '--porcelain', '--', ':(top)', `:(exclude,top)${EVIDENCE_DIR}`]) ?? '') !== '',
+      (git([
+        'status',
+        '--porcelain',
+        '--',
+        ':(top)',
+        ...evidenceDirs.map((dir) => `:(exclude,top)${dir}`),
+      ]) ?? '') !== '',
     node: process.versions.node,
     pakiety,
   };
@@ -179,6 +200,6 @@ export function writeMeasurementRecord(
 }
 
 /** Writes a non-measurement proof (correlation, error classes, secret scan). */
-export function writeEvidence(fileName: string, body: unknown): EvidenceResult {
-  return emit(fileName, `${JSON.stringify(body, null, 2)}\n`);
+export function writeEvidence(fileName: string, body: unknown, dir: string = EVIDENCE_DIR): EvidenceResult {
+  return emit(fileName, `${JSON.stringify(body, null, 2)}\n`, dir);
 }
