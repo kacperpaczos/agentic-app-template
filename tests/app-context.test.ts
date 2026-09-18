@@ -317,6 +317,46 @@ describe('L6.7 — wiekszy zbior jest pobierany oknem, nie w calosci', () => {
       ['procurement_get_case', await callTool('procurement_get_case', { caseId })],
       ['canvas_list_cards', await callTool('canvas_list_cards', { spaceId: await spaceWithCards() })],
       ['files_list', await callTool('files_list', {})],
+      /*
+       * `get_context` grows with what the user has picked and typed, so it is
+       * in this list too — with a deliberately heavy context: a dozen rows
+       * selected, a narrowed and ordered view, several dirty forms.
+       */
+      [
+        'get_context',
+        await callTool(
+          'get_context',
+          {},
+          {
+            appContext: {
+              ...EMPTY_CONTEXT,
+              spaceId: 'spc_pomiarowa',
+              resource: { kind: 'case', id: caseId },
+              selection: Array.from({ length: 12 }, (_, i) => ({
+                kind: 'offer_item',
+                id: `pci_${i}${'a'.repeat(16)}`,
+              })),
+              filters: {
+                'procurement.data': {
+                  predicates: [{ field: 'country', op: 'eq', value: 'PL' }],
+                  sort: { field: 'name', direction: 'desc' },
+                  page: { index: 1, size: 10, count: 1 },
+                  matched: 5,
+                  total: 7,
+                },
+              },
+              viewport: { x: 12, y: 34, zoom: 1 },
+              drafts: Array.from({ length: 5 }, (_, i) => ({
+                formId: `form_${i}`,
+                entity: 'offer_item',
+                entityId: `pci_${i}`,
+                dirtyFields: ['unitPrice', 'quantity'],
+              })),
+              ui: { version: 12, clientId: 'ui_tab_kontekst', viewId: 'procurement.data', url: '/data?country=PL' },
+            },
+          },
+        ),
+      ],
     ];
     for (const [name, answer] of answers) {
       expect(JSON.stringify(answer).length, `${name} nie miesci sie w zapisie wyniku narzedzia`).toBeLessThan(
@@ -371,8 +411,8 @@ describe('L6.11 — brak zasobu, cudzy zasob i pusty wynik to trzy rozne odpowie
   it('get_context i prompt mowia wprost, ze rekordu nie ma — zamiast milczec po identyfikatorze', async () => {
     const appContext: AppContext = { ...EMPTY_CONTEXT, resource: { kind: 'case', id: 'pc_nie_ma_takiej' } };
     const out: any = await callTool('get_context', {}, { appContext, conversationId: null });
-    expect(out.commandContext.resourceState).toBe('not_found');
-    expect(out.commandContext.resourceSummary).toBeNull();
+    expect(out.resourceState).toBe('not_found');
+    expect(out.resourceSummary).toBeNull();
     expect(out.resourceState).toBe('not_found');
 
     const prompt = buildSystemPrompt({
@@ -427,7 +467,7 @@ describe('L6.3 i L6.9 — agent czyta kontekst nowszy niz startowy i odroznia go
      */
     expect(out.currentContext.selection).toBeNull();
     expect(out.currentContext.changedSinceCommand).toBeNull();
-    expect(out.commandContext.selection).toEqual([{ kind: 'offer', id: 'of_1' }]);
+    expect(out.selection).toEqual([{ kind: 'offer', id: 'of_1' }]);
   });
 
   it('zmiana zaznaczenia i szkicu W TRAKCIE wykonania jest widoczna i nazwana', async () => {
@@ -504,9 +544,9 @@ describe('L6.3 i L6.9 — agent czyta kontekst nowszy niz startowy i odroznia go
     expect(last.currentContext.selection).toEqual([{ kind: 'offer_item', id: 'it_nowy' }]);
     expect(last.currentContext.unsavedDrafts[0]).toMatchObject({ formId: 'f1', dirtyFields: ['unitPrice'] });
     // … and is distinguishable from the context the command started with.
-    expect(last.commandContext.selection).toEqual(startSelection);
+    expect(last.selection).toEqual(startSelection);
     expect(last.currentContext.changedSinceCommand).toEqual(expect.arrayContaining(['selection', 'drafts']));
-    expect(last.currentContext.note).toContain('commandContext');
+    expect(last.currentContext.note).toContain('kontekst polecenia');
   });
 });
 
@@ -546,8 +586,8 @@ describe('L6.14 — zadanie nie przejmuje zaznaczenia ani przestrzeni z innej ro
     expect(text).not.toContain('pc_inne');
     expect(text).not.toContain('sp_innej_rozmowy');
     // The task keeps the space and the selection it was started with.
-    expect(out.commandContext.spaceId).toBe('sp_mojej_rozmowy');
-    expect(out.commandContext.selection).toEqual([{ kind: 'offer', id: 'of_moje' }]);
+    expect(out.spaceId).toBe('sp_mojej_rozmowy');
+    expect(out.selection).toEqual([{ kind: 'offer', id: 'of_moje' }]);
   });
 });
 
@@ -616,7 +656,7 @@ describe('L6.10 — cel operacji i aktualnosc wersji przy zapisie', () => {
     expect(context.currentContext.resource).toEqual({ kind: 'case', id: 'pc_gdzie_indziej' });
     expect(context.currentContext.changedSinceCommand).toContain('resource');
     // … and the operation's target did not move with it.
-    expect(context.commandContext.resource).toEqual({ kind: 'case', id: target.id });
+    expect(context.resource).toEqual({ kind: 'case', id: target.id });
     const after = h.service.getCaseDetail(target.id, h.ownerId).offers.flatMap((o) => o.items).find((i) => i.id === item.id)!;
     expect(after.unitPriceMinor).toBe(1150);
     expect(after.version).toBe(item.version + 1);

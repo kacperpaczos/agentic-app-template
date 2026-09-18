@@ -11,7 +11,7 @@ import type { PlatformServices } from '../../services/index.ts';
 /**
  * Application context for the run, in two parts that must never be confused.
  *
- * **`commandContext`** — what the client sent with the command, resolved once
+ * **The top-level fields** — what the client sent with the command, resolved once
  * when the run started. It decides what the run is *for*: the space it writes
  * to, the record it was asked about, the rows that were selected when the user
  * pressed send. It does not move, and it must not: a task started for one record
@@ -36,16 +36,16 @@ export function contextTools(services: PlatformServices): Array<ModuleToolDefini
     {
       name: 'get_context',
       description:
-        'Zwraca kontekst aplikacji w dwoch czesciach. commandContext to kontekst POLECENIA — rozmowa, ' +
+        'Zwraca kontekst aplikacji w dwoch czesciach. Pola na najwyzszym poziomie to kontekst POLECENIA — rozmowa, ' +
         'przestrzen canvas, wskazany zasob, zaznaczenie, filtry i niezapisane szkice z chwili wyslania; ' +
-        'to on wyznacza cel tego zadania i nie zmienia sie w trakcie. currentContext to to, co karta ' +
+        'to one wyznaczaja cel tego zadania i nie zmieniaja sie w trakcie. currentContext to to, co karta ' +
         'przegladarki pokazujaca TE rozmowe trzyma teraz: zasob, zaznaczenie i szkice, z wersja opisu. ' +
         'changedSinceCommand wymienia, co rozni sie od kontekstu polecenia (resource, selection, drafts, ' +
         'spaceId) — pusta lista znaczy "nic sie nie zmienilo". currentContext.stale=true znaczy, ze to NIE ' +
         'jest potwierdzony biezacy stan; reason mowi dlaczego (no_client, other_conversation, client_gone, ' +
         'client_inactive, older_than_requested, superseded). ' +
         'Wywolaj to na poczatku zadania i PONOWNIE, jesli zadanie trwa dlugo — zanim uznasz zaznaczenie albo ' +
-        'szkic za aktualne. Cel zadania bierz z commandContext, nowosci z currentContext.',
+        'szkic za aktualne. Cel zadania bierz z pol najwyzszego poziomu, nowosci z currentContext.',
       effect: 'read',
       alwaysLoad: true,
       inputSchema: z.object({
@@ -120,20 +120,26 @@ export function contextTools(services: PlatformServices): Array<ModuleToolDefini
             })
           : null;
 
+        /*
+         * The command's context stays at the top level, where it has always
+         * been and where the prompt points. It is deliberately *not* repeated
+         * inside a named block as well: a tool answer is stored in the
+         * conversation up to `TOOL_RESULT_STORED_CHARS`, and a user with a
+         * dozen rows selected and two forms open would push a duplicated
+         * context past that limit — after which the stored answer is cut in the
+         * middle of a value and stops parsing. `currentContext` sits beside it
+         * and says in its own words which of the two it is.
+         */
         return {
-          commandContext,
-          currentContext: currentContextOf(live, commandContext),
-          /*
-           * The command's fields are repeated at the top level because that is
-           * where every earlier version of this tool put them, and a prompt that
-           * still says "the context" must keep meaning the command's context.
-           */
           ...commandContext,
+          currentContext: currentContextOf(live, commandContext),
           filtersNote:
             'Stan widoku (zawezenie, sortowanie, strona) zmienia tylko to, co i w jakiej kolejnosci widac. Dane w bazie sa bez zmian.',
           note:
-            'unsavedDrafts to NIEZAPISANY stan formularza uzytkownika. To nie sa dane zapisane w bazie i nie wolno ich traktowac jak faktow. ' +
-            'Cel tego zadania wyznacza commandContext; currentContext mowi tylko, co uzytkownik ma teraz na ekranie tej rozmowy.',
+            'Pola na najwyzszym poziomie (spaceId, resource, selection, filters, unsavedDrafts, ui) to kontekst POLECENIA ' +
+            'z chwili jego wyslania — one wyznaczaja cel tego zadania i nie zmieniaja sie w trakcie. currentContext mowi, ' +
+            'co uzytkownik ma teraz na ekranie TEJ rozmowy. unsavedDrafts to NIEZAPISANY stan formularza uzytkownika: ' +
+            'to nie sa dane zapisane w bazie i nie wolno ich traktowac jak faktow.',
           workspaceDir: ctx.workspaceDir,
         };
       },
@@ -191,7 +197,7 @@ function currentContextOf(live: UiStateResult | null, command: CommandContextSha
       changedSinceCommand: null,
       note:
         'Zadna karta tej rozmowy nie podala biezacego kontekstu. NIE zakladaj, ze zaznaczenie i szkice sa ' +
-        'takie jak w commandContext — po prostu nie wiadomo, jakie sa teraz.',
+        'takie jak w kontekscie polecenia — po prostu nie wiadomo, jakie sa teraz.',
     };
   }
   const context = snapshot.context;
@@ -218,6 +224,6 @@ function currentContextOf(live: UiStateResult | null, command: CommandContextSha
       ? 'Ten opis nie jest potwierdzonym biezacym stanem (patrz reason) — nie opisuj go jako aktualnego.'
       : changed.length === 0
         ? 'Uzytkownik nie zmienil kontekstu od wyslania polecenia.'
-        : `Od wyslania polecenia zmienilo sie: ${changed.join(', ')}. Cel zadania nadal wyznacza commandContext.`,
+        : `Od wyslania polecenia zmienilo sie: ${changed.join(', ')}. Cel zadania nadal wyznacza kontekst polecenia (pola najwyzszego poziomu).`,
   };
 }

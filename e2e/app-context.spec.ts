@@ -181,10 +181,10 @@ test.describe('kontekst aplikacji dla agenta', () => {
 
     const conversationId = await conversationOnScreen(page);
     const [context] = await toolResults(page, conversationId, 'get_context');
-    expect(context.commandContext.resource).toEqual({ kind: 'case', id: caseId });
-    expect(context.commandContext.resourceState).toBe('described');
+    expect(context.resource).toEqual({ kind: 'case', id: caseId });
+    expect(context.resourceState).toBe('described');
     // The screen marker sent with the command is the one from the record screen.
-    expect(context.commandContext.ui.url).toContain(caseId);
+    expect(context.ui.url).toContain(caseId);
   });
 
   /* --------------------------------------------------------- L6.3, L6.9 -- */
@@ -215,7 +215,7 @@ test.describe('kontekst aplikacji dla agenta', () => {
     const [first, second] = reads;
 
     // At the start: nothing selected — so the later reading cannot be an echo.
-    expect(first.commandContext.selection).toEqual([]);
+    expect(first.selection).toEqual([]);
     expect(first.currentContext.selection ?? []).toEqual([]);
 
     // During the task the agent reads the newer context …
@@ -224,7 +224,7 @@ test.describe('kontekst aplikacji dla agenta', () => {
     expect(second.currentContext.selection).toEqual([{ kind: 'card', id: cardId }]);
     expect(second.currentContext.version).toBeGreaterThan(first.currentContext.version);
     // … and it is distinguishable from the context the command started with.
-    expect(second.commandContext.selection).toEqual([]);
+    expect(second.selection).toEqual([]);
     expect(second.currentContext.changedSinceCommand).toContain('selection');
   });
 
@@ -256,9 +256,9 @@ test.describe('kontekst aplikacji dla agenta', () => {
     const conversationId = await conversationOnScreen(page);
     const [context] = await toolResults(page, conversationId, 'get_context');
     // The card of the space the user left is not in the next command's context.
-    expect(context.commandContext.selection).toEqual([]);
-    expect(JSON.stringify(context.commandContext)).not.toContain(cardId);
-    expect(context.commandContext.spaceId).toBe(otherSpace);
+    expect(context.selection).toEqual([]);
+    expect(JSON.stringify(context)).not.toContain(cardId);
+    expect(context.spaceId).toBe(otherSpace);
   });
 
   test('L6.12: po zmianie wlasciciela bez przeladowania kolejne polecenie nie niesie niczego poprzedniego', async ({
@@ -290,14 +290,14 @@ test.describe('kontekst aplikacji dla agenta', () => {
     const conversationId = await conversationOnScreen(page);
     const [context] = await toolResults(page, conversationId, 'get_context');
 
-    const text = JSON.stringify(context.commandContext);
+    const text = JSON.stringify(context);
     for (const leaked of [caseId, cardId, spaceId!, firstConversation].filter(Boolean) as string[]) {
       expect(text, `wyciek ${leaked}`).not.toContain(leaked);
     }
-    expect(context.commandContext.resource).toBeNull();
-    expect(context.commandContext.selection).toEqual([]);
-    expect(context.commandContext.unsavedDrafts).toEqual([]);
-    expect(context.commandContext.conversationId).toBe(conversationId);
+    expect(context.resource).toBeNull();
+    expect(context.selection).toEqual([]);
+    expect(context.unsavedDrafts).toEqual([]);
+    expect(context.conversationId).toBe(conversationId);
     expect(conversationId).not.toBe(firstConversation);
   });
 
@@ -340,11 +340,11 @@ test.describe('kontekst aplikacji dla agenta', () => {
     const reads = await toolResults(page, conversationA, 'get_context');
     const last = reads.at(-1)!;
     // The task keeps the space it was started in …
-    expect(last.commandContext.spaceId).toBe(spaceA);
-    expect(last.commandContext.selection).toEqual([]);
+    expect(last.spaceId).toBe(spaceA);
+    expect(last.selection).toEqual([]);
     // … and the selection made afterwards is nowhere in its context.
-    expect(JSON.stringify(last.commandContext)).not.toContain(cardInB);
-    expect(JSON.stringify(last.commandContext)).not.toContain(spaceB);
+    expect(JSON.stringify(last)).not.toContain(cardInB);
+    expect(JSON.stringify(last)).not.toContain(spaceB);
 
     /* The visible consequence: the card it added is in A's space, not in B's. */
     const stateA = await getJson(page, `/api/canvas/spaces/${spaceA}`);
