@@ -148,3 +148,11 @@ modelu — czyli od zachowania, które L11.23 wyklucza. Zmiana nie kosztuje tury
 | `… playwright test e2e/run-continuity.spec.ts` | 0 | 4 testy (z prawdziwym zerwaniem połączenia) |
 | `… playwright test e2e/sandbox-files.spec.ts` | 0 | 5 testów |
 | `… playwright test e2e/sandbox-files.spec.ts -g "wynik jest artefaktem"` | 0 | 1 test — dowód, że nie zależy od sąsiadów |
+
+### Domknięcie rundy 1 (commit `bd3198e`)
+
+| Polecenie | Kod | Wynik |
+|---|---|---|
+| `… playwright test` (moje cztery spece) | 0 | **15 testów** |
+| `… playwright test` (cały domyślny przebieg) | 0 | **174 testy**, zero oblanych — test nawigacji, który oblał przy trzech równoległych zestawach, przechodzi |
+| `pnpm verify` | 0 | 45 plików / **723 testy**; `git status --porcelain` po przebiegu: pusto |
