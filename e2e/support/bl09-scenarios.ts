@@ -209,7 +209,19 @@ export const consentScript = (prompt: string): Step[] =>
 export const continuityScript = (prompt: string): Step[] =>
   prompt.includes('krotkie')
     ? [{ kind: 'text', text: 'Krotka odpowiedz.', delayMs: 100 }]
-    : [
+    : prompt.includes('nawigacja')
+      ? [
+          /*
+           * Moves the screen **before** the network is lost, and keeps working
+           * afterwards. What matters on the client's return is that the answer
+           * arrives and the navigation does *not* happen a second time.
+           */
+          { kind: 'text', text: 'Otwieram pliki. ', delayMs: 150 },
+          { kind: 'ui', targetId: 'platform.files', label: 'pliki' },
+          { kind: 'wait', delayMs: 6000 },
+          { kind: 'text', text: 'WYNIK-KONCOWY-A' },
+        ]
+      : [
         { kind: 'text', text: 'Zaczynam prace. ', delayMs: 200 },
         { kind: 'wait', delayMs: 6000 },
         { kind: 'text', text: 'WYNIK-KONCOWY-A' },

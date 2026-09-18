@@ -166,11 +166,17 @@ test.describe('zadanie w tle przezywa odejscie obserwatora', () => {
    * does do honestly — report the outage to the page and fire the `offline` and
    * `online` events a real outage fires.
    *
+   * **What the cut is, precisely.** It severs the browser↔proxy side: the page's
+   * connections die and new ones are refused. The proxy's own socket to the
+   * application stays open, so this is "the browser lost the network", not "the
+   * server lost its client" — the server-side half is the panel-close test
+   * above, where the page really goes away.
+   *
    * The run finishes **during** the outage, so the client comes back to a run the
    * backend no longer lists as active: the case that had no route back to the
    * answer at all.
    */
-  test('utrata sieci zrywa strumien, zadanie konczy sie bez obserwatora, a klient wraca do wyniku', async ({
+  test('utrata sieci zrywa polaczenie przegladarki, zadanie konczy sie bez niej, a klient wraca do wyniku', async ({
     page,
     context,
   }: {
@@ -198,9 +204,11 @@ test.describe('zadanie w tle przezywa odejscie obserwatora', () => {
       await context.setOffline(true);
 
       /*
-       * The connection is gone rather than merely unused: from inside the page
-       * every request now fails — asked of `fetch`, which is what a re-attachment
-       * would use.
+       * The page cannot reach the application. Worth naming honestly: switching
+       * the context offline would satisfy this on its own, so this assertion is
+       * a guard on the setup, not the evidence. The weight is carried by the two
+       * assertions below it — the run finishes while the page is cut off, and
+       * **the marker does not appear on screen** in that time.
        */
       const reachable = await page.evaluate(async () => {
         try {
@@ -244,6 +252,90 @@ test.describe('zadanie w tle przezywa odejscie obserwatora', () => {
       expect(occurrences(onScreen, MARKER), 'odpowiedz pokazana dwa razy').toBe(1);
       expect(occurrences(await answerText(page, conversation), MARKER)).toBe(1);
       expect(await runsOf(page, conversation), 'zadanie uruchomilo sie drugi raz').toHaveLength(1);
+    } finally {
+      await proxy.stop();
+    }
+  });
+
+  /**
+   * Coming back must bring the **answer**, not the agent's old navigation.
+   *
+   * The run moves the screen while the client is watching, the client then goes
+   * its own way, and the network dies. Three things now stand between the replay
+   * and a screen that jumps back minutes later, and this test is about their
+   * combined effect rather than any one of them:
+   *
+   *  - the cursor: a client that consumed the send path knows how far it got, so
+   *    what it asks for on return is what it missed (`platformAdapter.ts`);
+   *  - `UiCommandRunner` refuses a `commandId` it has already performed, in
+   *    memory and across reloads (`sessionStorage`);
+   *  - a **resolved** run's replay carries no interface commands at all
+   *    (`GET /api/runs/:id/stream`), because nothing is waiting for the answer.
+   */
+  test('po powrocie przychodzi wynik, a nawigacja agenta nie powtarza sie', async ({
+    page,
+    context,
+  }: {
+    page: Page;
+    context: BrowserContext;
+  }) => {
+    await long.start('bl09-continuity');
+    const proxy = new CuttableProxy(PROXY_PORT, long.baseUrl);
+    await proxy.start();
+    try {
+      await openApp(page, proxy.baseUrl);
+      await send(page, 'Otworz pliki i pracuj dalej — nawigacja.');
+
+      // The agent moves the screen, with the client watching and acknowledging.
+      await expect(page.getByTestId('files-page')).toBeVisible({ timeout: 60_000 });
+      const conversation = urlConversation(page)!;
+
+      // The user goes somewhere else while the run is still working.
+      await page.getByRole('link', { name: 'Ustawienia' }).click();
+      await expect(page.getByTestId('settings-page')).toBeVisible();
+      const parked = new URL(page.url()).pathname;
+
+      /* --------------------------- the wire is cut -------------------------- */
+
+      const reattach = page.waitForRequest((r) => /\/api\/runs\/[^/]+\/stream\?from=/.test(r.url()));
+      proxy.cut();
+      await context.setOffline(true);
+      await expect
+        .poll(async () => (await backendRuns(long, conversation))[0]?.status, { timeout: 30_000 })
+        .toBe('succeeded');
+
+      /* -------------------------- and comes back ----------------------------- */
+
+      proxy.restore();
+      await context.setOffline(false);
+
+      await expect(page.locator('.openui-agent-thread-messages')).toContainText(MARKER, {
+        timeout: 60_000,
+      });
+
+      /*
+       * The cursor is a real one: the client asked for what it missed, not for
+       * the whole run from the beginning. (`from=0` would mean the send path
+       * never recorded how far it got.)
+       */
+      const from = Number(new URL((await reattach).url()).searchParams.get('from'));
+      expect(from, 'klient poprosil o odtworzenie od poczatku').toBeGreaterThan(0);
+      // And it did not ask for more than the run ever produced.
+      const produced = await page.evaluate(async (id) => {
+        const { runs } = await (
+          await fetch(`/api/conversations/${id}/runs`, { credentials: 'include' })
+        ).json();
+        const { events } = await (
+          await fetch(`/api/runs/${runs[0].id}/events`, { credentials: 'include' })
+        ).json();
+        return events.length as number;
+      }, conversation);
+      expect(from).toBeLessThanOrEqual(produced);
+
+      // The screen the user chose is the screen they still have.
+      expect(new URL(page.url()).pathname, 'nawigacja agenta powtorzyla sie po powrocie').toBe(parked);
+      await expect(page.getByTestId('settings-page')).toBeVisible();
+      await expect(page.getByTestId('files-page')).toHaveCount(0);
     } finally {
       await proxy.stop();
     }

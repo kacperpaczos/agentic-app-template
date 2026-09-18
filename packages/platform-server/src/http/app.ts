@@ -13,6 +13,7 @@ import {
   cardSpecSchema,
   CHAT_CAPABILITIES,
   EMPTY_APP_CONTEXT,
+  PLATFORM_CUSTOM_EVENTS,
   runAgentInputSchema,
   updateCardGeometryInputSchema,
   updateCardSpecInputSchema,
@@ -487,7 +488,25 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
         }
         return;
       }
+      /*
+       * A **resolved** run's replay carries no interface commands.
+       *
+       * An interface command is a question the run is waiting on: it asks the
+       * browser to move the screen and does not resolve until the browser
+       * answers or the runtime times it out. Once the run has ended, nothing is
+       * waiting for that answer — it was already reported to the agent as
+       * `no_client` — so performing it now would move the user's screen for a
+       * question that was settled, possibly minutes ago, and answer it to
+       * nobody. A client that *did* see it live refuses the repeat by
+       * `commandId` (`UiCommandRunner`); this covers the other case, where the
+       * client never saw it because it was away while the run was ending.
+       *
+       * Only the persisted path filters. A run still executing here is served
+       * from its live stream, where a command may genuinely still be waiting.
+       */
       for (const { seq, payload } of services.runs.eventsAfter(runId, ownerId, from)) {
+        const event = payload as { type?: string; name?: string } | null;
+        if (event?.type === 'CUSTOM' && event.name === PLATFORM_CUSTOM_EVENTS.uiCommand) continue;
         await sse.writeSSE({ id: String(seq), data: JSON.stringify(payload) });
       }
       /*

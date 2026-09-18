@@ -53,6 +53,28 @@ export function platformAguiAdapter(qc: QueryClient): StreamProtocolAdapter {
        * right way to keep watching. See `runStreams.ts`.
        */
       if (runId) claimRunStream(runId);
+      /*
+       * How far this client has got, so a re-attachment asks for what it
+       * **missed** rather than for everything from the start.
+       *
+       * The backend numbers a run's events from 1 and increments by one, and
+       * this response carries them in that order from the beginning — so the
+       * count of events applied here *is* the sequence number of the last one.
+       * The number cannot be read off the wire instead: the ready-made parser
+       * yields parsed events and does not expose the SSE `id:` line, and
+       * re-implementing its parsing to see one line would be replacing the
+       * chat, which this application does not do.
+       *
+       * Counting only what is actually applied keeps the cursor honest in the
+       * one case where the two differ — an identity switch abandons the stream,
+       * and the run record it belonged to is cleared with it.
+       *
+       * Left at zero this was harmless but wasteful: a re-attachment replayed
+       * the whole run, including the interface commands the user had already
+       * seen performed (those are refused a second time by `commandId` in
+       * `UiCommandRunner`, which is why it was harmless).
+       */
+      let applied = 0;
       try {
         for await (const event of inner.parse(response)) {
           // Nothing of the previous identity's is applied, and nothing of it is
@@ -63,6 +85,8 @@ export function platformAguiAdapter(qc: QueryClient): StreamProtocolAdapter {
               qc,
               isActive: () => useAppState.getState().conversationId === conversationId,
             });
+            applied += 1;
+            useAppState.getState().patchRun(conversationId, { lastSeq: applied });
           }
           yield event;
         }
