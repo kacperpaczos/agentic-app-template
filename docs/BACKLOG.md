@@ -3,7 +3,7 @@
 > Plik generowany przez `node scripts/acceptance-matrix.mjs` z `docs/acceptance/assessment.json`.
 > Każde otwarte kryterium macierzy (`docs/ACCEPTANCE.md`) należy do dokładnie jednego pakietu.
 
-Otwartych kryteriów: **37** z 200, w 6 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.
+Otwartych kryteriów: **28** z 200, w 6 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.
 
 | Pakiet | Tytuł | Kryteria | Liczba |
 |---|---|---|---|
@@ -12,7 +12,7 @@ Otwartych kryteriów: **37** z 200, w 6 pakietach. Kolejność pakietów jest pr
 | BL-07 | Trwałość, kopia i migracje | L7.13 | 1 |
 | BL-09 | Pliki, sandbox i zadania w tle | L11.7, L11.12, L11.23 | 3 |
 | BL-11 | Domena, backend i cache | L6.11, L9.7 | 2 |
-| BL-12 | Odbiór i jakość dowodów | L1.2, L1.8, L1.9, L1.11, L1.12, L12.5, L12.7, L12.10, L12.12, L12.15 | 10 |
+| BL-12 | Odbiór i jakość dowodów | L12.10 | 1 |
 
 ## BL-03 — Powtarzalne próby na prawdziwym modelu w szablonie
 
@@ -94,13 +94,4 @@ Macierz, wersje w dowodach, kontrola negatywna testów, raportowanie nieudanych 
 
 | ID | Wymaganie | Stan | Brak |
 |---|---|---|---|
-| L1.2 | React i TypeScript są najnowszymi stabilnymi wersjami; lockfile i zgodność zależności są sprawdzone. | częściowe | Brak wykonywanego sprawdzenia „najnowsze stabilne” (np. porównania z wersją w rejestrze npm zapisanego z dowodami) i brak kontroli ostrzeżeń peer przy instalacji; stan „najnowsze” może się zdezaktualizować bez żadnego sygnału w regresji. |
-| L1.8 | Instancja testowa ma odrębny katalog danych, adres i identyfikację; konfiguracja kierująca test na instancję użytkownika jest odrzucana przed operacją zapisu. | częściowe | Udokumentowane w README polecenie pnpm acceptance (scripts/acceptance-agent.mjs, scripts/run-agent.mjs) domyślnie kieruje na http://127.0.0.1:8791, czyli port instancji użytkownika, bez sprawdzenia etykiety, i wykonuje zapisy (zmiana ilości pozycji, dodanie kart); README podaje porty e2e 8795–8799, a specyfikacje używają 8793–8799. Skutek: próba z prawdziwym modelem spoza e2e może pisać przez instancję użytkownika. |
-| L1.9 | Przygotowanie bazy testowej kończy się przed jej otwarciem przez serwer; żaden setup nie usuwa bazy pod działającym procesem. | częściowe | prepareDatabase nie sprawdza, czy port lub katalog .e2e-scripted-* jest używany przez działający proces (np. serwer skryptowany osierocony po przerwanym przebiegu); wtedy katalog jest usuwany pod działającym procesem, nowy proces nie zajmie portu, a #waitForHealth i verifyIsolatedInstance przyjmą starą instancję, bo etykieta nie jest unikalna dla przebiegu. |
-| L1.11 | Izolacja ścieżek uwzględnia rzeczywisty cel katalogu i dowiązania; testy nie usuwają danych wskazanych poza swoim zakresem. | częściowe | Brak realpathSync lub lstat w e2e/support/isolation.ts i config.ts: katalog .e2e-* będący dowiązaniem do data/ użytkownika (albo APP_DATA_DIR wskazujący taki link) przechodzi wszystkie kontrole i oznaczona instancja testowa pisze do danych użytkownika; brak testu z dowiązaniem. |
-| L1.12 | Wersje rozwiązanych pakietów, Node, SDK i zewnętrznego CLI oraz stan kodu są zapisane razem z dowodami; lockfile nie jest jedynym źródłem wersji CLI. | częściowe | Dowody generowane przez testy nie niosą commita ani wersji, a zapis wersji przy regresji nie obejmuje wszystkich rozwiązanych pakietów ani wersji CLI wbudowanej w SDK (może różnić się od globalnego claude). Wyniku testu nie da się więc samodzielnie powiązać z użytym runtime. |
-| L12.5 | Testy przeglądarkowe obejmują dynamiczny UI, rozmowy, narzędzia, artefakty i wznowienie. | częściowe | Artefakty nie są pokryte: e2e/chat-layout.spec.ts „artefakty sa osobna zakladka panelu” sprawdza tylko przełączenie zakładki, e2e/chat.spec.ts „usuniecie rozmowy odlacza artefakty zamiast je kasowac” używa wyłącznie API; żaden test nie otwiera artefaktu, jego podglądu, pełnego widoku ani stanu live w przeglądarce. |
-| L12.7 | Opis odbioru wskazuje wersje, dowody, nieudane próby, brakujące możliwości i własne adaptery. | częściowe | Brak aktualnego, pełnego rejestru własnych adapterów szablonu z opisem zakresu i próby zgodności (pełny rejestr jest tylko w archiwalnym FEEDBACK §6 i nie obejmuje nowszych adapterów, np. ConversationSync, ComposerAttachments, useComposerStop, runStreams); wersje wszystkich kluczowych zależności nie są zebrane w jednym opisie odbioru. |
-| L12.10 | Każdy dowód wskazuje wersję kodu, środowisko i rodzaj wykonania; dawny wynik nie potwierdza automatycznie zmienionej integracji. | częściowe | Poszczególne dowody nie wskazują wersji kodu ani środowiska: pliki wynikowe e2e (20-pomiary.json, 21-strumien.json, 22-strumien-model.json) nie zapisują commitu, wersji SDK ani modelu i trafiają do katalogu o historycznej nazwie docs/evidence/closure-2026-09-15, przez co wynik z szablonu wygląda jak dowód z AgenticApp. |
-| L12.12 | Testy krytycznych napraw wykazują zdolność wykrycia defektu przez kontrolowany wadliwy wariant lub adekwatną próbę negatywną; samo przejście nie wystarcza. | częściowe | Kontrolowane wadliwe warianty krytycznych napraw (szuflada D-1, projekcja D-2, zakleszczenie N-3, mapowanie abort na cancel w zadaniach w tle, detektor strumienia, guard izolacji) nie są powtarzalne w szablonie; brak skryptu lub testu wykazującego, że testy tych napraw oblewają na wadliwym wariancie, a części napraw nie chroni wbudowana próba negatywna. |
-| L12.15 | Własne adaptery i ograniczenia są opisane zgodnie z działaniem; niespełniony obowiązek nie staje się zaliczony przez przeniesienie do sekcji ograniczeń. | częściowe | Część opisów nie odpowiada wykonanym dowodom: README deklaruje, że zamknięcie panelu nie anuluje pracy i że załączniki JPEG, CSV i tekst działają w polu wiadomości, a ekran Ustawień (SettingsPage.tsx) twierdzi, że sandbox odcina sieć i katalog danych — bez próby w szablonie; rejestr własnych adapterów istnieje tylko w archiwum. |
+| L12.10 | Każdy dowód wskazuje wersję kodu, środowisko i rodzaj wykonania; dawny wynik nie potwierdza automatycznie zmienionej integracji. | częściowe | 44 dowody zapisane przed koperta (docs/evidence/POCHODZENIE.json) maja commit, wytworce i rodzaj wykonania w rejestrze, ale nie maja zapisu SRODOWISKA przebiegu i nie da sie go odtworzyc — pole czegoBrakujeWPliku mowi to wprost przy kazdym z nich. Dopisanie im srodowiska byloby zmysleniem, a regeneracja nalezy do pakietow, ktore te dowody wytworzyly. |

@@ -55,8 +55,9 @@ modułu.
 - **Dołączać pliki do rozmowy.** Obrazy PNG/JPEG, skoroszyty XLSX, pliki CSV i tekst. Agent czyta
   treść obrazu, a skoroszyt przetwarza kodem uruchamianym w sandboxie — dopiero po Twojej zgodzie.
   Zmieniony plik zapisuje jako nową wersję; oryginał zostaje bez zmian.
-- **Zostawić agenta przy pracy.** Przełączenie rozmowy, zamknięcie panelu czy odświeżenie strony nie
-  przerywa zadania. Zatrzymanie jest osobną, jawną akcją.
+- **Zostawić agenta przy pracy.** Przełączenie rozmowy i odświeżenie strony nie przerywa zadania;
+  zatrzymanie jest osobną, jawną akcją. (Wcześniejsza wersja tego zdania mówiła też o „zamknięciu
+  panelu” — ta powłoka nie ma takiej akcji: panel rozmowy jest zawsze widoczny.)
 - **Poprosić o przejście do ekranu.** „Przełącz na pliki” albo „pokaż ustawienie logowania” otwiera
   widok i podświetla element. Pytanie o dane, które mają swój ekran — np. „co jest w dostawcach?” —
   też przenosi na ten ekran.
@@ -348,12 +349,14 @@ Krok po kroku, z opisem kontraktu modułu i znanymi pułapkami:
 
 To wersja robocza. Najważniejsze braki i ograniczenia:
 
-- **Agent nie widzi pełnego stanu ekranu.** Nie odczytuje opisu aktywnego widoku, nie zna zawężenia
-  ustawionego wcześniej (dowiaduje się o nim tylko w tej samej turze), nie potrafi wskazać wartości
-  konkretnego pola rekordu.
-- **Nie ma sortowania ani stronicowania sterowanego rozmową** ani zapisanych preferencji widoków.
-  Zawężanie działa na danych już pobranych przez widok.
-- **Nie ma przestrzeni „Widoki agenta”**, w której agent sam składa trwałe zestawienia i wykresy.
+- **Agent czyta opis ekranu ze startu wykonania.** W trakcie pracy nie ma kanału, którym dostałby
+  nowszy stan ekranu — dowiaduje się o zmianie dopiero w następnej turze (próba T08, L6.3 i L6.9).
+- **Tekst wypowiedziany przed wywołaniem narzędzia** nie trafia do banki odpowiedzi gotowego czatu:
+  zostaje krokiem osi „Behind the scenes”, o jedno kliknięcie dalej (L5.15,
+  [`docs/NEW-APPLICATION.md`](docs/NEW-APPLICATION.md) §7).
+- **Odcięcie sieci i katalogu danych w sandboxie** jest sprawdzone jako **konfiguracja** SDK
+  (`tests/runtime.test.ts`), a nie próbą niedozwolonego odczytu, zapisu i połączenia z uruchomienia
+  (L11.3, L11.4, L11.11).
 - **Pliki XLSX:** formuły nie są przeliczane; wykresy, formatowanie warunkowe i tabele przestawne nie
   są zachowywane przy zapisie; pliki `.xlsm` i `.xls` są odrzucane.
 - **Zadania w tle** trwają tak długo jak proces backendu; restart oznacza je jako przerwane.

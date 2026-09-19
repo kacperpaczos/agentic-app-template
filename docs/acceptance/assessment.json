@@ -20,12 +20,11 @@
       }
     },
     "L1.2": {
-      "status": "czesciowe",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "Wersje przypięte dokładnie w package.json (react i react-dom 19.3.0 w apps/web i packages/platform-ui, typescript 7.0.2) i pnpm-lock.yaml; regresja wykonuje pnpm install --frozen-lockfile oraz pnpm verify (typecheck tsc --noEmit, build, testy), co sprawdza spójność lockfile i praktyczną zgodność zależności. Nie obejmuje: sprawdzenia w rejestrze npm, że to nadal najnowsze stabilne wersje (ustalenie historyczne z 2026-09-15); .npmrc ma strict-peer-dependencies=false i auto-install-peers=true, więc niezgodności peer nie przerywają instalacji.",
-      "gap": "Brak wykonywanego sprawdzenia „najnowsze stabilne” (np. porównania z wersją w rejestrze npm zapisanego z dowodami) i brak kontroli ostrzeżeń peer przy instalacji; stan „najnowsze” może się zdezaktualizować bez żadnego sygnału w regresji.",
-      "backlog": "BL-12",
+      "proof": "scripts/check-versions.mjs zapisuje sprawdzenie w rejestrze npm (docs/acceptance/wersje-rejestr.json): date, wersje node i sha256 pnpm-lock.yaml. tests/versions.test.ts wykonuje w regresji cztery rzeczy offline: rejestr musi opisywac TEN lockfile (porownanie sha256 — zmiana zaleznosci uniewaznia zapis), nie moze byc starszy niz 180 dni, przypiete react, react-dom i typescript musza byc rowne zapisanej najnowszej stabilnej i takie same we wszystkich manifestach. Piata rzecz to kontrola peer, ktorej brakowalo przy strict-peer-dependencies=false: parser pnpm-lock.yaml sprawdza, ze kazdy zadeklarowany, nieopcjonalny peer jest dostarczony (130 par w tym drzewie) i ze react oraz react-dom sa zainstalowane w jednej wersji. Kontrole przeciwne w tym samym pliku: fixture z brakujacym peerem MUSI byc wykryty, peer opcjonalny nie; zmieniony lockfile, przeterminowany rejestr i przypiecie rozne od najnowszej stabilnej daja komunikat. Nie obejmuje: spelnienia zakresow semver (bez biblioteki semver nie da sie tego orzec uczciwie) oraz pakietow spoza listy sledzonej — roznica hono 4.13.7 wobec 4.13.8 w rejestrze jest zapisana jako obserwowana, nie jako awaria, bo kryterium mowi o React i TypeScript.",
+      "gap": "—",
       "scenarios": [
         "T01"
       ],
@@ -107,23 +106,21 @@
       }
     },
     "L1.8": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "tests/isolation.test.ts: „domyslny port aplikacji nie jest portem testowym”, „katalog danych aplikacji jest odrzucony”, „adres wskazujacy inny port niz instancja testowa jest odrzucony”, „APP_BASE_URL wskazujacy instancje uzytkownika przerywa konfiguracje”, „oznaczona instancja nie wstanie na domyslnym porcie”, „loadConfig odrzuca oznaczona instancje przed utworzeniem katalogu”. playwright.config.ts wywołuje resolveTestInstance przy wczytaniu, e2e/support/fixtures.ts i e2e/global-setup.ts sprawdzają etykietę agenticapp-test z /api/health przed pierwszym testem (opis: raport §4b Rezultat 3). Nie obejmuje: negatywnej ścieżki assertIsolatedInstance (odpowiedź instancji bez etykiety) — brak testu; etykieta jest stała dla wszystkich instancji testowych i nie identyfikuje przebiegu.",
-      "gap": "Udokumentowane w README polecenie pnpm acceptance (scripts/acceptance-agent.mjs, scripts/run-agent.mjs) domyślnie kieruje na http://127.0.0.1:8791, czyli port instancji użytkownika, bez sprawdzenia etykiety, i wykonuje zapisy (zmiana ilości pozycji, dodanie kart); README podaje porty e2e 8795–8799, a specyfikacje używają 8793–8799. Skutek: próba z prawdziwym modelem spoza e2e może pisać przez instancję użytkownika.",
-      "backlog": "BL-12",
+      "proof": "scripts/lib/acceptance-target.mjs: pnpm acceptance i scripts/run-agent.mjs celuja domyslnie w http://127.0.0.1:8790 (nigdy 8791), odrzucaja APP_BASE wskazujacy port zainstalowanej aplikacji oraz adres spoza petli zwrotnej, a PRZED pierwszym zadaniem pytaja /api/health, kto odpowiada; brak etykiety agenticapp-dev, agenticapp-test albo agenticapp-acceptance konczy przebieg kodem 3. tests/acceptance-target.test.ts uruchamia prawdziwy skrypt wobec stand-ina udajacego instancje uzytkownika (instanceLabel null) i liczy, co do niego dotarlo: dokladnie [\"GET /api/health\"], zero zadan POST. Kontrola przeciwna jest w tym samym pliku i jest konieczna — brak POST jest tak samo prawdziwy o skrypcie, ktory w ogole nie wystartowal: ten sam stand-in z etykieta agenticapp-dev dostaje POST /api/auth/session i POST /api/agui/run. Instancja testowa ma wlasny katalog, port i etykiete (tests/isolation.test.ts), a od tego pakietu takze identyfikator przebiegu (APP_INSTANCE_RUN_ID). Proby zdolnosci wykrycia: cel-proby-etykieta i cel-proby-domyslny-port w docs/evidence/z13-bl12/proby-wykrycia.json.",
+      "gap": "—",
       "scenarios": [
         "T19"
       ]
     },
     "L1.9": {
-      "status": "czesciowe",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "e2e/support/boot-server.ts usuwa .e2e-data, wykonuje pnpm migrate i pnpm seed i dopiero potem importuje dist/server.js; Playwright z reuseExistingServer:false odmawia startu, gdy adres już odpowiada. ScriptedInstance.prepareDatabase (e2e/support/scripted.ts) jest wywoływane w beforeAll przed start() w każdej specyfikacji skryptowanej. Poprawka kolejności opisana w raporcie §4b Rezultat 3. Dowodem jest analiza kolejności w kodzie harnessu; brak testu wykrywającego odwrotną kolejność.",
-      "gap": "prepareDatabase nie sprawdza, czy port lub katalog .e2e-scripted-* jest używany przez działający proces (np. serwer skryptowany osierocony po przerwanym przebiegu); wtedy katalog jest usuwany pod działającym procesem, nowy proces nie zajmie portu, a #waitForHealth i verifyIsolatedInstance przyjmą starą instancję, bo etykieta nie jest unikalna dla przebiegu.",
-      "backlog": "BL-12",
+      "proof": "e2e/support/port-probe.ts pyta o port sonda TCP w osobnym procesie i odmawia przygotowania bazy, gdy cos tam nasluchuje — wywolywane w ScriptedInstance.prepareDatabase i w e2e/support/boot-server.ts PRZED rmSync, wiec nic nie jest kasowane pod dzialajacym procesem. Odmowa, nigdy zabicie: komunikat podaje port i kaze zatrzymac tamten proces po jego pid. Druga polowa to tozsamosc przebiegu: APP_INSTANCE_RUN_ID (config.ts, /api/health, resolveTestInstance) odroznia instancje TEGO przebiegu od instancji testowej z poprzedniego, bo etykieta agenticapp-test jest wspolna dla wszystkich; ScriptedInstance.start wymaga zgodnosci identyfikatora. tests/isolation-orphan.test.ts: na zajetym porcie prepareDatabase rzuca, a plik app.db w katalogu zostaje; serwer z wlasciwa etykieta i innym identyfikatorem przebiegu jest odrzucony, a z tym samym przyjety. Kontrola przeciwna: przy wolnym porcie ten sam prepareDatabase kasuje katalog i odtwarza baze przez pnpm migrate i pnpm seed. Proba zdolnosci wykrycia: guard-osieroconego-serwera.",
+      "gap": "—",
       "scenarios": [
         "T19"
       ]
@@ -139,23 +136,21 @@
       ]
     },
     "L1.11": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "tests/isolation.test.ts „katalog poza repozytorium jest odrzucony”, „katalog bez prefiksu testowego jest odrzucony”, „katalog danych aplikacji jest odrzucony” — assertTestDataDir (e2e/support/isolation.ts) i assertTestInstanceIsIsolated (packages/platform-server/src/config.ts) porównują ścieżki leksykalnie (path.resolve, relative, basename). rmSync w boot-server.ts i scripted.ts dotyczy tylko zweryfikowanego katalogu .e2e*; dla dowiązania usuwa sam link, nie cel. Nie obejmuje: rzeczywistego celu katalogu i dowiązań.",
-      "gap": "Brak realpathSync lub lstat w e2e/support/isolation.ts i config.ts: katalog .e2e-* będący dowiązaniem do data/ użytkownika (albo APP_DATA_DIR wskazujący taki link) przechodzi wszystkie kontrole i oznaczona instancja testowa pisze do danych użytkownika; brak testu z dowiązaniem.",
-      "backlog": "BL-12",
+      "proof": "packages/platform-server/src/util/real-path.ts (realResolve, isSymlink, isWithin) to jedna implementacja rozwiazywania dowiazan dla calej klasy: uzywaja jej e2e/support/isolation.ts (assertTestDataDir), packages/platform-server/src/config.ts (assertTestInstanceIsIsolated) i packages/platform-server/src/util/managed-fs.ts (assertInsideManagedRoot), a agent/permissions.ts deleguje do niej zamiast trzymac czwarta kopie. Kazdy warunek jest sprawdzany dwa razy — na sciezce zapisanej i na rzeczywistej — a katalog testowy bedacy dowiazaniem jest odrzucony wprost, bo harness go kasuje. tests/isolation-paths.test.ts dziala na PRAWDZIWYCH dowiazaniach (symlinkSync w katalogu tymczasowym): .e2e-* wskazujace data/, dowiazanie wychodzace poza repozytorium, katalog pod dowiazanym rodzicem, rename pod dowiazanym podkatalogiem magazynu plikow; loadConfig odmawia, zanim utworzy files/ i workspaces/ w celu dowiazania. Kontrole przeciwne: prawdziwy katalog .e2e-*, katalog jeszcze nieistniejacy i magazyn pod dowiazanym rodzicem MUSZA przejsc — guard, ktory odrzuca wszystko, nie jest ostrzejszy, tylko zepsuty. Zgodnosc z druga implementacja (scripts/lib/state-tools.mjs, plain .mjs) asertowana na tych samych wejsciach. Proby zdolnosci wykrycia: guard-izolacji-dowiazanie i guard-izolacji-magazyn.",
+      "gap": "—",
       "scenarios": [
         "T19"
       ]
     },
     "L1.12": {
-      "status": "czesciowe",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "docs/evidence/template-update-2026-09-17/przebieg-d142b85/01-srodowisko.txt (czysta kopia d142b85, 2026-09-17): system, Node 24.19.0, pnpm 9.15.9, zewnętrzne CLI claude, pełny hash commita, sha256 pnpm-lock.yaml; start-czysta-kopia.txt: wersje z /api/status (node, hono, drizzle, @mastra/core, @mastra/claude, claude-agent-sdk 0.3.270, zod). Wcześniejszy przebieg: docs/evidence/template-consolidation/przebieg-2-7d6bd78/. Nie obejmuje: rozwiązanych wersji React, TypeScript i OpenUI przy dowodzie; wersji CLI wbudowanej w SDK; pliki pomiarów zapisywane przez testy mają tylko znacznik czasu.",
-      "gap": "Dowody generowane przez testy nie niosą commita ani wersji, a zapis wersji przy regresji nie obejmuje wszystkich rozwiązanych pakietów ani wersji CLI wbudowanej w SDK (może różnić się od globalnego claude). Wyniku testu nie da się więc samodzielnie powiązać z użytym runtime.",
-      "backlog": "BL-12",
+      "proof": "tests/support/measurement-evidence.ts sklada koperte dowodowa dla kazdego zapisu: commit i stan drzewa (trzy stany, null znaczy „nie wiadomo”), system i architektura, Node, pnpm, rozwiazane wersje 14 sledzonych pakietow (czytane z zainstalowanych manifestow, nie z zakresow), wersja pakietu SDK, wersja CLI WBUDOWANEJ w SDK razem z jej commitem i data budowy (manifest.json pakietu SDK) oraz wersja CLI claude z PATH i model instancji. tests/evidence-provenance.test.ts sprawdza, ze te trzy wersje sa rozne wielkosci: CLI w SDK 2.1.270 wobec pakietu SDK 0.3.270 i wobec CLI na PATH — asercja wprost wymaga, zeby wersja CLI w SDK nie byla rowna wersji pakietu. Rodzaj wykonania jest polem WYMAGANYM przez typ, wiec nowego dowodu nie da sie zapisac bez niego; e2e/support/model-turns.ts (dowody prob modelowych) niesie te sama koperte. Koperta nie zawiera sciezek lokalnych ani nazwy uzytkownika — to tez jest asercja. Nie obejmuje: 44 dowodow zapisanych przed ta koperta; ich pochodzenie jest w docs/evidence/POCHODZENIE.json (zob. L12.10).",
+      "gap": "—",
       "scenarios": [
         "T01"
       ]
@@ -2299,12 +2294,11 @@
       }
     },
     "L12.5": {
-      "status": "czesciowe",
-      "evidence": "model",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "Testy Playwright w e2e: dynamiczny UI (app.spec.ts canvas i karty, ui-navigation.spec.ts), rozmowy (chat.spec.ts, chat-drawer.spec.ts, session-restore.spec.ts), narzędzia (tool-activity.spec.ts: wywołanie, wynik, błąd, restart backendu), wznowienie (session-restore.spec.ts, background-tasks.spec.ts), ścieżka z prawdziwym modelem (agent-ui.spec.ts, files-agent.spec.ts). Każdy plik używa e2e/support/fixtures.ts z izolacją instancji.",
-      "gap": "Artefakty nie są pokryte: e2e/chat-layout.spec.ts „artefakty sa osobna zakladka panelu” sprawdza tylko przełączenie zakładki, e2e/chat.spec.ts „usuniecie rozmowy odlacza artefakty zamiast je kasowac” używa wyłącznie API; żaden test nie otwiera artefaktu, jego podglądu, pełnego widoku ani stanu live w przeglądarce.",
-      "backlog": "BL-12",
+      "proof": "Testy Playwright pokrywaja piec obszarow kryterium: dynamiczny UI (e2e/app.spec.ts, e2e/ui-navigation.spec.ts, e2e/bl10-shell-canvas.spec.ts), rozmowy (e2e/chat.spec.ts, e2e/chat-drawer.spec.ts, e2e/chat-history.spec.ts), narzedzia (e2e/tool-activity.spec.ts: wywolanie, wynik, blad, restart backendu), ARTEFAKTY (e2e/artifact-views.spec.ts: podglad w wiadomosci i pelny widok pokazuja te sama wersje i ten sam stan zrodla, live odswieza sie po zmianie zrodla z interfejsu, a po restarcie backendu snapshot jest nadal zamrozony; e2e/artifact-renderers.spec.ts: trzy typy artefaktu trafiaja do trzech roznych rendererow) i wznowienie (e2e/session-restore.spec.ts, e2e/background-tasks.spec.ts, e2e/reconnect-live.spec.ts). Sciezka z prawdziwym modelem pozostaje w e2e/agent-ui.spec.ts i e2e/files-agent.spec.ts, poza domyslnym przebiegiem. Kazdy plik uzywa e2e/support/fixtures.ts, wiec przed pierwszym testem potwierdza etykiete instancji.",
+      "gap": "—",
       "scenarios": [
         "T05",
         "T19"
@@ -2330,12 +2324,11 @@
       }
     },
     "L12.7": {
-      "status": "czesciowe",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "docs/CONSOLIDATION-REPORT.md: wersje i środowisko przebiegów, dowody z odnośnikami, nieudane przebiegi (§5.1, §5.3), różnice kodu (§3), braki rozdzielone na implementację, brak próby, dostęp i decyzje (§6); docs/ACCEPTANCE.md i docs/BACKLOG.md generowane przez scripts/acceptance-matrix.mjs; docs/NEW-APPLICATION.md §7 (pułapki i własne obejścia: most hooków SDK, platformAdapter.ts, portal kompozytora); docs/observability.md (wersje Mastry i SDK).",
-      "gap": "Brak aktualnego, pełnego rejestru własnych adapterów szablonu z opisem zakresu i próby zgodności (pełny rejestr jest tylko w archiwalnym FEEDBACK §6 i nie obejmuje nowszych adapterów, np. ConversationSync, ComposerAttachments, useComposerStop, runStreams); wersje wszystkich kluczowych zależności nie są zebrane w jednym opisie odbioru.",
-      "backlog": "BL-12",
+      "proof": "docs/ADAPTERY.md — aktualny, pelny rejestr wlasnych adapterow szablonu: 17 wpisow (12 interfejsu, 5 backendu), kazdy z rodzajem (biblioteka/konfiguracja/adapter), opisem czego brakowalo, co dopisano, plikami, PROBA ZGODNOSCI wskazujaca konkretny test, ograniczeniem i informacja o ponownym uzyciu; obejmuje adaptery powstale po archiwalnym FEEDBACK §6 (ConversationSync, ComposerAttachments, useComposerStop, runStreams, ArtifactPane, AssistantMessage). W tym samym pliku jest tabela wersji wszystkich kluczowych zaleznosci — jeden opis odbioru zamiast szukania po manifestach. tests/adapters-register.test.ts trzyma to w ryzach: kazdy wymieniony plik i kazda proba zgodnosci musza istniec, KAZDY plik w packages/platform-ui/src/chat/ musi byc w rejestrze (nowy adapter nie wejdzie po cichu), a tabela wersji musi zgadzac sie co do znaku z manifestami. Nieudane proby, wersje przebiegow i braki pozostaja w docs/CONSOLIDATION-REPORT.md i w macierzy.",
+      "gap": "—",
       "scenarios": [],
       "historical": {
         "status": "potwierdzone",
@@ -2366,10 +2359,10 @@
     },
     "L12.10": {
       "status": "czesciowe",
-      "evidence": "kod",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "scripts/acceptance-matrix.mjs rozdziela rodzaj dowodu i pochodzenie (szablon lub historyczne), odrzuca „potwierdzone” bez dowodu z szablonu i pokazuje ocenę historyczną osobno; meta.codeState podaje jeden stan kodu dla całej macierzy. e2e/support/isolation.ts i tests/isolation.test.ts identyfikują instancję testową przed mutacją.",
-      "gap": "Poszczególne dowody nie wskazują wersji kodu ani środowiska: pliki wynikowe e2e (20-pomiary.json, 21-strumien.json, 22-strumien-model.json) nie zapisują commitu, wersji SDK ani modelu i trafiają do katalogu o historycznej nazwie docs/evidence/closure-2026-09-15, przez co wynik z szablonu wygląda jak dowód z AgenticApp.",
+      "proof": "Kazdy dowod zapisywany przez regresje niesie koperte: commit i stan drzewa, srodowisko (system, Node, pnpm, rozwiazane wersje pakietow, CLI w SDK i CLI na PATH, model) oraz RODZAJ WYKONANIA wymagany przez typ (tests/support/measurement-evidence.ts, e2e/support/model-turns.ts). tests/evidence-provenance.test.ts skanuje wszystkie *.json w docs/evidence: plik przechodzi, gdy niesie wersje kodu ORAZ rodzaj wykonania, albo gdy ma wpis w docs/evidence/POCHODZENIE.json z commitem, w ktorym wszedl do repozytorium, wytworca i rodzajem wykonania. Rejestr jest zamkniety w obie strony: wpis wskazujacy nieistniejacy plik i wpis dla pliku, ktory juz niesie koperte, sa bledem — wiec lista moze tylko malec. Dawny wynik nie zalicza kryterium: scripts/acceptance-matrix.mjs nadal rozdziela ocene z szablonu od historycznej i odrzuca „potwierdzone” bez dowodu z szablonu.",
+      "gap": "44 dowody zapisane przed koperta (docs/evidence/POCHODZENIE.json) maja commit, wytworce i rodzaj wykonania w rejestrze, ale nie maja zapisu SRODOWISKA przebiegu i nie da sie go odtworzyc — pole czegoBrakujeWPliku mowi to wprost przy kazdym z nich. Dopisanie im srodowiska byloby zmysleniem, a regeneracja nalezy do pakietow, ktore te dowody wytworzyly.",
       "backlog": "BL-12",
       "scenarios": [
         "T19"
@@ -2386,12 +2379,11 @@
       ]
     },
     "L12.12": {
-      "status": "czesciowe",
-      "evidence": "gui",
+      "status": "potwierdzone",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "Wbudowane kontrole negatywne wykonywane w regresji: e2e/streaming.spec.ts (odpowiedź naraz, narzędzie bez tekstu), tests/stream-verdict.test.ts, tests/agui-stream.test.ts „dwukrotne zastosowanie tego samego zdarzenia podwaja tekst — dlatego jeden konsument”, tests/access-context.test.ts „odpowiedz, ktora mimo wszystko dobiegnie, jest odrzucana po epoce” (fetch ignorujący abort), tests/migration.test.ts „powtorne uruchomienie nie dubluje danych”, tests/live-artifacts.test.ts (asercja, że zmiana źródła zmieniła wynik), tests/observability.test.ts (surowy eksporter wyłącza obserwowalność), e2e/agent-ui.spec.ts (usunięcie zastanej karty przed testem). Cofnięcia napraw (raport §5 „Kontrola siły testów”) wykonano w AgenticApp; kontrole negatywne check-boundaries opisane w FEEDBACK.md T1 wykonano ręcznie na kopii.",
-      "gap": "Kontrolowane wadliwe warianty krytycznych napraw (szuflada D-1, projekcja D-2, zakleszczenie N-3, mapowanie abort na cancel w zadaniach w tle, detektor strumienia, guard izolacji) nie są powtarzalne w szablonie; brak skryptu lub testu wykazującego, że testy tych napraw oblewają na wadliwym wariancie, a części napraw nie chroni wbudowana próba negatywna.",
-      "backlog": "BL-12",
+      "proof": "docs/acceptance/detection-trials.json i scripts/detection-trials.mjs: 11 kontrolowanych wariantow wadliwych, kazdy wskazuje naprawe, linie do zepsucia i test, ktory ma wtedy oblac. Harness wymaga czystego drzewa (commit najpierw), robi PRZEBIEG WZORCOWY na czystym kodzie (test musi przejsc i musi uruchomic co najmniej jeden test), potem mutuje, uruchamia test ponownie, przywraca plik bajt w bajt w finally i na sygnalach, a na koniec sprawdza czystosc drzewa. Test, ktory mimo wadliwego wariantu PRZECHODZI, jest raportowany jako NIEWYKRYTE i konczy przebieg kodem 1. Objete naprawy: szuflada D-1, projekcja D-2, szeregowanie rozmowy N-3, mapowanie abort na cancel w zadaniach w tle, detektor strumienia, guardy izolacji (dowiazanie, magazyn, osierocony serwer), cel proby odbiorowej i koperta dowodowa. tests/detection-trials.test.ts jest proba na samym bezpieczniku: na prawdziwym repozytorium tymczasowym sprawdza, ze harness potrafi zglosic znalezisko, ze przebieg bez ani jednego uruchomionego testu to BLAD-PROBY a nie zaliczenie, ze niepasujacy albo dwukrotnie pasujacy wzorzec jest bledem i ze plik wraca po wyjatku. Wyniki: docs/evidence/z13-bl12/proby-wykrycia.json.",
+      "gap": "—",
       "scenarios": [
         "T05",
         "T19",
@@ -2417,12 +2409,11 @@
       "scenarios": []
     },
     "L12.15": {
-      "status": "czesciowe",
-      "evidence": "kod",
+      "status": "potwierdzone",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "AGENTS.md: niespełnione wymaganie nie staje się spełnione przez przeniesienie do ograniczeń; scripts/acceptance-matrix.mjs wymaga dla każdego otwartego kryterium opisu braku i pakietu backlogu, więc ograniczenie nie zamyka kryterium. Ograniczenia opisane w README („Najważniejsze ograniczenia”), docs/NEW-APPLICATION.md §7, docs/observability.md, docs/odzyskiwanie-stanu.md (znane ograniczenie próby migracji).",
-      "gap": "Część opisów nie odpowiada wykonanym dowodom: README deklaruje, że zamknięcie panelu nie anuluje pracy i że załączniki JPEG, CSV i tekst działają w polu wiadomości, a ekran Ustawień (SettingsPage.tsx) twierdzi, że sandbox odcina sieć i katalog danych — bez próby w szablonie; rejestr własnych adapterów istnieje tylko w archiwum.",
-      "backlog": "BL-12",
+      "proof": "docs/ADAPTERY.md ma tabele deklaracji widocznych dla uzytkownika: kazde zdanie, ktore README albo ekran mowi o dzialaniu, ma wskazany dowod i STAN. tests/adapters-register.test.ts sprawdza, ze kazda deklaracja wskazuje istniejacy plik dowodu i nazywa swoj stan, oraz pilnuje dwoch konkretnych zdan z opisu braku: wiersz o odcieciu sieci musi byc oznaczony jako „tylko konfiguracja” z odniesieniem do L11.3, a ekran Ustawien musi mowic o konfiguracji sandboxa, nie o skutku. Poprawione opisy: SettingsPage.tsx nie twierdzi juz, ze siec jest odcieta, tylko ze jest tak skonfigurowana i ze skutecznosc nie ma jeszcze proby z uruchomienia; README nie obiecuje „zamkniecia panelu” (powloka renderuje ChatPanel bezwarunkowo — takiej akcji nie ma) i nie wymienia juz jako brakow trzech rzeczy, ktore powstaly w BL-01/BL-02 (opis ekranu, wskazanie wartosci pola, przestrzen Widokow agenta, sortowanie rozmowa). Zalaczniki JPEG, CSV i tekst maja dowod (e2e/sandbox-files.spec.ts). AGENTS.md i scripts/acceptance-matrix.mjs nadal nie pozwalaja zaliczyc kryterium przez przeniesienie go do ograniczen: kazde otwarte kryterium musi miec opis braku i pakiet backlogu.",
+      "gap": "—",
       "scenarios": []
     },
     "L12.16": {
@@ -2447,138 +2438,388 @@
   "scenarios": {
     "T01": {
       "status": "czesciowe",
-      "proof": "czyste kopie 7d6bd78 i d142b85: install z lockfile, pnpm verify (build), pnpm start — frontend serwowany przez backend, dane startowe (template-consolidation/przebieg-2-7d6bd78/, template-update-2026-09-17/przebieg-d142b85/). Błędna konfiguracja instancji testowej daje czytelny błąd przed operacją (tests/isolation.test.ts).",
-      "gap": "Brak zbudowanego pakietu przy pnpm test:e2e kończy się surowym ERR_MODULE_NOT_FOUND zamiast czytelnego komunikatu; brak logowania Claude i brak przeglądarek Playwright nie mają próby negatywnej."
+      "proof": "czyste kopie 7d6bd78 i d142b85: install z lockfile, pnpm verify (build), pnpm start — frontend serwowany przez backend, dane startowe (template-consolidation/przebieg-2-7d6bd78/, template-update-2026-09-17/przebieg-d142b85/). Błędna konfiguracja instancji testowej daje czytelny błąd przed operacją (tests/isolation.test.ts). Wersje: tests/versions.test.ts sprawdza w regresji, że zapisane sprawdzenie w rejestrze npm opisuje TEN lockfile (sha256), nie jest starsze niż 180 dni i że przypięte React, React-DOM i TypeScript są równe zapisanej najnowszej stabilnej; ten sam test liczy peer-zależności w lockfile. Każdy dowód pisany przez regresję niesie commit, środowisko, rozwiązane wersje pakietów i wersję CLI wbudowanej w SDK (tests/evidence-provenance.test.ts).",
+      "gap": "Brak zbudowanego pakietu przy pnpm test:e2e kończy się surowym ERR_MODULE_NOT_FOUND zamiast czytelnego komunikatu; brak logowania Claude i brak przeglądarek Playwright nie mają próby negatywnej.",
+      "evidence": [
+        "przebieg",
+        "test"
+      ],
+      "pliki": [
+        "docs/evidence/template-update-2026-09-17/przebieg-d142b85",
+        "docs/evidence/template-consolidation/przebieg-2-7d6bd78",
+        "tests/isolation.test.ts",
+        "tests/versions.test.ts"
+      ]
     },
     "T02": {
       "status": "czesciowe",
       "proof": "e2e/chat-drawer.spec.ts przy 1680 px i 1120 px: szuflada otwarta i zamknieta, kompozytor dostepny, canvas klikalny; e2e/chat-layout.spec.ts: geometria watku i przynaleznosc kontrolek; e2e/bl10-shell-canvas.spec.ts na dwoch faktycznie roznych ukladach gotowego czatu (panel 560 px — uklad mobilny biblioteki; panel pelnej szerokosci >768 px — uklad wbudowany): otwarcie i zamkniecie mysza oraz z klawiatury, klikniecie wiersza bez force przy otwartej szufladzie i test trafienia w punkt (elementFromPoint), ktory odrzuca przechwycony klik.",
-      "gap": "Klikalnosc canvasu przy zamknietej szufladzie jest sprawdzona tylko na panelu 560 px; na panelu pelnej szerokosci sprawdzono, ze szuflada nie oddaje swoich klikniec, ale nie ze canvas pod nia pozostaje interaktywny."
+      "gap": "Klikalnosc canvasu przy zamknietej szufladzie jest sprawdzona tylko na panelu 560 px; na panelu pelnej szerokosci sprawdzono, ze szuflada nie oddaje swoich klikniec, ale nie ze canvas pod nia pozostaje interaktywny.",
+      "evidence": [
+        "gui"
+      ],
+      "pliki": [
+        "e2e/chat-drawer.spec.ts",
+        "e2e/chat-layout.spec.ts",
+        "e2e/bl10-shell-canvas.spec.ts"
+      ]
     },
     "T03": {
       "status": "czesciowe",
       "proof": "e2e/session-restore.spec.ts: reload bez klikania listy, kontynuacja sesji, Wstecz/Dalej, przestrzen wraca z rozmowa, usunieta i cudza rozmowa (serwer skryptowany); e2e/bl10-session-context.spec.ts: przejscie przez link zachowuje c i s, Wstecz i Dalej przywracaja przestrzen razem z rozmowa, opozniona o 2,5 s odpowiedz poprzedniego wyboru nie cofa nowszego, a nieudane wczytanie historii ma wlasny stan zastepczy z ponowieniem.",
-      "gap": "Kontynuacja sesji potwierdzona na scenariuszu skryptowanym, nie na prawdziwym modelu."
+      "gap": "Kontynuacja sesji potwierdzona na scenariuszu skryptowanym, nie na prawdziwym modelu.",
+      "evidence": [
+        "gui",
+        "symulacja"
+      ],
+      "pliki": [
+        "e2e/session-restore.spec.ts",
+        "e2e/bl10-session-context.spec.ts",
+        "tests/session-restore.test.ts"
+      ]
     },
     "T04": {
       "status": "czesciowe",
       "proof": "pierwsza odpowiedz po nadaniu ID pozostaje widoczna (L4.10); proza i wynik narzedzia w czacie (e2e/tool-activity.spec.ts, e2e/agent-ui.spec.ts); e2e/bl10-composition.spec.ts: proza, poprawny OpenUI i wynik narzedzia obok siebie w jednej wiadomosci, sama proza, opis czesciowy i opis nazywajacy nieznany komponent — kazdy z wlasnym, widocznym rezultatem. Odpowiedz bez tekstu ma dowod poza strumieniowaniem: e2e/run-events.spec.ts „tura bez tekstu konczy sie sukcesem i nie udaje odpowiedzi” (faza dokladnie succeeded, brak banki odpowiedzi, dokladnie jedno RUN_FINISHED).",
-      "gap": "Tekst wypowiedziany PRZED wywolaniem narzedzia nie trafia do banki odpowiedzi: gotowy czat (@openuidev/react-ui 0.13.10) uznaje za odpowiedz wylacznie ostatni segment tury, a wczesniejsze wklada jako kroki osi „Behind the scenes”. Zmierzone, nie domniemane: w trakcie tury proza jest w panelu widoczna (i to podwojnie — razem z paskiem podgladu), po zakonczeniu tury os jest zwinieta i jej kroki nie istnieja w DOM, ale sa o jedno klikniecie i sa w historii. Przypiete dwukierunkowo: e2e/chat-history.spec.ts (po turze) i e2e/run-events.spec.ts „proza w turze z narzedziem…” (w trakcie). Zapisane jako jawnie niespelnione wymaganie przy L5.15 (BL-08 zamkniety) i opisane w docs/NEW-APPLICATION.md §7."
+      "gap": "Tekst wypowiedziany PRZED wywolaniem narzedzia nie trafia do banki odpowiedzi: gotowy czat (@openuidev/react-ui 0.13.10) uznaje za odpowiedz wylacznie ostatni segment tury, a wczesniejsze wklada jako kroki osi „Behind the scenes”. Zmierzone, nie domniemane: w trakcie tury proza jest w panelu widoczna (i to podwojnie — razem z paskiem podgladu), po zakonczeniu tury os jest zwinieta i jej kroki nie istnieja w DOM, ale sa o jedno klikniecie i sa w historii. Przypiete dwukierunkowo: e2e/chat-history.spec.ts (po turze) i e2e/run-events.spec.ts „proza w turze z narzedziem…” (w trakcie). Zapisane jako jawnie niespelnione wymaganie przy L5.15 (BL-08 zamkniety) i opisane w docs/NEW-APPLICATION.md §7.",
+      "evidence": [
+        "gui",
+        "model"
+      ],
+      "pliki": [
+        "e2e/bl10-composition.spec.ts",
+        "e2e/tool-activity.spec.ts",
+        "e2e/run-events.spec.ts",
+        "e2e/chat-history.spec.ts",
+        "e2e/agent-ui.spec.ts"
+      ]
     },
     "T05": {
       "status": "potwierdzone",
       "proof": "e2e/streaming.spec.ts: obserwacja wewnątrz strony, co najmniej dwa stany przed końcem wykonania; kontrole negatywne: cała odpowiedź na końcu i echo/podpowiedzi nie zaliczają; e2e/agent-ui.spec.ts na prawdziwym modelu (77 różnych długości przed końcem, pomiary-e2e/22-strumien-model.json); tests/stream-verdict.test.ts.",
-      "gap": "—"
+      "gap": "—",
+      "evidence": [
+        "gui",
+        "model",
+        "test"
+      ],
+      "pliki": [
+        "e2e/streaming.spec.ts",
+        "tests/stream-verdict.test.ts",
+        "e2e/agent-ui.spec.ts",
+        "docs/evidence/template-update-2026-09-17/przebieg-d142b85/pomiary-e2e/22-strumien-model.json"
+      ]
     },
     "T06": {
       "status": "czesciowe",
       "proof": "e2e/tool-activity.spec.ts: wywołanie, wynik i odpowiedź widoczne podczas pracy, po reload, przełączeniu rozmowy i restarcie backendu; błąd narzędzia jako błąd; tests/projection.test.ts.",
-      "gap": "Argumenty narzędzi nie są sprawdzane w przeglądarce; widoczność nie jest powiązana z fazą running; brak próby błędnego toolCallId w GUI; reconnect trwającego wykonania odtwarza zdarzenia od początku (L5.6)."
+      "gap": "Argumenty narzędzi nie są sprawdzane w przeglądarce; widoczność nie jest powiązana z fazą running; brak próby błędnego toolCallId w GUI; reconnect trwającego wykonania odtwarza zdarzenia od początku (L5.6).",
+      "evidence": [
+        "gui",
+        "test"
+      ],
+      "pliki": [
+        "e2e/tool-activity.spec.ts",
+        "tests/projection.test.ts"
+      ]
     },
     "T07": {
       "status": "czesciowe",
       "proof": "e2e/agent-ui.spec.ts na prawdziwym modelu: agent dodaje kartę powiązaną z wykonaniem, przeżywa reload; walidacja katalogu i rozdzielone wersje geometrii/treści w testach kontraktu.",
-      "gap": "Zmiana, przesunięcie i usunięcie karty przez model nie mają próby w szablonie; karty kind openui z nieznanym komponentem przechodzą walidację (L3.3)."
+      "gap": "Zmiana, przesunięcie i usunięcie karty przez model nie mają próby w szablonie; karty kind openui z nieznanym komponentem przechodzą walidację (L3.3).",
+      "evidence": [
+        "model",
+        "test"
+      ],
+      "pliki": [
+        "e2e/agent-ui.spec.ts",
+        "tests/bl10-card-catalog.test.ts"
+      ]
     },
     "T08": {
       "status": "niespelnione",
       "proof": "get_context istnieje, a rozróżnienie szkicu i zapisu jest opisane w wyniku narzędzia.",
-      "gap": "Narzędzie zwraca kontekst ze startu wykonania — nie ma kanału odczytu nowszego kontekstu podczas pracy (L6.3, L6.9); brak próby szkicu kontra zapis w szablonie (L6.5)."
+      "gap": "Narzędzie zwraca kontekst ze startu wykonania — nie ma kanału odczytu nowszego kontekstu podczas pracy (L6.3, L6.9); brak próby szkicu kontra zapis w szablonie (L6.5).",
+      "evidence": [
+        "kod"
+      ],
+      "pliki": [
+        "packages/platform-server/src/agent/tools/context.ts"
+      ]
     },
     "T09": {
       "status": "czesciowe",
       "proof": "e2e/app.spec.ts i e2e/measurements.spec.ts: odczyt i mutacja przez UI z widocznym wynikiem bez reload; pochodzenie ceny do pliku; tests/contracts.test.ts i tests/domain-comparison.test.ts: reguły, konflikt wersji, dostęp.",
-      "gap": "Ta sama reguła HTTP/MCP nie jest egzekwowana dla wszystkich operacji (L9.2: wagi kryteriów i limit wyszukiwania); przejście po relacjach i selektywny odczyt przez agenta tylko historycznie."
+      "gap": "Ta sama reguła HTTP/MCP nie jest egzekwowana dla wszystkich operacji (L9.2: wagi kryteriów i limit wyszukiwania); przejście po relacjach i selektywny odczyt przez agenta tylko historycznie.",
+      "evidence": [
+        "gui",
+        "test"
+      ],
+      "pliki": [
+        "e2e/app.spec.ts",
+        "e2e/measurements.spec.ts",
+        "tests/contracts.test.ts",
+        "tests/domain-comparison.test.ts"
+      ]
     },
     "T10": {
       "status": "czesciowe",
       "proof": "tests/orchestration.test.ts (symulacja, jeden AgentRuntime): dwa polecenia w jednej rozmowie — rozlaczne okna, pomiar od startu wykonania, wznowienie wlasciwej sesji, brak przecieku kontekstu narzedzi; dwie rozmowy i dwoch wlascicieli naraz; zgoda zwiazana z uruchomieniem z adresu; blad i Stop zwalniaja kolejke, a polecenie zatrzymane w kolejce nie rusza wcale. tests/domain-guarantees.test.ts: osiem jednoczesnych ponowien daje jeden skutek, ten sam klucz z inna trescia to conflict, nieudana operacja zwalnia klucz, operacja przerwana restartem nie jest powtarzana po cichu. Proby zdolnosci wykrycia: docs/evidence/z6-bl11b/proby-wykrycia.txt.",
-      "gap": "operationId pozostaje opcjonalny w narzedziach kart canvasu, widokow agenta i publikacji wersji pliku, wiec powtorzenie bez klucza nadal dubluje skutek (L9.7)."
+      "gap": "operationId pozostaje opcjonalny w narzedziach kart canvasu, widokow agenta i publikacji wersji pliku, wiec powtorzenie bez klucza nadal dubluje skutek (L9.7).",
+      "evidence": [
+        "symulacja"
+      ],
+      "pliki": [
+        "tests/orchestration.test.ts",
+        "tests/domain-guarantees.test.ts",
+        "docs/evidence/z6-bl11b/proby-wykrycia.txt"
+      ]
     },
     "T11": {
       "status": "potwierdzone",
       "proof": "tests/domain-guarantees.test.ts — piec wymuszonych awarii miedzy krokami: mutacja domenowa (updateItemChecked + touchOffer), wagi kryteriow, publikacja pliku jako artefaktu (z kompensacja i kontrola, ze ta sama publikacja bez przeszkody dziala), rozmowa z pierwsza wiadomoscia, karta canvasu z dotknieciem przestrzeni. Klucz idempotencji jest rezerwowany przed mutacja, a wpis po przerwanym procesie staje sie interrupted i blokuje ciche powtorzenie. tests/durability.test.ts zachowany dla artifacts.create. Proby zdolnosci wykrycia: docs/evidence/z6-bl11b/proby-wykrycia.txt (P12, P13, P15, P16).",
-      "gap": "—"
+      "gap": "—",
+      "evidence": [
+        "test"
+      ],
+      "pliki": [
+        "tests/domain-guarantees.test.ts",
+        "tests/durability.test.ts",
+        "docs/evidence/z6-bl11b/proby-wykrycia.txt"
+      ]
     },
     "T12": {
       "status": "czesciowe",
       "proof": "e2e/access-context.spec.ts: po przełączeniu tożsamości brak wierszy poprzedniej, powrót przywraca dane; tests/access-context.test.ts; e2e/session-restore.spec.ts: cudza rozmowa niedostępna.",
-      "gap": "Próba przeładowuje stronę, więc nie sprawdza czyszczenia w tej samej instancji klienta; opóźnione strumienie i kontekst poprzedniego właściciela nie są odcinane (L6.12, L10.11)."
+      "gap": "Próba przeładowuje stronę, więc nie sprawdza czyszczenia w tej samej instancji klienta; opóźnione strumienie i kontekst poprzedniego właściciela nie są odcinane (L6.12, L10.11).",
+      "evidence": [
+        "gui",
+        "test"
+      ],
+      "pliki": [
+        "e2e/access-context.spec.ts",
+        "e2e/session-restore.spec.ts",
+        "tests/access-context.test.ts"
+      ]
     },
     "T13": {
-      "status": "czesciowe",
-      "proof": "tests/live-artifacts.test.ts: snapshot zachowuje treść, live odczytuje aktualne dane po mutacji, deskryptor bez kodu, kontrola dostępu.",
-      "gap": "Żaden test przeglądarkowy nie otwiera artefaktu; podgląd i pełny widok oraz stan po restarcie w UI nie są sprawdzone; edycja w UI nie unieważnia otwartego artefaktu live (L10.14, L10.15)."
+      "status": "potwierdzone",
+      "proof": "tests/live-artifacts.test.ts: snapshot zachowuje treść, live odczytuje aktualne dane po mutacji, deskryptor bez kodu, kontrola dostępu. W przeglądarce: e2e/artifact-views.spec.ts (serwer skryptowany) otwiera artefakt w podglądzie wiadomości i w pełnym widoku i porównuje cztery atrybuty — ten sam identyfikator, ta sama wersja, ta sama wersja definicji i ten sam odcisk stanu źródła; zmiana źródła Z INTERFEJSU odświeża otwarty widok live, a snapshot zostaje zamrożony; po restarcie backendu snapshot jest nadal zamrożony, live nadal bieżący, a plik nadal do pobrania. e2e/artifact-renderers.spec.ts: trzy artefakty trzech typów trafiają do trzech różnych rendererów — mapowanie po pozycji, po nazwie narzędzia albo po kolejności oblewa wszystkie trzy naraz.",
+      "gap": "—",
+      "evidence": [
+        "gui",
+        "test"
+      ],
+      "pliki": [
+        "e2e/artifact-views.spec.ts",
+        "e2e/artifact-renderers.spec.ts",
+        "tests/live-artifacts.test.ts"
+      ]
     },
     "T14": {
       "status": "czesciowe",
       "proof": "e2e/files-agent.spec.ts na prawdziwym modelu: wgranie przez GUI, zmiana skoroszytu kodem w sandboxie po zgodzie, wynik jako nowa wersja do pobrania, oryginał identyczny bajt w bajt.",
-      "gap": "Próby niedozwolonego odczytu, zapisu i sieci dla wszystkich klas narzędzi nie są wykonywane w szablonie (L11.3, L11.4, L11.11); publikacja wyniku nie jest atomowa; checksum po sprzątaniu workspace nie jest sprawdzany."
+      "gap": "Próby niedozwolonego odczytu, zapisu i sieci dla wszystkich klas narzędzi nie są wykonywane w szablonie (L11.3, L11.4, L11.11); publikacja wyniku nie jest atomowa; checksum po sprzątaniu workspace nie jest sprawdzany.",
+      "evidence": [
+        "model"
+      ],
+      "pliki": [
+        "e2e/files-agent.spec.ts"
+      ]
     },
     "T15": {
       "status": "czesciowe",
       "proof": "e2e/files-agent.spec.ts na prawdziwym modelu: prośba o zgodę na uruchomienie kodu pojawia się w GUI i zgoda wznawia właściwe wykonanie. e2e/consent-runs.spec.ts (GUI bez modelu, BL-09): odmowa nie wykonuje operacji, zgoda wykonuje ją dokładnie raz, powtórzona odpowiedź nie wykonuje jej drugi raz, odpowiedź z requestId innego uruchomienia nie rozstrzyga niczego, a brak odpowiedzi przy zamkniętym panelu kończy się odmową. tests/consent.test.ts: macierz uprawnień z kategorią zabronioną i te same właściwości w backendzie.",
-      "gap": "Kolejność mechanizmów SDK (allowedTools zatwierdza przed canUseTool) nie ma próby na modelu (L11.12); L5.5 poza pakietem BL-09."
+      "gap": "Kolejność mechanizmów SDK (allowedTools zatwierdza przed canUseTool) nie ma próby na modelu (L11.12); L5.5 poza pakietem BL-09.",
+      "evidence": [
+        "model",
+        "gui",
+        "test"
+      ],
+      "pliki": [
+        "e2e/files-agent.spec.ts",
+        "e2e/consent-runs.spec.ts",
+        "tests/consent.test.ts"
+      ]
     },
     "T16": {
       "status": "czesciowe",
       "proof": "e2e/measurements.spec.ts: Stop z interfejsu mierzony jako trzy momenty (potwierdzenie zadania, faza koncowa w karcie, zakonczenie procesow uruchomienia), bez dalszych mutacji domeny i z dzialajaca kolejka — kolejne polecenie w tej samej rozmowie konczy sie sukcesem; tests/measurements.test.ts (symulacja): te same momenty w backendzie na 3 probkach, z prawdziwym procesem potomnym zwiazanym z sygnalem przerwania; e2e/background-tasks.spec.ts: jawne Stop; tests/run-lifecycle.test.ts: restart oznacza przerwane zadania.",
-      "gap": "Zakonczenie procesu potomnego samego Claude Agent SDK nie jest mierzone (L11.7) — proces w probie jest jego stand-inem na granicy adaptera; brak wykrywania utraty transkryptu SDK — wznowienie po cichu zaczyna nowa sesje (L7.13)."
+      "gap": "Zakonczenie procesu potomnego samego Claude Agent SDK nie jest mierzone (L11.7) — proces w probie jest jego stand-inem na granicy adaptera; brak wykrywania utraty transkryptu SDK — wznowienie po cichu zaczyna nowa sesje (L7.13).",
+      "evidence": [
+        "gui",
+        "symulacja",
+        "test"
+      ],
+      "pliki": [
+        "e2e/measurements.spec.ts",
+        "e2e/stop-children.spec.ts",
+        "e2e/background-tasks.spec.ts",
+        "tests/measurements.test.ts",
+        "tests/run-lifecycle.test.ts"
+      ]
     },
     "T17": {
       "status": "czesciowe",
       "proof": "Dostep do modelu: docs/evidence/z12-bl04/sesja-sdk.json — rzeczywiste wywolanie SDK (zadanie sterujace accountInfo(), bez tury modelu) potwierdza logowanie subskrypcyjne OAuth i pokazuje, ze ten sam klucz API przy wylaczonej polityce bylby widoczny; wersje CLI, SDK i adaptera sa w zapisie i pilnowane przez tests/sdk-session-evidence.test.ts. Diagnostyka sposobu logowania i stanu dostepu: Ustawienia (sekcje Uwierzytelnienie Claude i Sesja SDK) oraz pasek stanu, sprawdzane w e2e/auth-limits.spec.ts. Odmowa uwierzytelnienia jest potwierdzona RZECZYWISTYM przebiegiem przez SDK (docs/evidence/z12-bl04/refresh-refused-*.json, revoked-*.json; 0 tur, logowanie uzytkownika nietkniete). Stand-iny odswiezenia, odmowy, odwolania i limitu ida od granicy adaptera do UI w e2e/auth-limits.spec.ts (13 testow), na instancji z CLAUDE_CONFIG_DIR w katalogu tymczasowym — poswiadczenia uzytkownika nie sa dotykane, co mierzy tests/credential-guard.test.ts. Trzy tury na subskrypcji pozostaja w e2e/agent-ui.spec.ts i e2e/files-agent.spec.ts, poza domyslnym przebiegiem.",
-      "gap": "Brak przebiegu, w ktorym SDK naprawde odswieza przeterminowany token — i nie jest to juz kwestia kosztu, tylko bezpieczenstwa: proba na kopii zostawilaby uzytkownikowi refresh token poprzedniej generacji, a CLI kasuje poswiadczenie na dysku przy odmowie (zaobserwowane dwukrotnie). Brak tez przebiegu z rzeczywiscie wyczerpanym limitem i z rzeczywistym bledem sieci — te podciagi klasyfikatora pozostaja niepotwierdzone (L8.11). Odmowa uwierzytelnienia jest juz potwierdzona rzeczywistym przebiegiem SDK 0.3.270, bez wydania tury (L8.10, polowa)."
+      "gap": "Brak przebiegu, w ktorym SDK naprawde odswieza przeterminowany token — i nie jest to juz kwestia kosztu, tylko bezpieczenstwa: proba na kopii zostawilaby uzytkownikowi refresh token poprzedniej generacji, a CLI kasuje poswiadczenie na dysku przy odmowie (zaobserwowane dwukrotnie). Brak tez przebiegu z rzeczywiscie wyczerpanym limitem i z rzeczywistym bledem sieci — te podciagi klasyfikatora pozostaja niepotwierdzone (L8.11). Odmowa uwierzytelnienia jest juz potwierdzona rzeczywistym przebiegiem SDK 0.3.270, bez wydania tury (L8.10, polowa).",
+      "evidence": [
+        "przebieg",
+        "symulacja",
+        "gui"
+      ],
+      "pliki": [
+        "docs/evidence/z12-bl04/sesja-sdk.json",
+        "docs/evidence/z12-bl04/refresh-refused-2026-09-18T23-52-30-592Z.json",
+        "scripts/probe-refresh-refused.ts",
+        "tests/sdk-session-evidence.test.ts",
+        "e2e/auth-limits.spec.ts",
+        "tests/credential-guard.test.ts"
+      ]
     },
     "T18": {
       "status": "potwierdzone",
       "proof": "tests/backup-migration.test.ts (24 testy, dane syntetyczne w .e2e-bl07/): kopia z zapisem leżącym wyłącznie w WAL, weryfikacja i ponowny odczyt, próba migracji na kopii sprzed każdej migracji platformy, drugie i trzecie uruchomienie bez skutku, odtworzenie z odłożeniem stanu sprzed próby i startem aplikacji. Kontrole: uszkodzony plik, zmieniona baza, niespójny manifest, brakujący plik, kopia nowsza niż build; źródło bajt w bajt nietknięte.",
-      "gap": "—"
+      "gap": "—",
+      "evidence": [
+        "test"
+      ],
+      "pliki": [
+        "tests/backup-migration.test.ts"
+      ]
     },
     "T19": {
-      "status": "czesciowe",
-      "proof": "e2e/support/isolation.ts i tests/isolation.test.ts: port, katalog i etykieta instancji walidowane przed operacją; regresja w czystej kopii nie dotknęła instancji ani danych użytkownika (izolacja-agenticapp.txt).",
-      "gap": "Ścieżki porównywane tekstowo bez realpath — dowiązanie .e2e* do data/ przeszłoby kontrole (L1.11); pozostawiony serwer skryptowany z tą samą etykietą zostałby zaakceptowany (L1.9); pnpm acceptance i run-agent domyślnie kierują zapisy na 127.0.0.1:8791 (L1.8)."
+      "status": "potwierdzone",
+      "proof": "Konfiguracja: e2e/support/isolation.ts i tests/isolation.test.ts — port, katalog i etykieta instancji walidowane przed operacją; regresja w czystej kopii nie dotknęła instancji ani danych użytkownika (izolacja-agenticapp.txt). Dowiązania (L1.11): packages/platform-server/src/util/real-path.ts jest jedyną implementacją rozwiązywania dowiązań i używają jej wszystkie trzy warstwy kontroli; tests/isolation-paths.test.ts odrzuca .e2e-* będące dowiązaniem do data/, katalog pod dowiązanym rodzicem i rename pod dowiązanym podkatalogiem magazynu, na prawdziwych dowiązaniach, z kontrolami przeciwnymi. Osierocony serwer (L1.9): e2e/support/port-probe.ts odmawia przygotowania bazy, gdy port jest zajęty — przed rmSync, bez zabijania procesu — a APP_INSTANCE_RUN_ID odróżnia instancję tego przebiegu od instancji poprzedniego (tests/isolation-orphan.test.ts). Próby odbiorowe (L1.8): scripts/lib/acceptance-target.mjs kieruje pnpm acceptance i run-agent.mjs domyślnie na 8790 i pyta /api/health o etykietę przed pierwszym żądaniem; tests/acceptance-target.test.ts liczy, że do instancji bez etykiety dotarł wyłącznie GET /api/health i żaden POST, z kontrolą przeciwną. Wszystkie cztery guardy mają kontrolowany wariant wadliwy w docs/acceptance/detection-trials.json.",
+      "gap": "Pozostaje L12.10: 44 dowody zapisane przed kopertą dowodową mają pochodzenie w docs/evidence/POCHODZENIE.json, ale nie mają zapisu środowiska przebiegu.",
+      "evidence": [
+        "test",
+        "przebieg"
+      ],
+      "pliki": [
+        "tests/isolation.test.ts",
+        "tests/isolation-paths.test.ts",
+        "tests/isolation-orphan.test.ts",
+        "tests/acceptance-target.test.ts",
+        "e2e/support/isolation.ts",
+        "e2e/support/port-probe.ts",
+        "scripts/lib/acceptance-target.mjs",
+        "docs/evidence/template-consolidation/przebieg-2-7d6bd78"
+      ]
     },
     "T20": {
       "status": "potwierdzone",
       "proof": "pnpm check:boundaries (deklaracje, importy, słownik, konfiguracja, nazwy tabel modułów, zakaz zależności modułu od routera; z próbami zdolności wykrycia), tests/platform-boundary.test.ts i tests/module-contract.test.ts (platforma bez modułu i z modułem kontrolnym, wszystkie kontrakty rejestracji), pnpm check:module-swap (wymiana w dwóch plikach warstwy składania, platforma i moduł przykładowy bez zmian, typecheck, build, regresja jednostkowa na kopii jako test dymny podmiany — 552 testy, które budują platformę same i nie przechodzą przez warstwę składania, więc nie dowodzą uruchomienia regresji NA module kontrolnym; start, karta i ekrany modułu kontrolnego w przeglądarce; kontrole negatywne — słownik, etykiety, tabele i zakresy canvasu — wyprowadzone z manifestów i migracji modułów, których kopia nie składa), pnpm typecheck:modules (moduł kompiluje się bez aplikacji). Powłoka platformy nie ma już własnych rzeczowników domenowych: nagłówki sekcji nawigacji pochodzą z UiModule.menuSections, a stany puste mówią o rekordzie, nie o sprawie.",
-      "gap": "—"
+      "gap": "—",
+      "evidence": [
+        "przebieg",
+        "test"
+      ],
+      "pliki": [
+        "scripts/check-module-swap.mjs",
+        "scripts/check-boundaries.mjs",
+        "tests/platform-boundary.test.ts",
+        "tests/module-contract.test.ts",
+        "docs/evidence/z3-bl05/check-module-swap.json"
+      ]
     },
     "T21": {
       "status": "czesciowe",
       "proof": "agent_runs i run_events wiaza rozmowe, wykonanie i zdarzenia; aplikacja dziala bez eksportera (tests/observability.test.ts); tests/diagnostics.test.ts przechodzi lancuch rozmowa → wykonanie → narzedzie → mutacja → artefakt w obie strony i rozdziela klasy bledow (model_failed, integration_failed, sandbox_denied, rate_limited, domain_rule_violated) w zapisanych danych; tests/measurements.test.ts i e2e/measurements.spec.ts zbieraja pomiary z warunkami i wersja kodu do docs/evidence/z3-bl05/, w tym kolejnosc narzedzie–tekst i przebieg bez tekstu (brak metryki, nie zero); skan sekretow w logach serwera, bazie, zapisanych uruchomieniach i dowodach.",
-      "gap": "Kontrolowane wadliwe warianty krytycznych napraw nie sa powtarzalne w szablonie (L12.12); skan sekretow i pomiary wykonano na stand-inie modelu, nie na przebiegu z prawdziwym modelem (brak grantu tur w tym zadaniu)."
+      "gap": "Skan sekretów i pomiary wykonano na stand-inie modelu, nie na przebiegu z prawdziwym modelem (brak grantu tur w tamtym zadaniu). Kontrolowane wadliwe warianty krytycznych napraw są już powtarzalne w szablonie (scripts/detection-trials.mjs, L12.12).",
+      "evidence": [
+        "symulacja",
+        "test",
+        "gui"
+      ],
+      "pliki": [
+        "tests/observability.test.ts",
+        "tests/diagnostics.test.ts",
+        "tests/measurements.test.ts",
+        "e2e/measurements.spec.ts",
+        "docs/evidence/z3-bl05"
+      ]
     },
     "T22": {
       "status": "czesciowe",
       "proof": "e2e/background-tasks.spec.ts: przełączenie rozmowy i reload nie anulują zadania, powrót pokazuje wynik bez ponownego uruchomienia, Stop wskazanego wykonania; e2e/ui-navigation.spec.ts: zadanie w tle nie przejmuje widoku.",
-      "gap": "Test pracy w B restartuje serwer, więc zadanie A już nie trwa — równoległa praca A/B nie jest wykazana w przeglądarce; reconnect odtwarza zdarzenia od początku, co może powtórzyć nawigację lub prośbę o zgodę (L5.6)."
+      "gap": "Test pracy w B restartuje serwer, więc zadanie A już nie trwa — równoległa praca A/B nie jest wykazana w przeglądarce; reconnect odtwarza zdarzenia od początku, co może powtórzyć nawigację lub prośbę o zgodę (L5.6).",
+      "evidence": [
+        "gui"
+      ],
+      "pliki": [
+        "e2e/background-tasks.spec.ts",
+        "e2e/ui-navigation.spec.ts",
+        "e2e/reconnect-live.spec.ts"
+      ]
     },
     "T23": {
       "status": "czesciowe",
       "proof": "e2e/ui-navigation.spec.ts (serwer skryptowany): widok otwarty, ustawienie podświetlone bez zmiany wartości, Wstecz/Dalej, nieznany cel z odmową, brak przejęcia widoku z tła; potwierdzenie klienta przez /api/runs/:id/ui-ack. Od d142b85: e2e/agent-ui.spec.ts „pytanie o dane przenosi na ich widok…” — prawdziwy model wywołuje ui_navigate i ekran kończy na /data.",
-      "gap": "Polecenie pokazania USTAWIENIA z podświetleniem przez prawdziwy model nie ma próby (scenariusz skryptowany omija handler ui_navigate); ochrona przed ponowieniem polecenia istnieje tylko w pamięci komponentu i nie przeżywa reload (L2.15)."
+      "gap": "Polecenie pokazania USTAWIENIA z podświetleniem przez prawdziwy model nie ma próby (scenariusz skryptowany omija handler ui_navigate); ochrona przed ponowieniem polecenia istnieje tylko w pamięci komponentu i nie przeżywa reload (L2.15).",
+      "evidence": [
+        "symulacja",
+        "model"
+      ],
+      "pliki": [
+        "e2e/ui-navigation.spec.ts",
+        "e2e/agent-ui.spec.ts"
+      ]
     },
     "T24": {
       "status": "czesciowe",
       "proof": "e2e/files-agent.spec.ts na prawdziwym modelu: treść obrazu pod mylącą nazwą, analiza i zmiana wieloarkuszowego XLSX w sandboxie, oryginał bez zmian, wynik dostępny po powrocie. e2e/sandbox-files.spec.ts (GUI bez modelu, BL-09): pięć formatów załącznika odczytanych z treści, odrzucenie nieobsługiwanego formatu w polu załącznika, odczyt wszystkich arkuszy i typów komórek, typy zachowane w pliku wynikowym, uszkodzony skoroszyt kończy się błędem, wynik jako artefakt z podglądem i pobraniem po zmianie rozmowy i restarcie. tests/file-analysis.test.ts: semantyka zapisu (wykres znika, obrazy i formatowanie zostają, formuła zapisana przez uruchomienie nie niesie wartości).",
-      "gap": "Odczyt treści obrazu przez model sprawdzony tylko dla PNG (L11.21); odpowiedź modelu o formule nie ma próby (L11.23); L8.1, L8.4 i L10.9 poza pakietem BL-09."
+      "gap": "Odczyt treści obrazu przez model sprawdzony tylko dla PNG (L11.21); odpowiedź modelu o formule nie ma próby (L11.23); L8.1, L8.4 i L10.9 poza pakietem BL-09.",
+      "evidence": [
+        "model",
+        "gui",
+        "test"
+      ],
+      "pliki": [
+        "e2e/files-agent.spec.ts",
+        "e2e/sandbox-files.spec.ts",
+        "tests/file-analysis.test.ts"
+      ]
     },
     "T25": {
       "status": "potwierdzone",
       "proof": "Prawdziwy model (docs/evidence/bl01-bl02-2026-09-17/t25-wskazanie-wartosci.json): rekord spoza zawezonego widoku, agent zdjal zawezenie, otworzyl wlasciwy widok i podswietlil komorke z wartoscia rowna POST /api/read; potwierdzenie klienta identyfikuje rekord i pole, opis ekranu dostal nowsza wersje niz w chwili wyslania. Detektor proby (e2e/support/show-value-probe.ts) jest jednoczesnie warunkiem zaliczenia i kontrola negatywna: odpowiedz samym tekstem oblewa (e2e/show-value.spec.ts). Kontrole: bledny rekord, niejednoznacznosc, brak dostepu, pole nierenderowane, nieudany odczyt.",
-      "gap": "—"
+      "gap": "—",
+      "evidence": [
+        "model",
+        "gui"
+      ],
+      "pliki": [
+        "docs/evidence/bl01-bl02-2026-09-17/t25-wskazanie-wartosci.json",
+        "e2e/bl01-bl02-model.spec.ts",
+        "e2e/show-value.spec.ts",
+        "e2e/support/show-value-probe.ts"
+      ]
     },
     "T26": {
       "status": "potwierdzone",
       "proof": "Prawdziwy model, trzy tury jednej rozmowy (docs/evidence/bl01-bl02-2026-09-17/t26-zawezenie-rozmowa.json): zawezenie i sortowanie widoczne w kontrolkach, wierszach, adresie i pasku; kolejne pytanie ocenione po ekranie (rekord wskazany jako pierwszy wiersz zawezonego i przesortowanego widoku, rozny od pierwszego wiersza pelnej listy); usuniecie zawezenia przywrocilo pelny zakres. Dane biznesowe bajt w bajt niezmienione po kazdej turze; pusty wynik zawezenia to stan pusty z liczbami, nie blad.",
-      "gap": "—"
+      "gap": "—",
+      "evidence": [
+        "model"
+      ],
+      "pliki": [
+        "docs/evidence/bl01-bl02-2026-09-17/t26-zawezenie-rozmowa.json",
+        "e2e/bl01-bl02-model.spec.ts"
+      ]
     },
     "T27": {
       "status": "potwierdzone",
       "proof": "Prawdziwy model, szesc krokow jednej rozmowy (docs/evidence/bl01-bl02-2026-09-17/t27-widoki-agenta.json): przestrzen otwarta z nawigacji, zestawienie bez podania nazwy komponentu, dodany wykres (uczciwa odmowa rysowania nad dwiema walutami, zgloszona przez agenta po odczycie ui_state), zmiana zakresu rozmowa (ta sama karta, wykres gotowy, zakres rowny backendowi), mutacja akcja rekordu w karcie modelu bez przeladowania, przeladowanie i przelaczenie rozmowy odtwarzaja kompozycje. Identyfikatory kart pochodza z badanego wykonania (kontrola „zastana karta”), wartosci rowne POST /api/read, przestrzen rozmowy rozna od roboczej przestrzeni uzytkownika. Nieudane przebiegi sprzed poprawek zachowane jako dowody (docs/evidence/bl01-bl02-2026-09-17/t27-proba-a-kod-sprawy-jako-id.json).",
-      "gap": "—"
+      "gap": "—",
+      "evidence": [
+        "model"
+      ],
+      "pliki": [
+        "docs/evidence/bl01-bl02-2026-09-17/t27-widoki-agenta.json",
+        "docs/evidence/bl01-bl02-2026-09-17/t27-proba-a-kod-sprawy-jako-id.json",
+        "e2e/bl01-bl02-model.spec.ts"
+      ]
     }
   },
   "backlog": [

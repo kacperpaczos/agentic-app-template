@@ -120,8 +120,9 @@
       "zamien": "/* wariant wadliwy proby wykrycia: przywrocony defekt D-1 */\n.pf-chat__body .openui-agent-sidebar-container { left: 0 !important; }\n\n.pf-chat__body\n  .openui-agent-container--mobile\n  .openui-agent-sidebar-container:not(.openui-agent-sidebar-container--collapsed)\n  .openui-agent-sidebar-header__toggle-button {",
       "test": "e2e/chat-drawer.spec.ts",
       "nazwaTestu": "zamknieta szuflada nie zaslania rozmowy",
-      "wRegresji": false,
-      "powodPominiecia": "proba przegladarkowa: wymaga pnpm build i blokady wspoldzielonej (.e2e.lock), wiec uruchamiana swiadomie poleceniem --only, nie w regresji jednostkowej"
+      "powodPominiecia": "proba przegladarkowa: buduje pakiet i bierze blokade wspoldzielona; uruchamiana swiadomie (--browser albo --only)",
+      "rodzaj": "playwright",
+      "oczekiwanyKomunikat": "failed"
     }
   ],
   "uwagaOFiltrze": "Pole nazwaTestu trafia do vitest jako -t, czyli jako WYRAZENIE REGULARNE. Nazwa z kropka albo gwiazdka dopasuje sie inaczej, niz wyglada; harness wykrywa to teraz sam (przebieg wzorcowy musi uruchomic co najmniej jeden test), ale w rejestrze trzymaj fragmenty bez metaznakow.",

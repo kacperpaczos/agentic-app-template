@@ -289,7 +289,18 @@ export function SettingsPage() {
         <dt>Izolacja konfiguracji</dt>
         <dd>settingSources: [] — prywatne ustawienia i serwery MCP uzytkownika nie sa dziedziczone</dd>
         <dt>Sandbox</dt>
-        <dd>wlaczony; zapis tylko w workspace uruchomienia, siec odcieta, katalog danych aplikacji niedostepny</dd>
+        {/*
+          Says what is configured, and stops there. It used to say the network
+          was cut off and the data directory unreachable, full stop — a claim
+          about what a run can *do*, which nothing in this repository has yet
+          tried (L11.3, L11.4, L11.11 are open). A screen that states more than
+          was proved is the same defect as a matrix that does, and this is the
+          screen a reader trusts first. See README, "Czego jeszcze nie ma".
+        */}
+        <dd>
+          wlaczony; zapis tylko w workspace uruchomienia. Siec i katalog danych aplikacji sa odciete w
+          konfiguracji sandboxa — skutecznosc odciecia nie ma jeszcze proby z uruchomienia
+        </dd>
       </dl>
 
       <h2>Moduly biznesowe</h2>

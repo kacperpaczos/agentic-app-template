@@ -37,6 +37,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 export const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const REGISTRY = resolve(REPO, 'docs/acceptance/detection-trials.json');
 const EVIDENCE_DIR = 'docs/evidence/z13-bl12';
+/** The shared browser lock; one browser run at a time across all worktrees. */
+const LOCK = '/home/paczos/Documents/agentic-app-template-wt/.e2e.lock';
 
 /** Outcomes of one trial. `NIEWYKRYTE` is the one that matters. */
 export const WYKRYTE = 'wykryte';
@@ -60,6 +62,9 @@ export function ranTests(output) {
   const line = (output.match(/Tests\s+.*$/m) ?? [''])[0];
   let total = 0;
   for (const m of line.matchAll(/(\d+)\s+(passed|failed)/g)) total += Number(m[1]);
+  if (total > 0) return total;
+  // Playwright prints `3 passed (12.1s)` / `1 failed` on their own lines.
+  for (const m of output.matchAll(/^\s*(\d+)\s+(passed|failed)\b/gm)) total += Number(m[1]);
   return total;
 }
 
@@ -129,9 +134,42 @@ export function restore({ path, original }) {
 
 /** Runs the test a trial names. Replaced in the self-test by a stand-in. */
 export function vitestRunner(trial, repo = REPO) {
+  if (trial.rodzaj === 'playwright') return playwrightRunner(trial, repo);
   const args = ['exec', 'vitest', 'run', trial.test];
   if (trial.nazwaTestu) args.push('-t', trial.nazwaTestu);
   const out = spawnSync('pnpm', args, { cwd: repo, encoding: 'utf8', timeout: 600_000 });
+  return { code: out.status, output: `${out.stdout ?? ''}${out.stderr ?? ''}` };
+}
+
+/**
+ * A browser trial: build first, then run the spec under the shared lock.
+ *
+ * The build is not optional and not an optimisation. The browser suite drives
+ * the **production bundle**, so a mutation in a stylesheet or a component that
+ * is not rebuilt changes nothing that the browser will ever see — the trial
+ * would report `NIEWYKRYTE` about a fix that is perfectly well guarded, which
+ * is the same mistake as reading a filter that matched nothing as a pass.
+ *
+ * Both phases build, so the baseline is the built clean code and the mutated
+ * phase is the built mutated code.
+ */
+export function playwrightRunner(trial, repo = REPO) {
+  const build = spawnSync('pnpm', ['build'], { cwd: repo, encoding: 'utf8', timeout: 900_000 });
+  if (build.status !== 0) {
+    return { code: build.status, output: `pnpm build oblal:\n${build.stdout ?? ''}${build.stderr ?? ''}` };
+  }
+  const args = [
+    '-w',
+    '5400',
+    LOCK,
+    'pnpm',
+    'exec',
+    'playwright',
+    'test',
+    trial.test,
+    ...(trial.nazwaTestu ? ['-g', trial.nazwaTestu] : []),
+  ];
+  const out = spawnSync('flock', args, { cwd: repo, encoding: 'utf8', timeout: 3_600_000 });
   return { code: out.status, output: `${out.stdout ?? ''}${out.stderr ?? ''}` };
 }
 
@@ -230,7 +268,14 @@ if (isMain) {
     process.exit(0);
   }
   const only = argv.includes('--only') ? argv.slice(argv.indexOf('--only') + 1) : null;
-  const chosen = only ? registry.proby.filter((t) => only.includes(t.id)) : registry.proby;
+  /*
+   * A browser trial builds the bundle and takes the shared lock, so it never
+   * runs by accident: `--browser` (or naming it with `--only`) is the consent.
+   */
+  const browser = argv.includes('--browser');
+  const chosen = (only ? registry.proby.filter((t) => only.includes(t.id)) : registry.proby).map((t) =>
+    t.rodzaj === 'playwright' && !browser && !only ? { ...t, wRegresji: false } : t,
+  );
   if (chosen.length === 0) {
     console.error('Brak prob do uruchomienia (sprawdz --only).');
     process.exit(2);
