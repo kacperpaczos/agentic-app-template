@@ -179,33 +179,68 @@ export const idempotencyScript = (prompt: string): Step[] => {
   if (!prompt.includes('powtorka')) {
     return [{ kind: 'text', text: 'Nie rozpoznano polecenia testowego.' }];
   }
-  const cardInput = {
-    title: 'L97 KARTA POWTORZONA',
-    spec: { kind: 'component' as const, component: 'platform.markdown', props: { markdown: 'L97' } },
-    operationId: 'e2e-l97-karta-1',
-  };
-  const viewInput = {
-    title: 'L97 WIDOK POWTORZONY',
-    source: 'root = TextContent("L97")',
-    operationId: 'e2e-l97-widok-1',
-  };
+  /*
+   * Fixed literals, deliberately: this scenario owns its instance (fresh
+   * database, one conversation, keys quoted in the evidence file), and the
+   * literal is what makes the evidence's `klucze` section checkable against
+   * the source. The **repeat is spelled out in full** rather than shared as a
+   * const — two identical objects side by side are the claim "a retry is the
+   * same request", visible in the source, not assembled by a helper.
+   */
   return [
     { kind: 'call', name: 'files_list', maxChars: 400 },
-    { kind: 'call', name: 'canvas_add_card', input: cardInput, maxChars: 300 },
-    /* The retry: same key, same everything — one card, not two. */
-    { kind: 'call', name: 'canvas_add_card', input: cardInput, maxChars: 300 },
-    /* No key: the schema refuses this before any handler runs. */
     {
       kind: 'call',
       name: 'canvas_add_card',
+      input: {
+        title: 'L97 KARTA POWTORZONA',
+        spec: { kind: 'component', component: 'platform.markdown', props: { markdown: 'L97' } },
+        operationId: 'e2e-l97-karta-1',
+      },
+      maxChars: 300,
+    },
+    /* The retry: the same request, letter for letter — one card, not two. */
+    {
+      kind: 'call',
+      name: 'canvas_add_card',
+      input: {
+        title: 'L97 KARTA POWTORZONA',
+        spec: { kind: 'component', component: 'platform.markdown', props: { markdown: 'L97' } },
+        operationId: 'e2e-l97-karta-1',
+      },
+      maxChars: 300,
+    },
+    {
+      kind: 'call',
+      name: 'canvas_add_card',
+      // scenariusz-celowo-niepelny: brak operationId jest calym punktem tego kroku —
+      // schemat narzedzia ma je odrzucic, zanim cokolwiek zapisze (L9.7).
       input: {
         title: 'L97 KARTA BEZ KLUCZA',
         spec: { kind: 'component', component: 'platform.markdown', props: { markdown: 'L97' } },
       },
       maxChars: 300,
     },
-    { kind: 'call', name: 'agent_view_create', input: viewInput, maxChars: 300 },
-    { kind: 'call', name: 'agent_view_create', input: viewInput, maxChars: 300 },
+    {
+      kind: 'call',
+      name: 'agent_view_create',
+      input: {
+        title: 'L97 WIDOK POWTORZONY',
+        source: 'root = TextContent("L97")',
+        operationId: 'e2e-l97-widok-1',
+      },
+      maxChars: 300,
+    },
+    {
+      kind: 'call',
+      name: 'agent_view_create',
+      input: {
+        title: 'L97 WIDOK POWTORZONY',
+        source: 'root = TextContent("L97")',
+        operationId: 'e2e-l97-widok-1',
+      },
+      maxChars: 300,
+    },
     { kind: 'writeOutput', path: 'l97-wynik.csv', content: 'nazwa;ilosc\nkrzeslo;7\n' },
     {
       kind: 'call',
@@ -218,16 +253,20 @@ export const idempotencyScript = (prompt: string): Step[] => {
       }),
       maxChars: 400,
     },
-    { kind: 'call', name: 'files_publish_version', input: (calls: CallRecord[]) => ({
+    {
+      kind: 'call',
+      name: 'files_publish_version',
+      input: (calls: CallRecord[]) => ({
         path: 'l97-wynik.csv',
         originalFileId: l97Original(calls),
         filename: 'l97-poprawione.csv',
         operationId: 'e2e-l97-wersja-1',
-      }), maxChars: 400 },
+      }),
+      maxChars: 400,
+    },
     { kind: 'text', text: 'L97-KONIEC' },
   ];
 };
-
 /**
  * The workbook this conversation is working on, from the run's own listing.
  *
