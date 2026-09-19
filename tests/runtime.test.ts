@@ -11,6 +11,7 @@ import {
   subscriptionOnlyEnv,
   scrubbedEnvKeys,
   probeAuth,
+  credentialFilePath,
   RunEventStream,
   encodeSse,
   deriveTitle,
@@ -459,13 +460,15 @@ describe('token subskrypcji nie wycieka z aplikacji', () => {
    * material leaves this process. The test takes the *real* value from disk and
    * looks for it in everything the application exposes.
    *
-   * Skipped when no credential is present, so the suite still runs on a machine
-   * that is not logged in.
+   * **Nie przechodzi pusto.** Brak poświadczenia trzeba zadeklarować
+   * (`APP_ALLOW_NO_CREDENTIAL=1`), inaczej test oblewa z nazwą pliku — pusty
+   * skan wygląda jak dowód, a nim nie jest. Ścieżka pochodzi z
+   * `credentialFilePath()`, czyli z tej samej funkcji, której używa aplikacja:
+   * rozwiązywana inline ignorowała `CLAUDE_CONFIG_DIR` przy zmianie i była
+   * dokładnie tym defektem, który naprawiono w `tests/durability.test.ts` —
+   * w pliku cytowanym przez `proof` L8.14.
    */
-  const credFile = resolve(
-    process.env.CLAUDE_CONFIG_DIR ?? resolve(homedir(), '.claude'),
-    '.credentials.json',
-  );
+  const credFile = credentialFilePath(process.env);
 
   const readTokens = (): string[] => {
     if (!existsSync(credFile)) return [];
@@ -479,6 +482,17 @@ describe('token subskrypcji nie wycieka z aplikacji', () => {
       return [];
     }
   };
+
+  it('skan ma czego szukac, inaczej obie asercje ponizej sa puste', () => {
+    if (readTokens().length === 0) {
+      expect(
+        process.env.APP_ALLOW_NO_CREDENTIAL === '1',
+        `brak poswiadczenia w ${credFile}: skan wycieku nie ma czego szukac. ` +
+          'Zaloguj sie (claude /login) albo zadeklaruj brak logowania: APP_ALLOW_NO_CREDENTIAL=1.',
+      ).toBe(true);
+    }
+    expect(Array.isArray(readTokens())).toBe(true);
+  });
 
   it('rzeczywista wartosc tokena nie wystepuje w wyniku probeAuth()', () => {
     const tokens = readTokens();

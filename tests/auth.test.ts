@@ -235,7 +235,7 @@ describe('polityka wylacznie subskrypcyjna', () => {
  * classifier has to tell apart, and they are kept here verbatim (minus the
  * account's e-mail and organisation, which the probe never copies) so the rule
  * is asserted against what the SDK actually answers rather than against an
- * invented object. `scripts/probe-sdk-session.mjs` regenerates them.
+ * invented object. `scripts/probe-sdk-session.ts` regenerates them.
  */
 describe('sesja SDK: sposob uwierzytelnienia wedlug samego SDK', () => {
   const SUBSCRIPTION_ANSWER = { subscriptionType: 'Claude Max', apiProvider: 'firstParty' };

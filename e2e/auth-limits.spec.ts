@@ -146,6 +146,15 @@ test.describe('uwierzytelnienie i limity w interfejsie (symulacja na granicy ada
     },
   ] as const;
 
+  /**
+   * Co interfejs naprawdę pokazał, zbierane w trakcie przebiegów.
+   *
+   * Suita jest `serial`, więc zbiór jest kompletny zanim test podsumowujący go
+   * przeczyta. To są odczyty z DOM, nie stałe z tabeli wyżej.
+   */
+  const observedAuthStates = new Set<string>();
+  const observedRunErrors = new Set<string>();
+
   for (const c of cases) {
     test(`${c.scenario}: czat, pasek stanu i Ustawienia pokazuja stan "${c.access}"`, async ({ page }) => {
       await scripted.start(c.scenario);
@@ -170,6 +179,11 @@ test.describe('uwierzytelnienie i limity w interfejsie (symulacja na granicy ada
       });
       await expect(page.getByTestId('statusbar-auth')).toHaveAttribute('data-auth-confirmed', 'false');
 
+      // Zapisane z ekranu, dla asercji o rozróżnialności zbioru poniżej.
+      const shownState = await page.getByTestId('statusbar-auth').getAttribute('data-auth-state');
+      if (shownState) observedAuthStates.add(shownState);
+      observedRunErrors.add(((await page.getByTestId('run-error').textContent()) ?? '').trim());
+
       await openSettings(page);
       await expect(page.getByTestId('auth-access-state')).toHaveAttribute('data-state', c.access);
       await expect(page.getByTestId('auth-remedy')).toHaveAttribute('data-state', c.access);
@@ -185,17 +199,23 @@ test.describe('uwierzytelnienie i limity w interfejsie (symulacja na granicy ada
   /**
    * The four states above, side by side.
    *
-   * Asserted as a set rather than one at a time, because "distinguishable" is a
-   * statement about the collection: four failures that each showed something
-   * would still fail the criterion if two of them showed the same thing.
+   * "Rozróżnialne" jest własnością **zbioru**: cztery awarie, z których każda
+   * coś pokazała, nadal nie spełniają kryterium, jeśli dwie pokazały to samo.
+   *
+   * Zbiera **odczyty z ekranu**, a nie własną tablicę literałów. Poprzednia
+   * wersja liczyła `new Set(cases.map(c => c.access))` — czyli sprawdzała, czy
+   * autor testu wpisał cztery różne napisy, i przeszłaby nawet wtedy, gdyby
+   * aplikacja pokazywała jeden stan dla wszystkich. Wyłapała to recenzja.
    */
   test('cztery kontrolowane awarie daja cztery rozne stany, nie jeden blad', async () => {
-    const seen = new Set(cases.map((c) => c.access));
-    expect(seen.size, 'stany sie powtarzaja — to nie sa rozrozniane przypadki').toBe(cases.length);
-    const codes = new Set(cases.map((c) => c.runCode));
-    // The codes may collapse (a revoked login and a refused refresh are both
-    // `unauthenticated` in the chat) — the access states may not.
-    expect(codes.size).toBeGreaterThan(1);
+    expect(
+      observedAuthStates.size,
+      `z ekranu odczytano stany: ${[...observedAuthStates].join(', ')} — to nie sa rozrozniane przypadki`,
+    ).toBe(cases.length);
+    expect(
+      observedRunErrors.size,
+      'czat pokazal jeden i ten sam kod bledu dla wszystkich czterech awarii',
+    ).toBeGreaterThan(1);
   });
 
   /* --------------------- expired locally, working anyway ------------------ */
@@ -319,7 +339,7 @@ test.describe('uwierzytelnienie i limity w interfejsie (symulacja na granicy ada
    * The probe itself is answered by a stand-in here (`SDK_SESSION`), because
    * the real one starts the Claude CLI and a browser suite that depended on it
    * would be testing the machine. The real probe has its own recorded run:
-   * `scripts/probe-sdk-session.mjs`, evidence in `docs/evidence/z12-bl04/`.
+   * `scripts/probe-sdk-session.ts`, evidence in `docs/evidence/z12-bl04/`.
    */
   for (const [answer, state, usableAfterProbe] of [
     ['subscription', 'subscription', true],

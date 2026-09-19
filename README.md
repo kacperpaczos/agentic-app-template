@@ -262,7 +262,7 @@ jest gorszy niż czerwony: wygląda jak dowód, a nim nie jest. Dwie drogi: zalo
 w jaki sposób jest uwierzytelniony — żądaniem sterującym `accountInfo()`, które **nie wydaje tury
 modelu**. Odpowiedź rozróżnia subskrypcję OAuth od sesji na kluczu API i pokazuje wykorzystanie limitu
 planu. Raport nie niesie adresu e-mail ani nazwy organizacji konta. Poza aplikacją to samo sprawdzenie
-wykonuje `node scripts/probe-sdk-session.mjs` (patrz „Sprawdzanie zmian”).
+wykonuje `node scripts/probe-sdk-session.ts` (patrz „Sprawdzanie zmian”).
 
 ### Sprawdzanie zmian
 

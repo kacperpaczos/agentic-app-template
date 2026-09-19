@@ -68,7 +68,7 @@ Nie uruchamiano: `pnpm test:e2e:model`, `e2e/bl01-bl02-model.spec.ts`, `e2e/agen
 ## Próby zdolności wykrycia (G16)
 
 Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** linii, przebieg,
-`git checkout -- <plik>`, kontrola czystości. Wszystkie osiem oblało na spodziewanej asercji;
+`git checkout -- <plik>`, kontrola czystości. Wszystkie **dziesięć** oblało na spodziewanej asercji;
 żadna nie wyszła nieoczekiwanie zielona.
 
 | # | Wycofana linia | Test | Jak oblał |
@@ -80,6 +80,9 @@ Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** lini
 | E | `isAccessRelevantFailure` sprowadzone do `code !== 'session_transcript_lost'` | `tests/auth.test.ts` | 2 testy: odmowa sandboxa i własny limit czasu znów liczone jako błąd dostępu |
 | F | `console.log` z treścią pliku poświadczeń w `readCredentialMetadata` | `e2e/auth-limits.spec.ts` | linia 441: „kanarek poswiadczenia znaleziony w powierzchniach” (znalezisko w `logSerwera`) |
 | G | test dotyka prawdziwego pliku poświadczeń (zapis tej samej treści) | `tests/credential-guard.test.ts` | hook `afterAll`: „plik logowania uzytkownika zmienil sie w trakcie testow”, kod wyjścia 1 |
+| H | jawny warunek na potwierdzoną frazę SDK w `classifyAccessFailure` | `tests/auth.test.ts` | „rozpoznanie nie zalezy od przypadkowej obecnosci slowa »refresh«”: `expected 'revoked' to be 'refresh_refused'` |
+| **C1** | wcześniejsze wyjście z hooka dla `agent_id` przywrócone **przed** blok odmowy | `tests/credential-guard.test.ts` | „podwykonawca NIE omija odmowy”: `podwykonawca odczytal poswiadczenie: expected true to be false` — kanarek **był** w odpowiedzi |
+| I5 | dotknięcie pliku użytkownika w **ostatnim** teście pliku | `tests/credential-guard.test.ts` | `afterAll` na poziomie pliku oblewa, kod wyjścia 1 — hook wewnątrz `describe` tego nie widział |
 
 ### Znalezisko z próby A
 
@@ -89,7 +92,24 @@ czyta się jego wynik. Kolejność asercji zmieniono (commit `82c61c9`) tak, że
 pierwsza, i próbę powtórzono: oblewa teraz na wycieku. To jest przykład próby, która złapała **test**,
 nie kod — zgodnie z G16 potraktowany jako znalezisko, nie jako formalność.
 
-### Znalezisko z próby G
+### Znalezisko z próby G — i ostrzeżenie o niej samej
+
+> **Sama próba G była bezpieczna przez przypadek, nie z konstrukcji. Wykonana świadomie —
+> nie powtarzać.** Zapis „tej samej treści” i tak **obcina plik** przed zapisem, a w tle działała
+> sesja, która ten plik odświeża. Zbieg tych dwóch rzeczy w złym momencie to wylogowany użytkownik,
+> nie zmieniony `mtime`.
+>
+> **Bezpieczny zamiennik, którym należy się posługiwać zamiast niej:** ta sama własność pokazuje się
+> na **ścieżce tymczasowej** — plik-atrapa o tym samym kształcie, odcisk brany przed i po, dotknięcie
+> w ostatnim teście. Sprawdzana jest semantyka haka (czy `afterAll` obejmuje cały plik), a do tego
+> pliku użytkownika nie potrzeba.
+>
+> **Uczciwie: wykonano ją dwa razy.** Raz w fazie 1 (~23:57) i raz przy próbie I5 (01:53:48), zanim
+> ten akapit powstał. Za każdym razem treść pozostała bajtowo identyczna — skróty obu tokenów i
+> `expiresAt` bez zmian, zmienił się wyłącznie `mtime`. Drugiego razu nie powinno było być.
+
+#### Co próba wykazała
+
 
 Próba przez chwilę **zmieniła czas modyfikacji prawdziwego pliku poświadczeń użytkownika**
 (przepisanie tej samej treści; rozmiar i zawartość bez zmian, logowanie sprawne — sprawdzone po
@@ -138,6 +158,8 @@ okno, razem z tym, czego odciski **nie** obejmują.
 | 00:58:50 | przebieg `refresh-refused` #1 | 00:38:26 → 00:38:26 | bez zmian |
 | 00:59:47 | przebieg `revoked` | 00:38:26 → 00:38:26 | bez zmian |
 | 01:01:36 | przebieg `refresh-refused` #2 | 00:38:26 → 00:38:26 | bez zmian |
+| **01:53:48** | **próba I5 — NASZ zapis identycznej treści (powtórka wzorca G)** | 2026-09-19 01:53:48 | bez zmian |
+| 23:52:30 / 23:52:33 | dwa przebiegi po poprawce I3 | 01:53:48 → 01:53:48 | bez zmian |
 
 **Odciski z przebiegów NIE obejmują momentu 00:38:26** — najwcześniejszy „przed" jest o 00:58:50,
 dwadzieścia minut później. Powiedziane wprost, bo inaczej tabela wyglądałaby na dowód czegoś, czego
@@ -148,8 +170,12 @@ Co ten zapis rozstrzyga mimo to:
 1. **`expiresAt − mtime = dokładnie 8.0000 h.** Termin ważności tokena jest równo osiem godzin po
    czasie modyfikacji pliku — podpis **odświeżenia**, które przyznało ośmiogodzinny token o 00:38:26.
 2. **Termin przesunął się o 8 h** między odczytem z ~23:38 (00:43:24) a odczytem z ~00:52 (08:38:26).
-   Żaden zapis tej pracy nie potrafi zmienić `expiresAt`: jedyny, jaki kiedykolwiek dotknął tego
-   pliku (próba G), przepisywał **identyczną treść**.
+   Zapisy tej pracy, które dotknęły tego pliku (próba G i jej powtórka w próbie I5), przepisywały
+   **identyczną treść** i nie zmieniły `expiresAt` ani skrótów obu tokenów — to jest sprawdzone, a
+   nie założone. Kategorycznego „żaden nasz zapis nie potrafi zmienić `expiresAt`” **nie stawiam**:
+   `pnpm probe:sdk-session` i `POST /api/sdk-session` uruchamiają prawdziwe CLI przeciwko
+   **prawdziwemu** katalogowi użytkownika, czyli dokładnie mechanizm, który `expiresAt` przepisuje —
+   zob. obawy w raporcie.
 3. **Po 00:38 plik jest zamrożony.** mtime i skrót refresh tokena (`c4ffe5d5ebe855d8`) identyczne w
    sześciu próbkach z trzech przebiegów przez prawdziwe SDK i takie same do teraz.
 
@@ -222,7 +248,7 @@ pojawia się w żadnej z dwunastu przeszukanych powierzchni.
 1. **Rzeczywistego wyczerpania limitu.** Cztery awarie w suicie przeglądarkowej są symulacjami
    (dwie z nich mają teraz odpowiednik potwierdzony rzeczywistym przebiegiem). Odczyt wykorzystania
    okien planu z sondy (5 h, 7 dni) jest **odczytem prawdziwego limitu**, nie jego wyczerpaniem, i
-   kryterium nie zamyka. L8.11 i L8.12 zostają otwarte.
+   kryterium nie zamyka. L8.11 zostaje otwarte (L8.12 zamknięte — zob. raport §5).
 2. **Że komunikat limitu i błędu sieci to te, które SDK naprawdę wypisuje.** Komunikat odmowy
    uwierzytelnienia jest już potwierdzony (faza 2). `usage limit`, `429` i `socket hang up` — nie.
    To jest pozostały brak L8.11.
