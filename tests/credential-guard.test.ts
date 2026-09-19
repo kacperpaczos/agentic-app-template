@@ -10,6 +10,7 @@ import {
   createRunWorkspace,
   invokeTool,
   TOOL_PERMISSION_MATRIX,
+  declaresPathArguments,
   decideTool,
   protectedDirsFor,
   protectedPathRefusal,
@@ -554,19 +555,26 @@ describe('uruchomienie nie moze odczytac poswiadczenia (symulacja na granicy ada
     expect(stand.fileTools.map((f) => f.denied)).toEqual([true, false]);
   });
 
-  it('narzedzie plikowe bez zadeklarowanej sciezki nie dostaje auto-zatwierdzenia', () => {
+  it('kazde wstepnie zatwierdzone narzedzie plikowe zadeklarowalo, jak podaje sciezke', () => {
     /*
      * Odwrócenie komplementarności: lista narzędzi też jest zbiorem do
-     * wyliczenia, więc dopisanie narzędzia do listy wstępnie zatwierdzonych bez
-     * wpisu o tym, jak podaje ścieżkę, ma kończyć się pytaniem użytkownika, a
-     * nie cichą luką.
+     * wyliczenia, więc nie opieramy się na tym, że ktoś pamiętał o obu listach
+     * naraz.
+     *
+     * **Pierwsza wersja tej asercji nie mogła oblać.** Sprawdzała, że każde
+     * narzędzie z listy `auto` daje `decideTool → 'auto'` — co pod zepsutą
+     * wersją (`return 'auto'` bezwarunkowo) jest tym bardziej prawdziwe. Próba
+     * R wyszła zielona i to było znalezisko, nie zaliczenie. Niezmiennik brzmi
+     * inaczej: narzędzie wstępnie zatwierdzone **musi mieć zadeklarowany
+     * argument ścieżki** — i to oblewa w chwili dopisania takiego narzędzia.
      */
     for (const tool of TOOL_PERMISSION_MATRIX.auto) {
       expect(
-        decideTool(tool, []),
+        declaresPathArguments(tool),
         `${tool} jest wstepnie zatwierdzone, ale nie zadeklarowalo argumentu sciezki`,
-      ).toBe('auto');
+      ).toBe(true);
     }
+    // A narzędzie nieznane nadal trafia do zgody, nie do auto.
     expect(decideTool('NarzedzieBezDeklaracji', [])).toBe('consent');
   });
 
