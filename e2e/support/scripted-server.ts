@@ -41,6 +41,7 @@ import { consentThenWorkScript, liveReconnectScript } from './bl08b-scenarios.ts
 import {
   bl03CanvasScript,
   bl03ConsentScript,
+  bl03IsolationScript,
   bl03LifecycleScript,
   bl03RelationsScript,
 } from './bl03-scenarios.ts';
@@ -696,6 +697,7 @@ const CONVERSATION_SCENARIOS: Record<string, (prompt: string) => Step[]> = {
   'bl03-canvas': bl03CanvasScript,
   'bl03-relations': bl03RelationsScript,
   'bl03-consent': bl03ConsentScript,
+  'bl03-isolation': bl03IsolationScript,
   'bl03-lifecycle': bl03LifecycleScript,
 };
 

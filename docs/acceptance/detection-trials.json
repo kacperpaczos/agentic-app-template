@@ -169,6 +169,83 @@
       "test": "tests/acceptance-target.test.ts",
       "nazwaTestu": "szesc obejsc recenzenta oblewa regule",
       "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "most-odmowa-w-strumieniu",
+      "kryterium": "L11.5",
+      "naprawa": "Odmowa straznika na narzedziu plikowym trafia do strumienia zdarzen jako nieudany krok narzedzia — dowod pokazuje odmowe, zamiast wnioskowac ja z braku skutku.",
+      "plik": "packages/platform-server/src/agent/runtime.ts",
+      "szukaj": "          stream.toolResult(id, refusal, true);",
+      "zamien": "          /* wariant wadliwy proby wykrycia: odmowa nie trafia do strumienia */",
+      "test": "tests/hook-observability.test.ts",
+      "nazwaTestu": "wywolanie odrzucone przez straznika",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "most-argumenty-wywolania",
+      "kryterium": "L11.5",
+      "naprawa": "Kazde auto-zatwierdzone wywolanie narzedzia plikowego trafia do strumienia razem z argumentami — bez nich dowod nie wie, KTOREJ sciezki dotyczylo wywolanie.",
+      "plik": "packages/platform-server/src/agent/runtime.ts",
+      "szukaj": "        stream.toolArgs(id, JSON.stringify(input.tool_input ?? {}));\n        stream.toolEnd(id);",
+      "zamien": "        stream.toolEnd(id); /* wariant wadliwy proby wykrycia: brak argumentow */",
+      "test": "tests/hook-observability.test.ts",
+      "nazwaTestu": "auto-zatwierdzone wywolanie jest w strumieniu",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "most-wynik-narzedzia-plikowego",
+      "kryterium": "L11.5",
+      "naprawa": "Wynik auto-zatwierdzonego narzedzia plikowego (hook PostToolUse) trafia do strumienia — inaczej dowod nie odrozni wywolania, ktore sie udalo, od takiego, ktore nie doszlo do skutku.",
+      "plik": "packages/platform-server/src/agent/runtime.ts",
+      "szukaj": "        if (raw) stream.toolResult(scopeToolId(raw), summariseToolResponse(input.tool_response));",
+      "zamien": "        /* wariant wadliwy proby wykrycia: wynik narzedzia nie trafia do strumienia */",
+      "test": "tests/hook-observability.test.ts",
+      "nazwaTestu": "auto-zatwierdzone wywolanie jest w strumieniu",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "most-blad-narzedzia-plikowego",
+      "kryterium": "L11.5",
+      "naprawa": "Blad narzedzia plikowego (hook PostToolUseFailure) trafia do strumienia z trescia bledu, a nie jako pusty krok.",
+      "plik": "packages/platform-server/src/agent/runtime.ts",
+      "szukaj": "            summariseToolResponse(input.error ?? input.tool_response ?? 'Narzedzie zakonczylo sie bledem.'),",
+      "zamien": "            'wariant wadliwy proby wykrycia',",
+      "test": "tests/hook-observability.test.ts",
+      "nazwaTestu": "wywolanie zakonczone bledem jest w strumieniu",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "most-granica-podwykonawcy",
+      "kryterium": "L11.5",
+      "naprawa": "Granica wyciszenia podwykonawcy jest zapisana proba: zwykla aktywnosc podwykonawcy NIE trafia do strumienia (a jego odmowy trafiaja). Zmiana tej granicy w ktorakolwiek strone ma byc zauwazona, bo od niej zalezy, czego dowodzi brak wpisu w dowodzie.",
+      "plik": "packages/platform-server/src/agent/runtime.ts",
+      "szukaj": "        // Nothing was refused: ordinary subagent activity stays out of the chat.\n        if (fromSubagent) return { continue: true };",
+      "zamien": "        /* wariant wadliwy proby wykrycia: ruch podwykonawcy nie jest wyciszany */",
+      "test": "tests/hook-observability.test.ts",
+      "nazwaTestu": "NIEODRZUCONE wywolanie podwykonawcy",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "kontrola-wycieku-po-tozsamosci",
+      "kryterium": "L1.6",
+      "naprawa": "Kontrola wycieku procesow pyta o pid + czas startu chwytany PRZED sygnalem, zamiast o potomstwo serwera, ktorego juz nie ma. Wariant wadliwy odtwarza stara kontrole, ktora nie potrafila oblac.",
+      "plik": "e2e/support/bl03-checks.ts",
+      "szukaj": "    return read !== null && read.info.startTime === p.startTime;",
+      "zamien": "    return false; /* wariant wadliwy proby wykrycia: kontrola nie potrafi oblac */",
+      "test": "tests/isolation-orphan.test.ts",
+      "nazwaTestu": "ZNAJDUJE proces",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "kontrola-wycieku-sam-pid-nie-wystarcza",
+      "kryterium": "L1.6",
+      "naprawa": "Tozsamoscia procesu jest pid RAZEM z czasem startu. Wariant wadliwy pyta o sam pid, wiec ponownie uzyty numer uchodzi za wyciek, ktorego nie ma.",
+      "plik": "e2e/support/bl03-checks.ts",
+      "szukaj": "    return read !== null && read.info.startTime === p.startTime;",
+      "zamien": "    return read !== null; /* wariant wadliwy proby wykrycia: sam pid */",
+      "test": "tests/isolation-orphan.test.ts",
+      "nazwaTestu": "ten sam pid z innym czasem startu",
+      "oczekiwanyKomunikat": "Tests.*failed"
     }
   ],
   "uwagaOFiltrze": "Pole nazwaTestu trafia do vitest jako -t, czyli jako WYRAZENIE REGULARNE. Nazwa z kropka albo gwiazdka dopasuje sie inaczej, niz wyglada; harness wykrywa to teraz sam (przebieg wzorcowy musi uruchomic co najmniej jeden test), ale w rejestrze trzymaj fragmenty bez metaznakow.",

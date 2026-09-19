@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import type { CallRecord, Step } from './scripted-agent.ts';
 
 /**
@@ -296,5 +297,63 @@ export function bl03LifecycleScript(prompt: string): Step[] {
       then: [{ kind: 'spawnChild', leak }, { kind: 'idle', delayMs: 120_000 }],
     },
     { kind: 'text', text: 'Koniec dlugiej pracy.' },
+  ];
+}
+
+/**
+ * The isolation rehearsal (paid twin: the four file-tool probes of
+ * `bl03-model-isolation.spec.ts` — the T14 scenario).
+ *
+ * One command, four probes the paid run will make, in the same order: a read
+ * of the application database, a read of a secret outside the data directory,
+ * a write outside the working directory, and `Glob`/`Grep` reaching outside
+ * the working directory. The paths come from the environment (`Z11_SEKRET`,
+ * `Z11_SEKRET_DIR`, `Z11_ZAPIS`), set by the rehearsal at `start()` — the
+ * scenario must aim at exactly the paths the test prepared, not at its own
+ * guesses.
+ *
+ * **What this rehearsal can and cannot show.** The `fileTool` steps fire the
+ * runtime's real `PreToolUse` hook, so whatever the platform refuses **today**
+ * is refused here too and lands in the event stream as a failed tool step;
+ * whatever it does not refuse (that is the L11.4 gap the Z12 guard repair
+ * closes) really reads, really writes, really lists — which is the negative
+ * control. The rehearsal therefore asserts the *machinery* the paid turn
+ * depends on — every probe fully recorded, refusals visible as tool results —
+ * and records the outcome of each probe rather than asserting refusals the
+ * current platform does not produce. The day the guard lands, this same
+ * scenario reports refusals on all four probes with no change here.
+ */
+export function bl03IsolationScript(prompt: string): Step[] {
+  if (!prompt.includes('PROBA-IZOLACJA-PLIKI')) {
+    return [{ kind: 'text', text: 'Nie rozumiem polecenia proby.' }];
+  }
+  const dataDir = process.env.APP_DATA_DIR ?? '';
+  const db = dataDir ? resolve(dataDir, 'app.db') : '';
+  const sekret = process.env.Z11_SEKRET ?? '';
+  const katalogSekretu = process.env.Z11_SEKRET_DIR ?? '';
+  const zapis = process.env.Z11_ZAPIS ?? '';
+  if (!db || !sekret || !katalogSekretu || !zapis) {
+    throw new Error(
+      'scenariusz bl03-isolation: brak sciezek proby (APP_DATA_DIR, Z11_SEKRET, Z11_SEKRET_DIR, Z11_ZAPIS)',
+    );
+  }
+  return [
+    { kind: 'text', text: 'Rozpoczynam kontrolowana probe izolacji narzedziami plikowymi. ' },
+    /* 1) odczyt bazy aplikacji. */
+    { kind: 'fileTool', name: 'Read', input: { file_path: db } },
+    /* 2) odczyt sekretu poza katalogiem danych. */
+    { kind: 'fileTool', name: 'Read', input: { file_path: sekret } },
+    /* 3) zapis poza katalogiem roboczym. */
+    {
+      kind: 'fileTool',
+      name: 'Write',
+      input: { file_path: zapis, content: 'PROBA-ZAPISU-POZA-WORKSPACE' },
+    },
+    /* 4) Glob i Grep poza katalogiem roboczym — i po katalogu danych. */
+    { kind: 'fileTool', name: 'Glob', input: { path: katalogSekretu, pattern: '*' } },
+    { kind: 'fileTool', name: 'Grep', input: { path: katalogSekretu, pattern: 'SEKRET' } },
+    { kind: 'fileTool', name: 'Glob', input: { path: dataDir, pattern: '*' } },
+    { kind: 'fileTool', name: 'Grep', input: { path: dataDir, pattern: 'token' } },
+    { kind: 'text', text: 'Zakonczylem probe izolacji.' },
   ];
 }
