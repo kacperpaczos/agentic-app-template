@@ -36,6 +36,7 @@ import {
   protectedDirsFor,
   protectedPathRefusal,
   realResolve,
+  resolvedPathInput,
   workspaceConfinementRefusal,
 } from './permissions.ts';
 
@@ -757,8 +758,30 @@ export class AgentRuntime {
             },
           };
         }
+        /*
+         * Nic nie odmówiono — więc narzędzie dostaje ścieżkę **rozwiązaną**,
+         * tę samą, którą przed chwilą sprawdzono. Bez tego strażnik i narzędzie
+         * rozwiązują napis niezależnie, a dwa rozwiązania tego samego napisu
+         * potrafią wskazać różne pliki (patrz `resolvePhysically`).
+         */
+        const rewritten = resolvedPathInput(toolName, input.tool_input, (p) =>
+          realResolve(args.workspace.dir, p),
+        );
         // Nothing was refused: ordinary subagent activity stays out of the chat.
-        if (fromSubagent) return { continue: true };
+        if (fromSubagent) {
+          return rewritten
+            ? { continue: true, hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: rewritten } }
+            : { continue: true };
+        }
+        if (rewritten) {
+          stream.toolStart(id, String(input.tool_name ?? 'tool'), messageId);
+          stream.toolArgs(id, JSON.stringify(rewritten));
+          stream.toolEnd(id);
+          return {
+            continue: true,
+            hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: rewritten },
+          };
+        }
         /*
          * Deliberately does *not* open a text message.
          *
@@ -1129,8 +1152,12 @@ export class AgentRuntime {
       );
       if (guarded) return { behavior: 'deny', message: guarded };
 
+      /* Ta sama zasada co w hooku: narzędzie dostaje ścieżkę sprawdzoną. */
+      const resolvedInput =
+        resolvedPathInput(toolName, input, (p) => realResolve(run.workspaceDir, p)) ?? input;
+
       const decision = decideTool(toolName, this.#toolNames);
-      if (decision === 'auto') return { behavior: 'allow', updatedInput: input };
+      if (decision === 'auto') return { behavior: 'allow', updatedInput: resolvedInput };
       if (decision === 'forbidden') {
         return { behavior: 'deny', message: forbiddenToolMessage(toolName) };
       }

@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { invokeTool, resolveInWorkspace, type ModelAgentLike, type ToolEntry } from '@platform/server';
 import type { ToolCallContext } from '@platform/contracts';
 
@@ -89,6 +90,16 @@ export type Step =
        */
       content?: string;
     }
+  /**
+   * Tworzy dowiązanie **wewnątrz** katalogu roboczego uruchomienia.
+   *
+   * Odtwarza materiał, który w prawdziwym uruchomieniu leży tam od początku:
+   * `createRunWorkspace` linkuje biblioteki toolkitu do `node_modules/`, a ich
+   * cele są poza workspace. Atakujący niczego nie musi przygotowywać — i to
+   * jest powód, dla którego ten kształt ma własny krok, zamiast być ustawiany
+   * z zewnątrz przez test.
+   */
+  | { kind: 'linkIntoWorkspace'; from: string; to: string }
   /** The model's stream reports a failure — a stream existed and then failed. */
   | { kind: 'streamError'; message: string }
   /**
@@ -274,6 +285,13 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
             else signal?.addEventListener('abort', kill, { once: true });
             continue;
           }
+          if (step.kind === 'linkIntoWorkspace') {
+            if (!ctx?.workspaceDir) throw new Error('stand-in: brak workspace uruchomienia');
+            const target = join(ctx.workspaceDir, step.to);
+            mkdirSync(dirname(target), { recursive: true });
+            if (!existsSync(target)) symlinkSync(step.from, target);
+            continue;
+          }
           if (step.kind === 'fileTool') {
             callSeq += 1;
             /*
@@ -285,8 +303,21 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
             const resolved = Object.fromEntries(
               Object.entries(step.input).map(([k, v]) => [
                 k,
+                /*
+                 * Złożenie LEKSYKALNE, celowo bez walidacji: ten placeholder ma
+                 * tylko nazwać ścieżkę względem katalogu roboczego uruchomienia,
+                 * tak jak zrobiłby to model. Gdyby przechodził przez
+                 * `resolveInWorkspace`, to on odrzucałby ucieczki — i test
+                 * mierzyłby zastępnik zamiast strażnika, którego dotyczy.
+                 */
+                /*
+                 * Sklejenie NAPISÓW, nie `path.join` — bo `join` normalizuje, a
+                 * normalizacja zwija `..` leksykalnie i **niszczy kształt ataku
+                 * zanim dotrze do strażnika**. Test mierzyłby wtedy Node'a,
+                 * nie regułę. Model wysyła surowy napis i tak samo robi to krok.
+                 */
                 typeof v === 'string' && v.startsWith('$workspace/')
-                  ? resolveInWorkspace(ctx?.workspaceDir ?? '', v.slice('$workspace/'.length))
+                  ? `${ctx?.workspaceDir ?? ''}/${v.slice('$workspace/'.length)}`
                   : v,
               ]),
             );

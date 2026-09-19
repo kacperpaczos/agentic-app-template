@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -9,6 +9,8 @@ import {
   platformTools,
   createRunWorkspace,
   invokeTool,
+  TOOL_PERMISSION_MATRIX,
+  decideTool,
   protectedDirsFor,
   protectedPathRefusal,
   realResolve,
@@ -478,6 +480,94 @@ describe('uruchomienie nie moze odczytac poswiadczenia (symulacja na granicy ada
     } finally {
       ws.dispose();
     }
+  });
+
+  /* ---------- kolejność rozwiązywania: dowiązanie przed `..` ---------- */
+
+  /**
+   * Trzy kształty z rerecenzji, każdy odtworzony dokładnie tak, jak je odtworzył
+   * recenzent. Wspólny mechanizm: `path.resolve` zwijał `..` **leksykalnie**,
+   * zanim ktokolwiek dotknął dowiązań, a jądro robi to odwrotnie. Materiału nie
+   * trzeba nawet przygotowywać — `node_modules/<biblioteka>` jest dowiązaniem
+   * wyprowadzającym poza workspace i tworzy je `createRunWorkspace`.
+   */
+  it('dowiazanie + ".." NIE omija reguly: zapis nie tworzy pliku poza workspace', async () => {
+    const outside = mkdtempSync(join(tmpdir(), 'biblioteka-poza-ws-'));
+    mkdirSync(join(outside, 'exceljs'), { recursive: true });
+    const podrzucony = join(outside, 'podrzucony.txt');
+    try {
+      const { stand } = await startRun([
+        { kind: 'linkIntoWorkspace', from: join(outside, 'exceljs'), to: 'node_modules/exceljs' },
+        {
+          kind: 'fileTool',
+          name: 'Write',
+          input: { file_path: '$workspace/node_modules/exceljs/../podrzucony.txt' },
+          content: 'PODRZUCONA-TRESC',
+        },
+        { kind: 'text', text: 'Koniec.' },
+      ]);
+      expect(existsSync(podrzucony), 'POWSTAL PLIK poza workspace przez dowiazanie i ".."').toBe(false);
+      expect(stand.fileTools[0]).toMatchObject({ denied: true });
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('dowiazanie + ".." NIE omija reguly: odczyt nie oddaje tresci spoza workspace', async () => {
+    const outside = mkdtempSync(join(tmpdir(), 'biblioteka-poza-ws-'));
+    mkdirSync(join(outside, 'exceljs'), { recursive: true });
+    writeFileSync(join(outside, 'sekret.txt'), `POZA-WS-${CANARY}`);
+    try {
+      const { stand, events } = await startRun([
+        { kind: 'linkIntoWorkspace', from: join(outside, 'exceljs'), to: 'node_modules/exceljs' },
+        {
+          kind: 'fileTool',
+          name: 'Read',
+          input: { file_path: '$workspace/node_modules/exceljs/../sekret.txt' },
+        },
+        { kind: 'text', text: 'Koniec.' },
+      ]);
+      expect(answerText(events).includes(CANARY), 'odczytano tresc spoza workspace').toBe(false);
+      expect(stand.fileTools[0]).toMatchObject({ denied: true });
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('dowiazanie do katalogu poswiadczen + ".." NIE omija obu straznikow', async () => {
+    /* Kształt, w którym oba strażniki zwracały `null`, a kanarek był odczytany. */
+    const { stand, events } = await startRun([
+      { kind: 'linkIntoWorkspace', from: configDir, to: 'link' },
+      { kind: 'fileTool', name: 'Read', input: { file_path: '$workspace/link/../.credentials.json' } },
+      { kind: 'text', text: 'Koniec.' },
+    ]);
+    expect(answerText(events).includes(CANARY), 'kanarek odczytany przez dowiazanie i ".."').toBe(false);
+    expect(stand.fileTools[0]).toMatchObject({ denied: true });
+  });
+
+  it('wzorzec Glob wychodzacy w gore jest odrzucony, zwykly przechodzi', async () => {
+    const { stand } = await startRun([
+      { kind: 'fileTool', name: 'Glob', input: { path: '$workspace/output', pattern: '../../**' } },
+      { kind: 'fileTool', name: 'Glob', input: { path: '$workspace/output', pattern: '**/*.txt' } },
+      { kind: 'text', text: 'Koniec.' },
+    ]);
+    expect(stand.fileTools.map((f) => f.denied)).toEqual([true, false]);
+  });
+
+  it('narzedzie plikowe bez zadeklarowanej sciezki nie dostaje auto-zatwierdzenia', () => {
+    /*
+     * Odwrócenie komplementarności: lista narzędzi też jest zbiorem do
+     * wyliczenia, więc dopisanie narzędzia do listy wstępnie zatwierdzonych bez
+     * wpisu o tym, jak podaje ścieżkę, ma kończyć się pytaniem użytkownika, a
+     * nie cichą luką.
+     */
+    for (const tool of TOOL_PERMISSION_MATRIX.auto) {
+      expect(
+        decideTool(tool, []),
+        `${tool} jest wstepnie zatwierdzone, ale nie zadeklarowalo argumentu sciezki`,
+      ).toBe('auto');
+    }
+    expect(decideTool('NarzedzieBezDeklaracji', [])).toBe('consent');
   });
 
   it('uruchomienie NAPRAWDE przekazuje SDK liste chronionych katalogow', async () => {

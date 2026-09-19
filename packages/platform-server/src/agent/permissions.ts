@@ -1,6 +1,6 @@
-import { resolve } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { dirname, isAbsolute, join, parse, resolve } from 'node:path';
 import { claudeConfigDir } from './auth.ts';
-import { realResolve as sharedRealResolve } from '../util/real-path.ts';
 
 /**
  * The permission matrix for the Claude Agent SDK's **built-in** tools.
@@ -96,7 +96,19 @@ export const TOOL_PERMISSION_MATRIX = {
 export function decideTool(toolName: string, mcpToolNames: readonly string[]): ToolDecision {
   if ((FORBIDDEN_TOOLS as readonly string[]).includes(toolName)) return 'forbidden';
   if (mcpToolNames.includes(toolName)) return 'auto';
-  if ((AUTO_APPROVED_FILE_TOOLS as readonly string[]).includes(toolName)) return 'auto';
+  /*
+   * Wstępne zatwierdzenie **wymaga zadeklarowania, jak narzędzie podaje ścieżkę**.
+   *
+   * Odwrócenie tej samej komplementarności, o którą chodzi w regule pozytywnej:
+   * lista narzędzi też jest zbiorem do wyliczenia, więc nie opieramy się na tym,
+   * że ktoś pamiętał o obu listach naraz. Narzędzie dopisane do
+   * `AUTO_APPROVED_FILE_TOOLS` bez wpisu w `PATH_ARGUMENTS` nie dostaje `auto`,
+   * tylko trafia do zgody użytkownika — bo strażnik ścieżek nie umiałby go
+   * sprawdzić, a cicha luka jest gorsza od pytania.
+   */
+  if ((AUTO_APPROVED_FILE_TOOLS as readonly string[]).includes(toolName)) {
+    return PATH_ARGUMENTS[toolName] ? 'auto' : 'consent';
+  }
   return 'consent';
 }
 
@@ -141,6 +153,29 @@ export const forbiddenToolMessage = (toolName: string): string =>
  * guarded by the confinement, at the chokepoint, not by a second list that would
  * have to be kept in step with the first.
  */
+/**
+ * Argumenty, które są **wzorcem**, a nie ścieżką — i dlatego wymagają własnej reguły.
+ *
+ * `Glob{pattern:'../../**'}` nie jest ścieżką, więc `PATH_ARGUMENTS` go nie
+ * obejmuje, a mimo to wychodzi poza katalog roboczy. Pełnego rozwinięcia wzorca
+ * nie da się tu uczciwie odtworzyć (rozwija go narzędzie, nie my), więc reguła
+ * jest węższa i mówi dokładnie tyle, ile umie sprawdzić: **wzorzec zawierający
+ * człon `..` jest odrzucany**. Wzorzec bez `..` nie może wyjść w górę, a `path`
+ * tych narzędzi jest osobno ograniczony do katalogu roboczego.
+ *
+ * `Grep.pattern` jest wyrażeniem nad **treścią**, nie nad ścieżką, więc go tu nie
+ * ma; ograniczany jest jego `glob` i `path`.
+ */
+const PATTERN_ARGUMENTS: Record<string, readonly string[]> = {
+  Glob: ['pattern'],
+  Grep: ['glob'],
+};
+
+/** Czy wzorzec zawiera człon `..`, czyli próbuje wyjść w górę. */
+function patternClimbsUp(pattern: string): boolean {
+  return pattern.split(/[/\\]+/).some((part) => part === '..');
+}
+
 const PATH_ARGUMENTS: Record<string, readonly string[]> = {
   Read: ['file_path', 'path'],
   Write: ['file_path', 'path'],
@@ -192,12 +227,85 @@ export function protectedDirsFor(
  */
 export function realResolve(base: string, candidate: string): string {
   /*
-   * One implementation of this walk, in `util/real-path.ts`. It used to live
-   * here, and the same walk was written again in the maintenance scripts and
-   * missing altogether from the test-isolation guards — the third absence was
-   * found by a reviewer, not by a test. Same behaviour, one place to fix.
+   * ## Dlaczego to NIE jest `sharedRealResolve(resolve(base, candidate))`
+   *
+   * Bo `path.resolve()` zwija `..` **leksykalnie**, zanim ktokolwiek dotknie
+   * dowiązań — a jądro robi to w odwrotnej kolejności: najpierw podąża za
+   * dowiązaniem, potem cofa się o `..`. Te dwie kolejności wskazują różne pliki,
+   * i różnica nie jest teoretyczna:
+   *
+   *     <ws>/node_modules/exceljs/../podrzucony.txt
+   *
+   * leksykalnie zwija się do `<ws>/node_modules/podrzucony.txt` — wewnątrz
+   * katalogu roboczego, więc strażnik przepuszczał. Jądro najpierw rozwijało
+   * `node_modules/exceljs`, które jest **dowiązaniem do biblioteki poza
+   * workspace** — tworzy je `createRunWorkspace`, więc materiał leży tam od
+   * powstania katalogu — i dopiero potem cofało się o `..`. Plik powstawał poza
+   * katalogiem roboczym. Bez powłoki i bez zgody użytkownika.
+   *
+   * Dlatego ścieżka jest przechodzona **komponent po komponencie**, w kolejności
+   * jądra: każdy człon jest rozwijany fizycznie, zanim zostanie zinterpretowany
+   * następny, a `..` cofa się od ścieżki **już rozwiniętej**.
+   *
+   * `util/real-path.ts` zostaje tam, gdzie był — jego wywołujący porównują
+   * katalogi, nie ścieżki budowane przez model. Ta sama wada dotyczy jednak i
+   * jego; zgłoszone w raporcie jako znalezisko poza zakresem tego pakietu.
    */
-  return sharedRealResolve(resolve(base, candidate));
+  return resolvePhysically(base, candidate);
+}
+
+/**
+ * Rozwiązuje ścieżkę tak, jak zrobi to jądro: dowiązania przed `..`.
+ *
+ * Idzie komponent po komponencie od katalogu bazowego (albo od korzenia, gdy
+ * ścieżka jest bezwzględna). Każdy istniejący człon jest rozwijany przez
+ * `realpathSync`, więc dowiązanie jest rozwinięte **zanim** kolejny `..` je
+ * przeskoczy. Człon, którego jeszcze nie ma, kończy rozwijanie fizyczne —
+ * poniżej nieistniejącej ścieżki nie ma czego rozwijać, więc reszta jest
+ * doklejana, a `..` traktowane leksykalnie, co jest wtedy równoważne.
+ */
+export function resolvePhysically(base: string, candidate: string): string {
+  /*
+   * `resolve()` NIE jest tu wołane na kandydacie — i to jest cała treść tej
+   * funkcji. Pierwsza wersja robiła `parse(resolve(candidate)).root`, żeby
+   * znaleźć korzeń ścieżki bezwzględnej, i tym samym zwijała `..` leksykalnie
+   * zanim cokolwiek zaczęło być rozwijane: dokładnie ta wada, którą ta funkcja
+   * miała naprawić, tyle że o jedną warstwę głębiej. Wyłapała to dopiero próba
+   * na trzech kształtach, nie przegląd kodu.
+   */
+  const absolute = isAbsolute(candidate);
+  const root = absolute ? parse(candidate).root : '';
+  const startRaw = absolute ? root : base;
+  let current = (() => {
+    try {
+      return realpathSync(startRaw);
+    } catch {
+      return startRaw;
+    }
+  })();
+
+  const rest = absolute ? candidate.slice(root.length) : candidate;
+  let existsSoFar = true;
+
+  for (const part of rest.split(/[/\\]+/)) {
+    if (part === '' || part === '.') continue;
+    if (part === '..') {
+      current = dirname(current);
+      continue;
+    }
+    const next = join(current, part);
+    if (!existsSoFar) {
+      current = next;
+      continue;
+    }
+    try {
+      current = realpathSync(next);
+    } catch {
+      existsSoFar = false;
+      current = next;
+    }
+  }
+  return current;
 }
 
 /** True when `candidate` is `dir` itself or sits inside it. */
@@ -208,6 +316,40 @@ function isInside(candidate: string, dir: string): boolean {
 }
 
 const normalizeSlashes = (p: string): string => p.replace(/\\/g, '/');
+
+/**
+ * Zwraca wejście narzędzia z **rozwiązanymi** ścieżkami, albo `null`.
+ *
+ * Powód jest ten sam, dla którego dwie rundy temu odrzuciłem dopisanie narzędzi
+ * publikacji do `PATH_ARGUMENTS`: *sprawdzana byłaby inna ścieżka niż ta, którą
+ * narzędzie otwiera*. Znałem tę zasadę i nie zastosowałem jej tutaj — strażnik
+ * rozwiązywał ścieżkę u siebie, a narzędzie dostawało **surowy napis** i
+ * rozwiązywało go po swojemu. Przepisanie wejścia likwiduje rozjazd u źródła:
+ * narzędzie otwiera dokładnie ten plik, który został sprawdzony.
+ *
+ * SDK na to pozwala — `PreToolUseHookSpecificOutput.updatedInput` oraz
+ * `canUseTool → { behavior: 'allow', updatedInput }` są w typach 0.3.270.
+ */
+export function resolvedPathInput(
+  toolName: string,
+  toolInput: unknown,
+  resolvePath: (p: string) => string,
+): Record<string, unknown> | null {
+  const args = PATH_ARGUMENTS[toolName];
+  if (!args) return null;
+  const input = { ...((toolInput ?? {}) as Record<string, unknown>) };
+  let changed = false;
+  for (const key of args) {
+    const raw = input[key];
+    if (typeof raw !== 'string' || raw.length === 0) continue;
+    const abs = resolvePath(raw);
+    if (abs !== raw) {
+      input[key] = abs;
+      changed = true;
+    }
+  }
+  return changed ? input : null;
+}
 
 /**
  * Refuses a file tool that reaches **outside the run workspace** — in either
@@ -251,10 +393,22 @@ export function workspaceConfinementRefusal(
   workspaceDir: string,
   resolvePath: (p: string) => string = (p) => realResolve(workspaceDir, p),
 ): string | null {
+  const input = (toolInput ?? {}) as Record<string, unknown>;
+
+  /* Wzorce: własna, węższa reguła — patrz `PATTERN_ARGUMENTS`. */
+  for (const key of PATTERN_ARGUMENTS[toolName] ?? []) {
+    const raw = input[key];
+    if (typeof raw === 'string' && patternClimbsUp(raw)) {
+      return (
+        `Wzorzec narzedzia ${toolName} wychodzi poza katalog roboczy tego uruchomienia ` +
+        '(zawiera czlon ".."). Zostal odrzucony.'
+      );
+    }
+  }
+
   const args = PATH_ARGUMENTS[toolName];
   if (!args) return null;
   const root = realResolve(workspaceDir, '.');
-  const input = (toolInput ?? {}) as Record<string, unknown>;
   for (const key of args) {
     const raw = input[key];
     if (typeof raw !== 'string' || raw.length === 0) continue;
