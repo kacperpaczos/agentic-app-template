@@ -1,0 +1,126 @@
+{
+  "opis": "Kontrolowane warianty wadliwe krytycznych napraw. Kazdy wpis mowi, ktora naprawe chroni, ktora linie zepsuc i ktory test ma wtedy oblac. Test, ktory mimo wadliwego wariantu PRZECHODZI, jest znaleziskiem: naprawa nie jest chroniona.",
+  "jakUruchomic": "node scripts/detection-trials.mjs (czyste drzewo wymagane; pliki wracaja bajt w bajt)",
+  "zasada": "Wzorzec musi wystepowac w pliku dokladnie raz — rejestr, ktory rozjechal sie z kodem, oblewa probe zamiast po cichu nic nie zmienic i zaliczyc naprawy.",
+  "proby": [
+    {
+      "id": "N-3-kolejka-rozmowy",
+      "kryterium": "L7.10",
+      "naprawa": "Nieudane uruchomienie zwalnia kolejke rozmowy — lancuch obietnic per rozmowa pochlania blad poprzednika, zamiast przekazywac odrzucenie dalej (zakleszczenie N-3).",
+      "plik": "packages/platform-server/src/agent/runtime.ts",
+      "szukaj": "    const done = previous\n      .catch(() => undefined)\n      .then(() =>",
+      "zamien": "    const done = previous\n      .then(() =>",
+      "test": "tests/orchestration.test.ts",
+      "nazwaTestu": "po bledzie pierwszego polecenia drugie w tej samej rozmowie konczy sie sukcesem",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "D-2-projekcja-segmentu",
+      "kryterium": "L4.15",
+      "naprawa": "Tekst po wywolaniu narzedzia otwiera nowy segment wiadomosci — projekcja backendu zgadza sie z reduktorem biblioteki (defekt D-2).",
+      "plik": "packages/platform-server/src/agent/projection.ts",
+      "szukaj": "        if (this.#current.toolCalls.length > 0) this.#startNewSegment();",
+      "zamien": "        /* wariant wadliwy proby wykrycia: brak nowego segmentu */",
+      "test": "tests/projection.test.ts",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "abort-na-cancel-w-tle",
+      "kryterium": "L11.6",
+      "naprawa": "Zatrzymane zadanie w tle konczy sie statusem cancelled, nie failed — przerwanie po Stop jest mapowane na anulowanie, a nie na blad.",
+      "plik": "packages/platform-server/src/agent/runtime.ts",
+      "szukaj": "      const cancelled = abort.signal.aborted && !message.includes('run_timeout');",
+      "zamien": "      const cancelled = false; /* wariant wadliwy proby wykrycia */",
+      "test": "tests/background-runs.test.ts",
+      "nazwaTestu": "konczy wskazane wykonanie i nie rusza pozostalych",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "detektor-strumienia",
+      "kryterium": "L5.1",
+      "naprawa": "Odpowiedz podana w calosci na koncu nie jest zaliczana jako strumieniowanie — werdykt wymaga widocznej niepelnej odpowiedzi w trakcie wykonania.",
+      "plik": "e2e/support/streamProbe.ts",
+      "szukaj": "  const sawPartialAnswer = first !== null && first < largestSeen;",
+      "zamien": "  const sawPartialAnswer = true; /* wariant wadliwy proby wykrycia */",
+      "test": "tests/stream-verdict.test.ts",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "guard-izolacji-dowiazanie",
+      "kryterium": "L1.11",
+      "naprawa": "Oznaczona instancja testowa nie wstanie na katalogu danych bedacym dowiazaniem symbolicznym ani na katalogu, ktorego rzeczywisty cel to dane aplikacji.",
+      "plik": "packages/platform-server/src/config.ts",
+      "szukaj": "  if (isSymlink(cfg.dataDir)) {",
+      "zamien": "  if (false) {",
+      "test": "tests/isolation-paths.test.ts",
+      "nazwaTestu": "oznaczona instancja nie wstanie na .e2e-* bedacym dowiazaniem do danych",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "guard-izolacji-magazyn",
+      "kryterium": "L1.11",
+      "naprawa": "Operacje kasujace serwera porownuja sciezke rowniez po rozwiazaniu dowiazan, wiec podkatalog-dowiazanie nie wyprowadza zapisu poza magazyn.",
+      "plik": "packages/platform-server/src/util/managed-fs.ts",
+      "szukaj": "  if (!insideText || !insideReal) {",
+      "zamien": "  if (!insideText) {",
+      "test": "tests/isolation-paths.test.ts",
+      "nazwaTestu": "rename pod dowiazanym podkatalogiem magazynu jest odrzucony",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "guard-osieroconego-serwera",
+      "kryterium": "L1.9",
+      "naprawa": "Przygotowanie bazy scenariuszowej odmawia, gdy port jest zajety przez dzialajacy proces — katalog nie jest kasowany pod osieroconym serwerem.",
+      "plik": "e2e/support/scripted.ts",
+      "szukaj": "    assertPortFree(this.config.port, `przygotowanie instancji scenariuszowej (${this.config.dataDir})`);",
+      "zamien": "    /* wariant wadliwy proby wykrycia: brak sprawdzenia portu */",
+      "test": "tests/isolation-orphan.test.ts",
+      "nazwaTestu": "prepareDatabase NIE kasuje katalogu, gdy port jest zajety",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "cel-proby-etykieta",
+      "kryterium": "L1.8",
+      "naprawa": "Proba odbiorowa sprawdza etykiete instancji przed pierwszym zadaniem; instancja bez etykiety (czyli instancja uzytkownika) konczy sie odmowa.",
+      "plik": "scripts/lib/acceptance-target.mjs",
+      "szukaj": "  if (!target.allowedLabels.includes(label)) {",
+      "zamien": "  if (false) {",
+      "test": "tests/acceptance-target.test.ts",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "cel-proby-domyslny-port",
+      "kryterium": "L1.8",
+      "naprawa": "Domyslny cel proby odbiorowej nie jest portem zainstalowanej aplikacji.",
+      "plik": "scripts/lib/acceptance-target.mjs",
+      "szukaj": "export const DEFAULT_ACCEPTANCE_PORT = 8790;",
+      "zamien": "export const DEFAULT_ACCEPTANCE_PORT = 8791;",
+      "test": "tests/acceptance-target.test.ts",
+      "nazwaTestu": "domyslny cel nie jest portem zainstalowanej aplikacji",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "koperta-rodzaj-wykonania",
+      "kryterium": "L12.10",
+      "naprawa": "Kazdy zapisany dowod niesie rodzaj wykonania obok commita i srodowiska.",
+      "plik": "tests/support/measurement-evidence.ts",
+      "szukaj": "    zapisano: new Date().toISOString(),\n    rodzajWykonania,\n    wersjaKodu: wersjaKodu ?? codeVersion(undefined, [dir]),",
+      "zamien": "    zapisano: new Date().toISOString(),\n    wersjaKodu: wersjaKodu ?? codeVersion(undefined, [dir]),",
+      "test": "tests/evidence-provenance.test.ts",
+      "nazwaTestu": "rodzaj wykonania jest wymagany i nazwany slownikiem repozytorium",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "D-1-szuflada-nad-canvasem",
+      "kryterium": "L2.10",
+      "naprawa": "Zamknieta szuflada rozmow zostaje poza kadrem (left: -294px) i nie przykrywa watku; wariant wadliwy przywraca faktyczna przyczyne defektu D-1, czyli left: 0 !important.",
+      "plik": "packages/platform-ui/src/styles.css",
+      "szukaj": ".pf-chat__body\n  .openui-agent-container--mobile\n  .openui-agent-sidebar-container:not(.openui-agent-sidebar-container--collapsed)\n  .openui-agent-sidebar-header__toggle-button {",
+      "zamien": "/* wariant wadliwy proby wykrycia: przywrocony defekt D-1 */\n.pf-chat__body .openui-agent-sidebar-container { left: 0 !important; }\n\n.pf-chat__body\n  .openui-agent-container--mobile\n  .openui-agent-sidebar-container:not(.openui-agent-sidebar-container--collapsed)\n  .openui-agent-sidebar-header__toggle-button {",
+      "test": "e2e/chat-drawer.spec.ts",
+      "nazwaTestu": "zamknieta szuflada nie zaslania rozmowy",
+      "wRegresji": false,
+      "powodPominiecia": "proba przegladarkowa: wymaga pnpm build i blokady wspoldzielonej (.e2e.lock), wiec uruchamiana swiadomie poleceniem --only, nie w regresji jednostkowej"
+    }
+  ]
+}
