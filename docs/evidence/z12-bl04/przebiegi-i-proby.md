@@ -68,7 +68,7 @@ Nie uruchamiano: `pnpm test:e2e:model`, `e2e/bl01-bl02-model.spec.ts`, `e2e/agen
 ## Próby zdolności wykrycia (G16)
 
 Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** linii, przebieg,
-`git checkout -- <plik>`, kontrola czystości. Wszystkie **dziesięć** oblało na spodziewanej asercji;
+`git checkout -- <plik>`, kontrola czystości. Wszystkie **jedenaście** oblało na spodziewanej asercji;
 żadna nie wyszła nieoczekiwanie zielona.
 
 | # | Wycofana linia | Test | Jak oblał |
@@ -83,6 +83,7 @@ Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** lini
 | H | jawny warunek na potwierdzoną frazę SDK w `classifyAccessFailure` | `tests/auth.test.ts` | „rozpoznanie nie zalezy od przypadkowej obecnosci slowa »refresh«”: `expected 'revoked' to be 'refresh_refused'` |
 | **C1** | wcześniejsze wyjście z hooka dla `agent_id` przywrócone **przed** blok odmowy | `tests/credential-guard.test.ts` | „podwykonawca NIE omija odmowy”: `podwykonawca odczytal poswiadczenie: expected true to be false` — kanarek **był** w odpowiedzi |
 | I5 | dotknięcie pliku użytkownika w **ostatnim** teście pliku | `tests/credential-guard.test.ts` | `afterAll` na poziomie pliku oblewa, kod wyjścia 1 — hook wewnątrz `describe` tego nie widział |
+| J | filtr w `runtime.ts` gubi `<configDir>.json` przy budowaniu `credentialDirs` | `tests/credential-guard.test.ts` | „plik konfiguracji obok katalogu nie trafil do sandboxa” — asercja nad `sdkOptions` faktycznie podanymi SDK |
 
 ### Znalezisko z próby A
 
