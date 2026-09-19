@@ -1,0 +1,14 @@
+# Prawdziwa sesja Claude Agent SDK, wylacznie zadania sterujace — ZERO tur modelu
+# przebieg: 2026-09-19T00-09-34Z
+# commit:   2d4b598ef2d5e3483aae9581b80a7818ca91d074
+# polecenie: pnpm --filter @app/server diag -- --proba-bez-izolacji-mcp
+[diag] uwierzytelnienie: subscription | poswiadczenie=valid (max) | dostep=unverified
+[diag] klucz API w srodowisku: brak
+[diag] zadeklarowanych narzedzi: 33
+[diag] konto: plan=Claude Max backend=firstParty
+[diag] serwer "app": connected
+[diag] narzedzia serwera "app" w sesji: 33
+[diag] wszystkie zadeklarowane narzedzia sa zarejestrowane w sesji
+[diag] UWAGA: obce serwery MCP w sesji: claude.ai Claude Docs[claudeai]. Ich narzedzia nie sa narzedziami tej aplikacji i nie podlegaja jej sandboxowi.
+[diag] czas: 1102 ms | kod wyjscia: 1
+# kod wyjscia: 1
