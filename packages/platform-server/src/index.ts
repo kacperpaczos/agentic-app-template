@@ -12,6 +12,7 @@ import { ServerModuleRegistry } from './registry/modules.ts';
 import { ComponentCatalog } from './registry/catalog.ts';
 import { createPlatformServices, type PlatformServices } from './services/index.ts';
 import { AgentRuntime, type ModelAgentLike } from './agent/runtime.ts';
+import { probeSdkSession, type SessionProbe } from './agent/session-probe.ts';
 import { createPlatformApp, DEFAULT_USER_ID, SECOND_USER_ID } from './http/app.ts';
 import { platformCardComponents } from './registry/platform-components.ts';
 
@@ -34,6 +35,7 @@ export * from './services/index.ts';
 export * from './services/base-data.ts';
 export * from './agent/runtime.ts';
 export * from './agent/auth.ts';
+export * from './agent/session-probe.ts';
 export * from './agent/events.ts';
 export * from './agent/sandbox.ts';
 export * from './agent/permissions.ts';
@@ -118,6 +120,14 @@ export function createPlatform(input: {
    * {@link ModelAgentLike}.
    */
   modelAgent?: ModelAgentLike | null;
+  /**
+   * Replaces the SDK session probe. Tests and scripted harnesses only.
+   *
+   * The probe spawns the Claude CLI, so a browser test that wants to show what
+   * the interface does with each answer installs a scripted one here rather
+   * than depending on the machine it runs on. See `agent/session-probe.ts`.
+   */
+  sessionProbe?: SessionProbe | null;
 }): PlatformInstance {
   const config = { ...loadConfig(input.env), ...input.config };
   const db = openDatabase(config.dbFile);
@@ -170,7 +180,13 @@ export function createPlatform(input: {
   const runtime = new AgentRuntime(services, input.modelAgent ?? null);
   const versions = readVersions();
   const auth = SessionAuth.load(config.dataDir);
-  const app = createPlatformApp({ services, runtime, auth, versions });
+  const app = createPlatformApp({
+    services,
+    runtime,
+    auth,
+    versions,
+    sessionProbe: input.sessionProbe ?? probeSdkSession,
+  });
 
   return {
     config,

@@ -18,11 +18,13 @@ import {
   updateCardGeometryInputSchema,
   updateCardSpecInputSchema,
   type AppContext,
+  type SdkSession,
   type StoredMessage,
   uiCommandResultSchema,
   UI_SNAPSHOT_MAX_BYTES,
 } from '@platform/contracts';
-import { probeAuth } from '../agent/auth.ts';
+import { probeAuth, recordSdkSession } from '../agent/auth.ts';
+import type { SessionProbe } from '../agent/session-probe.ts';
 import { AgentRuntime } from '../agent/runtime.ts';
 import { SESSION_COOKIE, SessionAuth, ensureUser, requireUser } from '../auth/session.ts';
 import type { PlatformServices } from '../services/index.ts';
@@ -101,6 +103,8 @@ export interface PlatformAppDeps {
   runtime: AgentRuntime;
   auth: SessionAuth;
   versions: Record<string, string>;
+  /** Asks the SDK how it is authenticated. Replaceable for tests. */
+  sessionProbe: SessionProbe;
 }
 
 type Env = { Variables: { ownerId: string } };
@@ -343,6 +347,34 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
   );
 
   /* ------------------------------ status -------------------------------- */
+
+  /*
+   * Asks the Claude Agent SDK how it is authenticated, and records the answer.
+   *
+   * A POST, and explicit, for two reasons. It spawns the CLI, so it is far too
+   * expensive to sit behind a status poll; and the answer is a *record of a
+   * check that was made*, like `access`, so it must be something the user (or
+   * a test) triggered rather than something that happens by itself. The
+   * response is the same redacted report `/api/status` then reports.
+   *
+   * One at a time: a second request while the first is still running is
+   * answered by the first one's result instead of spawning another CLI.
+   */
+  let sessionProbeInFlight: Promise<SdkSession> | null = null;
+  app.post('/api/sdk-session', async (c) => {
+    if (!sessionProbeInFlight) {
+      sessionProbeInFlight = deps
+        .sessionProbe()
+        .then((report) => {
+          recordSdkSession(report);
+          return report;
+        })
+        .finally(() => {
+          sessionProbeInFlight = null;
+        });
+    }
+    return json(c, { sdkSession: await sessionProbeInFlight });
+  });
 
   app.get('/api/status', (c) => {
     const authStatus = probeAuth();

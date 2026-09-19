@@ -28,6 +28,8 @@
     "evidence:e2e": "APP_WRITE_EVIDENCE=1 playwright test e2e/measurements.spec.ts e2e/streaming.spec.ts e2e/view-filter.spec.ts",
     "evidence:z10": "APP_WRITE_EVIDENCE=1 playwright test e2e/stop-children.spec.ts",
     "diag:zapis": "pnpm --filter @app/server diag -- --zapis docs/evidence/z11-bl03/diag-sesja-sdk.json",
+    "probe:sdk-session": "node --experimental-transform-types --no-warnings=ExperimentalWarning scripts/probe-sdk-session.ts",
+    "probe:auth-refusal": "node --experimental-transform-types --no-warnings=ExperimentalWarning scripts/probe-refresh-refused.ts",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "check:acceptance": "node scripts/acceptance-matrix.mjs --check",
     "acceptance:render": "node scripts/acceptance-matrix.mjs",

@@ -10,7 +10,7 @@
  * Results obtained with it are simulations and are reported as such.
  */
 import { execFileSync, spawn } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   invokeTool,
@@ -127,6 +127,17 @@ export type Step =
       /** Order to apply; `null` restores the view's own order. */
       sort?: { field: string; direction: 'asc' | 'desc' } | null;
     }
+  /**
+   * One of the SDK's **built-in** file tools, played the way the SDK plays it.
+   *
+   * Not `call`: `Read`, `Glob` and `Grep` are the SDK's own tools, they are
+   * pre-approved, and the consent gate is therefore never consulted for them.
+   * The only thing that can stop one is a `PreToolUse` hook — so the step fires
+   * that hook, honours a `deny`, and otherwise **really reads the file**. The
+   * last part is the control: without the refusal the bytes reach the answer,
+   * which is what a browser test must be able to observe.
+   */
+  | { kind: 'fileTool'; name: string; input: Record<string, unknown> }
   | { kind: 'fail'; message: string };
 
 /**
@@ -220,6 +231,21 @@ export function scriptedAgent(
         for (const hook of group.hooks ?? []) await hook({ hook_event_name: event, ...payload });
       }
     };
+    /** Fires `PreToolUse` and reports the refusal, if any hook gave one. */
+    const firePreToolUse = async (payload: Record<string, unknown>): Promise<string | null> => {
+      let refusal: string | null = null;
+      for (const group of hooks.PreToolUse ?? []) {
+        for (const hook of group.hooks ?? []) {
+          const answer = (await hook({ hook_event_name: 'PreToolUse', ...payload })) as
+            | { hookSpecificOutput?: { permissionDecision?: string; permissionDecisionReason?: string } }
+            | undefined;
+          if (answer?.hookSpecificOutput?.permissionDecision === 'deny') {
+            refusal = answer.hookSpecificOutput.permissionDecisionReason ?? 'odmowa hooka PreToolUse';
+          }
+        }
+      }
+      return refusal;
+    };
     await fire('SessionStart', { session_id: 'sess_scripted' });
 
     let seq = 0;
@@ -257,7 +283,7 @@ export function scriptedAgent(
         } else if (step.kind === 'fail') {
           out.push({ type: 'error', payload: { error: new Error(step.message) } });
         } else {
-          // `call`, `ask`, `writeOutput`, `workspaceScript`, `spawnChild`.
+          // `call`, `ask`, `writeOutput`, `workspaceScript`, `spawnChild`, `fileTool`.
           out.push({ type: step.kind, step });
         }
       }
@@ -359,6 +385,28 @@ export function scriptedAgent(
               signal?.addEventListener('abort', onAbort, { once: true });
             });
             if (signal?.aborted) throw signal.reason ?? new Error('run cancelled');
+            continue;
+          }
+          if (e.type === 'fileTool') {
+            const step = e.step as Extract<Step, { kind: 'fileTool' }>;
+            seq += 1;
+            const refusal = await firePreToolUse({
+              tool_use_id: `tu_file_${seq}`,
+              tool_name: step.name,
+              tool_input: step.input,
+            });
+            if (refusal !== null) {
+              yield { type: 'text-delta', payload: { text: `[plik:${step.name}] odmowa ` } };
+              continue;
+            }
+            const target = String(step.input.file_path ?? step.input.path ?? '');
+            let contents: string;
+            try {
+              contents = readFileSync(target, 'utf8');
+            } catch (err) {
+              contents = `blad odczytu: ${(err as Error).message}`;
+            }
+            yield { type: 'text-delta', payload: { text: `[plik:${step.name}] ${shorten(contents, 800)} ` } };
             continue;
           }
           if (e.type === 'writeOutput') {

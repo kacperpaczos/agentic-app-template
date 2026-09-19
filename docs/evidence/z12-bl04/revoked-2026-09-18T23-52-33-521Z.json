@@ -1,0 +1,62 @@
+{
+  "przypadek": "revoked",
+  "opis": "Odwolane (martwe) logowanie: komunikat, ktory naprawde produkuje Claude Agent SDK, gdy token dostepu jest nieprawidlowy, a termin jeszcze nie minal, i to, co robi z nim aplikacja. Poswiadczenie proby ma CELOWO ZEPSUTE oba tokeny, wiec zadna prawdziwa wartosc nie jest uzywana ani uniewazniana. Przebieg nie przechodzi uwierzytelnienia, wiec nie dociera do modelu i NIE WYDAJE TURY SUBSKRYPCJI.",
+  "rodzajDowodu": "rzeczywisty przebieg przez Claude Agent SDK",
+  "zrodlo": "node --experimental-transform-types scripts/probe-refresh-refused.ts --revoked",
+  "turySubskrypcji": 0,
+  "zapisano": "2026-09-18T23:52:33.521Z",
+  "wersje": {
+    "node": "24.19.0",
+    "claudeCli": "2.1.277 (Claude Code)",
+    "commit": "8c782808b9046d684f0d94f3fbb4c542be017c4f",
+    "brudneDrzewo": true
+  },
+  "warunki": {
+    "katalogKonfiguracji": "/tmp/proba-odmowy-odnowienia-Th2lij",
+    "accessToken": "zastapiony wartoscia, ktora nigdy nie byla tokenem",
+    "refreshToken": "zastapiony wartoscia, ktora nigdy nie byla tokenem",
+    "expiresAt": "godzine w PRZYSZLOSCI, wiec CLI nie ma powodu odnawiac z wlasnej inicjatywy",
+    "czegoTenTrybNIEodtwarza": "To NIE jest odwolane logowanie. Refresh token jest tu tak samo nieprawidlowy jak w trybie refresh-refused — oba tryby roznia sie WYLACZNIE wartoscia expiresAt. Prawdziwe odwolanie (poprawny refresh token odrzucony po stronie serwera) nie zostalo wytworzone i nie da sie go wytworzyc bez konta testowego."
+  },
+  "wynik": {
+    "statusUruchomienia": "failed",
+    "kodBledu": "unauthenticated",
+    "komunikatSdk": "Claude Code returned an error result: Failed to authenticate: OAuth session expired and could not be refreshed",
+    "klasyfikacjaAplikacji": "refresh_refused",
+    "stanDostepuPoPrzebiegu": "refresh_refused",
+    "zdarzenRunError": 1
+  },
+  "poswiadczenieProbyPoPrzebiegu": {
+    "obecny": true,
+    "refreshTokenPusty": true,
+    "accessTokenPusty": true,
+    "expiresAtZerowane": true,
+    "skasowanePrzezCli": true
+  },
+  "logowanieUzytkownika": {
+    "nietkniete": true,
+    "przed": {
+      "plik": "/home/paczos/.claude/.credentials.json",
+      "obecny": true,
+      "bajtow": 524,
+      "mtimeMs": 1789771106157.6829,
+      "accessTokenSha": "6749d3f422e64897",
+      "refreshTokenSha": "c4ffe5d5ebe855d8",
+      "expiresAt": 1789799906144
+    },
+    "po": {
+      "plik": "/home/paczos/.claude/.credentials.json",
+      "obecny": true,
+      "bajtow": 524,
+      "mtimeMs": 1789771106157.6829,
+      "accessTokenSha": "6749d3f422e64897",
+      "refreshTokenSha": "c4ffe5d5ebe855d8",
+      "expiresAt": 1789799906144
+    },
+    "uwaga": "Skroty tokenow sa po to, zeby dalo sie stwierdzic ZMIANE bez zapisywania wartosci. Rozny skrot po przebiegu znaczylby, ze proba dotknela logowania uzytkownika."
+  },
+  "czegoToNieDowodzi": [
+    "To nie jest dowod SKUTECZNEGO odnowienia — tamten wariant wymagalby uzycia prawdziwego refresh tokena z kopii, co przy wymianie tokenow zostawiloby w pliku uzytkownika token poprzedniej generacji, a CLI kasuje poswiadczenie na dysku, gdy odnowienie wraca z invalid_grant. L8.10 zostaje w tej polowie otwarte swiadomie.",
+    "To nie jest dowod wyczerpania limitu (L8.11)."
+  ]
+}

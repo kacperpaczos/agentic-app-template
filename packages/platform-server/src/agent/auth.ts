@@ -2,7 +2,13 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
-import type { AccessState, AuthStatus, CredentialState } from '@platform/contracts';
+import {
+  UNPROBED_SDK_SESSION,
+  type AccessState,
+  type AuthStatus,
+  type CredentialState,
+  type SdkSession,
+} from '@platform/contracts';
 
 /**
  * Reports how the Claude runtime is authenticated.
@@ -13,9 +19,17 @@ import type { AccessState, AuthStatus, CredentialState } from '@platform/contrac
  * exists is not evidence that signing in works.
  *
  * **On reading the credential file.** This module does parse
- * `~/.claude/.credentials.json`, in full — there is no way to report the plan
- * and the expiry without parsing the object that contains them. What it
- * guarantees is narrower and checkable:
+ * `~/.claude/.credentials.json` — or `$CLAUDE_CONFIG_DIR/.credentials.json`,
+ * which is the same file moved — **in full**. There is no way to report the
+ * plan and the expiry without parsing the object that contains them, and that
+ * means `accessToken` and `refreshToken` **pass through this process's memory**
+ * on every such read, even though nothing takes them from there. Saying instead
+ * that the application "reads only the plan and the expiry from the file" would
+ * describe a program this is not; README.md says the same thing in the same
+ * words, and L8.14 is about those two agreeing.
+ *
+ * What it guarantees is narrower than "the tokens are never read", and every
+ * part of it is checkable:
  *
  *  - only `subscriptionType` and `expiresAt` are copied out of the parsed value;
  *  - `accessToken` and `refreshToken` are never referenced, returned, stored,
@@ -23,8 +37,13 @@ import type { AccessState, AuthStatus, CredentialState } from '@platform/contrac
  *  - the file is only ever *read*. Renewal belongs to the Claude Agent SDK,
  *    which reads and rewrites the same file on its own; this application is
  *    never on that path and must never implement a token flow of its own.
- *  - `tests/runtime.test.ts` takes the real token value from disk and asserts it
- *    appears in no output this application produces.
+ *  - `tests/runtime.test.ts` and `tests/durability.test.ts` take the real token
+ *    value from disk and assert it appears in nothing this application
+ *    produces — and `e2e/auth-limits.spec.ts` does the same with a canary
+ *    credential across the surfaces a real conversation leaves behind;
+ *  - the directory itself is out of the agent's reach: `sandboxSettings` denies
+ *    reads and writes of it, and `protectedPathRefusal` refuses a file tool
+ *    pointed at it both in the `PreToolUse` hook and at the consent gate.
  */
 
 /* --------------------------- last verified access -------------------------- */
@@ -63,6 +82,30 @@ export function classifyAccessFailure(message: string): AccessState {
     m.includes('too many requests')
   ) {
     return 'rate_limited';
+  }
+  /*
+   * Komunikat **potwierdzony na rzeczywistej awarii** SDK 0.3.270, nie zgadnięty.
+   *
+   * `docs/evidence/z12-bl04/refresh-refused-*.json` i `revoked-*.json`: przy poświadczeniu z
+   * **nieprawidłowym refresh tokenem** SDK 0.3.270 podaje ten sam tekst niezależnie od tego, czy
+   * access token wygasł:
+   *
+   *     Claude Code returned an error result: Failed to authenticate:
+   *     OAuth session expired and could not be refreshed
+   *
+   * Ten warunek istnieje po to, żeby werdykt **nie zależał od przypadku**, że tekst zawiera akurat
+   * słowa „refresh" i „expired" — bo pod regułą niżej przechodził tylko dzięki temu.
+   *
+   * **Czego te próby NIE pokazały.** Żadna z nich nie wytworzyła odwołanego logowania: oba tryby
+   * zapisują tak samo nieprawidłowy refresh token i różnią się wyłącznie `expiresAt`, więc oba
+   * kończą tym samym zdarzeniem — odnowieniem, które nie mogło się udać. Identyczny tekst jest
+   * spodziewanym skutkiem takiego ustawienia, a nie dowodem, że SDK myli dwie różne przyczyny.
+   * Czy prawdziwe odwołanie (poprawny refresh token odrzucony po stronie serwera) daje się odróżnić
+   * — **pozostaje nieznane**. Stan `revoked` zostaje dla źródeł, które mówią to wprost (401,
+   * „please run /login"), a porada dla obu stanów i tak brzmi „zaloguj się ponownie".
+   */
+  if (m.includes('oauth session expired') || m.includes('could not be refreshed')) {
+    return 'refresh_refused';
   }
   if (
     m.includes('refresh') &&
@@ -107,9 +150,63 @@ export function recordVerification(ok: boolean, error?: string): void {
   };
 }
 
+/**
+ * Whether a run failure says anything about **access** at all.
+ *
+ * Recording every non-cancelled failure as an access failure was wrong in both
+ * directions, and the second direction is the one L8.9 names: a sandbox refusal
+ * and a timeout this application imposed on itself are facts about this
+ * application, not about the subscription. Reporting them as "ostatni
+ * potwierdzony dostep: blad wywolania" puts a broken login on the screen for a
+ * problem the login has nothing to do with — and, because the record is
+ * process-global, it stays there for every conversation.
+ *
+ * Narrowing by code rather than by wording, because the code is a decision the
+ * layer that raised the failure already made.
+ */
+const NON_ACCESS_FAILURE_CODES = new Set([
+  /* The SDK no longer has the transcript. The login is fine. */
+  'session_transcript_lost',
+  /* The isolation refused. The login is fine. */
+  'sandbox_denied',
+  /* A tool or a domain rule refused. The login is fine. */
+  'forbidden',
+  'not_found',
+  'validation_failed',
+  'conflict',
+]);
+
+export function isAccessRelevantFailure(code: string, message = ''): boolean {
+  if (NON_ACCESS_FAILURE_CODES.has(code)) return false;
+  // A run this application stopped on its own clock never reached a verdict
+  // about access either.
+  if (message.includes('run_timeout')) return false;
+  return true;
+}
+
 /** Test seam: resets the process-local access record. */
 export function resetVerification(): void {
   access = { state: 'unverified', lastVerifiedAt: null, lastError: null, lastErrorAt: null };
+  sdkSession = { ...UNPROBED_SDK_SESSION };
+}
+
+/* ---------------------------- SDK session report --------------------------- */
+
+/**
+ * What the SDK last said about how it authenticates.
+ *
+ * Process-local and explicitly probed, like `access` above and for the same
+ * reason: it is a record of something that happened, so it starts empty and
+ * says `unknown` rather than guessing. See `session-probe.ts`.
+ */
+let sdkSession: SdkSession = { ...UNPROBED_SDK_SESSION };
+
+export function recordSdkSession(report: SdkSession): void {
+  sdkSession = report;
+}
+
+export function currentSdkSession(): SdkSession {
+  return { ...sdkSession };
 }
 
 /* ------------------------------ local metadata ----------------------------- */
@@ -176,8 +273,21 @@ export function readCredentialMetadata(
   };
 }
 
+/**
+ * Where the Claude CLI and SDK keep their configuration, including the login.
+ *
+ * Exported because two other places need the *directory*, not the file: the
+ * sandbox, which denies reads of it, and the tool gate, which refuses a file
+ * tool pointed at it. Honouring `CLAUDE_CONFIG_DIR` is not a detail — a test
+ * that redirects it and a protection that does not would guard the wrong
+ * directory and pass while the real one stayed open.
+ */
+export function claudeConfigDir(env: NodeJS.ProcessEnv = process.env): string {
+  return env.CLAUDE_CONFIG_DIR ?? resolve(homedir(), '.claude');
+}
+
 export function credentialFilePath(env: NodeJS.ProcessEnv = process.env): string {
-  return resolve(env.CLAUDE_CONFIG_DIR ?? resolve(homedir(), '.claude'), '.credentials.json');
+  return resolve(claudeConfigDir(env), '.credentials.json');
 }
 
 export function probeAuth(env: NodeJS.ProcessEnv = process.env, now = Date.now()): AuthStatus {
@@ -191,6 +301,7 @@ export function probeAuth(env: NodeJS.ProcessEnv = process.env, now = Date.now()
     apiKeyDetected: Boolean(env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN),
     apiKeyPolicy: 'refused',
     cliVersion: cliVersion(),
+    sdkSession: { ...sdkSession },
   };
 }
 
