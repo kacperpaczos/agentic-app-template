@@ -2,9 +2,9 @@
   "opis": "Kontrolowane warianty wadliwe krytycznych napraw. Kazdy wpis mowi, ktora naprawe chroni, ktora linie zepsuc i ktory test ma wtedy oblac. Test, ktory mimo wadliwego wariantu PRZECHODZI, jest znaleziskiem: naprawa nie jest chroniona.",
   "zrodlo": "node scripts/detection-trials.mjs (APP_WRITE_EVIDENCE=1)",
   "rodzajWykonania": "test kontraktu lub logiki",
-  "zapisano": "2026-09-19T09:18:19.637Z",
+  "zapisano": "2026-09-19T09:54:16.457Z",
   "wersjaKodu": {
-    "commit": "4cc174be6af458c4e45067b047d390f6d388affd",
+    "commit": "f9ada427744293557cc2abaf3656355a6d48c99e",
     "brudneDrzewoPrzedProbami": false,
     "node": "24.19.0"
   },
@@ -66,14 +66,14 @@
     {
       "id": "guard-izolacji-dowiazanie",
       "kryterium": "L1.11",
-      "naprawa": "Oznaczona instancja testowa nie wstanie na katalogu danych bedacym dowiazaniem symbolicznym ani na katalogu, ktorego rzeczywisty cel to dane aplikacji.",
+      "naprawa": "Katalog danych instancji testowej nie moze byc dowiazaniem symbolicznym — nawet gdy jego cel jest prawdziwym katalogiem testowym w repozytorium i wszystkie kontrole sciezki go przepuszczaja. Harness ten katalog KASUJE, a to, czy `rm` pojdzie za linkiem, nie jest wlasnoscia, na ktorej wolno opierac bezpieczenstwo.",
       "plik": "packages/platform-server/src/config.ts",
       "test": "tests/isolation-paths.test.ts",
-      "nazwaTestu": "bedacym dowiazaniem do danych",
+      "nazwaTestu": "dowiazanie do innego katalogu testowego tez jest odrzucone",
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 1,
-      "fragmentWyniku": "Tests  1 failed | 10 skipped (11)"
+      "fragmentWyniku": "Tests  1 failed | 11 skipped (12)"
     },
     {
       "id": "guard-izolacji-magazyn",
@@ -85,7 +85,7 @@
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 1,
-      "fragmentWyniku": "Tests  1 failed | 10 skipped (11)"
+      "fragmentWyniku": "Tests  1 failed | 11 skipped (12)"
     },
     {
       "id": "guard-osieroconego-serwera",
@@ -97,7 +97,7 @@
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 1,
-      "fragmentWyniku": "Tests  1 failed | 7 skipped (8)"
+      "fragmentWyniku": "Tests  1 failed | 8 skipped (9)"
     },
     {
       "id": "cel-proby-etykieta",
@@ -108,8 +108,8 @@
       "nazwaTestu": null,
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
-      "testowPrzedMutacja": 8,
-      "fragmentWyniku": "Tests  3 failed | 5 passed (8)"
+      "testowPrzedMutacja": 11,
+      "fragmentWyniku": "Tests  3 failed | 8 passed (11)"
     },
     {
       "id": "cel-proby-domyslny-port",
@@ -121,7 +121,7 @@
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 1,
-      "fragmentWyniku": "Tests  1 failed | 7 skipped (8)"
+      "fragmentWyniku": "Tests  1 failed | 10 skipped (11)"
     },
     {
       "id": "koperta-rodzaj-wykonania",
@@ -151,6 +151,30 @@
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 1,
       "fragmentWyniku": "Tests  1 failed | 18 skipped (19)"
+    },
+    {
+      "id": "guard-izolacji-realpath",
+      "kryterium": "L1.11",
+      "naprawa": "Kontrola katalogu testowego rozwiazuje dowiazania takze w RODZICACH: katalog o poprawnej nazwie, lezacy pod dowiazanym rodzicem, naprawde jest poza repozytorium.",
+      "plik": "e2e/support/isolation.ts",
+      "test": "tests/isolation-paths.test.ts",
+      "nazwaTestu": "odrzuca katalog pod dowiazanym rodzicem",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
+      "fragmentWyniku": "Tests  1 failed | 11 skipped (12)"
+    },
+    {
+      "id": "sciezka-sygnalowa-harnessu",
+      "kryterium": "L12.12",
+      "naprawa": "Przerwanie proby sygnalem przywraca zmutowany plik: obsluga sygnalu widzi nalozona mutacje, bo ta lezy w stanie modulu, a nie w lokalnej zmiennej funkcji.",
+      "plik": "scripts/detection-trials.mjs",
+      "test": "tests/detection-trials.test.ts",
+      "nazwaTestu": "PRZERWANIE SYGNALEM przywraca plik",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
+      "fragmentWyniku": "Tests  1 failed | 15 skipped (16)"
     }
   ]
 }
