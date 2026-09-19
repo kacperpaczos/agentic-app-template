@@ -69,7 +69,8 @@ test.describe('BL-03 przebieg A: kanwa, rekord i nawigacja na prawdziwym modelu'
       const before = await backend.cards(spaceId);
       const added = await run.command(
         page,
-        'Dodaj na kanwie tej sprawy karte z wykresem kosztow ofert. ' +
+        'Dodaj na kanwie tej sprawy karte pokazujaca koszty ofert — wybierz pasujacy ' +
+          'komponent z katalogu kart. ' +
           'Identyfikatora sprawy nie podaje — wez go z kontekstu tego polecenia. ' +
           'Nie opisuj drogi, po prostu dodaj karte.',
       );
@@ -89,19 +90,27 @@ test.describe('BL-03 przebieg A: kanwa, rekord i nawigacja na prawdziwym modelu'
         'karta istniala juz przed poleceniem — zastany element nie zalicza proby',
       ).toBe(false);
       expectCardPointsAtRecord(created.card, caseId);
+      const component = created.card!.spec.component!;
       record.kartaWykonania = created.cardId;
+      record.komponent = component;
       record.kartaWskazujeSprawe = (created.card!.spec.props ?? {}).caseId;
 
       await page.getByRole('link', { name: 'Otworz przestrzen pracy na canvasie' }).click();
       await expect(page.getByTestId('card-case-summary').first()).toBeVisible();
-      await expect(page.getByTestId('card-cost-chart').first()).toBeVisible({ timeout: 60_000 });
+      /*
+       * Po identyfikatorze karty, nie po komponencie. Ktory dokladnie komponent
+       * wybierze model, jest jego decyzja w granicach katalogu — asercja na
+       * `card-cost-chart` oblalaby poprawne uzycie `comparisonTable` i wydalaby
+       * ture na moje zalozenie, a nie na zachowanie aplikacji.
+       */
+      await expect(page.getByTestId(`card-${created.cardId}`)).toBeVisible({ timeout: 60_000 });
 
       /* -------------------- tura 2: zmiana tresci i przesuniecie ------------ */
 
       const geometryBefore = created.card!.geometry;
       const changed = await run.command(
         page,
-        `Zmien tytul karty z wykresem kosztow na doslownie „ZMIENIONY-${marker}” ` +
+        `Zmien tytul karty, ktora przed chwila dodales, na doslownie „ZMIENIONY-${marker}” ` +
           'i przesun te karte nizej i bardziej w prawo niz jest teraz. ' +
           'Zawartosci karty nie zmieniaj — ma dalej pokazywac ten sam wykres.',
       );
@@ -128,14 +137,15 @@ test.describe('BL-03 przebieg A: kanwa, rekord i nawigacja na prawdziwym modelu'
       ).not.toEqual({ x: geometryBefore.x, y: geometryBefore.y });
       // The content survived the content edit — a card that lost its component
       // would satisfy "the title changed" and be a defect.
-      expect(afterChange.spec.component).toBe('procurement.costChart');
+      expect(afterChange.spec.component).toBe(component);
+      expect((afterChange.spec.props ?? {}).caseId).toBe(caseId);
       record.poZmianie = { tytul: afterChange.title, specVersion: afterChange.specVersion, geometria: afterChange.geometry };
 
       await expect(page.locator('.react-flow')).toContainText(`ZMIENIONY-${marker}`, { timeout: 60_000 });
 
       /* ----------------------------- tura 3: usuniecie ---------------------- */
 
-      const removed = await run.command(page, 'Usun z kanwy te karte z wykresem kosztow.');
+      const removed = await run.command(page, 'Usun z kanwy te karte, ktora przed chwila zmieniles.');
       const phase3 = await settled(page, removed.runId);
       const events3 = await backend.runEvents(removed.runId);
       run.log.push({ tura: 3, cel: 'usuniecie', runId: removed.runId, faza: phase3, narzedzia: toolNames(events3) });
@@ -145,7 +155,7 @@ test.describe('BL-03 przebieg A: kanwa, rekord i nawigacja na prawdziwym modelu'
       expect(removals.length, `wywolane narzedzia: ${toolNames(events3).join(', ')}`).toBeGreaterThan(0);
       expect((removals[removals.length - 1]!.result as { removed: string }).removed).toBe(created.cardId);
       expect((await backend.cards(spaceId)).some((c) => c.id === created.cardId)).toBe(false);
-      await expect(page.getByTestId('card-cost-chart')).toHaveCount(0, { timeout: 60_000 });
+      await expect(page.getByTestId(`card-${created.cardId}`)).toHaveCount(0, { timeout: 60_000 });
       // The rest of the composition is untouched.
       await expect(page.getByTestId('card-case-summary').first()).toBeVisible();
 

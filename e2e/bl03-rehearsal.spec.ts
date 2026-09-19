@@ -128,6 +128,12 @@ test.describe('proba generalna prob modelowych BL-03 (bez modelu)', () => {
       { x: afterChange.geometry.x, y: afterChange.geometry.y },
       'przesuniecie nie zmienilo polozenia',
     ).not.toEqual({ x: geometryBefore.x, y: geometryBefore.y });
+    /*
+     * Widoczne, a nie tylko zapisane — i celowo probowane tutaj, bo selektor
+     * naglowka karty to dokladnie ten rodzaj szczegolu, ktory na turze platnej
+     * kosztuje ture.
+     */
+    await expect(page.locator('.react-flow')).toContainText('ZMIENIONY-TYTUL', { timeout: 30_000 });
 
     /* --- 3. usuniecie: karta znika z backendu i z ekranu -------------------- */
 
