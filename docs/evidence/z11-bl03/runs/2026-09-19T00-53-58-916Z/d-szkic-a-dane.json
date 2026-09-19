@@ -1,0 +1,52 @@
+{
+  "zapisano": "2026-09-19T00:55:25.896Z",
+  "kodCommit": "9a6846a5a86ecf382404feaa00f34a59939510c2",
+  "zrodlo": "prawdziwy model (subskrypcja Claude) przez @mastra/claude i proces Claude Agent SDK",
+  "pakiet": "BL-03 (Z11)",
+  "przebieg": "2026-09-19T00-53-58-916Z",
+  "spec": "e2e/bl03-model-lifecycle.spec.ts",
+  "przebiegPlanu": "C/D",
+  "turyWydaneWTymPliku": 3,
+  "turyWydaneLacznie": 11,
+  "budzet": 25,
+  "kroki": [
+    {
+      "cel": "druga tura po restarcie",
+      "runId": "run_ecf8593153ac4d14920d",
+      "faza": "succeeded"
+    },
+    {
+      "cel": "szkic a dane zapisane",
+      "runId": "run_aff82ce53cd04760a300",
+      "faza": "succeeded",
+      "narzedzia": [
+        "get_context",
+        "ToolSearch",
+        "procurement_search",
+        "ToolSearch",
+        "procurement_list_offers"
+      ]
+    }
+  ],
+  "kryteria": [
+    "L6.5"
+  ],
+  "pozycja": {
+    "id": "pci_d4be84eadc934b4d824d",
+    "nazwa": "Projektor laserowy 4K EX-5200",
+    "zapisanaIlosc": 37
+  },
+  "szkicWKontekscie": [
+    {
+      "formId": "item-pci_d4be84eadc934b4d824d",
+      "entity": "offer_item",
+      "entityId": "pci_d4be84eadc934b4d824d",
+      "dirtyFields": [
+        "quantity"
+      ]
+    }
+  ],
+  "odpowiedz": "Sprawdzam aktualny kontekst aplikacji i formularz tej pozycji.\nZapisana ilość pozycji „Projektor laserowy 4K EX-5200\" to **37 szt**.\n\nTak, w tym formularzu masz niezapisaną zmianę — pole **ilość** (quantity) jest zmienione, ale nie zapisane.",
+  "wpisanaWartoscWOdpowiedzi": false,
+  "wynik": "niezaliczona"
+}

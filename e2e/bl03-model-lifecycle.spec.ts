@@ -276,7 +276,13 @@ test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () 
         `/api/m/procurement/cases/${caseId}`,
       );
       const itemAfter = after.offers.flatMap((o) => o.items).find((i) => i.id === item.id)!;
-      expect(itemAfter.quantityMilli).toBe(item.quantityMilli);
+      /*
+       * Porownanie z wartoscia PO przygotowaniu, nie z odczytem sprzed niego.
+       * Baseline `item.quantityMilli` pochodzi sprzed patcha na 37, wiec
+       * porownanie z nim oblewa nawet wtedy, gdy nic sie nie zmienilo — co
+       * kosztowalo ture, mimo ze sama proba przeszla.
+       */
+      expect(itemAfter.quantityMilli).toBe(savedQuantity * 1000);
       record.wynik = 'zaliczona';
     } finally {
       run.save('d-szkic-a-dane.json', { ...record, wynik: record.wynik ?? 'niezaliczona' });

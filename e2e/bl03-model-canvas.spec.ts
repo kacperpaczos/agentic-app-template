@@ -32,7 +32,8 @@ import { type Page } from '@playwright/test';
  * through these very helpers. Nothing here asserts on the model's wording: an
  * agent that says the right thing and changes nothing has to fail.
  *
- * Koszt: 4 tury z grantu BL-03.
+ * Koszt: 4 tury z grantu BL-03 — 3 na operacje kompozycji i 1 na nawigacje.
+ * Dwa testy, nie jeden, zeby dalo sie powtorzyc sam ten kawalek, ktory oblal.
  */
 
 const FILE = 'bl03-model-canvas.spec.ts';
@@ -53,11 +54,11 @@ test.describe('BL-03 przebieg A: kanwa, rekord i nawigacja na prawdziwym modelu'
   test.describe.configure({ mode: 'serial', timeout: AGENT_TIMEOUT });
   test.skip(!preflight.ok, preflight.skipReason ?? '');
 
-  test('cztery operacje kompozycji, ustawienie i przestrzen — jedna rozmowa', async ({ page }) => {
+  test('trzy operacje kompozycji wywolane przez agenta, kazda powiazana z wykonaniem', async ({ page }) => {
     const run = paidRun({ file: FILE, przebieg: 'A' });
     const backend = new Backend(page);
     const marker = `Z11A${Date.now().toString(36).toUpperCase()}`;
-    const record: Record<string, unknown> = { znacznik: marker, kryteria: ['L3.2', 'L3.10', 'L3.13', 'L6.6', 'L2.13'] };
+    const record: Record<string, unknown> = { znacznik: marker, kryteria: ['L3.2', 'L3.10', 'L3.13', 'L6.6'] };
 
     try {
       await openApp(page, '');
@@ -158,8 +159,32 @@ test.describe('BL-03 przebieg A: kanwa, rekord i nawigacja na prawdziwym modelu'
       await expect(page.getByTestId(`card-${created.cardId}`)).toHaveCount(0, { timeout: 60_000 });
       // The rest of the composition is untouched.
       await expect(page.getByTestId('card-case-summary').first()).toBeVisible();
+      record.wynik = 'zaliczona';
+    } finally {
+      run.save('a-kanwa-cztery-operacje.json', { ...record, wynik: record.wynik ?? 'niezaliczona' });
+    }
+  });
 
-      /* ------------------- tura 4: ustawienie i przestrzen ------------------ */
+  /**
+   * Osobny test, bo osobno trzeba go bylo powtorzyc.
+   *
+   * Pierwsze podejscie (tura 6 grantu) pokazalo ustawienie poprawnie, a na
+   * przelaczeniu przestrzeni oblalo: agent wzial `spaces[].spaceId` z katalogu i
+   * podal go jako `targetId`. Poprawka jest w `ui_navigate` (odmowa mowi, co
+   * zrobic), ale zeby ja sprawdzic, trzeba bylo powtorzyc **jedno** polecenie, a
+   * nie cztery — dlatego to jest wlasny test, ktory nie zalezy od poprzedniego.
+   */
+  test('polecenie pokazuje ustawienie i przelacza przestrzen pracy', async ({ page }) => {
+    const run = paidRun({ file: FILE, przebieg: 'A' });
+    const backend = new Backend(page);
+    const record: Record<string, unknown> = { kryteria: ['L2.13'] };
+
+    try {
+      await openApp(page, '');
+      const { spaceId } = await openCase(page, backend);
+      await page.getByRole('link', { name: 'Otworz przestrzen pracy na canvasie' }).click();
+      await expect(page.getByTestId('card-case-summary').first()).toBeVisible();
+      /* ------------------ jedno polecenie, dwa ruchy interfejsu ------------- */
 
       if ((await backend.spaces()).length < 2) {
         const made = await page.request.post('/api/canvas/spaces', { data: { title: 'Druga przestrzen' } });
@@ -201,7 +226,7 @@ test.describe('BL-03 przebieg A: kanwa, rekord i nawigacja na prawdziwym modelu'
       record.przestrzenPo = new URL(page.url()).searchParams.get('s');
       record.wynik = 'zaliczona';
     } finally {
-      run.save('a-kanwa-rekord-nawigacja.json', { ...record, wynik: record.wynik ?? 'niezaliczona' });
+      run.save('a-ustawienie-i-przestrzen.json', { ...record, wynik: record.wynik ?? 'niezaliczona' });
     }
   });
 });
