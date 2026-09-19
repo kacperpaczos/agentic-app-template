@@ -2,6 +2,7 @@ import { mkdirSync, existsSync, readdirSync, statSync, symlinkSync } from 'node:
 import { resolve, sep } from 'node:path';
 import { AppError } from '@platform/contracts';
 import { removeManagedTree } from '../util/managed-fs.ts';
+import { realResolve } from './permissions.ts';
 import type { ToolkitEntry } from './toolkit.ts';
 
 export interface RunWorkspace {
@@ -76,10 +77,33 @@ export function createRunWorkspace(
   };
 }
 
-/** Rejects any path that would escape the run workspace. */
+/**
+ * Rejects any path that would escape the run workspace — **including through a
+ * symbolic link**.
+ *
+ * `path.resolve` alone answers a question about text: it flattens `..` and makes
+ * the path absolute. A symlink placed inside `output/` and pointing at the
+ * credential file therefore *resolved to a path under the workspace* and walked
+ * straight through the prefix comparison below — while `statSync` said "a file"
+ * and `readFileSync` followed the link. The two callers of this function are
+ * `artifact_publish_file` and `files_publish_version`, so the end of that road
+ * was **the subscription token published as a downloadable artifact**.
+ *
+ * Creating the link is not blocked by anything upstream and should not be: making
+ * a symlink reads nothing, so a read-denial cannot see it, and the tools are MCP
+ * tools, which `decideTool` answers `'auto'` for. The chokepoint is here.
+ *
+ * Both sides are resolved for real. The workspace root as well, because it may
+ * itself sit under a symlinked temporary directory — comparing a real path
+ * against a lexical root would start refusing perfectly ordinary files. And a
+ * path that **does not exist yet** is resolved through its nearest existing
+ * ancestor (see `realResolve`), because publication routinely names a file the
+ * caller is about to create.
+ */
 export function resolveInWorkspace(workspaceDir: string, relative: string): string {
-  const abs = resolve(workspaceDir, relative);
-  if (abs !== workspaceDir && !abs.startsWith(workspaceDir + sep)) {
+  const root = realResolve(workspaceDir, '.');
+  const abs = realResolve(workspaceDir, relative);
+  if (abs !== root && !abs.startsWith(root + sep)) {
     throw new AppError('sandbox_denied', 'Sciezka wychodzi poza workspace uruchomienia.', {
       requested: relative,
     });

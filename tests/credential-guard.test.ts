@@ -7,6 +7,8 @@ import {
   claudeConfigDir,
   collectToolEntries,
   platformTools,
+  createRunWorkspace,
+  invokeTool,
   protectedDirsFor,
   protectedPathRefusal,
   realResolve,
@@ -85,6 +87,17 @@ async function startRun(script: Step[]) {
   await reader;
   return { stand: handle, events, conversationId, runId: started.runId };
 }
+
+/** Minimalny kontekst wywolania narzedzia — tyle, ile potrzebuje publikacja. */
+const toolContext = (runId: string, workspaceDir: string) =>
+  ({
+    ownerId: h.ownerId,
+    conversationId: null,
+    runId,
+    workspaceDir,
+    emit: () => {},
+    requestUi: async () => ({ executed: false, reason: 'brak klienta' }),
+  }) as any;
 
 const answerText = (events: Array<Record<string, any>>) =>
   events
@@ -371,6 +384,90 @@ describe('uruchomienie nie moze odczytac poswiadczenia (symulacja na granicy ada
     expect(protectedPathRefusal('Read', { file_path: '/home/ktos/.claude.json' }, guards)).toBeTruthy();
     expect(protectedPathRefusal('Read', { file_path: '/home/ktos/.claude/.credentials.json' }, guards)).toBeTruthy();
     expect(protectedPathRefusal('Read', { file_path: '/home/ktos/.claude-notatki/plan.md' }, guards)).toBeNull();
+  });
+
+  it('publikacja przez dowiazanie w output/ jest odrzucona, a artefakt nie powstaje', async () => {
+    /*
+     * Piąta droga, znaleziona w rerecenzji, i jedyna kończąca się **plikiem do
+     * pobrania**. `artifact_publish_file` i `files_publish_version` to narzędzia
+     * MCP: `decideTool` odpowiada dla nich `'auto'`, nie ma ich w
+     * `PATH_ARGUMENTS`, więc `protectedPathRefusal` zwraca `null`. Całą obroną
+     * jest `resolveInWorkspace`, a ono porównywało ścieżkę **tekstowo**.
+     *
+     * Dowiązanie w `output/` przechodziło więc kontrolę przedrostka (jego własna
+     * ścieżka leży w workspace), `statSync` mówiło „plik", `readFileSync`
+     * podążało za dowiązaniem — i zawartość lądowała w artefakcie. Utworzenia
+     * dowiązania nic nie blokuje i blokować nie powinno: robienie linku **niczego
+     * nie czyta**, więc zakaz odczytu go nie widzi.
+     *
+     * Cel dowiązania jest ATRAPĄ o wymyślonej treści w katalogu tymczasowym —
+     * nie prawdziwym poświadczeniem i nie jego kopią. Sprawdzane jest to, że
+     * narzędzie **odmawia**, a nie to, co by przeczytało.
+     */
+    const outsideDir = mkdtempSync(join(tmpdir(), 'atrapa-poza-ws-'));
+    const decoy = join(outsideDir, '.credentials.json');
+    writeFileSync(decoy, JSON.stringify({ claudeAiOauth: { accessToken: CANARY, refreshToken: CANARY } }));
+
+    const before = h.platform.services.artifacts.list(h.ownerId, {}).length;
+    const entries = collectToolEntries({
+      registry: h.platform.registry,
+      platformTools: platformTools(h.platform.services),
+    });
+    const publish = entries.find((e) => e.localName === 'artifact_publish_file');
+    expect(publish, 'brak narzedzia artifact_publish_file').toBeTruthy();
+
+    const ws = createRunWorkspace(h.platform.config.workspacesDir, 'run_dowiazanie');
+    try {
+      // Dowiązanie, które mogłaby zrobić zaakceptowana komenda w sandboxie.
+      symlinkSync(decoy, join(ws.outputDir, 'raport.json'));
+
+      const outcome = await invokeTool(
+        publish!,
+        {
+          path: 'raport.json',
+          title: 'Raport',
+          operationId: `proba-dowiazanie-${Date.now()}`,
+        },
+        toolContext('run_dowiazanie', ws.dir),
+      );
+
+      const text = outcome.content.map((c) => c.text).join('');
+      expect(outcome.isError, 'publikacja przez dowiazanie NIE zostala odrzucona').toBe(true);
+      expect(text).toContain('sandbox_denied');
+      expect(text.includes(CANARY), 'tresc atrapy trafila do wyniku narzedzia').toBe(false);
+      // I najważniejsze: nic nie powstało do pobrania.
+      expect(
+        h.platform.services.artifacts.list(h.ownerId, {}).length,
+        'artefakt powstal mimo dowiazania poza workspace',
+      ).toBe(before);
+    } finally {
+      ws.dispose();
+      rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it('zwykly plik w output/ publikuje sie normalnie', async () => {
+    /*
+     * Kontrola w drugą stronę: rozwiązywanie rzeczywistych ścieżek nie może
+     * zepsuć publikacji, dla której te narzędzia istnieją.
+     */
+    const entries = collectToolEntries({
+      registry: h.platform.registry,
+      platformTools: platformTools(h.platform.services),
+    });
+    const publish = entries.find((e) => e.localName === 'artifact_publish_file')!;
+    const ws = createRunWorkspace(h.platform.config.workspacesDir, 'run_zwykly');
+    try {
+      writeFileSync(join(ws.outputDir, 'wynik.txt'), 'zwykla tresc wyniku');
+      const outcome = await invokeTool(
+        publish,
+        { path: 'wynik.txt', title: 'Wynik', operationId: `proba-zwykly-${Date.now()}` },
+        toolContext('run_zwykly', ws.dir),
+      );
+      expect(outcome.isError, outcome.content.map((c) => c.text).join('')).toBeFalsy();
+    } finally {
+      ws.dispose();
+    }
   });
 
   it('uruchomienie NAPRAWDE przekazuje SDK liste chronionych katalogow', async () => {
