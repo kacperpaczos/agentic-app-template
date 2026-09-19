@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -28,6 +28,15 @@ import {
   MODEL_TURNS_PER_RUN,
   RECORDED_LEDGER,
   RUN_STAMP,
+  Z11_MODEL_SPEC_FILES,
+  Z11_MODEL_SPEC_PATTERNS,
+  Z11_OPT_IN_ENV,
+  Z11_SPEC_TURNS,
+  Z11_TURNS_PLANNED,
+  Z11_TURN_BUDGET,
+  Z11_WORKING_LEDGER,
+  readZ11Ledger,
+  z11SpecsRequested,
   WORKING_LEDGER,
   acceptancePreflight,
   budgetPreflight,
@@ -257,16 +266,92 @@ describe('spece z prawdziwym modelem: opt-in i nienaruszalnosc dowodow', () => {
     const projects = config.projects!;
     expect(projects).toHaveLength(1);
     expect(projects[0]!.name).toBe('chromium');
-    // Excluded by the project's own file set: no argument or grep can reach them.
-    expect(projects[0]!.testIgnore).toEqual(MODEL_SPEC_PATTERNS);
+    /*
+     * Excluded by the project's own file set: no argument or grep can reach
+     * them — and that has to hold for **both** grants. A second package adding
+     * paid specs is exactly the moment this list silently stops covering
+     * everything that spends a turn.
+     */
+    expect(projects[0]!.testIgnore).toEqual([...MODEL_SPEC_PATTERNS, ...Z11_MODEL_SPEC_PATTERNS]);
     expect(projects[0]!.testMatch).toBeUndefined();
     expect(MODEL_SPEC_PATTERNS).toEqual([
       '**/bl01-bl02-model.spec.ts',
       '**/agent-ui.spec.ts',
       '**/files-agent.spec.ts',
     ]);
+    expect(Z11_MODEL_SPEC_PATTERNS).toEqual([
+      '**/bl03-model-canvas.spec.ts',
+      '**/bl03-model-isolation.spec.ts',
+      '**/bl03-model-lifecycle.spec.ts',
+      '**/bl03-model-relations.spec.ts',
+    ]);
     expect(modelSpecsRequested({} as NodeJS.ProcessEnv)).toBe(false);
     expect(modelSpecsRequested({ [MODEL_OPT_IN_ENV]: '1' } as NodeJS.ProcessEnv)).toBe(true);
+  });
+
+  /**
+   * The second grant, and why it needs a second switch.
+   *
+   * `pnpm test:e2e:model` is documented as costing 11 turns. Putting BL-03's
+   * four specs into the same project would change that number for everyone who
+   * runs it, without anybody choosing it — the same class of surprise as the
+   * default run spending turns. So `APP_E2E_MODEL_Z11` has to be set **as well**,
+   * and the two projects are mutually exclusive: one invocation can never spend
+   * from both grants.
+   */
+  it('spece BL-03 wymagaja drugiej zgody i wydaja z wlasnego grantu', () => {
+    const env = (extra: Record<string, string>) => extra as NodeJS.ProcessEnv;
+    expect(z11SpecsRequested(env({}))).toBe(false);
+    // The second switch alone is not enough: the first one is the opt-in to
+    // spending anything at all.
+    expect(z11SpecsRequested(env({ [Z11_OPT_IN_ENV]: '1' }))).toBe(false);
+    expect(z11SpecsRequested(env({ [MODEL_OPT_IN_ENV]: '1' }))).toBe(false);
+    expect(z11SpecsRequested(env({ [MODEL_OPT_IN_ENV]: '1', [Z11_OPT_IN_ENV]: '1' }))).toBe(true);
+
+    // Two ledgers: this grant's counter is not the closed grant's file.
+    expect(Z11_WORKING_LEDGER.startsWith(resolve(REPO, '.e2e-model-turns'))).toBe(true);
+    expect(Z11_WORKING_LEDGER).not.toBe(WORKING_LEDGER);
+    expect(Z11_WORKING_LEDGER.startsWith(EVIDENCE_ROOT)).toBe(false);
+    // A fresh checkout starts this grant at zero, not at the other one's count.
+    if (!existsSync(Z11_WORKING_LEDGER)) expect(readZ11Ledger().wydane).toBe(0);
+    expect(readZ11Ledger().budzet).toBe(Z11_TURN_BUDGET);
+
+    // The plan fits inside the grant, with room for retries.
+    expect(Object.values(Z11_SPEC_TURNS).reduce((a, b) => a + b, 0)).toBe(Z11_TURNS_PLANNED);
+    expect(Z11_TURNS_PLANNED).toBeLessThan(Z11_TURN_BUDGET);
+
+    // Every paid spec refuses before the first command when the grant is short.
+    for (const file of Z11_MODEL_SPEC_FILES) {
+      const source = readFileSync(resolve(REPO, 'e2e', file), 'utf8');
+      expect(source, `${file}: brak sprawdzenia wstepnego`).toContain('paidSpecPreflight(FILE)');
+      expect(source, `${file}: brak pominiecia przy braku budzetu`).toContain(
+        'test.skip(!preflight.ok',
+      );
+      // Evidence lands under the run stamp, written from a `finally`.
+      expect(source, `${file}: dowod nie jest zapisywany bezwarunkowo`).toContain('} finally {');
+    }
+    const shortfall = budgetPreflight({ budget: Z11_TURN_BUDGET, spent: 25, needed: 4 });
+    expect(shortfall).toMatchObject({ ok: false, left: 0, shortfall: 4 });
+    expect((shortfall as { message: string }).message).toContain('NIC nie zostalo wyslane do modelu');
+  });
+
+  it('pominiecie BL-03 jest powiedziane razem z kosztem i druga zgoda', () => {
+    const skipped = modelSpecsNotice({} as NodeJS.ProcessEnv);
+    for (const file of Z11_MODEL_SPEC_FILES) expect(skipped).toContain(file);
+    expect(skipped).toContain(Z11_OPT_IN_ENV);
+    expect(skipped).toContain('pnpm test:e2e:z11');
+    // With only the first switch, the BL-03 specs are named as still skipped.
+    const first = modelSpecsNotice({ [MODEL_OPT_IN_ENV]: '1' } as NodeJS.ProcessEnv);
+    expect(first).toContain(Z11_OPT_IN_ENV);
+    expect(first).toContain(String(MODEL_TURNS_PER_RUN));
+    // With both, the notice names this grant's ceiling instead.
+    const both = modelSpecsNotice({
+      [MODEL_OPT_IN_ENV]: '1',
+      [Z11_OPT_IN_ENV]: '1',
+    } as NodeJS.ProcessEnv);
+    expect(both).toContain('model-z11');
+    expect(both).toContain(String(Z11_TURNS_PLANNED));
+    expect(both).toContain(String(Z11_TURN_BUDGET));
   });
 
   it('pominiecie jest powiedziane, z kosztem w turach', () => {

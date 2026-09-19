@@ -98,7 +98,9 @@ pnpm install --frozen-lockfile
 pnpm verify          # granica, macierz 200, macierze historyczne, typy (pakiety + e2e), build, testy
 pnpm test:e2e        # przeglądarka na istniejącym buildzie produkcyjnym (po verify/build — inaczej testuje stary bundle);
                      # BEZ testów z prawdziwym modelem — nie zużywa ani jednej tury subskrypcji
-pnpm test:e2e:model  # tylko testy z prawdziwym modelem; koszt: 11 tur subskrypcji na przebieg
+pnpm test:e2e:model  # tylko testy z prawdziwym modelem BL-01/BL-02; koszt: 11 tur subskrypcji na przebieg
+pnpm test:e2e:z11    # tylko proby modelowe pakietu BL-03; koszt: do 16 tur z grantu 25 (osobny rejestr)
+pnpm diag            # prawdziwa sesja SDK, wylacznie zadania sterujace — 0 tur; porownuje narzedzia
 pnpm check:module-swap   # przy zmianach kontraktu modułu lub warstwy składania
 pnpm evidence            # regeneracja plików dowodowych z regresji (APP_WRITE_EVIDENCE=1) — na żądanie
 pnpm evidence:z5         # to samo dla dowodu kontekstu aplikacji (tests/app-context.test.ts)
@@ -128,7 +130,23 @@ modelowych kosztuje turę.
 (7 tur), `e2e/agent-ui.spec.ts` (2) i `e2e/files-agent.spec.ts` (2) nie należą do żadnego projektu
 domyślnego przebiegu — żaden argument ani filtr do nich nie sięgnie. Uruchamia je wyłącznie
 `pnpm test:e2e:model` (czyli `APP_E2E_MODEL=1`). Domyślny przebieg wypisuje, co pominął i ile by to
-kosztowało. Licznik wydanych tur trzymany jest w kopii roboczej (`.e2e-model-turns/`, ignorowanej przez
+kosztowało.
+
+Cztery spece pakietu BL-03 (`e2e/bl03-model-*.spec.ts`, razem 16 tur) wydają **inny grant** i mają
+**drugi przełącznik**: `pnpm test:e2e:z11` (`APP_E2E_MODEL=1 APP_E2E_MODEL_Z11=1`). Nie należą do
+projektu `model`, więc `pnpm test:e2e:model` nadal kosztuje 11 tur i ani jednej więcej — dołożenie ich
+tam zmieniłoby cenę polecenia, którego cena jest udokumentowana. Ich licznik to osobny plik
+(`.e2e-model-turns/z11-bl03.json`, sufit 25), bo rejestr BL-01/BL-02 opisuje **zamknięty** grant i nikt
+go nie dopisuje. Próbę generalną tych scenariuszy — te same asercje, model zastąpiony scenariuszem —
+uruchamia zwykły `pnpm test:e2e` (`e2e/bl03-rehearsal.spec.ts`), bez żadnej tury.
+
+**`pnpm diag` nie kosztuje tury.** Otwiera prawdziwą sesję Claude Agent SDK ze strumieniem wejściowym,
+który nigdy nic nie podaje — model nie dostaje wiadomości — i pyta ją **żądaniami sterującymi**
+(`initializationResult`, `mcpServerStatus`, `accountInfo`). Porównuje narzędzia zadeklarowane z tymi,
+które serwer MCP naprawdę ogłosił w sesji, i wypisuje obce serwery MCP; kończy się kodem ≠ 0, gdy
+czegoś brakuje. Ma dwie próby zdolności wykrycia: `--proba-niezgodnego-schematu` (serwer z `z.record()`
+raportuje się jako `connected` z zerem narzędzi i bez błędu) oraz `--proba-bez-izolacji-mcp` (bez
+`strictMcpConfig` do sesji wchodzą serwery MCP z konta). Licznik wydanych tur trzymany jest w kopii roboczej (`.e2e-model-turns/`, ignorowanej przez
 git), zasiewany raz z zamkniętego rejestru `docs/evidence/bl01-bl02-2026-09-17/tury-modelu.json`, którego
 spec **tylko czyta**; dowody przebiegu lądują pod stemplem przebiegu w `docs/evidence/<zadanie>/runs/`,
 więc zapisany werdykt próby odbiorowej nie jest do nadpisania przez późniejszy przebieg.

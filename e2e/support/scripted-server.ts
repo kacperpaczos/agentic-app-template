@@ -28,6 +28,12 @@ import {
 } from './bl09-scenarios.ts';
 import { chatHistoryScript } from './chat-history-scenario.ts';
 import { consentThenWorkScript, liveReconnectScript } from './bl08b-scenarios.ts';
+import {
+  bl03CanvasScript,
+  bl03ConsentScript,
+  bl03LifecycleScript,
+  bl03RelationsScript,
+} from './bl03-scenarios.ts';
 import { interactionsScript } from './interactions-scenario.ts';
 import { showValueScript } from './show-value-scenario.ts';
 import { scriptedAgent, type CallRecord, type Step } from './scripted-agent.ts';
@@ -664,6 +670,14 @@ const CONVERSATION_SCENARIOS: Record<string, (prompt: string) => Step[]> = {
   /* BL-08b: coming back to a run that is still going. */
   'bl08b-live-reconnect': liveReconnectScript,
   'bl08b-consent-then-work': consentThenWorkScript,
+  /*
+   * BL-03: rehearsals of the paid runs. Simulations, and never evidence for a
+   * criterion of that package — see the header of `bl03-scenarios.ts`.
+   */
+  'bl03-canvas': bl03CanvasScript,
+  'bl03-relations': bl03RelationsScript,
+  'bl03-consent': bl03ConsentScript,
+  'bl03-lifecycle': bl03LifecycleScript,
 };
 
 const scenario = process.env.SCRIPT ?? 'tool-then-text';

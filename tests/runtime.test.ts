@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  AgentRuntime,
   createRunWorkspace,
   listWorkspaceOutputs,
   resolveInWorkspace,
@@ -508,6 +509,81 @@ describe('token subskrypcji nie wycieka z aplikacji', () => {
       }
       // The metadata that *is* exposed stays exposed.
       expect(JSON.parse(text).auth).toHaveProperty('apiKeyPolicy', 'refused');
+    } finally {
+      h.dispose();
+    }
+  });
+});
+
+describe('sesja SDK widzi tylko serwer MCP tej aplikacji', () => {
+  /**
+   * `settingSources: []` is not the whole of the isolation, and believing it was
+   * is what this test exists to stop.
+   *
+   * It keeps out project `.mcp.json`, user settings and plugins. It does **not**
+   * keep out an MCP server attached to the *account* on claude.ai: a session
+   * built with it reported two servers, `app` and an account connector, when
+   * `pnpm diag` was first able to ask (SDK 0.3.270). A connector's tools run
+   * inside the SDK process, outside the shell sandbox, and are not the
+   * application's — the same reason `WebFetch` is forbidden outright rather than
+   * left to a consent prompt.
+   *
+   * `strictMcpConfig` is the option that limits the session to the servers
+   * passed in `mcpServers`. Asserted here on what the runtime actually hands the
+   * adapter, because that is where it can be lost; that the option *works* is a
+   * statement about the CLI and is shown in a live session by `pnpm diag`
+   * (`--proba-bez-izolacji-mcp` is its detection trial).
+   */
+  it('uruchomienie przekazuje SDK strictMcpConfig i wylacznie serwer "app"', async () => {
+    const h = await createHarness();
+    try {
+      let captured: Record<string, any> | null = null;
+      const answer = () => ({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', payload: { text: 'ok' } };
+        })(),
+      });
+      const runtime = new AgentRuntime(h.platform.services, {
+        stream: async (_p, o: any) => {
+          captured = o.sdkOptions as Record<string, any>;
+          return answer();
+        },
+        resumeStream: async (_i, o: any) => {
+          captured = o.sdkOptions as Record<string, any>;
+          return answer();
+        },
+      });
+      const conversationId = h.platform.services.conversations.create({
+        ownerId: h.ownerId,
+        title: 'Izolacja MCP',
+      }).id;
+      const started = await runtime.start({
+        ownerId: h.ownerId,
+        conversationId,
+        prompt: 'sprawdz izolacje',
+        appContext: {
+          conversationId,
+          spaceId: null,
+          resource: null,
+          selection: [],
+          filters: {},
+          viewport: null,
+          drafts: [],
+          ui: null,
+        },
+      });
+      await started.done;
+
+      const options = captured as unknown as {
+        strictMcpConfig?: boolean;
+        mcpServers: Record<string, unknown>;
+      };
+      expect(options, 'stand-in nie dostal sdkOptions').toBeTruthy();
+      expect(
+        options.strictMcpConfig,
+        'bez strictMcpConfig sesja dostaje takze serwery MCP skonfigurowane na koncie',
+      ).toBe(true);
+      expect(Object.keys(options.mcpServers)).toEqual(['app']);
     } finally {
       h.dispose();
     }

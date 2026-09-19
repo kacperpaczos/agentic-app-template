@@ -659,3 +659,97 @@ Recenzja nie znalazła krytycznych; poprawione zostały zapisy i ostrość kilku
   restartu ma dowód pozytywny (kolejne polecenie w tej samej rozmowie kończy się sukcesem), bo sama
   negacja przechodziła też dla pustego ekranu; komunikat „operacja wykonała się dwa razy" zawężony do
   tego, co asercja widzi — idempotencja usuwa duplikat, zanim artefakt powstanie.
+
+---
+
+## T7 — 2026-09-19 — BL-03 faza 1: projekt prób modelowych, próba generalna i to, co udało się zamknąć bez tury
+
+Pakiet BL-03 ma **19 kryteriów i grant 25 tur** prawdziwego modelu. Faza 1 (ta) nie wydaje ani jednej
+tury: projektuje przebiegi, sprawdza je na skryptowanym stand-inie i zabiera z planu wszystko, co da
+się potwierdzić bez modelu. Tury wydaje faza 2, po autoryzacji koordynatora.
+
+### Żądania sterujące SDK kosztują zero tur — i odpowiadają na dwa kryteria
+
+`Query` z Claude Agent SDK ma metody sterujące (`initializationResult`, `mcpServerStatus`,
+`accountInfo`), obsługiwane przez CLI lokalnie. Sesja otwarta ze **strumieniem wejściowym, który nigdy
+nic nie podaje**, nie przekazuje modelowi żadnej wiadomości, więc nie kosztuje tury — a `mcpServerStatus()`
+podaje stan serwera MCP i listę narzędzi, które naprawdę się w niej zarejestrowały.
+
+Trzy rzeczy z tego wyszły:
+
+1. **`pnpm diag` przestał ryzykować turę.** Poprzednia wersja wysyłała `prompt: 'ok'` i przerywała na
+   `system/init`; czy wiadomość zdążyła dojść do modelu przed `interrupt()`, było wyścigiem. Teraz
+   diagnostyka pyta wyłącznie żądaniami sterującymi, trwa ~2 s i porównuje 33 zadeklarowane narzędzia
+   z listą w sesji. Kończy się kodem ≠ 0, gdy czegoś brakuje albo gdy w sesji są obce serwery MCP.
+2. **Niezgodny schemat naprawdę znika po cichu — zmierzone, nie opowiedziane.** Serwer MCP z jednym
+   narzędziem na `z.record()` raportuje się w sesji jako `connected` z **zerem narzędzi i bez błędu**
+   (`--proba-niezgodnego-schematu`, kod wyjścia 1). W procesie ta sama konwersja rzuca wyjątek, który
+   CLI połyka. To jest dokładnie ten stan, którego nie da się zdiagnozować od strony modelu, i
+   jedyne, co go dziś zatrzymuje, to własny strażnik `assertMcpCompatibleShape` przy starcie.
+3. **`settingSources: []` nie wystarcza do izolacji MCP.** W sesji zbudowanej tak, jak robi to runtime,
+   pojawił się **obcy serwer MCP podpięty do konta** (łącznik z claude.ai) — jego narzędzia działają w
+   procesie SDK, poza sandboxem powłoki, czyli dokładnie tam, gdzie `WebFetch` jest zabroniony zamiast
+   pytany. Runtime dostał `strictMcpConfig: true`; bez tej flagi obcy serwer wraca
+   (`pnpm --filter @app/server diag -- --proba-bez-izolacji-mcp`, kod wyjścia 1).
+
+### Co SDK naprawdę ogłasza (`tests/mcp-published-schema.test.ts`)
+
+`assertMcpCompatibleShape` to statyczny obchód kształtu Zod, czyli zestaw **przekonań o cudzym
+konwerterze**. Nowy test czyta JSON Schema, które SDK wyprowadza z każdego realnego narzędzia, i woła
+narzędzia przez własną walidację serwera:
+
+- wszystkie zadeklarowane narzędzia są ogłoszone, z opisem i schematem obiektu;
+- jedno narzędzie z `z.record()` zabiera całą listę (kontrola: samo zdrowe narzędzie ogłasza się
+  normalnie);
+- **`.default()` pod `.optional()` jest ogłaszane jako NIEwymagane i uzupełniane przy wywołaniu**, gdy
+  obiekt nadrzędny jest podany — to jest ta semantyka, na którą strażnik pozwala i której nikt
+  wcześniej nie sprawdził (L9.13). Kontrola negatywna: obiekt bez `.optional()` jest wymagany i
+  wywołanie bez niego oblewa.
+
+### Opis skutku i zakresu dostępu w każdym narzędziu (L9.16)
+
+Opisy narzędzi rzadko mówiły, co narzędzie zmienia i dokąd sięga. Zdanie jest teraz **wyprowadzane z
+pola `effect`** i doklejane w `buildMcpServer`, a nie pisane ręcznie przy każdym narzędziu: zdanie,
+które trzeba pamiętać, jest zdaniem, którego kolejne narzędzie nie będzie miało. Test sprawdza je na
+opisie, który SDK naprawdę publikuje.
+
+### Próba generalna złapała pięć błędów scenariusza, zanim kosztowały turę
+
+`e2e/bl03-rehearsal.spec.ts` prowadzi **te same asercje**, których użyją próby płatne
+(`e2e/support/bl03-checks.ts`), przeciwko skryptowanym scenariuszom wołającym prawdziwe uchwyty
+narzędzi. Osiem testów, zero tur. Znalazła:
+
+1. polecenie wysłane z canvasu **nie niesie rekordu** — `resource` czyści się przy wyjściu z ekranu
+   sprawy, więc scenariusz odtwarzający spec karty z kontekstu padał; zmiana karty musi czytać kartę,
+   która jest, a nie budować ją od nowa (to samo ograniczenie dotyczy poleceń w próbie płatnej);
+2. w fixture jest **jedna** przestrzeń pracy, więc „przełącz na drugą” nie miało celu — druga
+   przestrzeń jest teraz przygotowywana przez API;
+3. wyszukiwanie zwraca `kind: "offer_item"`, nie `item`;
+4. `workspace_outputs` odpowiada polem `outputs`, nie `files`;
+5. szczegół sprawy ma `offers[].offer.id`, nie `offers[].id`; a karta dodana przez API wymaga
+   przeładowania, żeby pojawiła się na ekranie.
+
+Każdy z tych pięciu byłby w fazie 2 turą wydaną na błąd w skrypcie.
+
+### Zmiany w regresji
+
+- `tests/contracts.test.ts`: kontrakt `removeCard` (usuwa wskazaną kartę, nie rusza pozostałych,
+  powtórzenie tego samego `operationId` nie usuwa drugi raz, cudza karta nie jest do usunięcia).
+- `tests/isolation.test.ts`: domyślny projekt przeglądarkowy ignoruje **oba** zestawy specek
+  modelowych; spece BL-03 wymagają drugiej zgody (`APP_E2E_MODEL_Z11`) i mają własny licznik tur.
+  Ten test złapał moją zmianę jako pierwszy — dopisanie czterech płatnych specek bez rozszerzenia
+  `testIgnore` oblało go natychmiast.
+- `tests/runtime.test.ts`: uruchomienie przekazuje SDK `strictMcpConfig` i wyłącznie serwer `app`.
+
+### Czego faza 1 **nie** rozstrzyga
+
+Nie zmieniam ocen w `docs/acceptance/assessment.json`. Warunek zamknięcia BL-03 brzmi „dowód z
+przebiegu na commicie szablonu, oznaczony jako rzeczywisty model”; wpisanie werdyktu przed przebiegiem
+byłoby deklaracją, której ten program zabrania. Projekt siedmiu przebiegów, ich koszt w turach i lista
+kryteriów, które mogą zostać otwarte, są w raporcie zadania.
+
+Jedno odrzucone skrótowe rozwiązanie warto zapisać: `Query.readFile()` jest żądaniem sterującym i
+dokumentacja mówi, że podlega „tym samym regułom uprawnień, co narzędzie Read”. Gdyby tak było,
+L11.4 i L11.11 dałoby się zamknąć bez tury. Sprawdzone: `readFile` zachowuje się **identycznie** przy
+sandboxie i bez niego oraz w trybie `default` i `bypassPermissions` — jest po prostu ograniczony do
+`cwd`. Nie jest więc świadkiem decyzji bramki uprawnień i nie został użyty jako dowód.
