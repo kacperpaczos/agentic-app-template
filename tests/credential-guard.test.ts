@@ -373,6 +373,47 @@ describe('uruchomienie nie moze odczytac poswiadczenia (symulacja na granicy ada
     expect(protectedPathRefusal('Read', { file_path: '/home/ktos/.claude-notatki/plan.md' }, guards)).toBeNull();
   });
 
+  it('uruchomienie NAPRAWDE przekazuje SDK liste chronionych katalogow', async () => {
+    /*
+     * Wiązanie, nie sama reguła. `protectedDirsFor` jest sprawdzone wyżej na
+     * czystej funkcji, a `sandboxSettings` na wywołaniu wprost — ale między
+     * nimi jest filtr w `runtime.ts`, który odsiewa katalog danych, i to jest
+     * miejsce, gdzie da się po cichu zgubić pozycję. Tu czytane jest to, co
+     * runtime faktycznie podał SDK.
+     */
+    let captured: Record<string, any> | null = null;
+    const capturing = new AgentRuntime(h.platform.services, {
+      stream: async (_p: unknown, o: any) => {
+        captured = o.sdkOptions as Record<string, any>;
+        return { fullStream: (async function* () { yield { type: 'text-delta', payload: { text: 'ok' } }; })() };
+      },
+      resumeStream: async (_i: unknown, o: any) => {
+        captured = o.sdkOptions as Record<string, any>;
+        return { fullStream: (async function* () { yield { type: 'text-delta', payload: { text: 'ok' } }; })() };
+      },
+    });
+    const conversationId = h.platform.services.conversations.create({
+      ownerId: h.ownerId,
+      title: 'Sandbox',
+    }).id;
+    const started = await capturing.start({
+      ownerId: h.ownerId,
+      conversationId,
+      prompt: 'sprawdz sandbox',
+      appContext: { ...EMPTY_CONTEXT, conversationId },
+    });
+    await started.done;
+
+    const fs = (captured as any)?.sandbox?.filesystem;
+    expect(fs, 'stand-in nie dostal sdkOptions.sandbox').toBeTruthy();
+    expect(fs.denyRead, 'katalog poswiadczen nie trafil do sandboxa').toContain(configDir);
+    expect(fs.denyWrite).toContain(configDir);
+    // Plik obok katalogu — ten, który wcześniej nie miał ochrony w ogóle.
+    expect(fs.denyRead, 'plik konfiguracji obok katalogu nie trafil do sandboxa').toContain(`${configDir}.json`);
+    // I katalog danych aplikacji, którego filtr nie ma prawa zgubić.
+    expect(fs.denyRead).toContain(h.platform.config.dataDir);
+  });
+
   it('plik w workspace uruchomienia pozostaje dostepny', async () => {
     /*
      * The control that keeps the rule honest in the other direction: a
