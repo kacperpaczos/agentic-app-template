@@ -68,7 +68,53 @@ Nie uruchamiano: `pnpm test:e2e:model`, `e2e/bl01-bl02-model.spec.ts`, `e2e/agen
 ## Próby zdolności wykrycia (G16)
 
 Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** linii, przebieg,
-Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** linii, przebieg, `git checkout -- <plik>`, kontrola czystości. Prób jest **dwadzieścia jeden**; dwadzieścia oblało na spodziewanej asercji, a **jedna wyszła nieoczekiwanie zielona i to było znalezisko** (próba R, niżej).
+Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** linii, przebieg, `git checkout -- <plik>`, kontrola czystości. Prób jest **dwadzieścia dziewięć**; dwadzieścia osiem oblało na spodziewanej asercji, **jedna wyszła nieoczekiwanie zielona i to było znalezisko** (próba R) — a dwie kolejne (T2 i pierwsze podejście do Y) wyszły zielone, bo były **no-op albo celowały za płytko**; oba znaleziska zapisane niżej.
+
+### Runda 6 — czwarta iteracja tego samego strażnika
+
+Niezależny przegląd (odrzucenie rundy 4) dał 33 ataki: 21 ucieczek, 12 kontroli. Runda 6 odwróciła
+21 ucieczek w odmowy i zostawiła kontroli zielonymi (A1–A3, A4b, A5, A11b, B3, D2; A6c i A10 —
+„atak nie przechodzi"; A10b i D1 — udokumentowane znane kształty, niżej). Wszystkie próby tej rundy
+biegły **na pakiecie ataków recenzenta** (`tests/z12-r4-ataki.test.ts` + `tests/support/attack-standin.ts`
+skopiowane 1:1), z asercjami odwróconymi na odmowy.
+
+| Próba | Co wycofano | Jak oblała |
+|---|---|---|
+| **S** | (runda 5) leksykalne `resolve()` we wspólnym walkerze | 7 testów, w tym 3 z pakietu ataków |
+| **T** | M4: narzędzie dopisane do `AUTO_APPROVED_FILE_TOOLS` bez deklaracji ścieżki | niezmiennik na liście **i** na `allowedTools` — 2 asercje |
+| **U** | usunięty blok `settings.permissions.blockReads…` | „brak blockReadsOutsideWorkingDirectories w sdkOptions.settings" |
+| **V** | odmowa `..` po nieistniejącym komponencie w walkerze | 7 testów: 6 z pakietu ataków (A6/A6b/A6c/A6d/A6e/A11) + 1 z credential-guard |
+| **W** | wycofany pre-walk Z4 | B5/B6/B8: „zwykly wzorzec zostal odmowiony" |
+| **X** | wycofana reguła wzorców Z3 | B1/B2/B7: klamra i wzorzec bezwzględny przechodzą |
+| **Y** | wycofane odmowy tyldy i pustego napisu | A7/A7b/A8 |
+
+**Znane kształty świadomie niezamknięte (udokumentowane w pakiecie ataków):**
+
+- **A10b** — wyścig TOCTOU, gdy narzędzie **ignoruje `updatedInput`**. Nie da się zamknąć po stronie
+  aplikacji: tarczą jest honorowanie przepisania przez SDK/narzędzie, co rozstrzyga tura modelu
+  (L11.4/L11.11).
+- **D1** — narzędzie z odmiennie nazwanym polem ścieżki idzie do zgody użytkownika; zgoda otwiera.
+  „Pytanie, nie ochrona" — świadomie.
+
+**Czego runda 6 nie rozstrzyga bez tury:** czy SDK honoruje `updatedInput`
+(`PreToolUseHookSpecificOutput.updatedInput` istnieje w typach 0.3.270; identyfikator występuje w
+binarce CLI), czy `blockReadsOutsideWorkingDirectories` odmawia czy pyta (łańcuchy w binarce
+sugerują pytanie), czy prawdziwy `Glob` rozwija klamry. Wszystko to L11.4/L11.11.
+
+**Znaleziska metodyczne rundy 6** (patrz też §9e raportu):
+
+1. Próba T w pierwszym podejściu była **zielona pod mutacją** — asercja mierzyła stan, którego
+   mutacja nie dotykała. Niezmiennik przepisany na punkt wejścia mutacji (deklaracja ścieżki przy
+   dopisaniu narzędzia); próba powtórzona, oblewa.
+2. Pierwsze podejście do próby Y było **no-op**: `String.replace` zamienia tylko pierwsze
+   wystąpienie, a druga warstwa (obrona w głąb w `protectedPathRefusal`) dalej odmawiała — pakiet
+   zielony mimo wyłączonej reguły. Wyłączenie **obu** kopii daje 3 oblewania. Trzecie wystąpienie
+   tej samej pułapki w tym pakiecie; `replace` bez `replaceAll` i bez asercji licznika to nie jest
+   narzędzie mutacji.
+3. Runda 6 istnieje dlatego, że runda 4 naprawiła **wystąpienie** (`agent/permissions.ts`), a ten
+   sam algorytm w `util/real-path.ts` i w `scripts/lib/state-tools.mjs` został z wadą. Runda 5
+   scaliła walkera, runda 6 wpina pakiet ataków recenzenta na stałe w regresję. Czwarta iteracja
+   strażnika różni się od trzeciej jednym: **obrona ma teraz własnego adwersarza w repo**.
 żadna nie wyszła nieoczekiwanie zielona.
 
 | # | Wycofana linia | Test | Jak oblał |
