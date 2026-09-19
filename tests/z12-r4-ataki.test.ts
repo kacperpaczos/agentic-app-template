@@ -201,6 +201,21 @@ describe('A. sciezki plikowe', () => {
     expect(existsSync(cel), 'POWSTAL PLIK poza workspace przez zerwane dowiazanie na koncu').toBe(true);
   });
 
+  it('A4c ten sam ksztalt NIE zalezy od updatedInput: hook niczego nie przepisuje', async () => {
+    const { dir } = katalogPoza('a4c');
+    const cel = join(dir, 'podrzucony.txt');
+    const { proby } = await atak(
+      [
+        { kind: 'symlink', from: cel, to: 'output/skrot.txt' },
+        { kind: 'tool', name: 'Write', input: { file_path: '$ws/output/skrot.txt' }, content: 'PODRZUCONE' },
+      ],
+      { honorUpdatedInput: false },
+    );
+    expect(proby[0]?.denied).toBe(false);
+    expect(proby[0]?.updatedInput, 'hook nie mial czego przepisac — sciezka jest juz "rozwiazana"').toBe(null);
+    expect(existsSync(cel), 'POWSTAL PLIK poza workspace niezaleznie od semantyki SDK').toBe(true);
+  });
+
   it('A4b kontrola: dowiazanie na koncu do ISTNIEJACEGO pliku poza workspace jest odmowione', async () => {
     const { plik } = katalogPoza('a4b');
     const { proby, text } = await atak([
