@@ -308,6 +308,19 @@ export function resolvePhysically(base: string, candidate: string): string {
   return current;
 }
 
+/**
+ * Czy narzędzie zadeklarowało, **jak podaje ścieżkę**.
+ *
+ * Wystawione, bo to jest niezmiennik, którego pilnuje regresja: narzędzie na
+ * liście wstępnie zatwierdzonych bez wpisu w `PATH_ARGUMENTS` jest luką —
+ * strażnik ścieżek nie umie go sprawdzić, a `decideTool` odmawia mu wtedy
+ * `auto`. Asercja nad tą funkcją oblewa **w chwili dopisania** takiego
+ * narzędzia, czyli tam, gdzie popełnia się błąd.
+ */
+export function declaresPathArguments(toolName: string): boolean {
+  return PATH_ARGUMENTS[toolName] !== undefined;
+}
+
 /** True when `candidate` is `dir` itself or sits inside it. */
 function isInside(candidate: string, dir: string): boolean {
   const c = normalizeSlashes(candidate);
