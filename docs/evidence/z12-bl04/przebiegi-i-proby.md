@@ -186,6 +186,30 @@ Co ten zapis rozstrzyga mimo to:
 3. **Po 00:38 plik jest zamrożony.** mtime i skrót refresh tokena (`c4ffe5d5ebe855d8`) identyczne w
    sześciu próbkach z trzech przebiegów przez prawdziwe SDK i takie same do teraz.
 
+### Obserwacja WYKONANA — rotacja refresh tokena potwierdzona
+
+Bierna obserwacja opisana niżej **zaszła sama** w trakcie rundy 3 i rozstrzyga pytanie, na którym
+opierała się odmowa próby ze skutecznym odświeżeniem.
+
+| Chwila | `mtime` | `expiresAt` | `sha256(accessToken)[:16]` | `sha256(refreshToken)[:16]` |
+|---|---|---|---|---|
+| 02:26:40 | 02:26:40 | 2026-09-19 08:38:26 | `6749d3f422e64897` | `c4ffe5d5ebe855d8` |
+| **10:40:23** | 10:40:23 | 2026-09-19 **18:40:23** | `28a7f055641487a6` | **`3864260bdfd102d2`** |
+
+Poprzedni token dostępu wygasł o 08:38:26; o 10:40:23 sesja użytkownika odświeżyła go sama
+(`expiresAt − mtime` = równo 8.0000 h, ten sam podpis odświeżenia co poprzednio).
+**Zmienił się także refresh token** — `refreshTokenExpiresAt` pozostało praktycznie bez zmian
+(15:58:22 → 15:58:21), więc nie było to ponowne logowanie, tylko wymiana zestawu przy odświeżeniu.
+
+**Refresh token ROTUJE.** Odmowa próby 1 opierała się dotąd na wniosku z kształtu kodu CLI
+(compare-and-swap po refresh tokenie); teraz jest to **obserwacja**. Gdyby próba „skutecznego
+odświeżenia na kopii" została wykonana, w pliku użytkownika zostałby token poprzedniej generacji —
+a przy jego najbliższym użyciu CLI wyczyściłoby logowanie na dysku (zachowanie potwierdzone
+dwukrotnie w rundzie fazy 2). L8.10 zostaje **świadomie poza zakresem**, i to już nie z ostrożności,
+tylko na dowodzie.
+
+Obserwacja jest **wyłącznie odczytem** — G21 nienaruszone.
+
 ### Tania obserwacja, której nie wykonano — i która rozstrzygnęłaby L8.10
 
 Nie mamy skrótu refresh tokena **sprzed** 00:38, więc nie wiadomo, czy tamto odświeżenie **wymieniło**
@@ -201,7 +225,8 @@ odświeży token sama.
 - skrót **się nie zmieni** → rotacji nie ma, próba ze skutecznym odświeżeniem na kopii jest
   bezpieczna i L8.10 da się domknąć **bez** konta testowego.
 
-Wykracza poza okno tego zadania (potrzebuje ~7 h zwłoki), więc zostaje opisana, nie wykonana.
+Wykracza poza okno tego zadania (potrzebuje ~7 h zwłoki), więc została opisana, nie wykonana —
+**i zaszła sama przed końcem pracy**; wynik wyżej.
 
 ### Dlaczego nie ma próby ze *skutecznym* odświeżeniem
 
