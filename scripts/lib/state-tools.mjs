@@ -635,6 +635,13 @@ function assertApproved(path, operacja) {
  * (`renameWithinManagedRoot`); this mirrors that shape rather than inventing
  * a new one.
  *
+ * The claim is whole-file and enforced whole-file: a raw `rmSync`, `renameSync`,
+ * `writeFileSync`, `copyFileSync`, `cpSync` or `mkdirSync` anywhere else in this
+ * module fails `tests/state-tools-gate.test.ts`. Route the call through one of
+ * these wrappers, or add the enclosing function to that test's
+ * `WYJATKI_SUROWYCH` — with a reason; the one entry is
+ * `removeSideFilesWeCreated`.
+ *
  * `from` in `kopiujPlik`/`kopiujDrzewo` is deliberately **not** run through
  * `assertApproved`. Both are read from directories `assertApproved` would
  * refuse on purpose: `backup-state.mjs` reads `from` out of the *live data

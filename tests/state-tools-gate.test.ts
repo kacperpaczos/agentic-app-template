@@ -45,8 +45,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
  *    `assertApproved` decides "may I write here", not "may I read". The test
  *    pins the raw `from` as documented behaviour — if someone later guards it,
  *    the test sends them here to decide it again, not to change it silently.
- *  - `removeSideFilesWeCreated` sits outside the derived region and outside
- *    the gate by design; its justification lives with its definition.
+ *  - The claim about raw calls is **whole-file**, not region-bound: every raw
+ *    call of the six mutating functions anywhere in `state-tools.mjs` must sit
+ *    in a gate wrapper or on `WYJATKI_SUROWYCH`, with a reason. That list has
+ *    one entry, `removeSideFilesWeCreated`, whose justification (and its
+ *    stated limit) lives with the definition.
  *  - That `realResolve` itself matches the kernel is *not* this file's claim —
  *    `tests/isolation-paths.test.ts` (`realResolve — jedna implementacja,
  *    dwa jezyki`) pins the scripts' `realResolve` to the platform's. After
@@ -107,6 +110,23 @@ function wyliczOpakowania(): string[] {
   expect(nazwy.length, 'region bramki wyliczyl zero opakowan — sprawdzanie nic nie widzi').toBeGreaterThan(0);
   return nazwy;
 }
+
+/**
+ * Raw mutating calls that live outside the gate wrappers, each with its reason.
+ *
+ * Adding an entry here is a decision, not a shortcut: the enclosing function
+ * must be named, and the reason must be stated. The one entry is
+ * `removeSideFilesWeCreated`, whose justification (and its stated limit) lives
+ * with the definition; the review of this package re-verified it against the
+ * fixed gate — the exception rests on a difference of *existence* (`before`),
+ * not on the gate or on `realResolve`, so the fix changes it neither way.
+ * `tidy` needs no entry: it deletes through `usun`, the guarded wrapper.
+ */
+const WYJATKI_SUROWYCH: Record<string, string> = {
+  removeSideFilesWeCreated:
+    'usuwa wylacznie pliki boczne SQLite, ktorych nie bylo, gdy proces przyszedl — ' +
+    'skasowanie ich nie moze stracic cudzych danych; pelne uzasadnienie przy definicji funkcji',
+};
 
 interface Lib {
   approveTarget: (p: string, o?: object) => string;
@@ -226,6 +246,85 @@ describe('bramka skryptow stanu operuje na sciezce, ktora sprawdzila', () => {
       'kopiujDrzewo',
       'przenies',
     ]);
+  });
+
+  it('zadne surowe wywolanie mutujace w calej bibliotece nie stoi poza opakowaniem bramki ani wyjatkiem', () => {
+    /*
+     * The claim "the mutating fs calls of these scripts live in one module, at
+     * the gate" is whole-file, so this check is whole-file too — the wrapper
+     * region above would otherwise be the enforcement's edge, and a raw
+     * `rmSync` added next to `census` or above `assertApproved` would sit
+     * outside every test while the comment still said "one place".
+     *
+     * Every raw call of the six mutating functions is attributed to its
+     * enclosing top-level declaration. Only two kinds of enclosure are legal:
+     * a gate wrapper (already behaviourally verified against the mocked fs by
+     * the scenarios below — the same derivation names them) or a function on
+     * `WYJATKI_SUROWYCH`, with its reason. Anything else fails, naming the
+     * line and both ways out.
+     */
+    const src = readFileSync(LIB, 'utf8');
+
+    const deklaracje = [...src.matchAll(/^(?:export )?(?:async )?(?:const|function) (\w+)/gm)]
+      .map((m) => ({ nazwa: m[1]!, start: m.index! }));
+    expect(deklaracje.length, 'state-tools.mjs: wyliczanie deklaracji gornorzednych nic nie widzi').toBeGreaterThan(0);
+
+    const linie = src.split('\n');
+    const nrLinii = (idx: number) => src.slice(0, idx).split('\n').length - 1;
+
+    const surowe: Array<{ fn: string; idx: number; linia: number }> = [];
+    for (const fn of bramka.MUTUJACE) {
+      const wzor = new RegExp(`(^|[^.\\w])${fn}\\s*\\(`, 'g');
+      for (const m of src.matchAll(wzor)) {
+        const idx = m.index! + m[1]!.length;
+        const tekst = linie[nrLinii(idx)] ?? '';
+        // Mentions in prose are not calls; the same filter as script-path-flags.
+        if (/^\s*\*/.test(tekst) || /^\s*\/\//.test(tekst)) continue;
+        surowe.push({ fn, idx, linia: nrLinii(idx) + 1 });
+      }
+    }
+    expect(
+      surowe.length,
+      'skan surowych wywolan znalazl zero trafien w calym pliku — regulka nic nie widzi',
+    ).toBeGreaterThan(0);
+
+    const opakowania = new Set(wyliczOpakowania());
+    const oblewania: string[] = [];
+    const pokryteWyjatki = new Set<string>();
+    for (const t of surowe) {
+      let otoczka: string | null = null;
+      for (const d of deklaracje) {
+        if (d.start < t.idx) otoczka = d.nazwa;
+        else break;
+      }
+      if (otoczka && opakowania.has(otoczka)) continue;
+      if (otoczka && WYJATKI_SUROWYCH[otoczka]) {
+        pokryteWyjatki.add(otoczka);
+        continue;
+      }
+      oblewania.push(
+        otoczka
+          ? `state-tools.mjs:${t.linia} — surowe ${t.fn} w ${otoczka}: przepusc przez opakowanie bramki ` +
+              `(usun, utworzKatalog, zapisz, kopiujPlik, kopiujDrzewo, przenies) albo dopisz ${otoczka} ` +
+              'do WYJATKOW_SUROWYCH w tests/state-tools-gate.test.ts, z powodem'
+          : `state-tools.mjs:${t.linia} — surowe ${t.fn} na poziomie modulu: przepusc przez opakowanie bramki`,
+      );
+    }
+    expect(
+      oblewania,
+      `surowe wywolania mutujace poza bramka i poza wyjatkami:\n${oblewania.join('\n')}`,
+    ).toEqual([]);
+
+    /*
+     * The exception list stays honest in the other direction too: an entry
+     * whose function no longer holds a raw call is a stale permission and is
+     * removed here rather than kept for the next one to lean on.
+     */
+    const nietknete = Object.keys(WYJATKI_SUROWYCH).filter((n) => !pokryteWyjatki.has(n));
+    expect(
+      nietknete,
+      'wyjatki surowych wywolan bez pokrycia w kodzie — usun wpis albo przywroc uzasadnienie',
+    ).toEqual([]);
   });
 
   it.each(['usun', 'utworzKatalog', 'zapisz', 'kopiujPlik', 'kopiujDrzewo', 'przenies'])(
