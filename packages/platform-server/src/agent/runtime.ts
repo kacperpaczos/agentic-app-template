@@ -770,7 +770,11 @@ export class AgentRuntime {
         const rewritten = resolvedPathInput(toolName, input.tool_input, (p) =>
           realResolve(args.workspace.dir, p),
         );
-        // Nothing was refused: ordinary subagent activity stays out of the chat.
+        /*
+         * Granica wyciszenia podwykonawcy (próba `most-granica-podwykonawcy`):
+         * zwykła aktywność podwykonawcy milczy, ale z przepisanym wejściem —
+         * narzędzie ma otworzyć ścieżkę sprawdzoną także tutaj.
+         */
         if (fromSubagent) {
           return rewritten
             ? { continue: true, hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: rewritten } }
@@ -785,6 +789,8 @@ export class AgentRuntime {
             hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: rewritten },
           };
         }
+        // Nothing was refused: ordinary subagent activity stays out of the chat.
+        if (fromSubagent) return { continue: true };
         /*
          * Deliberately does *not* open a text message.
          *

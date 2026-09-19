@@ -164,11 +164,15 @@ afterEach(async () => {
 
 describe('most hookow a strumien zdarzen — narzedzia plikowe', () => {
   it('auto-zatwierdzone wywolanie jest w strumieniu z nazwa, argumentami i wynikiem', async () => {
-    const plik = join(workDir, 'zwykly.txt');
-    writeFileSync(plik, 'zwykla tresc robocza');
-
+    /*
+     * Runda 6: reguła pozytywna ogranicza narzędzia plikowe do katalogu
+     * roboczego uruchomienia, więc czytany plik jest tworzony WEWNĄTRZ
+     * workspace krokiem `writeOutput`. Intencja testu — obserwowalność
+     * auto-zatwierdzonego wywołania — bez zmian.
+     */
     const { events, stand } = await startRun([
-      { kind: 'fileTool', name: 'Read', input: { file_path: plik } },
+      { kind: 'writeOutput', path: 'zwykly.txt', content: 'zwykla tresc robocza' },
+      { kind: 'fileTool', name: 'Read', input: { file_path: '$workspace/output/zwykly.txt' } },
       { kind: 'text', text: 'Koniec.' },
     ]);
 
@@ -179,7 +183,10 @@ describe('most hookow a strumien zdarzen — narzedzia plikowe', () => {
     const calls = seenCalls(events);
     expect(calls, 'auto-zatwierdzone wywolanie nie trafilo do strumienia zdarzen').toHaveLength(1);
     expect(calls[0]!.name).toBe('Read');
-    expect(pathOf(calls[0]!), 'strumien nie niesie sciezki, ktorej dotyczylo wywolanie').toBe(plik);
+    /* Runda 6: ścieżka po rozwinięciu `$workspace/` przez zastępnik. */
+    expect(pathOf(calls[0]!), 'strumien nie niesie sciezki, ktorej dotyczylo wywolanie').toContain(
+      '/output/zwykly.txt',
+    );
     expect(calls[0]!.ended).toBe(true);
     expect(calls[0]!.result, 'wynik auto-zatwierdzonego wywolania nie trafil do strumienia').toContain(
       'zwykla tresc robocza',
@@ -206,14 +213,14 @@ describe('most hookow a strumien zdarzen — narzedzia plikowe', () => {
      * Dowod czyta `isError` i tresc wyniku; oba musza byc w strumieniu.
      */
     expect(calls[0]!.isError, 'odmowa nie jest oznaczona jako blad kroku').toBe(true);
-    expect(calls[0]!.result).toContain('danych aplikacji');
+    /* Runda 6: pierwszą regułą jest pozytywna (poza katalogiem roboczym). */
+    expect(calls[0]!.result).toContain('katalogu roboczego');
   });
 
   it('wywolanie zakonczone bledem jest w strumieniu, oznaczone jako blad', async () => {
-    const nieistniejacy = join(workDir, 'nie-ma-takiego.txt');
-
+    /* Runda 6: nieistniejący plik WEWNĄTRZ workspace — dozwolony kształt. */
     const { events, stand } = await startRun([
-      { kind: 'fileTool', name: 'Read', input: { file_path: nieistniejacy } },
+      { kind: 'fileTool', name: 'Read', input: { file_path: '$workspace/output/nie-ma-takiego.txt' } },
       { kind: 'text', text: 'Koniec.' },
     ]);
 
@@ -223,7 +230,8 @@ describe('most hookow a strumien zdarzen — narzedzia plikowe', () => {
     const calls = seenCalls(events);
     expect(calls, 'wywolanie zakonczone bledem nie trafilo do strumienia zdarzen').toHaveLength(1);
     expect(calls[0]!.name).toBe('Read');
-    expect(pathOf(calls[0]!)).toBe(nieistniejacy);
+    // Runda 6: ścieżka w asercji jest tą z kroku (zastępnik rozwija `$workspace/`).
+    expect(pathOf(calls[0]!)).toContain('/output/nie-ma-takiego.txt');
     expect(calls[0]!.isError, 'blad narzedzia nie zostal oznaczony w strumieniu').toBe(true);
     expect(calls[0]!.result).toContain('ENOENT');
   });
@@ -305,11 +313,9 @@ describe('most hookow a podwykonawca — jedyne miejsce, w ktorym wywolanie znik
      * Ten test istnieje po to, zeby ta granica byla zapisana i zeby jej
      * przypadkowa zmiana — w ktoraskolwiek strone — zostala zauwazona.
      */
-    const plik = join(workDir, 'dozwolony.txt');
-    writeFileSync(plik, 'tresc dozwolona');
-
     const { events, stand } = await startRun([
-      { kind: 'fileTool', name: 'Read', input: { file_path: plik }, subagent: true },
+      { kind: 'writeOutput', path: 'dozwolony.txt', content: 'tresc dozwolona' },
+      { kind: 'fileTool', name: 'Read', input: { file_path: '$workspace/output/dozwolony.txt' }, subagent: true },
       { kind: 'text', text: 'Koniec.' },
     ]);
 
