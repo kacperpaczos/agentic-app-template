@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -58,6 +58,8 @@ interface Harness {
   BLAD_PROBY: string;
   ranTests: (output: string) => number;
   childEnv: () => Record<string, string | undefined>;
+  currentMutation: () => { path: string; original: string } | null;
+  installRescue: () => void;
   readRegistry: (path?: string) => { proby: Trial[] };
   assertCleanTree: (repo?: string, what?: string) => void;
   applyMutation: (trial: Trial, repo?: string) => { path: string; original: string };
@@ -250,6 +252,56 @@ describe('harness prob zdolnosci wykrycia', () => {
     expect(harness.ranTests('Tests  1 failed | 7 skipped (8)')).toBe(1);
     expect(harness.ranTests('Tests  13 passed (13)')).toBe(13);
     expect(harness.ranTests('nic takiego')).toBe(0);
+  });
+
+  it('PRZERWANIE SYGNALEM przywraca plik — proba na samej sciezce sygnalowej', async () => {
+    /*
+     * Ta sciezka nie miala proby i przez to nie dzialala: CLI trzymalo wlasna
+     * zmienna `inFlight`, ktorej **nic nigdy nie przypisywalo**, wiec obsluga
+     * sygnalu nie miala czego przywrocic, a `process.exit(130)` omijalo
+     * `finally`. Trzy miejsca — naglowek skryptu, raport i opis dowodu L12.12 —
+     * gloslily wlasnosc bezpieczenstwa, ktora nie zachodzila.
+     *
+     * Proba jest prawdziwa: osobny proces, prawdziwa mutacja na dysku,
+     * prawdziwy SIGINT. Asercja dotyczy zawartosci pliku po smierci procesu.
+     */
+    const { repo } = repoWithFile('const strzezone = true;\n');
+    const file = resolve(repo, 'src/plik.ts');
+    const harnessPath = resolve(REPO, 'scripts/detection-trials.mjs');
+    const program = [
+      `const m = await import(${JSON.stringify(harnessPath)});`,
+      'm.installRescue();',
+      `m.applyMutation({ id: 'p', plik: 'src/plik.ts', szukaj: 'const strzezone = true;',`,
+      `  zamien: 'const strzezone = false;' }, ${JSON.stringify(repo)});`,
+      // The file is broken on disk right now; say so, then die by signal.
+      `const fs = await import('node:fs');`,
+      `process.stdout.write(fs.readFileSync(${JSON.stringify(file)}, 'utf8'));`,
+      'process.kill(process.pid, "SIGINT");',
+      'await new Promise((r) => setTimeout(r, 5000));',
+    ].join('\n');
+
+    const child = spawn(process.execPath, ['--input-type=module', '-e', program]);
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (b: Buffer) => (stdout += b.toString()));
+    child.stderr.on('data', (b: Buffer) => (stderr += b.toString()));
+    const code = await new Promise<number | null>((done) => child.on('close', done));
+
+    // The mutation really was on disk while the process lived...
+    expect(stdout, `mutacja nie zostala nalozona: ${stderr}`).toContain('const strzezone = false;');
+    expect(stderr, 'obsluga sygnalu nie zglosila przywrocenia').toContain('plik przywrocony');
+    // ...and the signal handler put it back, byte for byte.
+    expect(readFileSync(file, 'utf8')).toBe('const strzezone = true;\n');
+    expect(code).toBe(130);
+  }, 30_000);
+
+  it('po przywroceniu nie ma juz czego przywracac', () => {
+    const { repo } = repoWithFile('const strzezone = true;\n');
+    expect(harness.currentMutation()).toBeNull();
+    const mutation = harness.applyMutation(trial(), repo);
+    expect(harness.currentMutation()?.path).toBe(mutation.path);
+    harness.restore(mutation);
+    expect(harness.currentMutation()).toBeNull();
   });
 
   it('brudne drzewo zatrzymuje proby, zanim cokolwiek zostanie zmienione', () => {

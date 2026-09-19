@@ -312,8 +312,13 @@ export function offlineProblems({ repo = REPO, record, lockfileText, now = Date.
   const age = ageInDays(record, now);
   if (age > MAX_AGE_DAYS) {
     problems.push(
-      `rejestr wersji ma ${Math.round(age)} dni (limit ${MAX_AGE_DAYS}) — twierdzenie "najnowsze stabilne" ` +
-        'wygaslo. Uruchom: node scripts/check-versions.mjs --refresh',
+      `docs/acceptance/wersje-rejestr.json ma ${Math.round(age)} dni (limit ${MAX_AGE_DAYS}), ` +
+        `bo sprawdzono go ${record.sprawdzono?.slice(0, 10)} — twierdzenie „React i TypeScript sa ` +
+        'najnowszymi stabilnymi" wygaslo i nikt go od tamtej pory nie potwierdzil. ' +
+        'Odswiez: `pnpm check:versions:refresh` (wymaga sieci; pyta rejestr npm i przepisuje ten plik). ' +
+        'UWAGA: samo odswiezenie moze NIE wystarczyc — jesli React albo TypeScript zdazyly sie ruszyc, ' +
+        'odswiezony zapis pokaze roznice i trzeba bedzie naprawde podniesc wersje w manifestach i ' +
+        'lockfile, a potem przejsc regresje. To jest cel tej kontroli, nie jej usterka.',
     );
   }
   for (const name of TRACKED) {

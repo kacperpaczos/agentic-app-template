@@ -49,13 +49,14 @@
     {
       "id": "guard-izolacji-dowiazanie",
       "kryterium": "L1.11",
-      "naprawa": "Oznaczona instancja testowa nie wstanie na katalogu danych bedacym dowiazaniem symbolicznym ani na katalogu, ktorego rzeczywisty cel to dane aplikacji.",
+      "naprawa": "Katalog danych instancji testowej nie moze byc dowiazaniem symbolicznym — nawet gdy jego cel jest prawdziwym katalogiem testowym w repozytorium i wszystkie kontrole sciezki go przepuszczaja. Harness ten katalog KASUJE, a to, czy `rm` pojdzie za linkiem, nie jest wlasnoscia, na ktorej wolno opierac bezpieczenstwo.",
       "plik": "packages/platform-server/src/config.ts",
       "szukaj": "  if (isSymlink(cfg.dataDir)) {",
       "zamien": "  if (false) {",
       "test": "tests/isolation-paths.test.ts",
-      "nazwaTestu": "bedacym dowiazaniem do danych",
-      "oczekiwanyKomunikat": "Tests.*failed"
+      "nazwaTestu": "dowiazanie do innego katalogu testowego tez jest odrzucone",
+      "oczekiwanyKomunikat": "Tests.*failed",
+      "uwaga": "Wariant wadliwy jest ZACHOWANIOWY: w tym przypadku strazniki sciezki nie maja zastrzezen, wiec po wylaczeniu kontroli dowiazania konfiguracja przechodzi, zamiast zmienic brzmienie komunikatu. Pierwsza wersja tej proby celowala w przypadek, w ktorym straznik odmawia takze inna droga, wiec test oblewal tylko na tekscie — to byla proba komunikatu, nie zachowania."
     },
     {
       "id": "guard-izolacji-magazyn",
@@ -134,6 +135,29 @@
       "test": "tests/sdk-session-evidence.test.ts",
       "nazwaTestu": "wersje, na ktorych wziety jest dowod, to wersje zainstalowane teraz",
       "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "guard-izolacji-realpath",
+      "kryterium": "L1.11",
+      "naprawa": "Kontrola katalogu testowego rozwiazuje dowiazania takze w RODZICACH: katalog o poprawnej nazwie, lezacy pod dowiazanym rodzicem, naprawde jest poza repozytorium.",
+      "plik": "e2e/support/isolation.ts",
+      "szukaj": "  const real = realResolve(abs);",
+      "zamien": "  const real = abs; /* wariant wadliwy proby wykrycia: bez rozwiazania dowiazan */",
+      "test": "tests/isolation-paths.test.ts",
+      "nazwaTestu": "odrzuca katalog pod dowiazanym rodzicem",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "sciezka-sygnalowa-harnessu",
+      "kryterium": "L12.12",
+      "naprawa": "Przerwanie proby sygnalem przywraca zmutowany plik: obsluga sygnalu widzi nalozona mutacje, bo ta lezy w stanie modulu, a nie w lokalnej zmiennej funkcji.",
+      "plik": "scripts/detection-trials.mjs",
+      "szukaj": "      if (applied) restore(applied);",
+      "zamien": "      /* wariant wadliwy proby wykrycia: brak przywrocenia po sygnale */",
+      "test": "tests/detection-trials.test.ts",
+      "nazwaTestu": "PRZERWANIE SYGNALEM przywraca plik",
+      "oczekiwanyKomunikat": "Tests.*failed",
+      "uwaga": "Proba mutuje sam harness. Dziala, bo modul jest juz wczytany do pamieci procesu, ktory ja prowadzi, a test uruchamia OSOBNY proces, ktory importuje plik z dysku — czyli wariant wadliwy."
     }
   ],
   "uwagaOFiltrze": "Pole nazwaTestu trafia do vitest jako -t, czyli jako WYRAZENIE REGULARNE. Nazwa z kropka albo gwiazdka dopasuje sie inaczej, niz wyglada; harness wykrywa to teraz sam (przebieg wzorcowy musi uruchomic co najmniej jeden test), ale w rejestrze trzymaj fragmenty bez metaznakow.",
@@ -157,6 +181,16 @@
       "kiedy": "2026-09-19, po aktualizacji Claude CLI 2.1.277 -> 2.1.278",
       "co": "Zapisane dowody uwierzytelnienia byly przypiete do wersji `claude` z PATH, a ten plik nie bral udzialu w zadnym z tych przebiegow: SDK uruchamia wlasne CLI z pakietu (obserwacja przy PATH bez `claude`, docs/evidence/z13-bl12/ktore-cli-uruchamia-sdk.json). Aktualizacja CLI po stronie uzytkownika, bez zadnej zmiany w repozytorium, wywracala cala bramke pnpm verify.",
       "skutek": "Przypiecie przeniesione na wersje CLI wbudowanej w SDK — funkcje wersji pakietu, ktora pilnuje lockfile. `claude` z PATH jest nadal zapisywany jako srodowisko i jego zmiana jest wypisywana, ale nie oblewa regresji. Proba przypiecie-cli-w-sdk pokazuje, ze nowe przypiecie potrafi oblac."
+    },
+    {
+      "kiedy": "2026-09-19, recenzja bezpieczenstwa rundy 1",
+      "co": "Przywracanie po sygnale bylo martwym kodem: CLI trzymalo wlasna zmienna `inFlight`, ktorej nic nie przypisywalo, bo nalozona mutacja siedziala w lokalnej zmiennej wewnatrz runTrials. Przerwanie w trakcie proby zostawialo zmutowany plik w drzewie, a naglowek skryptu, raport i opis dowodu L12.12 gloslily, ze tak nie jest.",
+      "skutek": "Stan mutacji przeniesiony na poziom modulu (currentMutation), obsluga sygnalu wspolna (installRescue), a sciezka sygnalowa dostala wlasna probe: osobny proces, prawdziwa mutacja na dysku, prawdziwy SIGINT, asercja o zawartosci pliku po smierci procesu i o kodzie 130. Do rejestru doszla proba sciezka-sygnalowa-harnessu."
+    },
+    {
+      "kiedy": "2026-09-19, recenzja bezpieczenstwa rundy 1",
+      "co": "Proba guard-izolacji-dowiazanie byla KOMUNIKATOWA, nie zachowaniowa: po wylaczeniu kontroli dowiazania straznik nadal odmawial inna droga (rzeczywisty cel nazywa sie `data`), wiec test oblewal wylacznie na brzmieniu komunikatu.",
+      "skutek": "Proba celuje teraz w przypadek, w ktorym decyduje wylacznie kontrola dowiazania (link do innego katalogu .e2e-* w repozytorium), a rozwiazywanie dowiazan dostalo osobna probe zachowaniowa guard-izolacji-realpath."
     }
   ]
 }

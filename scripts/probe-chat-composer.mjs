@@ -16,8 +16,22 @@ import { mkdirSync, writeFileSync } from 'node:fs';
  * portem instancji uzytkownika (8791). Ta sonda zajmowala 8798 i zderzyla sie z
  * suita scenariuszowa, ktora startuje wlasny serwer w tym zakresie — straz
  * izolacji slusznie odmowila pracy.
+ *
+ * Naglowek tego pliku mowil „nigdy na instancji uzytkownika — port podaje sie
+ * jawnie". To bylo zdanie, nie kontrola: PROBE_BASE mogl wskazac cokolwiek, a
+ * sonda wykonuje POST /api/auth/session. Teraz przechodzi przez te sama bramke,
+ * co `pnpm acceptance` — etykieta instancji sprawdzana przed pierwszym
+ * zadaniem (L1.8).
  */
-const BASE = process.env.PROBE_BASE ?? 'http://127.0.0.1:8788';
+import { requireAcceptanceInstance } from './lib/acceptance-target.mjs';
+
+let BASE;
+try {
+  BASE = (await requireAcceptanceInstance({ APP_BASE: process.env.PROBE_BASE ?? 'http://127.0.0.1:8788' })).base;
+} catch (e) {
+  console.error(e.message);
+  process.exit(3);
+}
 const OUT = process.argv[2] ?? 'docs/evidence/chat-ux-2026-09-16';
 mkdirSync(OUT, { recursive: true });
 

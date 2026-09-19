@@ -168,9 +168,17 @@ describe('rejestr wersji', () => {
   });
 
   it('React i TypeScript sa najnowszymi stabilnymi wedlug zapisanego sprawdzenia', () => {
+    /*
+     * Zapis musi obejmowac DOKLADNIE sledzony zbior. Wczesniej stalo tu
+     * `expect(entry.wymaganaNajnowsza).toBe(true)` dla nazw branych z tej samej
+     * listy, ktora to pole wypelnia — asercja, ktora nie mogla oblac. Ta moze:
+     * pakiet usuniety z zapisu albo dopisany do niego bez odswiezenia oblewa.
+     */
+    expect(Object.keys(record.najnowszeStabilne).sort()).toEqual(
+      [...checker.WYMAGANE_NAJNOWSZE, ...checker.OBSERWOWANE].sort(),
+    );
     for (const name of checker.WYMAGANE_NAJNOWSZE) {
       const entry = record.najnowszeStabilne[name]!;
-      expect(entry.wymaganaNajnowsza).toBe(true);
       expect(entry.przypiete, `${name} przypieta`).toBe(entry.wRejestrzeNpm);
     }
     // Pinned identically in every manifest that names them.

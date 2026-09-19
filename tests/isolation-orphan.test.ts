@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:net';
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -10,7 +10,7 @@ import {
   readInstanceLabel,
   resolveTestInstance,
 } from '../e2e/support/isolation.ts';
-import { assertPortFree, portInUse } from '../e2e/support/port-probe.ts';
+import { assertDirectoryFree, assertPortFree, directoryInUse, portInUse } from '../e2e/support/port-probe.ts';
 import { ScriptedInstance } from '../e2e/support/scripted.ts';
 
 /**
@@ -126,6 +126,39 @@ describe('port zajety przez cudzy proces', () => {
     expect(existsSync(marker)).toBe(false);
     expect(existsSync(resolve(instance.config.dataDir, 'app.db'))).toBe(true);
   }, 120_000);
+});
+
+describe('katalog otwarty przez dzialajacy proces', () => {
+  it('widzi otwarty plik w katalogu i przestaje go widziec po zamknieciu', () => {
+    /*
+     * Port to nie cale pytanie: proces moze trzymac ten katalog, nasluchujac na
+     * innym porcie niz ten, ktory przebieg zarezerwowal. Otwarty deskryptor tego
+     * samego procesu wystarczy, zeby sprawdzenie bylo prawdziwe — i zeby dalo
+     * sie pokazac obie odpowiedzi, nie tylko jedna.
+     */
+    const instance = new ScriptedInstance({ port: 8796, dataDirName: '.e2e-scripted-katalog-test' });
+    dirs.push(instance.config.dataDir);
+    mkdirSync(instance.config.dataDir, { recursive: true });
+    const file = resolve(instance.config.dataDir, 'app.db');
+    writeFileSync(file, 'x');
+
+    const fd = openSync(file, 'r');
+    try {
+      const answer = directoryInUse(instance.config.dataDir);
+      if (answer === null) return; // system bez /proc — sprawdzenie mowi „nie wiadomo"
+      expect(answer).toBe(true);
+      expect(() => assertDirectoryFree(instance.config.dataDir, 'przygotowanie')).toThrow(/otwarty przez/);
+      expect(() => instance.prepareDatabase()).toThrow(/otwarty przez/);
+      // Plik nadal jest — odmowa poprzedzila kasowanie.
+      expect(existsSync(file)).toBe(true);
+    } finally {
+      closeSync(fd);
+    }
+
+    // Kontrola przeciwna: po zamknieciu ten sam katalog jest wolny.
+    expect(directoryInUse(instance.config.dataDir)).toBe(false);
+    expect(() => assertDirectoryFree(instance.config.dataDir, 'przygotowanie')).not.toThrow();
+  });
 });
 
 describe('tozsamosc przebiegu, nie tylko etykieta', () => {

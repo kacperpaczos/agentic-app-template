@@ -107,16 +107,38 @@ export function resolveAcceptanceTarget(env = {}) {
  * acceptance run has no reason to wait for a backend that is not there, and
  * "nothing answered" must never be read as "nothing objected".
  */
-export async function checkAcceptanceInstance(target, fetchImpl = fetch) {
+export const HEALTH_TIMEOUT_MS = 10_000;
+
+export async function checkAcceptanceInstance(target, fetchImpl = fetch, timeoutMs = HEALTH_TIMEOUT_MS) {
   let label;
   try {
-    const res = await fetchImpl(`${target.base}/api/health`);
+    const res = await fetchImpl(`${target.base}/api/health`, {
+      /*
+       * Two options, both load-bearing.
+       *
+       * `redirect: 'error'` — without it the label may be read from a
+       * *different* server than the one the writes will go to: `/api/health`
+       * answers 302 to a second, properly labelled instance, the check passes,
+       * and every POST afterwards goes to the first one. Demonstrated by a
+       * reviewer, not imagined. A check whose answer can come from elsewhere
+       * than the subject is not a check.
+       *
+       * `signal` — this module's own comment says "nothing answered is an
+       * answer", and without a deadline that sentence was false: a target that
+       * accepts the connection and never replies hung the run for ever, which
+       * is the one outcome that is neither a refusal nor a pass.
+       */
+      redirect: 'error',
+      signal: AbortSignal.timeout(timeoutMs),
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = await res.json();
     label = body?.instanceLabel ?? null;
   } catch (e) {
     return (
-      `Instancja pod ${target.base} nie odpowiada na /api/health (${(e && e.message) || String(e)}). ` +
+      `Instancja pod ${target.base} nie odpowiada na /api/health poprawnie ` +
+      `(${(e && e.message) || String(e)}). Przekierowanie i brak odpowiedzi w ${timeoutMs} ms sa tu ` +
+      'odmowa, nie zgoda: etykiete trzeba przeczytac z tej samej instancji, ktora przyjmie zapisy. ' +
       `Uruchom instancje odbiorowa z osobnym katalogiem danych i etykieta, np. ` +
       `APP_INSTANCE_LABEL=agenticapp-acceptance APP_DATA_DIR=<katalog> PORT=${DEFAULT_ACCEPTANCE_PORT} pnpm start.`
     );
@@ -139,9 +161,9 @@ export async function checkAcceptanceInstance(target, fetchImpl = fetch) {
  * fetched — `/api/auth/session` is itself a POST, and a POST to the user's
  * instance is already the thing this prevents.
  */
-export async function requireAcceptanceInstance(env = {}, fetchImpl = fetch) {
+export async function requireAcceptanceInstance(env = {}, fetchImpl = fetch, timeoutMs = HEALTH_TIMEOUT_MS) {
   const target = resolveAcceptanceTarget(env);
-  const problem = await checkAcceptanceInstance(target, fetchImpl);
+  const problem = await checkAcceptanceInstance(target, fetchImpl, timeoutMs);
   if (problem) throw new AcceptanceTargetError(problem);
   return target;
 }

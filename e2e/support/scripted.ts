@@ -2,7 +2,7 @@ import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, type WriteStream } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { TEST_RUN_ID, resolveTestInstance, type TestInstanceConfig } from './isolation.ts';
-import { assertPortFree } from './port-probe.ts';
+import { assertDirectoryFree, assertPortFree } from './port-probe.ts';
 import { verifyIsolatedInstance } from './fixtures.ts';
 
 /**
@@ -83,6 +83,7 @@ export class ScriptedInstance {
    */
   prepareDatabase(): void {
     assertPortFree(this.config.port, `przygotowanie instancji scenariuszowej (${this.config.dataDir})`);
+    assertDirectoryFree(this.config.dataDir, 'przygotowanie instancji scenariuszowej');
     if (existsSync(this.config.dataDir)) {
       rmSync(this.config.dataDir, { recursive: true, force: true });
     }

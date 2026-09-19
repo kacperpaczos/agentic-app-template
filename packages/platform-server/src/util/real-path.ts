@@ -13,14 +13,16 @@ import { basename, dirname, join, resolve, sep } from 'node:path';
  * `open()` that follows lands somewhere else entirely. The check says one place
  * and the operation goes to another.
  *
- * It has been found three times in this repository, in three layers, which is
- * why the resolution lives in one module now: the file tools of the agent
- * (`agent/permissions.ts`), the maintenance scripts
- * (`scripts/lib/state-tools.mjs`) and the test-isolation guards
- * (`e2e/support/isolation.ts`, `config.ts`). The scripts keep their own copy
- * only because they are plain `.mjs` run by node without the TypeScript
- * pipeline; `tests/isolation.test.ts` asserts the two behave identically, so
- * they cannot drift.
+ * Four places in this repository resolve a path before deciding, which is why
+ * the resolution lives in one module now: the file tools of the agent
+ * (`agent/permissions.ts`), the test-isolation guard of the harness
+ * (`e2e/support/isolation.ts`), the same guard inside the server
+ * (`config.ts`) and the server's own destructive operations
+ * (`util/managed-fs.ts`). The maintenance scripts
+ * (`scripts/lib/state-tools.mjs`) keep a fifth copy only because they are plain
+ * `.mjs` run by node without the TypeScript pipeline;
+ * `tests/isolation-paths.test.ts` asserts the two implementations answer
+ * identically on the same inputs, so they cannot drift.
  *
  * Kryteria: L1.11.
  */

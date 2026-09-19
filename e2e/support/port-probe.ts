@@ -1,4 +1,6 @@
 import { spawnSync } from 'node:child_process';
+import { existsSync, readdirSync, readlinkSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { TestIsolationError } from './isolation.ts';
 
 /**
@@ -56,6 +58,46 @@ export function portInUse(port: number, host = '127.0.0.1'): boolean {
 }
 
 /**
+ * Is any process of this user holding a file inside `dir`?
+ *
+ * Three answers, not two: `true` somebody has it open, `false` nobody does,
+ * `null` **it could not be established** — on a system without `/proc` this
+ * cannot be asked at all, and a check that cannot run must say so rather than
+ * report a clean result. The criterion says "no setup deletes the database
+ * under a running process", and a process can hold this directory while
+ * listening on a different port than the one this run reserved, so the port is
+ * not the whole question.
+ *
+ * Only this user's processes are visible, which is exactly the case that
+ * matters: the orphan is one the harness itself started.
+ */
+export function directoryInUse(dir: string): boolean | null {
+  if (!existsSync('/proc')) return null;
+  const target = resolve(dir);
+  let looked = 0;
+  for (const entry of readdirSync('/proc')) {
+    if (!/^\d+$/.test(entry)) continue;
+    let handles: string[];
+    try {
+      handles = readdirSync(`/proc/${entry}/fd`);
+    } catch {
+      continue; // another user's process, or one that ended mid-scan
+    }
+    looked += 1;
+    for (const handle of handles) {
+      try {
+        const path = readlinkSync(`/proc/${entry}/fd/${handle}`);
+        if (path === target || path.startsWith(`${target}/`)) return true;
+      } catch {
+        /* the descriptor closed while we were reading it */
+      }
+    }
+  }
+  // Nothing found, and nothing could be looked at: that is not "free".
+  return looked === 0 ? null : false;
+}
+
+/**
  * Refuses to continue when the port a run is about to use is taken.
  *
  * Called before the data directory is deleted, not after: the whole point is
@@ -69,5 +111,20 @@ export function assertPortFree(port: number, what: string): void {
       'trzyma otwarta baze w katalogu, ktory ten przebieg wlasnie mialby skasowac, ' +
       'a jego etykieta jest taka sama jak nowego, wiec kontrola tozsamosci by go przyjela. ' +
       'Zatrzymaj TEN proces samodzielnie (po jego pid, nie po nazwie) i uruchom przebieg ponownie.',
+  );
+}
+
+/**
+ * Refuses to delete a data directory that a live process still has open.
+ *
+ * The second half of the same question. A refusal only when the answer is a
+ * definite `true`: `null` means the check could not run, and a check that
+ * cannot run must not block a legitimate run either.
+ */
+export function assertDirectoryFree(dir: string, what: string): void {
+  if (directoryInUse(dir) !== true) return;
+  throw new TestIsolationError(
+    `${what}: katalog ${dir} jest otwarty przez dzialajacy proces (widoczne w /proc). ` +
+      'Skasowanie go teraz wyjeloby baze spod tego procesu. Zatrzymaj go samodzielnie, po jego pid.',
   );
 }

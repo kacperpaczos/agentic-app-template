@@ -249,7 +249,17 @@ export async function readInstanceLabel(
   baseUrl: string,
 ): Promise<{ label: string | null; runId: string | null } | { unreachable: string }> {
   try {
-    const res = await fetch(`${baseUrl}/api/health`);
+    /*
+     * `redirect: 'error'` and a deadline, for the same two reasons as in
+     * `scripts/lib/acceptance-target.mjs`: an answer that came from a redirect
+     * describes a different server than the one the caller is about to use, and
+     * a target that accepts the connection and never replies would hang the
+     * run instead of being refused.
+     */
+    const res = await fetch(`${baseUrl}/api/health`, {
+      redirect: 'error',
+      signal: AbortSignal.timeout(10_000),
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = (await res.json()) as {
       ok?: boolean;

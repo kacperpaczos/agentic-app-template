@@ -298,6 +298,14 @@ z nich test oblewa i trzeba sondę powtórzyć.
 
 `pnpm test:e2e` działa na istniejącym buildzie, więc uruchamiaj go po `pnpm verify` albo `pnpm build`.
 Testy startują własne serwery na portach 8792–8799 z własnymi katalogami danych.
+
+**Rejestr wersji wygasa po 180 dniach.** `tests/versions.test.ts` sprawdza offline zapis z
+`docs/acceptance/wersje-rejestr.json`: czy opisuje ten lockfile (sha256) i czy twierdzenie „React i
+TypeScript są najnowszymi stabilnymi” nie jest starsze niż pół roku. Po tym terminie `pnpm verify`
+robi się czerwone bez żadnej zmiany w kodzie — i tak ma być, bo nikt tego twierdzenia od pół roku nie
+potwierdził. Odświeżenie: `pnpm check:versions:refresh` (wymaga sieci). **Samo odświeżenie może nie
+wystarczyć:** jeśli React albo TypeScript zdążyły się ruszyć, odświeżony zapis pokaże różnicę i
+trzeba będzie naprawdę podnieść wersje w manifestach i lockfile, a potem przejść regresję.
 `pnpm typecheck` (w `pnpm verify`) sprawdza pakiety, każdy moduł osobno bez warstwy składania
 (`pnpm typecheck:modules`) i katalog `e2e/` (`tsconfig.e2e.json`).
 

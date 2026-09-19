@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { resolveTestInstance } from './isolation.ts';
-import { assertPortFree } from './port-probe.ts';
+import { assertDirectoryFree, assertPortFree } from './port-probe.ts';
 
 /**
  * Prepares the browser suite's database and then starts the production server
@@ -35,6 +35,7 @@ const instance = resolveTestInstance({
  * what we did not start.
  */
 assertPortFree(instance.port, 'przygotowanie instancji testowej');
+assertDirectoryFree(instance.dataDir, 'przygotowanie instancji testowej');
 
 if (existsSync(instance.dataDir)) rmSync(instance.dataDir, { recursive: true, force: true });
 

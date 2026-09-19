@@ -7,10 +7,26 @@
  * Playwright report when the whole app fails to boot.
  *
  *   node scripts/diag-frontend.mjs [url]
+ *
+ * **Wczytanie strony jest zapisem.** `apps/web/src/main.tsx` wola przy starcie
+ * `switchAccessContext`, czyli `POST /api/auth/session` — wiec ta diagnostyka
+ * zapisuje sesje w instancji, ktora wskaze, a zrzut ekranu utrwala jej dane.
+ * Domyslny cel `http://127.0.0.1:8791/` kierowal ja wprost na port instancji
+ * uzytkownika. Idzie teraz przez te sama bramke, co `pnpm acceptance`: domyslnie
+ * 8790, etykieta instancji sprawdzana przed otwarciem przegladarki (L1.8).
  */
 import { chromium } from '@playwright/test';
+import { requireAcceptanceInstance } from './lib/acceptance-target.mjs';
 
-const url = process.argv[2] ?? process.env.APP_BASE_URL ?? 'http://127.0.0.1:8791/';
+let url;
+try {
+  const target = await requireAcceptanceInstance({ APP_BASE: process.argv[2] ?? process.env.APP_BASE_URL });
+  url = `${target.base}/`;
+} catch (e) {
+  console.error(e.message);
+  process.exit(3);
+}
+console.log(`# instancja: ${url}`);
 
 const browser = await chromium.launch();
 const page = await browser.newPage();

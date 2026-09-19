@@ -110,6 +110,39 @@ export function assertCleanTree(repo = REPO, what = 'proby zdolnosci wykrycia') 
  * code intact — and then the test passes, and the harness would report a
  * finding about a mutation it never made. Both are errors here, not warnings.
  */
+/**
+ * The mutation currently applied to the tree, or null.
+ *
+ * Module level, and that is the whole point of this revision. The CLI used to
+ * keep its own `inFlight` variable that **nothing ever assigned**: the applied
+ * mutation lived in a local inside `runTrials`, so the signal handler had
+ * nothing to put back and `process.exit(130)` skipped the `finally`. Three
+ * places — the header of this file, the task report and the acceptance matrix —
+ * claimed a safety property that did not hold. It holds now because the state
+ * the handler needs is where the handler can see it.
+ */
+let applied = null;
+
+/** What is mutated right now. Exported so a test can watch the signal path. */
+export const currentMutation = () => applied;
+
+/**
+ * Restores on interruption — the path that had no trial of its own.
+ *
+ * `tests/detection-trials.test.ts` sends a real SIGINT to a real child process
+ * with a real mutation applied, and requires the file to come back and the exit
+ * code to be 130.
+ */
+export function installRescue() {
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    process.on(signal, () => {
+      if (applied) restore(applied);
+      console.error(`\nPrzerwano (${signal}) — plik przywrocony: ${applied?.path ?? 'brak mutacji'}`);
+      process.exit(130);
+    });
+  }
+}
+
 export function applyMutation(trial, repo = REPO) {
   const path = resolve(repo, trial.plik);
   if (!existsSync(path)) throw new Error(`${trial.id}: brak pliku ${trial.plik}`);
@@ -125,12 +158,14 @@ export function applyMutation(trial, repo = REPO) {
     throw new Error(`${trial.id}: wariant wadliwy jest identyczny z oryginalem — to nie jest proba.`);
   }
   writeFileSync(path, original.replace(trial.szukaj, trial.zamien));
-  return { path, original };
+  applied = { path, original };
+  return applied;
 }
 
 /** Puts the file back, byte for byte. */
 export function restore({ path, original }) {
   writeFileSync(path, original);
+  if (applied && applied.path === path) applied = null;
 }
 
 /** Runs the test a trial names. Replaced in the self-test by a stand-in. */
@@ -242,10 +277,10 @@ export async function runTrials({ trials, repo = REPO, runner = vitestRunner, lo
       continue;
     }
 
-    let applied = null;
+    let mutation = null;
     let outcome;
     try {
-      applied = applyMutation(trial, repo);
+      mutation = applyMutation(trial, repo);
       const { code, output } = await runner(trial, repo, 'mutated');
       const failed = code !== 0;
       const expected = trial.oczekiwanyKomunikat ? new RegExp(trial.oczekiwanyKomunikat).test(output) : true;
@@ -261,7 +296,7 @@ export async function runTrials({ trials, repo = REPO, runner = vitestRunner, lo
         fragmentWyniku: (output.match(/Tests\s+.*$/m) ?? [''])[0].trim() || output.trim().slice(-300),
       };
     } finally {
-      if (applied) restore(applied);
+      if (mutation) restore(mutation);
     }
     results.push(outcome);
     log(`${outcome.wynik}  ${outcome.id}  ${outcome.fragmentWyniku}`);
@@ -284,7 +319,18 @@ if (isMain) {
     }
     process.exit(0);
   }
-  const only = argv.includes('--only') ? argv.slice(argv.indexOf('--only') + 1) : null;
+  /*
+   * Identifiers after `--only`, and only those: `--only X --browser` used to
+   * read `--browser` as the name of a trial, which then matched nothing and
+   * silently narrowed the run to X alone.
+   */
+  const only = argv.includes('--only')
+    ? (() => {
+        const rest = argv.slice(argv.indexOf('--only') + 1);
+        const end = rest.findIndex((a) => a.startsWith('--'));
+        return end === -1 ? rest : rest.slice(0, end);
+      })()
+    : null;
   /*
    * A browser trial builds the bundle and takes the shared lock, so it never
    * runs by accident: `--browser` (or naming it with `--only`) is the consent.
@@ -305,21 +351,11 @@ if (isMain) {
    * leaves a broken source file in the tree otherwise, and the next reader
    * finds a repository that does not build with no idea why.
    */
-  let inFlight = null;
-  const rescue = (signal) => {
-    if (inFlight) restore(inFlight);
-    console.error(`\nPrzerwano (${signal}) — plik przywrocony.`);
-    process.exit(130);
-  };
-  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => rescue(signal));
+  installRescue();
 
   const results = await runTrials({
     trials: chosen,
     log: (line) => console.log(line),
-    runner: (trial, repo) => {
-      inFlight = null;
-      return vitestRunner(trial, repo);
-    },
   });
 
   const status = treeStatus();

@@ -85,6 +85,44 @@ describe('katalog testowy, ktory jest dowiazaniem', () => {
     );
   });
 
+  it('dowiazanie do innego katalogu testowego tez jest odrzucone', () => {
+    /*
+     * Przypadek, w ktorym decyduje WYLACZNIE kontrola dowiazania: cel jest
+     * prawdziwym katalogiem testowym w repozytorium, wiec wszystkie kontrole
+     * sciezki — zawieranie, prefiks nazwy, roznica od katalogu danych — przepusza
+     * go w obie strony. Zostaje jedno pytanie: czy to jest dowiazanie. Harness
+     * kasuje ten katalog, a to, czy `rm` pojdzie za linkiem czy zdejmie sam link,
+     * nie jest wlasnoscia, na ktorej wolno opierac bezpieczenstwo.
+     */
+    const repo = tmp();
+    const real = resolve(repo, '.e2e-prawdziwy-cel');
+    mkdirSync(real, { recursive: true });
+    const link = resolve(repo, '.e2e-dowiazanie');
+    symlinkSync(real, link, 'dir');
+    expect(() => assertTestDataDir(link, repo, 'katalog danych testow')).toThrow(/dowiazaniem symbolicznym/);
+    // Serwer odmawia startu z tego samego powodu i tylko z tego.
+    expect(() =>
+      assertTestInstanceIsIsolated(
+        {
+          dataDir: link,
+          dbFile: '',
+          filesDir: '',
+          workspacesDir: '',
+          port: 8799,
+          allowedOrigins: [],
+          webDistDir: null,
+          model: 'm',
+          runTimeoutMs: 1,
+          consentTimeoutMs: 1,
+          maxUploadBytes: 1,
+          instanceLabel: TEST_INSTANCE_LABEL,
+          instanceRunId: null,
+        } as Parameters<typeof assertTestInstanceIsIsolated>[0],
+        resolve(repo, 'data'),
+      ),
+    ).toThrow(/dowiazaniem symbolicznym/);
+  });
+
   it('kontrola: prawdziwy katalog .e2e-* w repozytorium przechodzi', () => {
     // Without this the tests above would also pass on a guard that refuses
     // everything, which is not a guard but a broken harness.
