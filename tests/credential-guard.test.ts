@@ -431,15 +431,19 @@ describe('uruchomienie nie moze odczytac poswiadczenia (symulacja na granicy ada
         toolContext('run_dowiazanie', ws.dir),
       );
 
-      const text = outcome.content.map((c) => c.text).join('');
-      expect(outcome.isError, 'publikacja przez dowiazanie NIE zostala odrzucona').toBe(true);
-      expect(text).toContain('sandbox_denied');
-      expect(text.includes(CANARY), 'tresc atrapy trafila do wyniku narzedzia').toBe(false);
-      // I najważniejsze: nic nie powstało do pobrania.
+      /*
+       * Najpierw szkoda, potem mechanizm. Własnością, której broni ten test, jest
+       * „nie powstał plik do pobrania" — i to ona ma nazywać oblanie, a nie
+       * bookkeeping o kodzie błędu. Ta sama lekcja, co przy próbie A.
+       */
       expect(
         h.platform.services.artifacts.list(h.ownerId, {}).length,
-        'artefakt powstal mimo dowiazania poza workspace',
+        'POWSTAL ARTEFAKT DO POBRANIA mimo dowiazania poza workspace',
       ).toBe(before);
+      const text = outcome.content.map((c) => c.text).join('');
+      expect(text.includes(CANARY), 'tresc atrapy trafila do wyniku narzedzia').toBe(false);
+      expect(outcome.isError, 'publikacja przez dowiazanie NIE zostala odrzucona').toBe(true);
+      expect(text).toContain('sandbox_denied');
     } finally {
       ws.dispose();
       rmSync(outsideDir, { recursive: true, force: true });
