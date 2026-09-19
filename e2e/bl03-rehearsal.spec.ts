@@ -251,6 +251,27 @@ test.describe('proba generalna prob modelowych BL-03 (bez modelu)', () => {
     expect(outputs.map((f) => f.path)).toEqual(['wykonane.txt']);
   });
 
+  test('B: odmowa i zgoda na te sama operacje w JEDNYM poleceniu', async ({ page }) => {
+    await scripted.start('bl03-consent');
+    await openApp(page, BASE);
+    const backend = new Backend(page, BASE);
+
+    /*
+     * Ksztalt, ktory naprawde wykona proba platna: jedno polecenie, dwie
+     * prosby o zgode, decyzja zalezna od numeru prosby.
+     */
+    const sent = await send(page, 'PROBA-ZGODA-DWIE-DECYZJE: sprobuj dwa razy.');
+    const both = await settledDeciding(page, sent.runId, (_text, index) =>
+      index === 0 ? 'Odmowa' : 'Zgoda',
+    );
+    expect(both.decisions.map((d) => d.decision)).toEqual(['Odmowa', 'Zgoda']);
+
+    const outputs = callsOf(await backend.runEvents(sent.runId), 'workspace_outputs')[0]!;
+    const files = (outputs.result as { outputs: Array<{ path: string }> }).outputs.map((f) => f.path);
+    // Odmowa nie wykonala swojej operacji, zgoda wykonala swoja — dokladnie raz.
+    expect(files).toEqual(['druga.txt']);
+  });
+
   /* ---------------------------------------------------------------------- */
   /*  Przebiegi C i D — blad narzedzia, Stop, sygnal, druga tura             */
   /* ---------------------------------------------------------------------- */

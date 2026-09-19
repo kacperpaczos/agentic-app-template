@@ -273,7 +273,8 @@ export const Z11_MODEL_SPEC_PATTERNS: string[] = Z11_MODEL_SPEC_FILES.map((f) =>
  */
 export const Z11_SPEC_TURNS: Record<Z11ModelSpecFile, number> = {
   'bl03-model-canvas.spec.ts': 4,
-  'bl03-model-isolation.spec.ts': 4,
+  /* 3, nie 4: odmowa i zgoda na te sama operacje mieszcza sie w jednym poleceniu. */
+  'bl03-model-isolation.spec.ts': 3,
   'bl03-model-lifecycle.spec.ts': 7,
   'bl03-model-relations.spec.ts': 1,
 };

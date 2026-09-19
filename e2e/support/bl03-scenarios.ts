@@ -196,6 +196,32 @@ export function bl03RelationsScript(prompt: string): Step[] {
  * leaves the operation undone.
  */
 export function bl03ConsentScript(prompt: string): Step[] {
+  /*
+   * Ta sama operacja pytana DWA RAZY w jednym poleceniu.
+   *
+   * Przebieg B scalil odmowe i zgode w jedna ture, wiec proba generalna musi
+   * przecwiczyc dokladnie ten mechanizm: `settledDeciding` odpowiada na kolejne
+   * prosby wedlug ich numeru, a nie jednakowo. Scenariusz z jednym pytaniem
+   * przepuscilby blad w tej logice do tury platnej.
+   */
+  if (prompt.includes('PROBA-ZGODA-DWIE-DECYZJE')) {
+    return [
+      {
+        kind: 'ask',
+        toolName: 'Bash',
+        input: { command: 'node -e "console.log(1)"' },
+        then: [{ kind: 'writeOutput', path: 'pierwsza.txt', content: 'NIE-POWINNO-POWSTAC' }],
+      },
+      {
+        kind: 'ask',
+        toolName: 'Bash',
+        input: { command: 'node -e "console.log(2)"' },
+        then: [{ kind: 'writeOutput', path: 'druga.txt', content: 'WYKONANO-PO-ZGODZIE' }],
+      },
+      { kind: 'call', name: 'workspace_outputs', maxChars: 400 },
+      { kind: 'text', text: 'Zakonczylem obie proby zgody.' },
+    ];
+  }
   if (prompt.includes('PROBA-ZGODA')) {
     return [
       {
