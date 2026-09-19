@@ -1,0 +1,30 @@
+{
+  "zapisano": "2026-09-19T01:07:24.122Z",
+  "kodCommit": "1b9a1809d6b997b81d4fc17df03e19feae982c07",
+  "zrodlo": "prawdziwy model (subskrypcja Claude) przez @mastra/claude i proces Claude Agent SDK",
+  "pakiet": "BL-03 (Z11)",
+  "przebieg": "2026-09-19T01-06-49-066Z",
+  "spec": "e2e/bl03-model-canvas.spec.ts",
+  "przebiegPlanu": "A",
+  "turyWydaneWTymPliku": 1,
+  "turyWydaneLacznie": 14,
+  "budzet": 25,
+  "kroki": [
+    {
+      "tura": 4,
+      "cel": "ustawienie i przestrzen",
+      "runId": "run_e4b52ae747ed4bb7afad",
+      "faza": "succeeded",
+      "narzedzia": [
+        "ui_navigate",
+        "ui_catalog",
+        "ui_navigate"
+      ]
+    }
+  ],
+  "kryteria": [
+    "L2.13"
+  ],
+  "przestrzenPo": "spc_5b9f3ed3dc7543b481d5",
+  "wynik": "zaliczona"
+}

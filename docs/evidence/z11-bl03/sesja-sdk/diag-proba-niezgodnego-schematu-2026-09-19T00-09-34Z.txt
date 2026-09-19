@@ -1,0 +1,14 @@
+# Prawdziwa sesja Claude Agent SDK, wylacznie zadania sterujace — ZERO tur modelu
+# przebieg: 2026-09-19T00-09-34Z
+# commit:   2d4b598ef2d5e3483aae9581b80a7818ca91d074
+# polecenie: pnpm --filter @app/server diag -- --proba-niezgodnego-schematu
+[diag] uwierzytelnienie: subscription | poswiadczenie=valid (max) | dostep=unverified
+[diag] klucz API w srodowisku: brak
+[diag] zadeklarowanych narzedzi: 2 (PROBA: serwer z niekonwertowalnym schematem)
+[diag] konto: plan=Claude Max backend=firstParty
+[diag] serwer "app": connected
+[diag] narzedzia serwera "app" w sesji: 0
+[diag] BRAKUJACE narzedzia (2): zdrowe, niekonwertowalne. Serwer MCP moze byc zarejestrowany, a jego narzedzia mimo to nieobecne — tak wyglada niekonwertowalny schemat (patrz assertMcpCompatibleShape).
+[diag] izolacja konfiguracji OK: brak obcych serwerow MCP
+[diag] czas: 2811 ms | kod wyjscia: 1
+# kod wyjscia: 1

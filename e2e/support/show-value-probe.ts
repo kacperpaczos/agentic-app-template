@@ -88,7 +88,7 @@ export const highlights = (page: Page): Promise<Highlight[]> =>
  * run of proba T25 failed on exactly this while the application had done
  * everything right.
  */
-function parseToolContent(raw: string): any {
+export function parseToolContent(raw: string): any {
   const value = JSON.parse(raw);
   const blocks =
     Array.isArray(value) && value.every((b) => b && typeof b === 'object' && b.type === 'text')

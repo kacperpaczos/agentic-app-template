@@ -1,0 +1,39 @@
+{
+  "zapisano": "2026-09-19T00:58:10.394Z",
+  "kodCommit": "0495f2e9c0d67e2f8aefb3e574500a355c57a968",
+  "zrodlo": "prawdziwy model (subskrypcja Claude) przez @mastra/claude i proces Claude Agent SDK",
+  "pakiet": "BL-03 (Z11)",
+  "przebieg": "2026-09-19T00-57-37-949Z",
+  "spec": "e2e/bl03-model-lifecycle.spec.ts",
+  "przebiegPlanu": "C/D",
+  "turyWydaneWTymPliku": 1,
+  "turyWydaneLacznie": 12,
+  "budzet": 25,
+  "kroki": [
+    {
+      "cel": "blad narzedzia",
+      "runId": "run_3cc8accc32714bc58146",
+      "faza": "succeeded",
+      "narzedzia": [
+        "ToolSearch",
+        "canvas_add_card"
+      ]
+    }
+  ],
+  "kryteria": [
+    "L5.8",
+    "L7.3"
+  ],
+  "bladNarzedzia": {
+    "argumenty": {
+      "title": "Karta z błędem",
+      "spec": {
+        "kind": "component",
+        "component": "nie.istnieje"
+      },
+      "spaceId": "spc_722795ec8d6d46e0bef1"
+    },
+    "wynik": "{\"error\":\"validation_failed\",\"message\":\"Nieznany komponent: nie.istnieje\",\"details\":{\"allowed\":[\"platform.markdown\",\"platform.artifact\",\"platform.files\",\"procurement.caseSummary\",\"procurement.offerList\",\"procurement.comparisonTable\",\"procurement.costChart\",\"procurement.deliveryTerms\",\"procurement.offerItemForm\",\"procurement.provenance\"]}}"
+  },
+  "wynik": "zaliczona"
+}

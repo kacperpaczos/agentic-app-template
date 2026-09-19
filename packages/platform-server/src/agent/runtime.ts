@@ -821,6 +821,27 @@ export class AgentRuntime {
     const sdkOptions: Record<string, unknown> = {
       cwd: args.workspace.dir,
       mcpServers: { app: server },
+      /*
+       * Only the server on the line above, and nothing the machine happens to
+       * have configured.
+       *
+       * `settingSources: []` was believed to cover this and does not: it keeps
+       * out project `.mcp.json`, user settings and plugins, but an MCP server
+       * attached to the *account* on claude.ai is registered by the CLI anyway.
+       * Observed on this codebase with SDK 0.3.270 — a session built with
+       * `settingSources: []` reported two servers, `app` and a connector from
+       * the account, the second of which reaches the network from inside the
+       * SDK process where the shell sandbox does not apply. Its tools are not in
+       * `#toolNames`, so `decideTool` sends them to the consent prompt rather
+       * than running them unannounced — but a platform whose isolation story is
+       * "the run has the application's tools and no others" must not leave that
+       * to the user's answer, for the same reason `WebFetch` is forbidden rather
+       * than asked about (`permissions.ts`).
+       *
+       * Checked without spending a model turn: `mcpServerStatus()` is a control
+       * request, so `pnpm diag` can list the servers a real session actually has.
+       */
+      strictMcpConfig: true,
       systemPrompt: { type: 'preset', preset: 'claude_code', append: systemPrompt },
       // Only the application's own tools and the workspace file tools are
       // pre-approved; Bash is deliberately absent (see `permissions.ts`).

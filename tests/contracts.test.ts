@@ -246,6 +246,53 @@ describe('kontrakty: walidacja, uprawnienia, konflikty, powtorzenia', () => {
     expect(h.platform.services.canvas.getState(space.id, h.ownerId).cards).toHaveLength(1);
   });
 
+  /**
+   * Removal, at the service — the one canvas operation that had no contract test.
+   *
+   * Three separate claims, and the last two are why a delete needs one at all:
+   * the named card goes, **only** it goes, and a repeat of the same operation is
+   * the same operation rather than a second delete that fails on a row somebody
+   * else has since created. A removal that answers `not_found` on retry looks to
+   * the agent exactly like a removal that never happened.
+   */
+  it('usuniecie karty zabiera wskazana karte, nie rusza pozostalych i nie powtarza sie', async () => {
+    const space = h.platform.services.canvas.createSpace({ ownerId: h.ownerId, title: 'T4' });
+    const spec = { kind: 'component' as const, component: 'platform.markdown', props: { markdown: 'x' } };
+    const doomed = await h.platform.services.canvas.addCard(
+      { spaceId: space.id, title: 'Do usuniecia', spec },
+      h.ownerId,
+    );
+    const kept = await h.platform.services.canvas.addCard(
+      { spaceId: space.id, title: 'Zostaje', spec },
+      h.ownerId,
+    );
+
+    const op = `op-remove-${Date.now()}`;
+    const first = await h.platform.services.canvas.removeCard(
+      { cardId: doomed.id, operationId: op },
+      h.ownerId,
+    );
+    expect(first.removed).toBe(doomed.id);
+
+    const after = h.platform.services.canvas.getState(space.id, h.ownerId).cards;
+    expect(after.map((c) => c.id)).toEqual([kept.id]);
+
+    // The retry: same answer, still one card, and no second attempt at a row
+    // that is already gone.
+    const again = await h.platform.services.canvas.removeCard(
+      { cardId: doomed.id, operationId: op },
+      h.ownerId,
+    );
+    expect(again).toEqual(first);
+    expect(h.platform.services.canvas.getState(space.id, h.ownerId).cards).toHaveLength(1);
+
+    // And a card of somebody else's is not removable by knowing its id.
+    await expect(
+      h.platform.services.canvas.removeCard({ cardId: kept.id }, h.otherOwnerId),
+    ).rejects.toThrow();
+    expect(h.platform.services.canvas.getState(space.id, h.ownerId).cards).toHaveLength(1);
+  });
+
   /* ------------------ same rules through HTTP and through MCP ------------- */
   /*
    * `registry.callTool` is the execution the MCP server performs for the model
