@@ -2,25 +2,30 @@
   "opis": "Kontrolowane warianty wadliwe krytycznych napraw. Kazdy wpis mowi, ktora naprawe chroni, ktora linie zepsuc i ktory test ma wtedy oblac. Test, ktory mimo wadliwego wariantu PRZECHODZI, jest znaleziskiem: naprawa nie jest chroniona.",
   "zrodlo": "node scripts/detection-trials.mjs (APP_WRITE_EVIDENCE=1)",
   "rodzajWykonania": "test kontraktu lub logiki",
-  "zapisano": "2026-09-19T01:21:48.308Z",
+  "zapisano": "2026-09-19T09:18:19.637Z",
   "wersjaKodu": {
-    "commit": "5f988a5cf966f3a61d13bcc26fe4a12d537aa968",
+    "commit": "4cc174be6af458c4e45067b047d390f6d388affd",
     "brudneDrzewoPrzedProbami": false,
     "node": "24.19.0"
   },
-  "drzewoPoProbach": "BRUDNE",
+  "srodowisko": {
+    "system": "linux 7.2.5-200.fc44.x86_64 x64",
+    "node": "24.19.0",
+    "pnpm": "9.15.9"
+  },
+  "drzewoPoProbach": "czyste",
   "wyniki": [
     {
-      "id": "N-3-kolejka-rozmowy",
+      "id": "N-3-szeregowanie-rozmowy",
       "kryterium": "L7.10",
-      "naprawa": "Nieudane uruchomienie zwalnia kolejke rozmowy — lancuch obietnic per rozmowa pochlania blad poprzednika, zamiast przekazywac odrzucenie dalej (zakleszczenie N-3).",
+      "naprawa": "Polecenia jednej rozmowy sa szeregowane: drugie czeka na zakonczenie pierwszego, zamiast wznawiac te sama sesje SDK rownolegle (defekt N-3).",
       "plik": "packages/platform-server/src/agent/runtime.ts",
       "test": "tests/orchestration.test.ts",
-      "nazwaTestu": "po bledzie pierwszego polecenia drugie w tej samej rozmowie konczy sie sukcesem",
-      "wynik": "NIEWYKRYTE",
-      "kodWyjsciaTestu": 0,
-      "powod": "test PRZESZEDL na wadliwym wariancie — naprawa nie jest chroniona",
-      "fragmentWyniku": "Tests  1 passed | 7 skipped (8)"
+      "nazwaTestu": "okna wykonania sa rozlaczne",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
+      "fragmentWyniku": "Tests  1 failed | 7 skipped (8)"
     },
     {
       "id": "D-2-projekcja-segmentu",
@@ -31,6 +36,7 @@
       "nazwaTestu": null,
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 12,
       "fragmentWyniku": "Tests  1 failed | 11 passed (12)"
     },
     {
@@ -42,19 +48,20 @@
       "nazwaTestu": "konczy wskazane wykonanie i nie rusza pozostalych",
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
       "fragmentWyniku": "Tests  1 failed | 9 skipped (10)"
     },
     {
       "id": "detektor-strumienia",
       "kryterium": "L5.1",
-      "naprawa": "Odpowiedz podana w calosci na koncu nie jest zaliczana jako strumieniowanie — werdykt wymaga widocznej niepelnej odpowiedzi w trakcie wykonania.",
+      "naprawa": "Probki o tej samej dlugosci nie sa zaliczane jako przyrost — werdykt strumieniowania wymaga co najmniej dwoch ROZNYCH dlugosci w trakcie wykonania.",
       "plik": "e2e/support/streamProbe.ts",
       "test": "tests/stream-verdict.test.ts",
-      "nazwaTestu": null,
-      "wynik": "NIEWYKRYTE",
-      "kodWyjsciaTestu": 0,
-      "powod": "test PRZESZEDL na wadliwym wariancie — naprawa nie jest chroniona",
-      "fragmentWyniku": "Tests  13 passed (13)"
+      "nazwaTestu": "dwie probki o pelnej dlugosci to nadal nie strumieniowanie",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
+      "fragmentWyniku": "Tests  1 failed | 12 skipped (13)"
     },
     {
       "id": "guard-izolacji-dowiazanie",
@@ -62,11 +69,11 @@
       "naprawa": "Oznaczona instancja testowa nie wstanie na katalogu danych bedacym dowiazaniem symbolicznym ani na katalogu, ktorego rzeczywisty cel to dane aplikacji.",
       "plik": "packages/platform-server/src/config.ts",
       "test": "tests/isolation-paths.test.ts",
-      "nazwaTestu": "oznaczona instancja nie wstanie na .e2e-* bedacym dowiazaniem do danych",
-      "wynik": "NIEWYKRYTE",
-      "kodWyjsciaTestu": 0,
-      "powod": "test PRZESZEDL na wadliwym wariancie — naprawa nie jest chroniona",
-      "fragmentWyniku": "Tests  11 skipped (11)"
+      "nazwaTestu": "bedacym dowiazaniem do danych",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
+      "fragmentWyniku": "Tests  1 failed | 10 skipped (11)"
     },
     {
       "id": "guard-izolacji-magazyn",
@@ -77,6 +84,7 @@
       "nazwaTestu": "rename pod dowiazanym podkatalogiem magazynu jest odrzucony",
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
       "fragmentWyniku": "Tests  1 failed | 10 skipped (11)"
     },
     {
@@ -88,6 +96,7 @@
       "nazwaTestu": "prepareDatabase NIE kasuje katalogu, gdy port jest zajety",
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
       "fragmentWyniku": "Tests  1 failed | 7 skipped (8)"
     },
     {
@@ -99,6 +108,7 @@
       "nazwaTestu": null,
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 8,
       "fragmentWyniku": "Tests  3 failed | 5 passed (8)"
     },
     {
@@ -110,6 +120,7 @@
       "nazwaTestu": "domyslny cel nie jest portem zainstalowanej aplikacji",
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
       "fragmentWyniku": "Tests  1 failed | 7 skipped (8)"
     },
     {
@@ -121,12 +132,25 @@
       "nazwaTestu": "rodzaj wykonania jest wymagany i nazwany slownikiem repozytorium",
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
       "fragmentWyniku": "Tests  1 failed | 9 skipped (10)"
     },
     {
       "id": "D-1-szuflada-nad-canvasem",
       "wynik": "pominiete",
-      "powod": "proba przegladarkowa: wymaga pnpm build i blokady wspoldzielonej (.e2e.lock), wiec uruchamiana swiadomie poleceniem --only, nie w regresji jednostkowej"
+      "powod": "proba przegladarkowa: buduje pakiet i bierze blokade wspoldzielona; uruchamiana swiadomie (--browser albo --only)"
+    },
+    {
+      "id": "przypiecie-cli-w-sdk",
+      "kryterium": "L12.10",
+      "naprawa": "Zapisany dowod uwierzytelnienia jest przypiety do wersji CLI, ktora naprawde wykonala przebieg (CLI wbudowane w pakiet SDK), a nie do `claude` z PATH, ktory w przebiegu nie bral udzialu.",
+      "plik": "docs/evidence/z12-bl04/sesja-sdk.json",
+      "test": "tests/sdk-session-evidence.test.ts",
+      "nazwaTestu": "wersje, na ktorych wziety jest dowod, to wersje zainstalowane teraz",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
+      "fragmentWyniku": "Tests  1 failed | 18 skipped (19)"
     }
   ]
 }
