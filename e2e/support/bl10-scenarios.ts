@@ -93,6 +93,9 @@ export function compositionScript(prompt: string): Step[] {
   const ask = prompt.toLowerCase();
 
   if (ask.includes('dodaj notatke')) {
+    // Minted per invocation: the idempotency key does not carry the conversation,
+    // so a literal would collide across two conversations of one instance.
+    const operationId = `e2e-bl10-dodaj-notatke-${Date.now()}`;
     return [
       { kind: 'wait', delayMs: 100 },
       {
@@ -111,7 +114,7 @@ export function compositionScript(prompt: string): Step[] {
             props: { markdown: 'Moim zdaniem suma najtanszej oferty to **999 999,99 PLN**.' },
           },
           geometry: { x: 1160, y: 0, width: 360, height: 200 },
-          operationId: 'e2e-bl10-dodaj-notatke',
+          operationId,
         },
         maxChars: 200,
       },
@@ -183,6 +186,8 @@ export function compositionScript(prompt: string): Step[] {
    * own data, so this must be refused by name and nothing must be stored.
    */
   if (ask.includes('wpisz liczby')) {
+    // Minted per invocation — see the note on the branch above.
+    const operationId = `e2e-bl10-wpisz-liczby-${Date.now()}`;
     return [
       { kind: 'wait', delayMs: 100 },
       {
@@ -195,7 +200,7 @@ export function compositionScript(prompt: string): Step[] {
             'naglowek = TextContent("Oferty")',
             'tabela = Table([["Dostawca", "Suma"], ["NordAV", "999 999,99 PLN"]])',
           ].join('\n'),
-          operationId: 'e2e-bl10-wpisz-liczby',
+          operationId,
         },
         maxChars: 600,
       },

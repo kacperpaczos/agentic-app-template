@@ -152,6 +152,82 @@ const OPEN_WORKBOOK = script(
 /** Names this scenario publishes under; never an input to work on. */
 const PUBLISHED_NAMES = ['oferty-poprawione.xlsx', 'oferty-artefakt.xlsx'];
 
+/** The CSV the L9.7 scenario publishes a version of, from the run's own listing. */
+const l97Original = (calls: CallRecord[]): string => {
+  const listed = calls.find((c) => c.name === 'files_list');
+  const file = (listed?.result?.files ?? []).find((f: { filename: string }) => f.filename.endsWith('.csv'));
+  if (!file) throw new Error('scenariusz: brak pliku CSV w magazynie');
+  return file.id as string;
+};
+
+/**
+ * L9.7: a retry of a write carries the same `operationId`, and one effect comes
+ * out.
+ *
+ * Each creating tool is called **twice with the same key** — the shape of an
+ * agent retrying after a reconnect — plus, for `canvas_add_card`, once with no
+ * key at all, which the schema now refuses before the handler runs. The tool
+ * answers are only half the proof (the browser spec reads them from the run's
+ * events); the other half is what the database and the other screens show, and
+ * that is where the spec's assertions live.
+ *
+ * The repeats are deliberate and identical, input for input: that is what makes
+ * the store's answer a replay rather than a fresh write. A scenario that varied
+ * the input would end in a `conflict` — a different guard, tested elsewhere.
+ */
+export const idempotencyScript = (prompt: string): Step[] => {
+  if (!prompt.includes('powtorka')) {
+    return [{ kind: 'text', text: 'Nie rozpoznano polecenia testowego.' }];
+  }
+  const cardInput = {
+    title: 'L97 KARTA POWTORZONA',
+    spec: { kind: 'component' as const, component: 'platform.markdown', props: { markdown: 'L97' } },
+    operationId: 'e2e-l97-karta-1',
+  };
+  const viewInput = {
+    title: 'L97 WIDOK POWTORZONY',
+    source: 'root = TextContent("L97")',
+    operationId: 'e2e-l97-widok-1',
+  };
+  return [
+    { kind: 'call', name: 'files_list', maxChars: 400 },
+    { kind: 'call', name: 'canvas_add_card', input: cardInput, maxChars: 300 },
+    /* The retry: same key, same everything — one card, not two. */
+    { kind: 'call', name: 'canvas_add_card', input: cardInput, maxChars: 300 },
+    /* No key: the schema refuses this before any handler runs. */
+    {
+      kind: 'call',
+      name: 'canvas_add_card',
+      input: {
+        title: 'L97 KARTA BEZ KLUCZA',
+        spec: { kind: 'component', component: 'platform.markdown', props: { markdown: 'L97' } },
+      },
+      maxChars: 300,
+    },
+    { kind: 'call', name: 'agent_view_create', input: viewInput, maxChars: 300 },
+    { kind: 'call', name: 'agent_view_create', input: viewInput, maxChars: 300 },
+    { kind: 'writeOutput', path: 'l97-wynik.csv', content: 'nazwa;ilosc\nkrzeslo;7\n' },
+    {
+      kind: 'call',
+      name: 'files_publish_version',
+      input: (calls: CallRecord[]) => ({
+        path: 'l97-wynik.csv',
+        originalFileId: l97Original(calls),
+        filename: 'l97-poprawione.csv',
+        operationId: 'e2e-l97-wersja-1',
+      }),
+      maxChars: 400,
+    },
+    { kind: 'call', name: 'files_publish_version', input: (calls: CallRecord[]) => ({
+        path: 'l97-wynik.csv',
+        originalFileId: l97Original(calls),
+        filename: 'l97-poprawione.csv',
+        operationId: 'e2e-l97-wersja-1',
+      }), maxChars: 400 },
+    { kind: 'text', text: 'L97-KONIEC' },
+  ];
+};
+
 /**
  * The workbook this conversation is working on, from the run's own listing.
  *

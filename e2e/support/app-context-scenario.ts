@@ -35,6 +35,9 @@ export const appContextScript = (prompt: string): Step[] => {
    * to make visible.
    */
   if (prompt.includes('w tle')) {
+    // Minted per invocation: the idempotency key does not carry the conversation,
+    // so a literal would collide across two conversations of one instance.
+    const operationId = `e2e-app-context-karta-${Date.now()}`;
     return [
       { kind: 'text', text: 'Pracuje w tle. ', delayMs: 200 },
       { kind: 'call', name: 'get_context', maxChars: 2000 },
@@ -46,7 +49,7 @@ export const appContextScript = (prompt: string): Step[] => {
         input: () => ({
           title: 'Karta zadania w tle',
           spec: { kind: 'component', component: 'platform.markdown', props: { markdown: 'z zadania w tle' } },
-          operationId: 'e2e-app-context-karta-w-tle',
+          operationId,
         }),
         maxChars: 400,
       },

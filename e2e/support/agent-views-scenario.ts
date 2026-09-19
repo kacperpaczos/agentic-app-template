@@ -55,6 +55,15 @@ const listCases: Step = { kind: 'call', name: 'procurement_list_cases', maxChars
 const listViews: Step = { kind: 'call', name: 'agent_views_list', maxChars: 300 };
 
 export function agentViewsScript(prompt: string): Step[] {
+  /*
+   * Minted per invocation, not a fixed literal: the idempotency key is
+   * (operationId, owner, scope) and does not carry the conversation, so two
+   * conversations of one instance reusing a literal would collide — the second
+   * creation would be answered with the first conversation's stored card
+   * instead of creating anything. Within one invocation the two calls of a
+   * repeat branch share the minted key; that repeat is the point (L9.7).
+   */
+  const mint = (name: string) => `e2e-agent-view-${name}-${Date.now()}`;
   if (prompt.includes('[zestawienie]')) {
     return [
       listCases,
@@ -64,7 +73,7 @@ export function agentViewsScript(prompt: string): Step[] {
         input: (calls) => ({
           title: TABLE_TITLE,
           source: tableComposition(caseIdFrom(calls)),
-          operationId: 'e2e-agent-view-zestawienie',
+          operationId: mint('zestawienie'),
         }),
       },
       { kind: 'text', text: 'Zestawienie jest w Widokach agenta.' },
@@ -87,7 +96,7 @@ export function agentViewsScript(prompt: string): Step[] {
         input: (calls) => ({
           title: TABLE_TITLE,
           source: tableComposition(caseIdFrom(calls)),
-          operationId: 'e2e-agent-view-pierwszy',
+          operationId: mint('pierwszy'),
         }),
       },
       { kind: 'text', text: 'Widok jest juz w Widokach agenta. ', delayMs: 100 },
@@ -104,7 +113,7 @@ export function agentViewsScript(prompt: string): Step[] {
         input: (calls) => ({
           title: CHART_TITLE,
           source: chartComposition(caseIdFrom(calls)),
-          operationId: 'e2e-agent-view-wykres',
+          operationId: mint('wykres'),
         }),
       },
       { kind: 'text', text: 'Wykres jest w Widokach agenta.' },
@@ -160,7 +169,7 @@ export function agentViewsScript(prompt: string): Step[] {
         input: {
           title: 'Liczby wpisane',
           source: 'root = BarChart(["A", "B"], [Series("Suma", [100, 200])])',
-          operationId: 'e2e-agent-view-odmowa-literal',
+          operationId: mint('odmowa-literal'),
         },
       },
       // A read nobody registered.
@@ -170,7 +179,7 @@ export function agentViewsScript(prompt: string): Step[] {
         input: {
           title: 'Zla operacja',
           source: 'root = DataTable({operation: "procurement.nie_ma"})',
-          operationId: 'e2e-agent-view-odmowa-operacja',
+          operationId: mint('odmowa-operacja'),
         },
       },
       { kind: 'text', text: 'Zglaszam odmowy.' },
@@ -187,7 +196,7 @@ export function agentViewsScript(prompt: string): Step[] {
         input: (calls) => ({
           title: BACKGROUND_TITLE,
           source: tableComposition(caseIdFrom(calls)),
-          operationId: 'e2e-agent-view-tlo',
+          operationId: mint('tlo'),
         }),
       },
       { kind: 'text', text: 'Widok z tla gotowy.' },

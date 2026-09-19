@@ -25,6 +25,7 @@ import {
   consentScript,
   continuityScript,
   filesScript,
+  idempotencyScript,
   neverEndingScript,
 } from './bl09-scenarios.ts';
 import { chatHistoryScript } from './chat-history-scenario.ts';
@@ -685,6 +686,8 @@ const CONVERSATION_SCENARIOS: Record<string, (prompt: string) => Step[]> = {
   'bl09-timeout': neverEndingScript,
   'bl09-child': childProcessScript,
   'bl09-files': filesScript,
+  /* BL-09, L9.7: repeats of the creating write tools produce one effect. */
+  'bl09-l97': idempotencyScript,
   /* BL-04: a mutation, then the limit, then a retry the user asks for. */
   'auth-mutation-then-limit': mutationThenLimitScript,
   /* BL-08b: coming back to a run that is still going. */
