@@ -1,0 +1,45 @@
+{
+  "zapisano": "2026-09-19T00:30:24.954Z",
+  "kodCommit": "9b0d48429f98521c9a8969f7e1ea1d233bffbe4a",
+  "zrodlo": "prawdziwy model (subskrypcja Claude) przez @mastra/claude i proces Claude Agent SDK",
+  "pakiet": "BL-03 (Z11)",
+  "przebieg": "2026-09-19T00-29-50-327Z",
+  "spec": "e2e/bl03-model-relations.spec.ts",
+  "przebiegPlanu": "E",
+  "turyWydaneWTymPliku": 1,
+  "turyWydaneLacznie": 2,
+  "budzet": 25,
+  "kroki": [
+    {
+      "tura": 1,
+      "cel": "wyszukanie i relacje",
+      "runId": "run_69412ee40f1b422fb8c8",
+      "faza": "succeeded",
+      "narzedzia": [
+        "ToolSearch",
+        "procurement_search",
+        "procurement_find_price_provenance"
+      ]
+    }
+  ],
+  "kryteria": [
+    "L9.4"
+  ],
+  "wynikNarzedzia": {
+    "dostawca": "MediaPro Systemy",
+    "referencja": "MP-2026-0442",
+    "pozycja": "Projektor laser 4K MP-Vision",
+    "zrodlo": {
+      "field": "unit_price",
+      "locator": "wiersz 2, kolumna cena_jednostkowa_netto_pln",
+      "note": "Cena odczytana z dokumentu oferty MP-2026-0442.",
+      "file": {
+        "id": "fil_09f37ab084604fbdba89",
+        "filename": "oferta-mediapro-MP-2026-0442.csv",
+        "mediaType": "text/csv"
+      },
+      "downloadUrl": "/api/files/fil_09f37ab084604fbdba89/content"
+    }
+  },
+  "wynik": "niezaliczona"
+}

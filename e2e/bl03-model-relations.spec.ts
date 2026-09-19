@@ -82,9 +82,23 @@ test.describe('BL-03 przebieg E: wyszukanie, relacje i szczegol na prawdziwym mo
       expect(result.provenance[0]!.locator).toMatch(/wiersz \d+/);
       expect(result.provenance[0]!.file.filename).toMatch(/\.csv$/);
 
-      const csv = await page.request.get(`/api/files/${result.provenance[0]!.file.id}/content`);
-      expect(csv.status()).toBe(200);
-      expect(await csv.text()).toContain('13100.00');
+      /*
+       * Pobrane **przegladarka uzytkownika**, a nie klientem HTTP testu.
+       *
+       * Nie z wygody: `GET /api/files/:id/content` odpowiada z **dwoma**
+       * naglowkami Content-Length (uchwyt ustawia swoj, a `c.body()` dokłada
+       * drugi), co scisly klient HTTP — undici Node'a i klient Playwrighta —
+       * odrzuca w calosci (`Parse Error: Duplicate Content-Length`).
+       * Przegladarka to toleruje, wiec uzytkownik tego nie widzi. Defekt jest
+       * poza kryteriami tego pakietu i zostal zglaszony w raporcie razem z
+       * odtworzeniem bez modelu; tu bierzemy sciezke, ktora ma uzytkownik.
+       */
+      const csv = await page.evaluate(async (id: string) => {
+        const res = await fetch(`/api/files/${id}/content`, { credentials: 'include' });
+        return { status: res.status, text: await res.text() };
+      }, result.provenance[0]!.file.id);
+      expect(csv.status).toBe(200);
+      expect(csv.text).toContain('13100.00');
 
       /*
        * And the user was told. Deliberately the loosest assertion in the file:
