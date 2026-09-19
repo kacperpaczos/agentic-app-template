@@ -354,7 +354,13 @@ if (isMain) {
       drzewoPoProbach: dirty ? 'BRUDNE' : 'czyste',
       wyniki: results,
     };
-    const path = resolve(dir, 'proby-wykrycia.json');
+    /*
+     * A narrowed run writes beside the full one, never over it: a recorded
+     * result is a fact about the run that produced it, and `--only D-1` is a
+     * different run from "all of them".
+     */
+    const name = only ? `proby-wykrycia-${only.join('-').slice(0, 60)}.json` : 'proby-wykrycia.json';
+    const path = resolve(dir, name);
     writeFileSync(path, `${JSON.stringify(body, null, 2)}\n`);
     console.log(`dowod: ${relative(REPO, path)}`);
   }
