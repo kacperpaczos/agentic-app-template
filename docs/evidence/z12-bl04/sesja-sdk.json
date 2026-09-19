@@ -6,6 +6,8 @@
   "wersje": {
     "node": "24.19.0",
     "claudeCli": "2.1.277 (Claude Code)",
+    "claudeCliWSdk": "2.1.270",
+    "claudeCliWSdkCommit": "97ecbf7abeb4170dcfd26c4d4b397afd9015030e",
     "claudeAgentSdk": "0.3.270",
     "mastraClaude": "0.3.1",
     "mastraCore": "1.66.0",
@@ -65,5 +67,6 @@
   "czegoToNieDowodzi": [
     "To nie jest dowod wyczerpania limitu. Pole planLimits to ODCZYT rzeczywistego wykorzystania okien planu, nie jego wyczerpanie; kryteria L8.11 i L8.12 pozostaja otwarte w tej czesci.",
     "Zadanie sterujace potwierdza sposob logowania sesji, nie przebieg pelnej tury modelu z narzedziami."
-  ]
+  ],
+  "uwagaOWersjachCli": "Pole claudeCli to `claude --version` z PATH — SRODOWISKO przebiegu. Prace wykonalo CLI wbudowane w pakiet SDK (claudeCliWSdk), co pokazuje obserwacja: docs/evidence/z13-bl12/ktore-cli-uruchamia-sdk.json (SDK odpowiedzialo na zadanie sterujace przy PATH BEZ `claude`). Pola claudeCliWSdk i claudeCliWSdkCommit zostaly DOPISANE 2026-09-19 przez pakiet BL-12, nie zmierzone ponownie: sa funkcja zapisanej w tym samym pliku wersji pakietu SDK 0.3.270 (manifest.json tego pakietu), a regresja sprawdza rownosc tej wersji z zainstalowana, wiec dopisana wartosc nie moze sie rozjechac z kodem. Samego przebiegu nie powtorzono swiadomie: sonda sesji potrzebuje DZIALAJACEGO logowania, czyli katalogu poswiadczen uzytkownika, ktory CLI przy okazji odswieza i przepisuje — a tego zabrania G21. Dwie proby graniczne (refresh-refused, revoked) powtorzono, bo dzialaja na poswiadczeniu fabrykowanym w katalogu tymczasowym."
 }

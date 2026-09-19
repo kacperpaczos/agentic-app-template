@@ -187,6 +187,7 @@ describe('serwer odmawia startu przy niezgodnej konfiguracji', () => {
       consentTimeoutMs: 1,
       maxUploadBytes: 1,
       instanceLabel: TEST_INSTANCE_LABEL,
+      instanceRunId: null,
       ...over,
     }) as Parameters<typeof assertTestInstanceIsIsolated>[0];
 

@@ -1,0 +1,31 @@
+{
+  "opis": "Kontrolowane warianty wadliwe krytycznych napraw. Kazdy wpis mowi, ktora naprawe chroni, ktora linie zepsuc i ktory test ma wtedy oblac. Test, ktory mimo wadliwego wariantu PRZECHODZI, jest znaleziskiem: naprawa nie jest chroniona.",
+  "zrodlo": "node scripts/detection-trials.mjs (APP_WRITE_EVIDENCE=1)",
+  "rodzajWykonania": "test kontraktu lub logiki",
+  "zapisano": "2026-09-19T09:21:23.083Z",
+  "wersjaKodu": {
+    "commit": "cda66a03d268d162e5c5efcb45005d550d1fd3c4",
+    "brudneDrzewoPrzedProbami": false,
+    "node": "24.19.0"
+  },
+  "srodowisko": {
+    "system": "linux 7.2.5-200.fc44.x86_64 x64",
+    "node": "24.19.0",
+    "pnpm": "9.15.9"
+  },
+  "drzewoPoProbach": "czyste",
+  "wyniki": [
+    {
+      "id": "D-1-szuflada-nad-canvasem",
+      "kryterium": "L2.10",
+      "naprawa": "Zamknieta szuflada rozmow zostaje poza kadrem (left: -294px) i nie przykrywa watku; wariant wadliwy przywraca faktyczna przyczyne defektu D-1, czyli left: 0 !important.",
+      "plik": "packages/platform-ui/src/styles.css",
+      "test": "e2e/chat-drawer.spec.ts",
+      "nazwaTestu": "zamknieta szuflada nie zaslania rozmowy",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 2,
+      "fragmentWyniku": "] No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage"
+    }
+  ]
+}

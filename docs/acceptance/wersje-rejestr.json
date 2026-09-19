@@ -1,0 +1,40 @@
+{
+  "opis": "Zapis sprawdzenia w rejestrze npm: czy przypiete wersje sa nadal najnowszymi stabilnymi. Powstaje na zadanie (--refresh), bo wymaga sieci; regresja sprawdza go offline i oblewa, gdy opisuje inny lockfile albo gdy sie zestarzal.",
+  "sprawdzono": "2026-09-19T01:28:22.442Z",
+  "czym": "node scripts/check-versions.mjs --refresh (node 24.19.0)",
+  "lockfileSha256": "eb3608c664b2db1345c41d6c105ceda57d8827178055edea58e367add1860837",
+  "maksymalnyWiekDni": 180,
+  "najnowszeStabilne": {
+    "react": {
+      "przypiete": "19.3.0",
+      "wRejestrzeNpm": "19.3.0",
+      "wymaganaNajnowsza": true
+    },
+    "react-dom": {
+      "przypiete": "19.3.0",
+      "wRejestrzeNpm": "19.3.0",
+      "wymaganaNajnowsza": true
+    },
+    "typescript": {
+      "przypiete": "7.0.2",
+      "wRejestrzeNpm": "7.0.2",
+      "wymaganaNajnowsza": true
+    },
+    "vite": {
+      "przypiete": "8.3.0",
+      "wRejestrzeNpm": "8.3.0",
+      "wymaganaNajnowsza": false
+    },
+    "zod": {
+      "przypiete": "4.6.5",
+      "wRejestrzeNpm": "4.6.5",
+      "wymaganaNajnowsza": false
+    },
+    "hono": {
+      "przypiete": "4.13.7",
+      "wRejestrzeNpm": "4.13.8",
+      "wymaganaNajnowsza": false
+    }
+  },
+  "uwagaOPeer": ".npmrc ma strict-peer-dependencies=false i auto-install-peers=true, wiec instalacja nie przerywa sie na niezgodnosci peer. Dlatego peer sprawdzany jest na lockfile: kazdy zadeklarowany, nieopcjonalny peer musi byc dostarczony w snapshocie, a react i react-dom nie moga byc zainstalowane w dwoch wersjach naraz. Ograniczenie: to sprawdza DOSTARCZENIE peera, nie spelnienie zakresu semver — tego bez biblioteki semver nie da sie uczciwie orzec."
+}

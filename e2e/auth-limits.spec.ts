@@ -477,7 +477,8 @@ test.describe('uwierzytelnienie i limity w interfejsie (symulacja na granicy ada
           'scenariuszowa dziala z CLAUDE_CONFIG_DIR wskazujacym katalog tymczasowy z kanarkiem; ' +
           'prawdziwe logowanie uzytkownika nie bierze udzialu w probie.',
         zrodlo: 'APP_WRITE_EVIDENCE=1 pnpm exec playwright test e2e/auth-limits.spec.ts',
-        rodzajDowodu: 'test GUI bez modelu + skan powierzchni (symulacja na granicy adaptera)',
+        rodzajWykonania: 'symulacja',
+        rodzajDowodu: 'stand-in na granicy adaptera SDK, prawdziwe UI i prawdziwy serwer',
         wersjaKodu: codeVersion({}, ['docs/evidence/z12-bl04']),
         przeszukanePowierzchnie: Object.fromEntries(
           Object.entries(surfaces).map(([k, v]) => [k, { bajtow: v.length, kanarek: v.includes(CANARY) }]),

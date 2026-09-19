@@ -10,13 +10,27 @@
  *   node scripts/acceptance-agent.mjs [scenario...]
  *
  * Scenarios: mutation, provenance, layout, consent-denied, cancel
+ *
+ * Every scenario writes, so which instance answers is checked before the first
+ * request rather than left to the reader: see `lib/acceptance-target.mjs`
+ * (L1.8). `run-agent.mjs` repeats the check for itself — it is also documented
+ * as a standalone command.
  */
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { requireAcceptanceInstance } from './lib/acceptance-target.mjs';
 
-const BASE = process.env.APP_BASE ?? 'http://127.0.0.1:8791';
 const here = dirname(fileURLToPath(import.meta.url));
+
+let BASE;
+try {
+  BASE = (await requireAcceptanceInstance(process.env)).base;
+} catch (e) {
+  console.error(e.message);
+  process.exit(3);
+}
+console.log(`# instancja odbiorowa: ${BASE}`);
 
 const jar = [];
 const call = async (path, init = {}) => {
@@ -38,7 +52,9 @@ const runAgent = (prompt, args = []) =>
     const child = spawn(
       process.execPath,
       [resolve(here, 'run-agent.mjs'), prompt, ...args],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
+      // The resolved origin, not the raw variable: parent and child must agree
+      // on which instance was checked, including when APP_BASE was unset.
+      { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, APP_BASE: BASE } },
     );
     let out = '';
     child.stdout.on('data', (b) => {

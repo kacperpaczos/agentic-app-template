@@ -12,7 +12,7 @@
  *   node scripts/acceptance-matrix.mjs --check    # tylko sprawdza; kod 1 przy brakach lub dryfie plików
  *   node scripts/acceptance-matrix.mjs --summary  # wypisuje podsumowanie
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -37,6 +37,14 @@ const EVIDENCE = {
   test: 'test kontraktu lub logiki',
   symulacja: 'symulacja',
   kod: 'analiza kodu',
+  /*
+   * A recorded run of an acceptance command — `pnpm verify` on a clean copy,
+   * `pnpm check:module-swap`, a probe script — with its log kept as evidence.
+   * G17 allows exactly this ("skrypt odbiorowy z logiem") and none of the five
+   * names above fits it: it was executed, so calling it code analysis would be
+   * false, and no test file carries it.
+   */
+  przebieg: 'przebieg odbiorowy z logiem',
   brak: '—',
 };
 const ORIGIN = { szablon: 'szablon', historyczny: 'historyczny (AgenticApp)', brak: '—' };
@@ -130,6 +138,39 @@ const S = data.scenarios ?? {};
 for (const t of Object.keys(S)) if (!scenarios.has(t)) problems.push(`ocena próby ${t} bez próby w specyfikacji`);
 for (const t of scenarios.keys()) if (!S[t]) problems.push(`brak oceny próby ${t}`);
 
+/*
+ * The index of trials, checked rather than described (BL-12).
+ *
+ * Every trial has to say **what kind of proof** it rests on and **which file
+ * carries it** — and the file has to exist. A trial that has no evidence says
+ * so with `brak`, which is a statement, not an omission: the one thing that may
+ * not happen is a row that reads as evidence and points at nothing.
+ */
+for (const [t, s] of scenarios) {
+  const a = S[t];
+  if (!a) continue;
+  const kinds = a.evidence ?? [];
+  if (!Array.isArray(kinds) || kinds.length === 0) {
+    problems.push(`próba ${t}: brak rodzaju dowodu (pole evidence)`);
+  } else {
+    for (const k of kinds) if (!EVIDENCE[k]) problems.push(`próba ${t}: nieznany rodzaj dowodu "${k}"`);
+  }
+  const files = a.pliki ?? [];
+  if (!Array.isArray(files)) problems.push(`próba ${t}: pole pliki nie jest lista`);
+  else {
+    for (const f of files) {
+      if (!existsSync(resolve(root, f))) problems.push(`próba ${t}: dowód wskazuje nieistniejący ${f}`);
+    }
+    if (files.length === 0 && !kinds.includes('brak')) {
+      problems.push(`próba ${t}: rodzaj dowodu podany, ale żaden plik go nie niesie`);
+    }
+  }
+  if (a.status === 'potwierdzone' && kinds.includes('brak')) {
+    problems.push(`próba ${t}: „potwierdzona” bez dowodu`);
+  }
+  if (!s) problems.push(`próba ${t}: brak w specyfikacji`);
+}
+
 /* -------------------------------- render ---------------------------------- */
 
 const esc = (s) => String(s ?? '—').replace(/\|/g, '\\|').replace(/\n/g, ' ');
@@ -185,6 +226,12 @@ m.push('|---|---|');
 for (const k of Object.keys(STATUS)) m.push(`| ${STATUS[k]} | ${scenarioCounts[k] ?? 0} |`);
 m.push(`| **Razem** | **${scenarios.size}** |`);
 m.push('');
+const scenarioEvidence = {};
+for (const t of scenarios.keys()) for (const k of S[t]?.evidence ?? []) scenarioEvidence[k] = (scenarioEvidence[k] ?? 0) + 1;
+m.push('| Rodzaj dowodu prób odbiorowych | Liczba prób |');
+m.push('|---|---|');
+for (const [k, v] of Object.entries(scenarioEvidence).sort((a, b) => b[1] - a[1])) m.push(`| ${EVIDENCE[k] ?? k} | ${v} |`);
+m.push('');
 m.push(`**Warstwy zamknięte — ${closed.length} z ${layers.length}:** ${closed.map((l) => `L${l.num}`).join(', ') || 'brak'}.`);
 m.push('');
 m.push('| Warstwa | Kryteria | Otwarte | Otwarte kryteria |');
@@ -197,11 +244,22 @@ m.push('Znaczenie pól: **Stan w szablonie** dotyczy wyłącznie dowodu uzyskane
 m.push('');
 m.push('## Próby odbiorowe');
 m.push('');
-m.push('| Próba | Warstwy | Stan w szablonie | Dowód | Braki | Powiązane kryteria |');
-m.push('|---|---|---|---|---|---|');
+m.push(
+  'Każda próba podaje **rodzaj dowodu** i **plik, który go niesie**; kolumna „Otwarte kryteria próby” ' +
+    'jest wyliczana z ocen, więc próba potwierdzona nie ukryje kryterium, które nadal jest otwarte.',
+);
+m.push('');
+m.push('| Próba | Warstwy | Stan w szablonie | Rodzaj dowodu | Pliki z dowodem | Dowód | Braki | Powiązane kryteria | Otwarte kryteria próby |');
+m.push('|---|---|---|---|---|---|---|---|---|');
 for (const [t, s] of scenarios) {
   const a = S[t] ?? {};
-  m.push(`| **${t}** — ${esc(s.name)} | ${s.layers.map((x) => `L${x}`).join(', ')} | **${esc(STATUS[a.status] ?? a.status)}** | ${esc(a.proof)} | ${esc(a.gap)} | ${scenarioRefs.get(t).join(', ') || '—'} |`);
+  const kinds = (a.evidence ?? []).map((k) => EVIDENCE[k] ?? k).join(', ') || '—';
+  const files = (a.pliki ?? []).map((f) => `\`${f}\``).join(', ') || '—';
+  const refs = scenarioRefs.get(t);
+  const openRefs = refs.filter((id) => OPEN.has(A[id]?.status ?? 'niesprawdzone'));
+  m.push(
+    `| **${t}** — ${esc(s.name)} | ${s.layers.map((x) => `L${x}`).join(', ')} | **${esc(STATUS[a.status] ?? a.status)}** | ${esc(kinds)} | ${esc(files)} | ${esc(a.proof)} | ${esc(a.gap)} | ${refs.join(', ') || '—'} | ${openRefs.join(', ') || '—'} |`,
+  );
 }
 m.push('');
 m.push('## Kryteria');

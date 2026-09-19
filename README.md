@@ -55,8 +55,9 @@ modułu.
 - **Dołączać pliki do rozmowy.** Obrazy PNG/JPEG, skoroszyty XLSX, pliki CSV i tekst. Agent czyta
   treść obrazu, a skoroszyt przetwarza kodem uruchamianym w sandboxie — dopiero po Twojej zgodzie.
   Zmieniony plik zapisuje jako nową wersję; oryginał zostaje bez zmian.
-- **Zostawić agenta przy pracy.** Przełączenie rozmowy, zamknięcie panelu czy odświeżenie strony nie
-  przerywa zadania. Zatrzymanie jest osobną, jawną akcją.
+- **Zostawić agenta przy pracy.** Przełączenie rozmowy i odświeżenie strony nie przerywa zadania;
+  zatrzymanie jest osobną, jawną akcją. (Wcześniejsza wersja tego zdania mówiła też o „zamknięciu
+  panelu” — ta powłoka nie ma takiej akcji: panel rozmowy jest zawsze widoczny.)
 - **Poprosić o przejście do ekranu.** „Przełącz na pliki” albo „pokaż ustawienie logowania” otwiera
   widok i podświetla element. Pytanie o dane, które mają swój ekran — np. „co jest w dostawcach?” —
   też przenosi na ten ekran.
@@ -297,6 +298,14 @@ z nich test oblewa i trzeba sondę powtórzyć.
 
 `pnpm test:e2e` działa na istniejącym buildzie, więc uruchamiaj go po `pnpm verify` albo `pnpm build`.
 Testy startują własne serwery na portach 8792–8799 z własnymi katalogami danych.
+
+**Rejestr wersji wygasa po 180 dniach.** `tests/versions.test.ts` sprawdza offline zapis z
+`docs/acceptance/wersje-rejestr.json`: czy opisuje ten lockfile (sha256) i czy twierdzenie „React i
+TypeScript są najnowszymi stabilnymi” nie jest starsze niż pół roku. Po tym terminie `pnpm verify`
+robi się czerwone bez żadnej zmiany w kodzie — i tak ma być, bo nikt tego twierdzenia od pół roku nie
+potwierdził. Odświeżenie: `pnpm check:versions:refresh` (wymaga sieci). **Samo odświeżenie może nie
+wystarczyć:** jeśli React albo TypeScript zdążyły się ruszyć, odświeżony zapis pokaże różnicę i
+trzeba będzie naprawdę podnieść wersje w manifestach i lockfile, a potem przejść regresję.
 `pnpm typecheck` (w `pnpm verify`) sprawdza pakiety, każdy moduł osobno bez warstwy składania
 (`pnpm typecheck:modules`) i katalog `e2e/` (`tsconfig.e2e.json`).
 
@@ -313,8 +322,17 @@ Licznik i to sprawdzenie obejmują **tylko** spec odbiorowy. `e2e/agent-ui.spec.
 kosztuje 11 tur nawet wtedy, gdy spec odbiorowy sam się pominie.
 
 `pnpm acceptance` i `scripts/run-agent.mjs` działają inaczej: łączą się z **działającą** instancją
-(domyślnie `http://127.0.0.1:8791`) i zmieniają jej dane. Kieruj je tylko na osobną instancję z
-osobnym katalogiem danych, np. przez `APP_BASE=http://127.0.0.1:8790`.
+(`APP_BASE`, domyślnie `http://127.0.0.1:8790`) i **zmieniają jej dane** — zmieniają ilość pozycji i
+dodają karty. Dlatego, zanim wyślą pierwsze żądanie, pytają `/api/health`, kto tam odpowiada:
+instancja musi mieć etykietę `agenticapp-dev`, `agenticapp-test` albo `agenticapp-acceptance`.
+Zainstalowana instancja nie ma żadnej etykiety, więc odpowiedź bez etykiety kończy się odmową i
+kodem wyjścia 3, zanim cokolwiek zostanie zapisane; `APP_BASE` wskazujący port 8791 jest odrzucany z
+podaniem powodu, tak samo jak adres spoza pętli zwrotnej. Instancję odbiorową uruchamiasz świadomie:
+
+```bash
+APP_INSTANCE_LABEL=agenticapp-acceptance APP_DATA_DIR=$PWD/.acceptance-data \
+  PORT=8790 APP_ALLOWED_ORIGINS=http://127.0.0.1:8790 pnpm start
+```
 
 ## Własna aplikacja na tym szablonie
 
@@ -339,12 +357,14 @@ Krok po kroku, z opisem kontraktu modułu i znanymi pułapkami:
 
 To wersja robocza. Najważniejsze braki i ograniczenia:
 
-- **Agent nie widzi pełnego stanu ekranu.** Nie odczytuje opisu aktywnego widoku, nie zna zawężenia
-  ustawionego wcześniej (dowiaduje się o nim tylko w tej samej turze), nie potrafi wskazać wartości
-  konkretnego pola rekordu.
-- **Nie ma sortowania ani stronicowania sterowanego rozmową** ani zapisanych preferencji widoków.
-  Zawężanie działa na danych już pobranych przez widok.
-- **Nie ma przestrzeni „Widoki agenta”**, w której agent sam składa trwałe zestawienia i wykresy.
+- **Agent czyta opis ekranu ze startu wykonania.** W trakcie pracy nie ma kanału, którym dostałby
+  nowszy stan ekranu — dowiaduje się o zmianie dopiero w następnej turze (próba T08, L6.3 i L6.9).
+- **Tekst wypowiedziany przed wywołaniem narzędzia** nie trafia do banki odpowiedzi gotowego czatu:
+  zostaje krokiem osi „Behind the scenes”, o jedno kliknięcie dalej (L5.15,
+  [`docs/NEW-APPLICATION.md`](docs/NEW-APPLICATION.md) §7).
+- **Odcięcie sieci i katalogu danych w sandboxie** jest sprawdzone jako **konfiguracja** SDK
+  (`tests/runtime.test.ts`), a nie próbą niedozwolonego odczytu, zapisu i połączenia z uruchomienia
+  (L11.3, L11.4, L11.11).
 - **Pliki XLSX:** formuły nie są przeliczane; wykresy, formatowanie warunkowe i tabele przestawne nie
   są zachowywane przy zapisie; pliki `.xlsm` i `.xls` są odrzucane.
 - **Zadania w tle** trwają tak długo jak proces backendu; restart oznacza je jako przerwane.
