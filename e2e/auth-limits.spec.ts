@@ -208,9 +208,18 @@ test.describe('uwierzytelnienie i limity w interfejsie (symulacja na granicy ada
    * aplikacja pokazywała jeden stan dla wszystkich. Wyłapała to recenzja.
    */
   test('cztery kontrolowane awarie daja cztery rozne stany, nie jeden blad', async () => {
+    /*
+     * Ten test PODSUMOWUJE odczyty z czterech poprzednich, więc ma sens tylko w
+     * przebiegu całego pliku (suita jest `serial`). Pusty zbiór znaczy „nie
+     * uruchomiono poprzedników”, a nie „aplikacja pokazuje jeden stan” — i
+     * komunikat musi te dwie rzeczy rozróżniać, bo inaczej `-g` na samym tym
+     * teście wygląda jak defekt produktu.
+     */
     expect(
       observedAuthStates.size,
-      `z ekranu odczytano stany: ${[...observedAuthStates].join(', ')} — to nie sa rozrozniane przypadki`,
+      observedAuthStates.size === 0
+        ? 'nie zebrano zadnego odczytu — uruchom caly plik, ten test podsumowuje cztery poprzednie'
+        : `z ekranu odczytano stany: ${[...observedAuthStates].join(', ')} — to nie sa rozrozniane przypadki`,
     ).toBe(cases.length);
     expect(
       observedRunErrors.size,
