@@ -1,6 +1,7 @@
 import { realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, parse, resolve } from 'node:path';
 import { claudeConfigDir } from './auth.ts';
+import { realResolveFrom } from '../util/real-path.ts';
 
 /**
  * The permission matrix for the Claude Agent SDK's **built-in** tools.
@@ -266,46 +267,14 @@ export function realResolve(base: string, candidate: string): string {
  */
 export function resolvePhysically(base: string, candidate: string): string {
   /*
-   * `resolve()` NIE jest tu wołane na kandydacie — i to jest cała treść tej
-   * funkcji. Pierwsza wersja robiła `parse(resolve(candidate)).root`, żeby
-   * znaleźć korzeń ścieżki bezwzględnej, i tym samym zwijała `..` leksykalnie
-   * zanim cokolwiek zaczęło być rozwijane: dokładnie ta wada, którą ta funkcja
-   * miała naprawić, tyle że o jedną warstwę głębiej. Wyłapała to dopiero próba
-   * na trzech kształtach, nie przegląd kodu.
+   * Jedno przejście, w jednym miejscu (`util/real-path.ts`).
+   *
+   * Przez jedną rundę stało tutaj drugie, bo naprawiałem wadę tam, gdzie
+   * patrzyłem. Dwie podobne funkcje rozwiązujące ścieżki to dokładnie ten układ,
+   * w którym wadę naprawia się w jednej i zostawia w drugiej — co w tym
+   * repozytorium właśnie się zdarzyło i kosztowało osobną rundę.
    */
-  const absolute = isAbsolute(candidate);
-  const root = absolute ? parse(candidate).root : '';
-  const startRaw = absolute ? root : base;
-  let current = (() => {
-    try {
-      return realpathSync(startRaw);
-    } catch {
-      return startRaw;
-    }
-  })();
-
-  const rest = absolute ? candidate.slice(root.length) : candidate;
-  let existsSoFar = true;
-
-  for (const part of rest.split(/[/\\]+/)) {
-    if (part === '' || part === '.') continue;
-    if (part === '..') {
-      current = dirname(current);
-      continue;
-    }
-    const next = join(current, part);
-    if (!existsSoFar) {
-      current = next;
-      continue;
-    }
-    try {
-      current = realpathSync(next);
-    } catch {
-      existsSoFar = false;
-      current = next;
-    }
-  }
-  return current;
+  return realResolveFrom(base, candidate);
 }
 
 /**

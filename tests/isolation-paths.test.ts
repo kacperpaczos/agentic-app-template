@@ -1,10 +1,10 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { assertTestInstanceIsIsolated, loadConfig } from '@platform/server';
 import { assertInsideManagedRoot } from '../packages/platform-server/src/util/managed-fs.ts';
-import { isWithin, realResolve } from '../packages/platform-server/src/util/real-path.ts';
+import { isWithin, realResolve, realResolveFrom } from '../packages/platform-server/src/util/real-path.ts';
 import { assertTestDataDir, TEST_INSTANCE_LABEL, TestIsolationError } from '../e2e/support/isolation.ts';
 
 /**
@@ -259,5 +259,108 @@ describe('realResolve — jedna implementacja, dwa jezyki', () => {
     expect(scripts.isWithin(realResolve(link), realResolve(repo))).toBe(
       isWithin(realResolve(link), realResolve(repo)),
     );
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Kolejność rozwiązywania: dowiązanie przed `..`.
+ *
+ * Wada, którą te testy atakują, przeżyła trzy recenzje przez czytanie i dwie
+ * poprawki w sąsiednim module — bo każdy czytał **algorytm**, a nie jego wynik
+ * na ścieżce z `..` za dowiązaniem. Stąd ten blok pyta o wynik i nic więcej.
+ *
+ * `path.resolve()` zwija `..` leksykalnie; jądro rozwiązuje w odwrotnej
+ * kolejności. Dla `/a/link/../b`, gdzie `link` wskazuje poza drzewo, odpowiedź
+ * leksykalna brzmi `/a/b`, a `open()` trafia gdzie indziej. Każdy strażnik w
+ * tym repozytorium kończy się porównaniem ścieżek, więc zła odpowiedź jest
+ * zgodą na operację w niewłaściwym miejscu.
+ */
+describe('realResolve: dowiazanie rozwiazywane przed ".."', () => {
+  const shapes = () => {
+    const base = mkdtempSync(join(tmpdir(), 'kolejnosc-'));
+    const outside = mkdtempSync(join(tmpdir(), 'poza-'));
+    mkdirSync(join(base, 'wnetrze'), { recursive: true });
+    mkdirSync(join(outside, 'cel'), { recursive: true });
+    symlinkSync(join(outside, 'cel'), join(base, 'wnetrze', 'link'));
+    return { base, outside };
+  };
+
+  it('sciezka bezwzgledna z ".." za dowiazaniem wypada TAM, gdzie trafi jadro', () => {
+    const { base, outside } = shapes();
+    try {
+      const surowa = `${base}/wnetrze/link/../ofiara`;
+      // Leksykalnie: <base>/wnetrze/ofiara. Fizycznie: <outside>/ofiara.
+      expect(realResolve(surowa)).toBe(join(outside, 'ofiara'));
+      expect(realResolve(surowa)).not.toBe(join(base, 'wnetrze', 'ofiara'));
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('to samo dla sciezki wzglednej podanej przez realResolveFrom', () => {
+    const { base, outside } = shapes();
+    try {
+      expect(realResolveFrom(base, 'wnetrze/link/../ofiara')).toBe(join(outside, 'ofiara'));
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('straznik widzi, ze cel lezy w katalogu danych, choc tekst mowi inaczej', () => {
+    /*
+     * Kształt istotny dla skryptów utrzymaniowych: ich flagi (`--out`, `--data`)
+     * to napisy od użytkownika i mogą nieść `..`. Guard pyta „czy cel leży w
+     * katalogu danych" — i pod starą odpowiedzią mówił „nie", gdy fizycznie
+     * leżał.
+     */
+    const root = mkdtempSync(join(tmpdir(), 'straznik-'));
+    try {
+      mkdirSync(join(root, 'data', 'sub'), { recursive: true });
+      mkdirSync(join(root, 'backups'), { recursive: true });
+      symlinkSync(join(root, 'data', 'sub'), join(root, 'backups', 'link'));
+
+      const zywe = realResolve(join(root, 'data'));
+      const cel = realResolve(`${root}/backups/link/../x`);
+
+      expect(cel).toBe(join(realResolve(join(root, 'data')), 'x'));
+      expect(isWithin(cel, zywe), 'straznik nie widzi, ze cel jest w katalogu danych').toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('kopia w scripts/lib/state-tools.mjs odpowiada tak samo na ten ksztalt', async () => {
+    const scripts = (await import(resolve(import.meta.dirname, '../scripts/lib/state-tools.mjs'))) as {
+      realResolve: (p: string) => string;
+    };
+    const { base, outside } = shapes();
+    try {
+      const surowa = `${base}/wnetrze/link/../ofiara`;
+      expect(scripts.realResolve(surowa)).toBe(realResolve(surowa));
+      expect(scripts.realResolve(surowa)).toBe(join(outside, 'ofiara'));
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('kontrakt zachowany: sciezka, ktorej jeszcze nie ma, i zwykla sciezka', () => {
+    const { base, outside } = shapes();
+    try {
+      // Nieistniejący liść przez najbliższego istniejącego przodka — po to ta funkcja powstała.
+      expect(realResolve(join(base, 'wnetrze', 'jeszcze', 'nie', 'ma'))).toBe(
+        join(realResolve(join(base, 'wnetrze')), 'jeszcze/nie/ma'),
+      );
+      // Zwykła ścieżka bez dowiązań i bez `..` odpowiada jak dotąd.
+      expect(realResolve(join(base, 'wnetrze'))).toBe(join(realResolve(base), 'wnetrze'));
+      void outside;
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 });

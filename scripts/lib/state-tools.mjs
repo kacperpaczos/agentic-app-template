@@ -33,7 +33,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { createRequire } from 'node:module';
-import { basename, dirname, join, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, parse, resolve, sep } from 'node:path';
 
 export const REPO = resolve(import.meta.dirname, '../..');
 
@@ -219,20 +219,50 @@ export function makeArgs(argv, declared) {
  * target that is about to be created is still judged by where it will really be.
  */
 export function realResolve(path) {
-  const absolute = resolve(path);
-  const missing = [];
-  let cursor = absolute;
-  for (;;) {
-    if (existsSync(cursor)) {
-      return missing.length === 0
-        ? realpathSync(cursor)
-        : join(realpathSync(cursor), ...missing.reverse());
+  /*
+   * Komponent po komponencie, w kolejności jądra: dowiązanie rozwijane ZANIM
+   * zinterpretowany będzie następny człon, `..` cofa się od ścieżki już
+   * rozwiązanej. Poprzednia wersja zaczynała od `resolve(path)`, czyli zwijała
+   * `..` leksykalnie — a dla `--out .e2e-x/link/../ofiara`, gdzie `link`
+   * wskazuje poza drzewo, odpowiedź leksykalna i `open()` trafiają w różne
+   * miejsca. Te skrypty kasują katalogi, więc różnica nie jest akademicka.
+   *
+   * Bliźniak `packages/platform-server/src/util/real-path.ts`; równoważność obu
+   * sprawdza `tests/isolation-paths.test.ts` — także na tym kształcie.
+   */
+  const absolutePath = isAbsolute(path);
+  const root = absolutePath ? parse(path).root : '';
+  let current = (() => {
+    const start = absolutePath ? root : resolve('.');
+    try {
+      return realpathSync(start);
+    } catch {
+      return start;
     }
-    const parent = dirname(cursor);
-    if (parent === cursor) return absolute;
-    missing.push(basename(cursor));
-    cursor = parent;
+  })();
+
+  const rest = absolutePath ? path.slice(root.length) : path;
+  let existsSoFar = true;
+
+  for (const part of rest.split(/[/\\]+/)) {
+    if (part === '' || part === '.') continue;
+    if (part === '..') {
+      current = dirname(current);
+      continue;
+    }
+    const next = join(current, part);
+    if (!existsSoFar) {
+      current = next;
+      continue;
+    }
+    try {
+      current = realpathSync(next);
+    } catch {
+      existsSoFar = false;
+      current = next;
+    }
   }
+  return current;
 }
 
 /** Written into every directory these scripts create, so they can recognise it later. */
