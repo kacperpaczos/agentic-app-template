@@ -420,13 +420,22 @@ describe('uruchomienie nie moze odczytac poswiadczenia (symulacja na granicy ada
      * protection that refused every file would pass every assertion above and
      * break the product.
      */
-    const readable = join(configDir, '..', 'nie-poswiadczenie.txt');
-    writeFileSync(resolve(readable), 'zwykla tresc robocza');
-    const { stand } = await startRun([
-      { kind: 'fileTool', name: 'Read', input: { file_path: resolve(readable) } },
-      { kind: 'text', text: 'Koniec.' },
-    ]);
-    expect(stand.fileTools[0]).toMatchObject({ denied: false });
-    rmSync(resolve(readable), { force: true });
+    /*
+     * We własnym katalogu tymczasowym, nie w gołym `/tmp`: stała nazwa w `/tmp`
+     * zderzyłaby się z równoległym przebiegiem i jest dokładnie tą niechlujnością,
+     * którą ten pakiet tropi gdzie indziej.
+     */
+    const plainDir = mkdtempSync(join(tmpdir(), 'kanarek-zwykly-'));
+    const readable = join(plainDir, 'nie-poswiadczenie.txt');
+    writeFileSync(readable, 'zwykla tresc robocza');
+    try {
+      const { stand } = await startRun([
+        { kind: 'fileTool', name: 'Read', input: { file_path: readable } },
+        { kind: 'text', text: 'Koniec.' },
+      ]);
+      expect(stand.fileTools[0]).toMatchObject({ denied: false });
+    } finally {
+      rmSync(plainDir, { recursive: true, force: true });
+    }
   });
 });
