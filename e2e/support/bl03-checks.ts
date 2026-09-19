@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { expect, type Page } from '@playwright/test';
+import { parseToolContent } from './show-value-probe.ts';
 
 /**
  * What the BL-03 runs assert, written once so the rehearsal and the paid run
@@ -226,10 +227,23 @@ export interface ToolCall {
   isError: boolean;
 }
 
+/**
+ * What one `TOOL_CALL_RESULT` carries — **and it is not the same shape on both
+ * paths**.
+ *
+ * A scripted handler's answer is logged as the object itself; the same handler
+ * reached through MCP by the real model is logged as the protocol's content
+ * blocks (`[{type: "text", text: "<json>"}]`). A reader that only does
+ * `JSON.parse` therefore works perfectly in the rehearsal and returns an object
+ * with none of the expected fields on the paid run — which is exactly what
+ * happened here, on turn 1, and what happened to proba T25's first real-model
+ * run before it. The unwrapping lives in `show-value-probe.ts`, which already
+ * had to learn this; there is one copy of it and both suites use it.
+ */
 const parse = (text: string | null | undefined): unknown => {
   if (typeof text !== 'string') return null;
   try {
-    return JSON.parse(text);
+    return parseToolContent(text);
   } catch {
     return text;
   }
