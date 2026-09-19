@@ -128,27 +128,63 @@ export async function settledDeciding(
  * Zwraca decyzje, ktore padly, zeby dowod mowil, czy zgoda w ogole byla
  * potrzebna.
  */
-export async function working(page: Page, runId: string): Promise<string[]> {
+export interface WorkingState {
+  decisions: string[];
+  /** Faza w chwili, gdy helper oddal sterowanie — zanim test cokolwiek zrobil. */
+  phase: string | null;
+  /** Czy wykonanie w tej chwili **nadal trwalo**. */
+  inFlight: boolean;
+}
+
+/**
+ * Doprowadza wykonanie do chwili, w ktorej **naprawde jeszcze trwa** — i mowi,
+ * czy sie udalo.
+ *
+ * Zgadza sie po drodze na powloke, bo run stojacy na bramce zgody nie pracuje.
+ *
+ * Wersja pierwsza czekala na pierwszy fragment odpowiedzi i spala 1,5 s „zeby
+ * bylo w polowie”. Dwa razy to przegralo: model konczyl odpowiedz w tym czasie,
+ * a test wysylal Stop albo SIGTERM do wykonania, ktore juz sie skonczylo —
+ * i oblewal na statusie `succeeded`, nie mowiac nic o kryterium. Teraz helper
+ * oddaje sterowanie **natychmiast** po pierwszym fragmencie i zwraca faze
+ * odczytana w tej samej chwili; wolajacy sprawdza `inFlight`, zanim cokolwiek
+ * zrobi, wiec „sygnal w trakcie wykonania” jest warunkiem, a nie nadzieja.
+ */
+export async function working(page: Page, runId: string): Promise<WorkingState> {
   const strip = page.getByTestId('run-state');
   await expect.poll(() => strip.getAttribute('data-run-id'), { timeout: 420_000 }).toBe(runId);
   const decisions: string[] = [];
+  const terminal = (p: string | null) => p === 'succeeded' || p === 'failed' || p === 'cancelled';
   const deadline = Date.now() + 180_000;
+  let sawText = false;
   while (Date.now() < deadline) {
     const phase = await strip.getAttribute('data-phase').catch(() => null);
-    if (phase === 'succeeded' || phase === 'failed' || phase === 'cancelled') break;
+    if (terminal(phase)) return { decisions, phase, inFlight: false };
+
     const prompt = page.getByTestId('permission-prompt');
     if (await prompt.isVisible().catch(() => false)) {
       decisions.push('Zgoda');
       await prompt.getByRole('button', { name: 'Zgoda' }).click();
-      // Po zgodzie polecenie rusza — od tego momentu jest co liczyc.
-      await page.waitForTimeout(2500);
-      return decisions;
+      await page.waitForTimeout(1500);
+      const after = await strip.getAttribute('data-phase').catch(() => null);
+      return { decisions, phase: after, inFlight: !terminal(after) };
     }
-    await page.waitForTimeout(300);
+
+    if (!sawText) {
+      sawText = await page
+        .getByTestId('streaming-answer')
+        .isVisible()
+        .catch(() => false);
+      if (sawText) {
+        // Bez zadnej dodatkowej zwloki: faza czytana w tej samej chwili.
+        const now = await strip.getAttribute('data-phase').catch(() => null);
+        return { decisions, phase: now, inFlight: !terminal(now) };
+      }
+    }
+    await page.waitForTimeout(200);
   }
-  // Bez bramki: wystarczy, ze wykonanie trwa i cos juz powiedzialo.
-  await page.waitForTimeout(1500);
-  return decisions;
+  const last = await strip.getAttribute('data-phase').catch(() => null);
+  return { decisions, phase: last, inFlight: !terminal(last) };
 }
 
 /* -------------------------------------------------------------------------- */

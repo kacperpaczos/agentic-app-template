@@ -360,7 +360,15 @@ test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () 
 
       const long = await run.command(page, LONG_COMMAND);
       const conversationId = new URL(page.url()).searchParams.get('c')!;
-      record.decyzjeZgody = await working(page, long.runId);
+      const state = await working(page, long.runId);
+      record.decyzjeZgody = state.decisions;
+      record.fazaWChwiliDzialania = state.phase;
+      /*
+       * Warunek, a nie nadzieja: kryterium mowi o przerwaniu **w trakcie**
+       * wykonania. Wykonanie, ktore juz sie skonczylo, nie moze o nim nic
+       * powiedziec — i wlasnie na tym przepadly dwie tury.
+       */
+      expect(state.inFlight, `wykonanie juz sie zakonczylo (faza ${state.phase}) — nie bylo czego przerywac`).toBe(true);
 
       const during = descendants(serverPid);
       const started = during.filter((d) => !before.some((b) => b.pid === d.pid));
@@ -422,7 +430,15 @@ test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () 
 
       const long = await run.command(page, LONG_COMMAND);
       const conversationId = new URL(page.url()).searchParams.get('c')!;
-      record.decyzjeZgody = await working(page, long.runId);
+      const state = await working(page, long.runId);
+      record.decyzjeZgody = state.decisions;
+      record.fazaWChwiliDzialania = state.phase;
+      /*
+       * Warunek, a nie nadzieja: kryterium mowi o przerwaniu **w trakcie**
+       * wykonania. Wykonanie, ktore juz sie skonczylo, nie moze o nim nic
+       * powiedziec — i wlasnie na tym przepadly dwie tury.
+       */
+      expect(state.inFlight, `wykonanie juz sie zakonczylo (faza ${state.phase}) — nie bylo czego przerywac`).toBe(true);
 
       const during = descendants(serverPid);
       const started = during.filter((d) => !before.some((b) => b.pid === d.pid));

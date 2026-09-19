@@ -302,8 +302,9 @@ test.describe('proba generalna prob modelowych BL-03 (bez modelu)', () => {
     const long = await send(page, 'Uruchom cos dlugiego w powloce.');
     const strip = page.getByTestId('run-state');
     // Ten sam helper, ktorego uzywa proba platna — razem z klikaniem Zgody.
-    const decisions = await working(page, long.runId);
-    expect(decisions, 'bramka zgody nie zostala przecwiczona').toEqual(['Zgoda']);
+    const state = await working(page, long.runId);
+    expect(state.decisions, 'bramka zgody nie zostala przecwiczona').toEqual(['Zgoda']);
+    expect(state.inFlight, 'wykonanie nie trwalo w chwili dzialania').toBe(true);
     await expect(page.getByTestId('streaming-answer')).toContainText('[proces] pid=', {
       timeout: 30_000,
     });
@@ -336,8 +337,9 @@ test.describe('proba generalna prob modelowych BL-03 (bez modelu)', () => {
 
     const long = await send(page, 'Uruchom cos dlugiego w powloce.');
     const conversationId = new URL(page.url()).searchParams.get('c')!;
-    const decisions = await working(page, long.runId);
-    expect(decisions).toEqual(['Zgoda']);
+    const state = await working(page, long.runId);
+    expect(state.decisions).toEqual(['Zgoda']);
+    expect(state.inFlight).toBe(true);
     await expect(page.getByTestId('streaming-answer')).toContainText('[proces] pid=', {
       timeout: 30_000,
     });
