@@ -68,7 +68,7 @@ Nie uruchamiano: `pnpm test:e2e:model`, `e2e/bl01-bl02-model.spec.ts`, `e2e/agen
 ## Próby zdolności wykrycia (G16)
 
 Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** linii, przebieg,
-Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** linii, przebieg, `git checkout -- <plik>`, kontrola czystości. Prób jest **dwadzieścia**; dziewiętnaście oblało na spodziewanej asercji, a **jedna wyszła nieoczekiwanie zielona i to było znalezisko** (próba R, niżej).
+Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** linii, przebieg, `git checkout -- <plik>`, kontrola czystości. Prób jest **dwadzieścia jeden**; dwadzieścia oblało na spodziewanej asercji, a **jedna wyszła nieoczekiwanie zielona i to było znalezisko** (próba R, niżej).
 żadna nie wyszła nieoczekiwanie zielona.
 
 | # | Wycofana linia | Test | Jak oblał |
@@ -93,6 +93,7 @@ Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** lini
 | **O** | powrót do rozwiązywania leksykalnego (`resolve()` przed `realpath`) | `tests/credential-guard.test.ts` | 3 testy: zapis **tworzy** plik poza workspace, odczyt **oddaje** treść spoza, dowiązanie do katalogu poświadczeń **oddaje** kanarka |
 | **P** | wycofana reguła wzorców `Glob`/`Grep` | `tests/credential-guard.test.ts` | `expected [false, false] to deeply equal [true, false]` — wzorzec `../../**` przechodzi |
 | **R** | `decideTool` daje `auto` bez deklaracji ścieżki (+ narzędzie dopisane do listy) | `tests/credential-guard.test.ts` | **za pierwszym razem ZIELONA** — patrz znalezisko; po poprawce asercji: „NoweNarzedzie jest wstepnie zatwierdzone, ale nie zadeklarowalo argumentu sciezki” |
+| **S** | powrót do leksykalnego `resolve()` we **wspólnym** walkerze `util/real-path.ts` | `tests/isolation-paths.test.ts`, `tests/credential-guard.test.ts` | 7 testów: `expected '/tmp/kolejnosc-…/wnetrze/ofiara' to be '/tmp/poza-…/ofiara'` oraz trzy kształty narzędzi plikowych agenta |
 
 ### Znalezisko z próby A
 
