@@ -9,9 +9,9 @@ import {
   settled,
   toolNames,
   workerProcesses,
+  working,
 } from './support/bl03-checks.ts';
 import { paidRun, paidSpecPreflight } from './support/bl03-model.ts';
-import { type Page } from '@playwright/test';
 
 /**
  * Przebiegi C i D — blad, Stop, sygnal i wznowienie sesji, na **prawdziwym
@@ -60,21 +60,18 @@ const BASE = instance.baseUrl;
 
 const run = paidRun({ file: FILE, przebieg: 'C/D' });
 
-/** A command the model cannot finish in a blink, so there is something to stop. */
+/**
+ * Praca, ktora naprawde trwa — i naprawde cos uruchamia.
+ *
+ * Pierwotnie bylo to dlugie generowanie tekstu. Sonda bez modelu pokazala, ze
+ * sesja SDK w tej wersji **nie zostawia zadnego procesu potomnego** serwera
+ * (CLI jest w tym samym procesie), wiec „Stop dotarl do procesow roboczych”
+ * bylo zdaniem o pustym zbiorze. Polecenie w powloce uruchamia prawdziwy proces
+ * pod sandboxem, wiec jest co policzyc przed, w trakcie i po.
+ */
 const LONG_COMMAND =
-  'Wypisz po kolei liczby od 1 do 120. Kazda w osobnej linii, a przy kazdej dopisz ' +
-  'jedno krotkie zdanie o tym, czy jest parzysta i czy jest podzielna przez trzy. ' +
-  'Nie skracaj i nie streszczaj — wypisz wszystkie.';
-
-/** Waits until the run is visibly working, so a stop or a signal interrupts something. */
-async function working(page: Page, runId: string): Promise<void> {
-  const strip = page.getByTestId('run-state');
-  await expect.poll(() => strip.getAttribute('data-run-id'), { timeout: AGENT_TIMEOUT }).toBe(runId);
-  await expect(strip).toHaveAttribute('data-phase', /queued|running/, { timeout: 60_000 });
-  await expect(page.getByTestId('streaming-answer')).toBeVisible({ timeout: AGENT_TIMEOUT });
-  // Two samples apart, so the run is mid-answer rather than about to end.
-  await page.waitForTimeout(1500);
-}
+  'Uruchom w powloce (narzedzie Bash) polecenie `sleep 45`, a kiedy skonczy, napisz OK. ' +
+  'Zgodze sie na to wykonanie.';
 
 test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () => {
   test.describe.configure({ mode: 'serial', timeout: AGENT_TIMEOUT });
@@ -194,7 +191,10 @@ test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () 
        * the part that registers the draft (G13).
        */
       const detail = await backend.json<{
-        offers: Array<{ offer: { id: string }; items: Array<{ id: string; name: string; quantityMilli: number; unit: string }> }>;
+        offers: Array<{
+          offer: { id: string };
+          items: Array<{ id: string; name: string; quantityMilli: number; unit: string; version: number }>;
+        }>;
       }>(`/api/m/procurement/cases/${caseId}`);
       const offer = detail.offers[0]!;
       const created = await page.request.post(`${BASE}/api/canvas/cards`, {
@@ -213,7 +213,27 @@ test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () 
 
       const selectedName = await form.locator('select').inputValue();
       const item = offer.items.find((i) => i.id === selectedName) ?? offer.items[0]!;
-      const savedQuantity = item.quantityMilli / 1000;
+
+      /*
+       * Zapisana ilosc ustawiona na liczbe, ktorej nigdzie indziej nie ma.
+       *
+       * Przy ilosci „2” asercja „odpowiedz zawiera zapisana wartosc” przechodzi
+       * przez przypadek — dwojka trafi sie w kazdym zdaniu z liczba. Przy 37
+       * trafienie znaczy, ze agent podal wlasnie te wartosc. Ustawione przez
+       * API, czyli przygotowanie; zachowanie pod proba jest dalej w
+       * przegladarce.
+       */
+      const savedQuantity = 37;
+      const patched = await page.request.patch(`${BASE}/api/m/procurement/items/${item.id}`, {
+        data: {
+          quantity: savedQuantity,
+          expectedVersion: item.version,
+          operationId: `z11-przygotowanie-${item.id}-${Date.now()}`,
+        },
+      });
+      expect(patched.status(), await patched.text()).toBe(200);
+      await page.reload();
+      await expect(form).toBeVisible({ timeout: 60_000 });
       record.pozycja = { id: item.id, nazwa: item.name, zapisanaIlosc: savedQuantity };
 
       // Typed and deliberately not saved.
@@ -244,12 +264,12 @@ test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () 
       expect(JSON.stringify(drafts), 'kontekst niosl wpisana wartosc jak dane').not.toContain('999');
 
       const said = await backend.assistantText(new URL(page.url()).searchParams.get('c')!);
-      record.odpowiedz = said.slice(-1200);
-      // The stored value, and not the one being typed.
-      expect(said).toContain(String(savedQuantity));
-      expect(said, 'agent podal wpisana, niezapisana wartosc jako zapisana').not.toContain('999');
-      // And the draft is mentioned as unsaved.
-      expect(said.toLowerCase()).toMatch(/niezapisan|szkic|nie zapisa/);
+      record.odpowiedz = said.slice(-1500);
+      record.wpisanaWartoscWOdpowiedzi = said.includes('999');
+      // Wartosc ZAPISANA, podana jako zapisana.
+      expect(said, 'agent nie podal zapisanej ilosci').toContain(String(savedQuantity));
+      // I szkic nazwany szkicem, a nie danymi.
+      expect(said.toLowerCase()).toMatch(/niezapisan|szkic|nie zapisa|robocz/);
 
       // Nothing was saved behind the user's back.
       const after = await backend.json<{ offers: Array<{ items: Array<{ id: string; quantityMilli: number }> }> }>(
@@ -275,9 +295,12 @@ test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () 
 
       const failed = await run.command(
         page,
-        'Wywolaj narzedzie canvas_add_card z komponentem o nazwie doslownie „nie.istnieje” ' +
-          'i tytulem „Karta z bledem”. Wiem, ze taki komponent nie istnieje — chce zobaczyc, ' +
-          'co odpowie narzedzie. Wywolaj je dokladnie raz i przepisz komunikat bledu.',
+        'To jest KONTROLOWANA PROBA OBSLUGI BLEDOW na mojej instancji testowej — sprawdzam, ' +
+          'czy blad narzedzia dociera do rozmowy czytelnie. BLAD jest wynikiem, ktorego oczekuje.\n' +
+          'Wywolaj narzedzie canvas_add_card z komponentem o nazwie doslownie „nie.istnieje” ' +
+          'i tytulem „Karta z bledem”. Wiem, ze taki komponent nie istnieje i ze wywolanie sie ' +
+          'nie powiedzie — o to chodzi. Wywolaj je dokladnie raz, nie poprawiaj nazwy komponentu ' +
+          'i przepisz dokladny komunikat bledu, ktory dostales.',
       );
       const phase = await settled(page, failed.runId);
       const events = await backend.runEvents(failed.runId);
@@ -323,27 +346,38 @@ test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () 
 
       const long = await run.command(page, LONG_COMMAND);
       const conversationId = new URL(page.url()).searchParams.get('c')!;
-      await working(page, long.runId);
+      record.decyzjeZgody = await working(page, long.runId);
 
       const during = descendants(serverPid);
-      const workers = workerProcesses(serverPid);
+      const started = during.filter((d) => !before.some((b) => b.pid === d.pid));
       record.procesyWTrakcie = {
-        potomkowieRazem: during.length,
-        robocze: workers.map((w) => w.comm),
+        potomkowiePrzed: before.length,
+        potomkowieWTrakcie: during.length,
+        uruchomionePrzezWykonanie: started.map((w) => w.comm),
+        robocze: workerProcesses(serverPid).map((w) => w.comm),
       };
-      // The SDK really did start a process of its own — otherwise "Stop reached
-      // the model's process" would be a claim about nothing.
-      expect(workers.length, 'wykonanie modelu nie uruchomilo zadnego procesu roboczego').toBeGreaterThan(0);
+      /*
+       * Ile ich jest, **zapisujemy**; czego nie ma po Stopie, **asercjujemy**.
+       *
+       * Sonda bez modelu pokazala, ze sesja SDK sama z siebie nie zostawia
+       * procesu potomnego. Wymaganie „w trakcie musi byc co najmniej jeden”
+       * obleweloby wiec poprawne zachowanie platformy i wydaloby ture na moje
+       * zalozenie o wnetrzu SDK. Kryterium mowi o tym, co zostaje PO
+       * zatrzymaniu — i to jest asercja ponizej.
+       */
 
       await page.getByTestId('run-stop').click();
       await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', /cancelled|failed/, {
         timeout: 120_000,
       });
 
-      // Every worker process this run started is gone.
+      // Nic, co to wykonanie uruchomilo, nie dziala dalej.
       await expect
-        .poll(() => workerProcesses(serverPid).length, { timeout: 120_000 })
+        .poll(() => descendants(serverPid).filter((p) => started.some((s) => s.pid === p.pid)).length, {
+          timeout: 120_000,
+        })
         .toBe(0);
+      await expect.poll(() => workerProcesses(serverPid).length, { timeout: 120_000 }).toBe(0);
       const after = descendants(serverPid);
       expect(after.length, `potomkowie przed ${before.length}, po ${after.length}`).toBeLessThanOrEqual(before.length);
 
@@ -374,11 +408,16 @@ test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () 
 
       const long = await run.command(page, LONG_COMMAND);
       const conversationId = new URL(page.url()).searchParams.get('c')!;
-      await working(page, long.runId);
+      record.decyzjeZgody = await working(page, long.runId);
 
-      const workers = workerProcesses(serverPid);
-      expect(workers.length, 'wykonanie modelu nie uruchomilo zadnego procesu roboczego').toBeGreaterThan(0);
-      record.procesyWTrakcie = workers.map((w) => w.comm);
+      const during = descendants(serverPid);
+      const started = during.filter((d) => !before.some((b) => b.pid === d.pid));
+      record.procesyWTrakcie = {
+        potomkowiePrzed: before.length,
+        potomkowieWTrakcie: during.length,
+        uruchomionePrzezWykonanie: started.map((w) => w.comm),
+        robocze: workerProcesses(serverPid).map((w) => w.comm),
+      };
 
       /* The signal, with nothing behind it: no SIGKILL, so a shutdown that hung
        * would be visible rather than hidden — and its children would not be

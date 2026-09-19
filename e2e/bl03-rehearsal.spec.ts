@@ -11,6 +11,7 @@ import {
   toolNames,
   typeCommand,
   workerProcesses,
+  working,
   type CanvasCard,
 } from './support/bl03-checks.ts';
 import { type Page } from '@playwright/test';
@@ -298,9 +299,11 @@ test.describe('proba generalna prob modelowych BL-03 (bez modelu)', () => {
     expect(serverPid).toBeTruthy();
 
     const before = descendants(serverPid);
-    const long = await send(page, 'Policz cos dlugo i opowiadaj po drodze.');
+    const long = await send(page, 'Uruchom cos dlugiego w powloce.');
     const strip = page.getByTestId('run-state');
-    await expect(strip).toHaveAttribute('data-phase', 'running', { timeout: 30_000 });
+    // Ten sam helper, ktorego uzywa proba platna — razem z klikaniem Zgody.
+    const decisions = await working(page, long.runId);
+    expect(decisions, 'bramka zgody nie zostala przecwiczona').toEqual(['Zgoda']);
     await expect(page.getByTestId('streaming-answer')).toContainText('[proces] pid=', {
       timeout: 30_000,
     });
@@ -331,11 +334,10 @@ test.describe('proba generalna prob modelowych BL-03 (bez modelu)', () => {
     const serverPid = scripted.pid!;
     const before = descendants(serverPid);
 
-    const long = await send(page, 'Policz cos dlugo i opowiadaj po drodze.');
+    const long = await send(page, 'Uruchom cos dlugiego w powloce.');
     const conversationId = new URL(page.url()).searchParams.get('c')!;
-    await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'running', {
-      timeout: 30_000,
-    });
+    const decisions = await working(page, long.runId);
+    expect(decisions).toEqual(['Zgoda']);
     await expect(page.getByTestId('streaming-answer')).toContainText('[proces] pid=', {
       timeout: 30_000,
     });

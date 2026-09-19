@@ -121,6 +121,36 @@ export async function settledDeciding(
   throw new Error(`uruchomienie ${runId} nie zakonczylo sie w czasie`);
 }
 
+/**
+ * Doprowadza wykonanie do stanu, w ktorym **naprawde cos robi** — zgadzajac sie
+ * po drodze na powloke, bo bez tego run stoi na bramce zgody zamiast pracowac.
+ *
+ * Zwraca decyzje, ktore padly, zeby dowod mowil, czy zgoda w ogole byla
+ * potrzebna.
+ */
+export async function working(page: Page, runId: string): Promise<string[]> {
+  const strip = page.getByTestId('run-state');
+  await expect.poll(() => strip.getAttribute('data-run-id'), { timeout: 420_000 }).toBe(runId);
+  const decisions: string[] = [];
+  const deadline = Date.now() + 180_000;
+  while (Date.now() < deadline) {
+    const phase = await strip.getAttribute('data-phase').catch(() => null);
+    if (phase === 'succeeded' || phase === 'failed' || phase === 'cancelled') break;
+    const prompt = page.getByTestId('permission-prompt');
+    if (await prompt.isVisible().catch(() => false)) {
+      decisions.push('Zgoda');
+      await prompt.getByRole('button', { name: 'Zgoda' }).click();
+      // Po zgodzie polecenie rusza — od tego momentu jest co liczyc.
+      await page.waitForTimeout(2500);
+      return decisions;
+    }
+    await page.waitForTimeout(300);
+  }
+  // Bez bramki: wystarczy, ze wykonanie trwa i cos juz powiedzialo.
+  await page.waitForTimeout(1500);
+  return decisions;
+}
+
 /* -------------------------------------------------------------------------- */
 /*  What the backend says happened                                            */
 /* -------------------------------------------------------------------------- */

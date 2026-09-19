@@ -271,11 +271,23 @@ export function bl03LifecycleScript(prompt: string): Step[] {
       { kind: 'text', text: 'Odczytalem kontekst ze szkicem.' },
     ];
   }
-  /* The long one: stopped from the interface, or interrupted by a signal. */
+  /*
+   * The long one: stopped from the interface, or interrupted by a signal.
+   *
+   * Zaczyna sie od bramki zgody, bo tak zaczyna sie proba platna — polecenie
+   * uruchamia cos w powloce, wiec runtime pyta uzytkownika, zanim cokolwiek
+   * ruszy. Bez tego kroku `working()` (helper prob platnych) nigdy nie
+   * przecwiczylby galezi, w ktorej klika Zgode, i blad w niej wyszedlby dopiero
+   * na turze.
+   */
   return [
     { kind: 'text', text: 'Zaczynam dluga prace. ', delayMs: 150 },
-    { kind: 'spawnChild' },
-    { kind: 'idle', delayMs: 120_000 },
+    {
+      kind: 'ask',
+      toolName: 'Bash',
+      input: { command: 'sleep 45' },
+      then: [{ kind: 'spawnChild' }, { kind: 'idle', delayMs: 120_000 }],
+    },
     { kind: 'text', text: 'Koniec dlugiej pracy.' },
   ];
 }
