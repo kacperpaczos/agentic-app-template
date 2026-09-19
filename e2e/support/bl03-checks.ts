@@ -403,35 +403,56 @@ export const conversationIdOf = (page: Page): string | null =>
 /*  Processes                                                                 */
 /* -------------------------------------------------------------------------- */
 
+/** One process, identified so it stays identifiable after its parent is gone. */
+export interface ProcessId {
+  pid: number;
+  comm: string;
+  /**
+   * Field 22 of `/proc/<pid>/stat` — when this process started, in clock ticks.
+   *
+   * Carried because a pid alone is not an identity: pids are reused, and a check
+   * asking "does /proc/1234 exist?" minutes later can answer yes about a
+   * completely different process. Pid plus start time is stable for the life of
+   * the process and cannot be reused while it lives.
+   */
+  startTime: string;
+}
+
+const readProcess = (pid: number): { ppid: number; info: ProcessId } | null => {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    const comm = stat.slice(stat.indexOf('(') + 1, stat.lastIndexOf(')'));
+    const after = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+    const ppid = Number(after[1]);
+    // `after[0]` is state, so field 22 (starttime) sits at index 19 here.
+    const startTime = after[19] ?? '';
+    return Number.isFinite(ppid) ? { ppid, info: { pid, comm, startTime } } : null;
+  } catch {
+    // Ended between the listing and the read.
+    return null;
+  }
+};
+
 /**
- * Every process descended from `root`, with its command name, from `/proc`.
+ * Every process descended from `root`, from `/proc`.
  *
- * "The application left no unmanaged worker process" is a claim about
- * processes, and a status in a database cannot see one. The comm field is
- * parenthesised and may contain spaces, hence the split on the last `)`.
+ * Useful **while the parent is alive** — to see what a run started. It is not a
+ * leak check: see {@link stillRunning}.
  */
-export function descendants(root: number): Array<{ pid: number; comm: string }> {
-  const parents = new Map<number, { ppid: number; comm: string }>();
+export function descendants(root: number): ProcessId[] {
+  const parents = new Map<number, { ppid: number; info: ProcessId }>();
   for (const entry of readdirSync('/proc')) {
     if (!/^\d+$/.test(entry)) continue;
-    try {
-      const stat = readFileSync(`/proc/${entry}/stat`, 'utf8');
-      const comm = stat.slice(stat.indexOf('(') + 1, stat.lastIndexOf(')'));
-      const after = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
-      const ppid = Number(after[1]);
-      if (Number.isFinite(ppid)) parents.set(Number(entry), { ppid, comm });
-    } catch {
-      // Ended between the listing and the read: not a descendant still running,
-      // which is all this counts.
-    }
+    const read = readProcess(Number(entry));
+    if (read) parents.set(Number(entry), read);
   }
-  const found: Array<{ pid: number; comm: string }> = [];
+  const found: ProcessId[] = [];
   const queue = [root];
   while (queue.length > 0) {
     const current = queue.shift()!;
-    for (const [pid, info] of parents) {
-      if (info.ppid === current && !found.some((f) => f.pid === pid)) {
-        found.push({ pid, comm: info.comm });
+    for (const [pid, r] of parents) {
+      if (r.ppid === current && !found.some((f) => f.pid === pid)) {
+        found.push(r.info);
         queue.push(pid);
       }
     }
@@ -440,21 +461,43 @@ export function descendants(root: number): Array<{ pid: number; comm: string }> 
 }
 
 /**
- * Descendants that are the model's, not the server's own.
+ * Which of these exact processes are **still running** — the leak check.
  *
- * The Claude Agent SDK runs the CLI as a child process, and a sandboxed command
- * runs under `bwrap` beneath it. Those are the "unmanaged worker processes"
- * L1.6 is about — a `node` worker of the server is not one, so the match is by
- * name rather than by count.
+ * This is the correction a review forced, and the reason matters more than the
+ * code. The previous check called `descendants(serverPid)` *after* the server
+ * had exited. A process orphaned by that exit is reparented to init, so it is by
+ * definition no longer a descendant of the server: the list came back empty
+ * whether or not anything leaked. It could not fail — which is exactly the class
+ * of defect the gap note on L1.6 names, "regresja nie wykryje wycieku procesow
+ * roboczych", reproduced in the check meant to catch it.
+ *
+ * Identity is therefore captured **before** the signal (pid + start time) and
+ * each process is asked about directly, with no reference to parentage. One that
+ * survived its parent is still at its own pid with its own start time, and this
+ * reports it.
  */
-export const workerProcesses = (root: number): Array<{ pid: number; comm: string }> =>
-  descendants(root).filter((p) => /claude|bwrap|bubblewrap/i.test(p.comm));
+export function stillRunning(recorded: readonly ProcessId[]): ProcessId[] {
+  return recorded.filter((p) => {
+    const read = readProcess(p.pid);
+    // Gone, or the pid was reused by something else: not our process.
+    return read !== null && read.info.startTime === p.startTime;
+  });
+}
+
+/**
+ * Descendants that are the model's own, not the server's.
+ *
+ * The SDK runs the CLI as a child and the sandbox adds helpers (`socat` for the
+ * network proxy, `bwrap` for the filesystem) — observed on turns 19 and 20.
+ * Those are the "unmanaged worker processes" L1.6 is about; a `node` worker of
+ * the server is not one, so the match is by name rather than by count.
+ */
+export const workerProcesses = (root: number): ProcessId[] =>
+  descendants(root).filter((p) => /claude|bwrap|bubblewrap|socat/i.test(p.comm));
 
 /** Processes that were there before and are not there now. */
-export const goneSince = (
-  before: Array<{ pid: number }>,
-  now: Array<{ pid: number }>,
-): number[] => before.filter((b) => !now.some((n) => n.pid === b.pid)).map((b) => b.pid);
+export const goneSince = (before: readonly ProcessId[], now: readonly ProcessId[]): number[] =>
+  before.filter((b) => !now.some((n) => n.pid === b.pid)).map((b) => b.pid);
 
 /**
  * Values that must never appear in evidence or in a conversation.

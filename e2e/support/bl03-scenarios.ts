@@ -280,13 +280,20 @@ export function bl03LifecycleScript(prompt: string): Step[] {
    * przecwiczylby galezi, w ktorej klika Zgode, i blad w niej wyszedlby dopiero
    * na turze.
    */
+  /*
+   * `PROBA-WYCIEK` uruchamia potomka, ktory **ignoruje SIGTERM** i nie jest
+   * zwiazany z sygnalem przerwania — czyli wyciek procesu roboczego. Sluzy
+   * wylacznie probie zdolnosci wykrycia: kontrola, ktora na tym nie oblewa, nie
+   * potrafi oblac na niczym.
+   */
+  const leak = prompt.includes('PROBA-WYCIEK');
   return [
     { kind: 'text', text: 'Zaczynam dluga prace. ', delayMs: 150 },
     {
       kind: 'ask',
       toolName: 'Bash',
       input: { command: 'sleep 45' },
-      then: [{ kind: 'spawnChild' }, { kind: 'idle', delayMs: 120_000 }],
+      then: [{ kind: 'spawnChild', leak }, { kind: 'idle', delayMs: 120_000 }],
     },
     { kind: 'text', text: 'Koniec dlugiej pracy.' },
   ];

@@ -6,6 +6,7 @@ import {
   customEvents,
   descendants,
   openApp,
+  stillRunning,
   settled,
   toolNames,
   workerProcesses,
@@ -380,12 +381,17 @@ test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () 
 
       const during = descendants(serverPid);
       const started = during.filter((d) => !before.some((b) => b.pid === d.pid));
+      /* Identyfikatory, nie same nazwy — inaczej po fakcie nie da sie tego zinterpretowac. */
       record.procesyWTrakcie = {
         potomkowiePrzed: before.length,
         potomkowieWTrakcie: during.length,
-        uruchomionePrzezWykonanie: started.map((w) => w.comm),
-        robocze: workerProcesses(serverPid).map((w) => w.comm),
+        uruchomionePrzezWykonanie: started,
+        robocze: workerProcesses(serverPid),
       };
+      expect(
+        started.length,
+        'wykonanie modelu nie uruchomilo zadnego procesu — nie ma czego sprawdzac po zatrzymaniu',
+      ).toBeGreaterThan(0);
       /*
        * Ile ich jest, **zapisujemy**; czego nie ma po Stopie, **asercjujemy**.
        *
@@ -401,20 +407,22 @@ test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () 
         timeout: 120_000,
       });
 
-      // Nic, co to wykonanie uruchomilo, nie dziala dalej.
-      await expect
-        .poll(() => descendants(serverPid).filter((p) => started.some((s) => s.pid === p.pid)).length, {
-          timeout: 120_000,
-        })
-        .toBe(0);
-      await expect.poll(() => workerProcesses(serverPid).length, { timeout: 120_000 }).toBe(0);
-      const after = descendants(serverPid);
-      expect(after.length, `potomkowie przed ${before.length}, po ${after.length}`).toBeLessThanOrEqual(before.length);
+      /*
+       * Zapytane o **te konkretne procesy**, nie o potomstwo serwera.
+       *
+       * Serwer tu zyje, wiec obie drogi daja ten sam wynik — ale asercja ma byc
+       * ta sama co przy sygnale, gdzie serwera juz nie ma. Jedna kontrola, jedno
+       * znaczenie.
+       */
+      await expect.poll(() => stillRunning(started).length, { timeout: 120_000 }).toBe(0);
+      const leftovers = stillRunning(started);
+      expect(leftovers, `procesy wykonania dzialaja po Stop: ${JSON.stringify(leftovers)}`).toEqual([]);
+      record.procesyPo = leftovers;
 
       const record2 = (await backend.runs(conversationId)).find((r) => r.id === long.runId)!;
       expect(record2.status).toBe('cancelled');
       expect(record2.errorCode).toBe('cancelled');
-      record.poZatrzymaniu = { status: record2.status, kod: record2.errorCode, potomkowie: after.length };
+      record.poZatrzymaniu = { status: record2.status, kod: record2.errorCode, nadalDzialajace: leftovers.length };
 
       // The interface says so, and the partial answer is not thrown away.
       await expect(page.locator('.pf-chat')).toContainText(/zatrzym|anulow|cancel/i, { timeout: 30_000 });
@@ -451,12 +459,17 @@ test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () 
 
       const during = descendants(serverPid);
       const started = during.filter((d) => !before.some((b) => b.pid === d.pid));
+      /* Identyfikatory, nie same nazwy — inaczej po fakcie nie da sie tego zinterpretowac. */
       record.procesyWTrakcie = {
         potomkowiePrzed: before.length,
         potomkowieWTrakcie: during.length,
-        uruchomionePrzezWykonanie: started.map((w) => w.comm),
-        robocze: workerProcesses(serverPid).map((w) => w.comm),
+        uruchomionePrzezWykonanie: started,
+        robocze: workerProcesses(serverPid),
       };
+      expect(
+        started.length,
+        'wykonanie modelu nie uruchomilo zadnego procesu — nie ma czego sprawdzac po zatrzymaniu',
+      ).toBeGreaterThan(0);
 
       /* The signal, with nothing behind it: no SIGKILL, so a shutdown that hung
        * would be visible rather than hidden — and its children would not be
@@ -465,10 +478,21 @@ test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () 
       record.zamkniecie = { zakonczony: outcome.exited, ms: outcome.ms, kod: outcome.code, sygnal: outcome.signal };
       expect(outcome.exited, `serwer nie zakonczyl sie po SIGTERM w ${outcome.ms} ms`).toBe(true);
 
-      // Nothing of the model's is still running.
-      await expect.poll(() => workerProcesses(serverPid).length, { timeout: 60_000 }).toBe(0);
-      const leftovers = descendants(serverPid);
-      expect(leftovers, `osierocone procesy po SIGTERM: ${JSON.stringify(leftovers)}`).toEqual([]);
+      /*
+       * **Po identyfikatorach zapamietanych przed sygnalem.**
+       *
+       * `descendants(serverPid)` po wyjsciu serwera zawsze zwraca pusto: osierocony
+       * proces jest przepiety do init i przestaje byc potomkiem. Taka kontrola nie
+       * potrafi oblac — a wyciek procesu roboczego jest dokladnie tym, czego L1.6
+       * kaze pilnowac. Pytamy wiec o pid + czas startu kazdego procesu, ktory to
+       * wykonanie uruchomilo.
+       */
+      await expect.poll(() => stillRunning(started).length, { timeout: 60_000 }).toBe(0);
+      const leftovers = stillRunning(started);
+      expect(
+        leftovers,
+        `osierocone procesy robocze po SIGTERM: ${JSON.stringify(leftovers)}`,
+      ).toEqual([]);
       record.procesyPo = leftovers;
 
       /* The other half of L1.6: the durable data is still there. */

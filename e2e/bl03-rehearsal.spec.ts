@@ -9,8 +9,8 @@ import {
   settled,
   settledDeciding,
   toolNames,
+  stillRunning,
   typeCommand,
-  workerProcesses,
   working,
   type CanvasCard,
 } from './support/bl03-checks.ts';
@@ -314,11 +314,8 @@ test.describe('proba generalna prob modelowych BL-03 (bez modelu)', () => {
 
     await page.getByTestId('run-stop').click();
     await expect(strip).toHaveAttribute('data-phase', /cancelled|failed/, { timeout: 30_000 });
-    await expect
-      .poll(() => descendants(serverPid).filter((p) => started.some((s) => s.pid === p.pid)).length, {
-        timeout: 60_000,
-      })
-      .toBe(0);
+    // Ta sama kontrola, ktorej uzywa spec platny: po tozsamosci, nie po rodzicu.
+    await expect.poll(() => stillRunning(started).length, { timeout: 60_000 }).toBe(0);
 
     const backend = new Backend(page, BASE);
     const runs = await backend.runs(new URL(page.url()).searchParams.get('c')!);
@@ -354,12 +351,13 @@ test.describe('proba generalna prob modelowych BL-03 (bez modelu)', () => {
 
     // Nothing of the run is still running — neither its own child nor anything
     // that looks like a model worker.
-    await expect
-      .poll(() => descendants(serverPid).filter((p) => started.some((s) => s.pid === p.pid)).length, {
-        timeout: 30_000,
-      })
-      .toBe(0);
-    expect(workerProcesses(serverPid)).toEqual([]);
+    /*
+     * Po tozsamosci zapamietanej PRZED sygnalem. Serwera juz nie ma, wiec
+     * pytanie o jego potomstwo zawsze dawaloby pusto — i wlasnie dlatego ta
+     * kontrola byla wczesniej niezdolna do oblania.
+     */
+    await expect.poll(() => stillRunning(started).length, { timeout: 30_000 }).toBe(0);
+    expect(stillRunning(started), 'osierocony proces po SIGTERM').toEqual([]);
 
     /* The other half of L1.6: the durable state is still there. */
     await scripted.start('bl03-lifecycle');
@@ -387,6 +385,64 @@ test.describe('proba generalna prob modelowych BL-03 (bez modelu)', () => {
     );
     expect(new Set(messagesAfter.map((m) => m.id)).size).toBe(messagesAfter.length);
     expect((await backend.runs(conversationId)).length).toBe(runs.length + 1);
+  });
+
+  /**
+   * Proba zdolnosci wykrycia dla kontroli wycieku procesow (L1.6).
+   *
+   * Warunek postawiony w recenzji: kontrola, ktora nie potrafi oblac na
+   * zastepniku, nie zasluguje na ture. Scenariusz uruchamia potomka, ktory
+   * **ignoruje SIGTERM** i nie jest zwiazany z sygnalem przerwania — czyli
+   * dokladnie wyciek, o ktorym mowi opis braku L1.6. Kontrola po tozsamosci
+   * musi go **znalezc**; poprzednia, po potomstwie serwera, zwrocilaby pusto,
+   * bo osierocony proces jest przepiety do init.
+   *
+   * Test konczy sie sprzatnieciem procesu proby po pid — nie po nazwie.
+   */
+  test('C: kontrola wycieku procesow POTRAFI oblac (potomek ignorujacy sygnal)', async ({ page }) => {
+    await scripted.start('bl03-lifecycle');
+    await openApp(page, BASE);
+    const serverPid = scripted.pid!;
+    const before = descendants(serverPid);
+
+    const long = await send(page, 'PROBA-WYCIEK: uruchom cos dlugiego w powloce.');
+    const state = await working(page, long.runId);
+    expect(state.decisions).toEqual(['Zgoda']);
+    await expect(page.getByTestId('streaming-answer')).toContainText('[proces] pid=', {
+      timeout: 30_000,
+    });
+
+    const during = descendants(serverPid);
+    const started = during.filter((d) => !before.some((b) => b.pid === d.pid));
+    expect(started.length, 'scenariusz proby nie uruchomil procesu').toBeGreaterThan(0);
+
+    const outcome = await scripted.stopWith('SIGTERM');
+    expect(outcome.exited).toBe(true);
+
+    /*
+     * Sedno proby. Stara kontrola pytala o potomstwo nieistniejacego juz
+     * serwera i odpowiadala „pusto" — zaliczenie mimo wycieku. Nowa pyta o te
+     * konkretne procesy i ma je **znalezc**.
+     */
+    expect(
+      descendants(serverPid),
+      'kontrola po potomstwie zwraca pusto mimo wycieku — dlatego zostala wymieniona',
+    ).toEqual([]);
+    const leaked = stillRunning(started);
+    expect(
+      leaked.length,
+      'kontrola wycieku NIE wykryla procesu, ktory przezyl sygnal — nie potrafi oblac',
+    ).toBeGreaterThan(0);
+
+    // Sprzatniecie po pid, nigdy po nazwie.
+    for (const p of leaked) {
+      try {
+        process.kill(p.pid, 'SIGKILL');
+      } catch {
+        /* zdazyl sam wyjsc */
+      }
+    }
+    await expect.poll(() => stillRunning(leaked).length, { timeout: 15_000 }).toBe(0);
   });
 
   test('D: niezapisany szkic trafia do kontekstu jako szkic, bez wartosci', async ({ page }) => {
