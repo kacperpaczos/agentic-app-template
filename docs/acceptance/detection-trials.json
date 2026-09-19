@@ -158,6 +158,17 @@
       "nazwaTestu": "PRZERWANIE SYGNALEM przywraca plik",
       "oczekiwanyKomunikat": "Tests.*failed",
       "uwaga": "Proba mutuje sam harness. Dziala, bo modul jest juz wczytany do pamieci procesu, ktory ja prowadzi, a test uruchamia OSOBNY proces, ktory importuje plik z dysku — czyli wariant wadliwy."
+    },
+    {
+      "id": "regula-bramki-skryptow",
+      "kryterium": "L1.8",
+      "naprawa": "Regula klasyfikujaca skrypty jest REKURENCYJNA: skrypt w podkatalogu scripts/ nie jest poza zasiegiem. Recenzent obszedl poprzednia wersje miedzy innymi plikiem scripts/zzevade/probe.mjs.",
+      "plik": "tests/acceptance-target.test.ts",
+      "szukaj": "    if (entry.isDirectory()) out.push(...skryptyPod(resolve(dir, entry.name), rel));",
+      "zamien": "    if (entry.isDirectory()) continue; /* wariant wadliwy proby wykrycia: skan nierekurencyjny */",
+      "test": "tests/acceptance-target.test.ts",
+      "nazwaTestu": "szesc obejsc recenzenta oblewa regule",
+      "oczekiwanyKomunikat": "Tests.*failed"
     }
   ],
   "uwagaOFiltrze": "Pole nazwaTestu trafia do vitest jako -t, czyli jako WYRAZENIE REGULARNE. Nazwa z kropka albo gwiazdka dopasuje sie inaczej, niz wyglada; harness wykrywa to teraz sam (przebieg wzorcowy musi uruchomic co najmniej jeden test), ale w rejestrze trzymaj fragmenty bez metaznakow.",
@@ -191,6 +202,11 @@
       "kiedy": "2026-09-19, recenzja bezpieczenstwa rundy 1",
       "co": "Proba guard-izolacji-dowiazanie byla KOMUNIKATOWA, nie zachowaniowa: po wylaczeniu kontroli dowiazania straznik nadal odmawial inna droga (rzeczywisty cel nazywa sie `data`), wiec test oblewal wylacznie na brzmieniu komunikatu.",
       "skutek": "Proba celuje teraz w przypadek, w ktorym decyduje wylacznie kontrola dowiazania (link do innego katalogu .e2e-* w repozytorium), a rozwiazywanie dowiazan dostalo osobna probe zachowaniowa guard-izolacji-realpath."
+    },
+    {
+      "kiedy": "2026-09-19, rerecenzja rundy 1",
+      "co": "Regula L1.8 byla TEKSTOWA — szukala adresu petli zwrotnej z literalnym portem i zwalniala plik, w ktorym gdziekolwiek padl napis z nazwa bramki. Recenzent obszedl ja szesc razy na szesc prob (skan nierekurencyjny, .cjs, port w interpolacji, adres ze sklejenia, port z process.env, http://[::1]:8791), kazde obejscie POST-owalo na 8791, a komentarz z nazwa bramki zwalnial plik, ktory jej nie importowal. Zdania w opisie dowodu i w raporcie byly przez to nieprawdziwe.",
+      "skutek": "Regula liczy teraz od OPERACJI, nie od adresu: kazdy plik wykonywalny w scripts/ (rekurencyjnie, takze .cjs i .sh) musi byc sklasyfikowany, zwolnienie wynika z prawdziwego IMPORTU bramki, a deklaracja 'bez sieci' jest sprawdzana krzyzowo. Kontrola krzyzowa od razu zlapala dwa moje wlasne bledy klasyfikacji (audit-server.sh, closure-server.sh uzywaja curl). Proba na samej regule: siedem przypadkow na kontrolowanym drzewie + wpis regula-bramki-skryptow."
     }
   ]
 }

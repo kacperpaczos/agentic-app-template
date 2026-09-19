@@ -289,7 +289,15 @@ describe('harness prob zdolnosci wykrycia', () => {
 
     // The mutation really was on disk while the process lived...
     expect(stdout, `mutacja nie zostala nalozona: ${stderr}`).toContain('const strzezone = false;');
-    expect(stderr, 'obsluga sygnalu nie zglosila przywrocenia').toContain('plik przywrocony');
+    /*
+     * O stanie swiadczy PLIK, nie napis. Wczesniej stalo tu
+     * `toContain('plik przywrocony')`, a obsluga wypisywala ten napis
+     * bezwarunkowo — asercja, ktora nie mogla oblac. Komunikat jest teraz
+     * sprawdzany tylko dlatego, ze potrafi powiedziec dwie rozne rzeczy, i
+     * razem ze sciezka, ktora pojawia sie wylacznie po przywroceniu.
+     */
+    expect(stderr).toContain(`przywrocono ${file}`);
+    expect(stderr).not.toContain('nie bylo czego przywracac');
     // ...and the signal handler put it back, byte for byte.
     expect(readFileSync(file, 'utf8')).toBe('const strzezone = true;\n');
     expect(code).toBe(130);

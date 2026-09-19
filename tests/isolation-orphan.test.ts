@@ -129,7 +129,11 @@ describe('port zajety przez cudzy proces', () => {
 });
 
 describe('katalog otwarty przez dzialajacy proces', () => {
-  it('widzi otwarty plik w katalogu i przestaje go widziec po zamknieciu', () => {
+  /*
+   * Pominiecie jest JAWNE. Wczesniej test wracal `return`, gdy nie bylo /proc,
+   * czyli zaliczal sie po cichu na systemie, na ktorym niczego nie sprawdzil.
+   */
+  it.skipIf(!existsSync('/proc'))('widzi otwarty plik w katalogu i przestaje go widziec po zamknieciu', () => {
     /*
      * Port to nie cale pytanie: proces moze trzymac ten katalog, nasluchujac na
      * innym porcie niz ten, ktory przebieg zarezerwowal. Otwarty deskryptor tego
@@ -144,9 +148,7 @@ describe('katalog otwarty przez dzialajacy proces', () => {
 
     const fd = openSync(file, 'r');
     try {
-      const answer = directoryInUse(instance.config.dataDir);
-      if (answer === null) return; // system bez /proc — sprawdzenie mowi „nie wiadomo"
-      expect(answer).toBe(true);
+      expect(directoryInUse(instance.config.dataDir)).toBe(true);
       expect(() => assertDirectoryFree(instance.config.dataDir, 'przygotowanie')).toThrow(/otwarty przez/);
       expect(() => instance.prepareDatabase()).toThrow(/otwarty przez/);
       // Plik nadal jest — odmowa poprzedzila kasowanie.
@@ -158,6 +160,60 @@ describe('katalog otwarty przez dzialajacy proces', () => {
     // Kontrola przeciwna: po zamknieciu ten sam katalog jest wolny.
     expect(directoryInUse(instance.config.dataDir)).toBe(false);
     expect(() => assertDirectoryFree(instance.config.dataDir, 'przygotowanie')).not.toThrow();
+  });
+});
+
+describe('czytnik etykiety — ten sam serwer, w skonczonym czasie', () => {
+  /*
+   * `readInstanceLabel` obsluguje proxy trybu deweloperskiego i KAZDA suite
+   * przegladarkowa, a poprawke (redirect: 'error' + termin) dostal bez testu.
+   * Analiza kodu nie zamyka zachowania, wiec oto oba przypadki na prawdziwych
+   * serwerach.
+   */
+  it('odpowiedz przez przekierowanie nie uchodzi za etykiete tej instancji', async () => {
+    const labelled = await healthAnswering(TEST_INSTANCE_LABEL, TEST_RUN_ID);
+    const redirector = createHttpServer((_req, res) => {
+      res.statusCode = 302;
+      res.setHeader('location', `${labelled}/api/health`);
+      res.end();
+    });
+    await new Promise<void>((done) => redirector.listen(0, '127.0.0.1', done));
+    const address = redirector.address();
+    if (typeof address === 'string' || address === null) throw new Error('brak portu');
+    const base = `http://127.0.0.1:${address.port}`;
+    try {
+      const answer = await readInstanceLabel(base);
+      expect(answer, 'przekierowanie zostalo przyjete jako etykieta').toHaveProperty('unreachable');
+      // I ta sama odmowa po stronie polityki suit.
+      await expect(assertInstanceLabel(base, TEST_INSTANCE_LABEL, 'Instancja')).rejects.toThrow(
+        /nie odpowiada na \/api\/health/,
+      );
+    } finally {
+      await new Promise<void>((done) => redirector.close(() => done()));
+    }
+  });
+
+  it('cel, ktory przyjmuje polaczenie i milczy, konczy sie odmowa, nie zawieszeniem', async () => {
+    const silent = createHttpServer(() => {
+      /* celowo bez odpowiedzi */
+    });
+    await new Promise<void>((done) => silent.listen(0, '127.0.0.1', done));
+    const address = silent.address();
+    if (typeof address === 'string' || address === null) throw new Error('brak portu');
+    const started = Date.now();
+    try {
+      const answer = await readInstanceLabel(`http://127.0.0.1:${address.port}`);
+      expect(answer).toHaveProperty('unreachable');
+      // Termin jest w module 10 s; liczy sie to, ze przebieg w ogole wraca.
+      expect(Date.now() - started).toBeLessThan(20_000);
+    } finally {
+      await new Promise<void>((done) => silent.close(() => done()));
+    }
+  }, 30_000);
+
+  it('kontrola przeciwna: bezposrednia odpowiedz jest czytana', async () => {
+    const base = await healthAnswering(TEST_INSTANCE_LABEL, TEST_RUN_ID);
+    expect(await readInstanceLabel(base)).toEqual({ label: TEST_INSTANCE_LABEL, runId: TEST_RUN_ID });
   });
 });
 

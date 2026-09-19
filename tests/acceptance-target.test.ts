@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
-import { readFileSync, readdirSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
 /**
  * L1.8 — a probe run from a shell may not write through the user's instance.
@@ -26,6 +27,14 @@ import { afterEach, describe, expect, it } from 'vitest';
  */
 
 const REPO = resolve(import.meta.dirname, '..');
+
+const katalogi: string[] = [];
+/** Kontrolowane drzewo skryptów dla prób reguły. */
+const tmpKatalog = (): string => {
+  const d = mkdtempSync(resolve(tmpdir(), 'agentic-skrypty-'));
+  katalogi.push(d);
+  return d;
+};
 const RUN_AGENT = resolve(REPO, 'scripts/run-agent.mjs');
 const MODULE = resolve(REPO, 'scripts/lib/acceptance-target.mjs');
 
@@ -118,6 +127,10 @@ async function instanceThatNeverAnswers(): Promise<string> {
   if (typeof address === 'string' || address === null) throw new Error('brak portu');
   return `http://127.0.0.1:${address.port}`;
 }
+
+afterAll(() => {
+  for (const d of katalogi.splice(0)) rmSync(d, { recursive: true, force: true });
+});
 
 afterEach(async () => {
   for (const ref of ['running', 'second'] as const) {
@@ -238,44 +251,237 @@ describe('sprawdzenie etykiety nie daje sie obejsc', () => {
   });
 });
 
-describe('klasa: skrypty celujace w dzialajaca instancje', () => {
-  /*
-   * Reguła, nie lista. Przy L1.8 naprawione zostały dwa skrypty, które zlecenie
-   * nazwało po imieniu; recenzent znalazł trzeci (`diag-frontend.mjs`, domyślnie
-   * 8791, a samo wczytanie strony wykonuje POST /api/auth/session przez
-   * `switchAccessContext`). Przeszukanie klasy znalazło czwarty
-   * (`probe-chat-composer.mjs`, 8788, też POST). Ten test jest tym, czego
-   * brakowało: nowy skrypt z adresem instancji albo przechodzi przez bramkę,
-   * albo celuje w port zarezerwowany dla testów — trzeciej drogi nie ma.
-   */
-  const SCRIPTS = resolve(REPO, 'scripts');
-  const files = readdirSync(SCRIPTS).filter((f) => /\.(mjs|ts)$/.test(f));
+/* ------------------- klasa: skrypty a bramka instancji -------------------- */
 
-  it('kazdy skrypt z adresem petli zwrotnej ma bramke albo port testowy', () => {
-    expect(files.length).toBeGreaterThan(10);
-    const problems: string[] = [];
-    let scanned = 0;
-    for (const file of files) {
-      const text = readFileSync(resolve(SCRIPTS, file), 'utf8');
-      const ports = [...text.matchAll(/https?:\/\/(?:127\.0\.0\.1|localhost):(\d{2,5})/g)].map((m) =>
-        Number(m[1]),
+/** Rozszerzenia, ktore ktos uruchamia. `.sh` tez potrafi wywolac curl. */
+const WYKONYWALNE = /\.(mjs|cjs|js|ts|mts|cts|sh)$/;
+
+/**
+ * Prawdziwy import bramki — instrukcja, nie wzmianka.
+ *
+ * Poprzednia wersja zwalniala plik, w ktorym gdziekolwiek wystepowal napis
+ * `lib/acceptance-target.mjs`, wiec **komentarz zwalnial plik, ktory bramki
+ * nigdy nie importowal**. Komentarze sa tu najpierw usuwane, a potem szukana
+ * jest instrukcja importu.
+ */
+const IMPORT_BRAMKI =
+  /(?:^|\n)\s*(?:import[^;\n]*from\s*|await\s+import\s*\(\s*)['"][^'"]*lib\/acceptance-target\.mjs['"]/;
+
+/** Ślady wykonania żądania HTTP albo otwarcia przeglądarki. */
+const ROBI_SIEC =
+  /\bfetch\s*\(|\bchromium\b|\bfirefox\b|\bwebkit\b|page\.goto\s*\(|https?\.request\s*\(|\bcurl\b|\bwget\b/;
+
+const bezKomentarzy = (text: string): string =>
+  text.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ').replace(/^\s*#[^\n]*/gm, ' ');
+
+/** Rekurencyjnie: podkatalog to nie jest miejsce poza zasięgiem reguły. */
+function skryptyPod(dir: string, prefix = ''): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) out.push(...skryptyPod(resolve(dir, entry.name), rel));
+    else if (WYKONYWALNE.test(entry.name)) out.push(rel);
+  }
+  return out;
+}
+
+interface Wpis {
+  /** Czy plik wykonuje żądania HTTP albo otwiera przeglądarkę. */
+  siec: boolean;
+  /** Dlaczego wolno mu to robić bez bramki. Wymagane, gdy `siec`. */
+  powod: string;
+}
+
+/**
+ * Reguła, licząc od operacji, nie od adresu.
+ *
+ * Każdy plik wykonywalny w `scripts/` musi być **sklasyfikowany**: albo
+ * importuje bramkę, albo ma wpis mówiący, czy w ogóle rusza sieć i dlaczego
+ * wolno mu bez niej. Deklaracja „nie rusza sieci” jest sprawdzana krzyżowo —
+ * plik, który ją składa, a zawiera `fetch(`, oblewa.
+ */
+export function problemyKlasyfikacji(root: string, klasyfikacja: Record<string, Wpis>): string[] {
+  const problemy: string[] = [];
+  const pliki = skryptyPod(root);
+  for (const plik of pliki) {
+    const tekst = readFileSync(resolve(root, plik), 'utf8');
+    const kod = bezKomentarzy(tekst);
+    if (IMPORT_BRAMKI.test(kod)) continue;
+    const wpis = klasyfikacja[plik];
+    if (!wpis) {
+      problemy.push(
+        `${plik}: nie importuje bramki i nie ma wpisu w klasyfikacji — ` +
+          'dopisz go albo przepuść przez requireAcceptanceInstance',
       );
-      if (ports.length === 0) continue;
-      scanned += 1;
-      if (text.includes('lib/acceptance-target.mjs')) continue;
-      const outside = [...new Set(ports)].filter(
-        (port) => port < mod.TEST_PORT_RANGE.from || port > mod.TEST_PORT_RANGE.to,
-      );
-      if (outside.length > 0) {
-        problems.push(
-          `${file}: adresy na portach ${outside.join(', ')} poza zakresem testowym ` +
-            `${mod.TEST_PORT_RANGE.from}-${mod.TEST_PORT_RANGE.to} i bez requireAcceptanceInstance`,
-        );
-      }
+      continue;
     }
-    // A scan that examined nothing would report no problems just as loudly.
-    expect(scanned, 'skan nie znalazl zadnego skryptu z adresem instancji').toBeGreaterThan(5);
-    expect(problems, problems.join('\n')).toEqual([]);
+    if (!wpis.siec && ROBI_SIEC.test(kod)) {
+      problemy.push(`${plik}: zadeklarowany jako bez sieci, a wykonuje żądanie albo otwiera przeglądarkę`);
+    }
+    if (wpis.siec && wpis.powod.trim().length < 20) {
+      problemy.push(`${plik}: zwolniony z bramki bez powodu`);
+    }
+  }
+  for (const plik of Object.keys(klasyfikacja)) {
+    if (!pliki.includes(plik)) problemy.push(`${plik}: wpis w klasyfikacji wskazuje nieistniejący plik`);
+  }
+  return problemy;
+}
+
+const SONDA_W_ZAKRESIE_TESTOWYM =
+  'historyczna sonda odbiorowa: cel domyślnie w zakresie 8792-8799, uruchamiana ręcznie przy audycie, ' +
+  'nie jest częścią żadnego udokumentowanego polecenia';
+
+/** Każdy plik wykonywalny w `scripts/`, który nie importuje bramki. */
+const KLASYFIKACJA: Record<string, Wpis> = {
+  'acceptance-matrix.mjs': { siec: false, powod: '' },
+  'audit-matrix.mjs': { siec: false, powod: '' },
+  'audit-probe-chat-layout.mjs': { siec: true, powod: SONDA_W_ZAKRESIE_TESTOWYM },
+  'audit-probe-chat-tools.mjs': { siec: true, powod: SONDA_W_ZAKRESIE_TESTOWYM },
+  'audit-probe-remount.mjs': { siec: true, powod: SONDA_W_ZAKRESIE_TESTOWYM },
+  'audit-probes-api.mjs': { siec: true, powod: SONDA_W_ZAKRESIE_TESTOWYM },
+  'audit-probes-browser.mjs': { siec: true, powod: SONDA_W_ZAKRESIE_TESTOWYM },
+  'audit-probes-model.mjs': { siec: true, powod: SONDA_W_ZAKRESIE_TESTOWYM },
+  'audit-probes.ts': { siec: false, powod: '' },
+  'audit-server.sh': {
+    siec: true,
+    powod:
+      'startuje WLASNY serwer (domyslnie 8795, wlasny katalog danych) i czeka na jego GET /api/health; ' +
+      'jedyne zadanie idzie do procesu, ktorego sam jest rodzicem — znalezione przez kontrole krzyzowa ' +
+      'tej reguly, bo pierwsza klasyfikacja mowila blednie "bez sieci"',
+  },
+  'audit-versions.mjs': { siec: false, powod: '' },
+  'backup-state.mjs': { siec: false, powod: '' },
+  'check-boundaries.mjs': { siec: false, powod: '' },
+  'check-module-swap.mjs': {
+    siec: true,
+    powod:
+      'odpytuje wyłącznie serwer, którego sam jest rodzicem: port wybiera z wolnych (freePort), ' +
+      'katalog danych ma w katalogu tymczasowym kopii, a proces zatrzymuje w finally',
+  },
+  'check-versions.mjs': {
+    siec: true,
+    powod: 'jedyny cel to registry.npmjs.org — nie instancja aplikacji; żadnego zapisu, tylko odczyt wersji',
+  },
+  'closure-evidence.sh': { siec: false, powod: '' },
+  'closure-matrix.mjs': { siec: false, powod: '' },
+  'closure-probe-cancel.mjs': { siec: true, powod: SONDA_W_ZAKRESIE_TESTOWYM },
+  'closure-probe-chat-layout.mjs': { siec: true, powod: SONDA_W_ZAKRESIE_TESTOWYM },
+  'closure-probe-restore.mjs': { siec: true, powod: SONDA_W_ZAKRESIE_TESTOWYM },
+  'closure-probe-select.mjs': { siec: true, powod: SONDA_W_ZAKRESIE_TESTOWYM },
+  'closure-probe-tool-dom.mjs': { siec: true, powod: SONDA_W_ZAKRESIE_TESTOWYM },
+  'closure-server.sh': {
+    siec: true,
+    powod:
+      'to samo co audit-server.sh, port domyslnie 8796: startuje wlasny serwer i czeka na jego ' +
+      'GET /api/health; zadne zadanie nie idzie do cudzej instancji',
+  },
+  'detection-trials.mjs': { siec: false, powod: '' },
+  'dev-server.sh': {
+    siec: true,
+    powod:
+      'jedyne żądanie to GET /api/health na 8791 — sprawdza, czy port zajmuje instancja użytkownika, ' +
+      'żeby tryb deweloperski jej nie wyparł; odczyt, nigdy zapis',
+  },
+  'lib/acceptance-target.mjs': {
+    siec: true,
+    powod: 'to JEST bramka: jej jedyne żądanie to odczyt etykiety z /api/health, od którego zależy reszta',
+  },
+  'lib/state-tools.mjs': { siec: false, powod: '' },
+  'matrix-summary.mjs': { siec: false, powod: '' },
+  'migration-rehearsal.mjs': { siec: false, powod: '' },
+  'openui-library-schema.mjs': { siec: false, powod: '' },
+  'probe-refresh-refused.ts': {
+    siec: false,
+    powod: '',
+  },
+  'probe-sdk-session.ts': { siec: false, powod: '' },
+  'probe-which-cli.mjs': { siec: false, powod: '' },
+  'restore-state.mjs': { siec: false, powod: '' },
+  'synthetic-state.mjs': { siec: false, powod: '' },
+  'typecheck-modules.mjs': { siec: false, powod: '' },
+};
+
+describe('klasa: skrypty a bramka instancji', () => {
+  /*
+   * Reguła liczona od OPERACJI, nie od adresu — i to jest cała poprawka.
+   *
+   * Poprzednia wersja szukała w tekście adresu pętli zwrotnej z literalnym
+   * portem i zwalniała plik, w którym gdziekolwiek padł napis z nazwą bramki.
+   * Recenzent obszedł ją sześć razy na sześć prób: skan nierekurencyjny,
+   * rozszerzenie `.cjs`, port w interpolacji, adres ze sklejenia, port z
+   * `process.env`, zapis `http://[::1]:8791` — a każde obejście POST-owało na
+   * 8791. Kształtów zapisu adresu jest nieskończenie wiele; operacji jest
+   * kilka, a gardło już istnieje.
+   *
+   * Dlatego: każdy plik wykonywalny musi być sklasyfikowany, zwolnienie wynika
+   * z **importu**, a deklaracja „bez sieci” jest sprawdzana krzyżowo.
+   */
+  it('kazdy skrypt jest sklasyfikowany, a deklaracja "bez sieci" sie zgadza', () => {
+    const problemy = problemyKlasyfikacji(resolve(REPO, 'scripts'), KLASYFIKACJA);
+    expect(problemy, problemy.join('\n')).toEqual([]);
+    // Skan, który niczego nie obejrzał, też zwróciłby pustą listę.
+    expect(skryptyPod(resolve(REPO, 'scripts')).length).toBeGreaterThan(30);
+    expect(skryptyPod(resolve(REPO, 'scripts'))).toContain('lib/acceptance-target.mjs');
+  });
+
+  it('PROBA ZDOLNOSCI WYKRYCIA: szesc obejsc recenzenta oblewa regule', () => {
+    /*
+     * Każde z sześciu obejść, na kontrolowanym drzewie, plus siódmy przypadek:
+     * plik, który deklaruje „bez sieci” i kłamie. Adres nie ma tu żadnego
+     * znaczenia — reguła patrzy na `fetch(`.
+     */
+    const root = tmpKatalog();
+    mkdirSync(resolve(root, 'zzevade'), { recursive: true });
+    const zapisz = (rel: string, tresc: string) => writeFileSync(resolve(root, rel), tresc);
+
+    zapisz('zzevade/probe.mjs', "await fetch('http://127.0.0.1:8791/api/auth/session', { method: 'POST' });\n");
+    zapisz('obejscie.cjs', "fetch('http://127.0.0.1:8791/api/auth/session', { method: 'POST' });\n");
+    zapisz('interpolacja.mjs', 'const p = 8791;\nawait fetch(`http://127.0.0.1:${p}/api/x`);\n');
+    zapisz('sklejenie.mjs', "await fetch('http://127.0.0.1:' + 8791 + '/api/x');\n");
+    zapisz('ze-srodowiska.mjs', "await fetch(`http://127.0.0.1:${process.env.X ?? 8791}/api/x`);\n");
+    zapisz('ipv6.mjs', "await fetch('http://[::1]:8791/api/x');\n");
+    zapisz(
+      'klamie.mjs',
+      "/* import { requireAcceptanceInstance } from './lib/acceptance-target.mjs'; */\n" +
+        "await fetch('http://127.0.0.1:8791/api/x');\n",
+    );
+
+    const problemy = problemyKlasyfikacji(root, { 'klamie.mjs': { siec: false, powod: '' } });
+    const zgloszone = problemy.join('\n');
+    for (const plik of [
+      'zzevade/probe.mjs',
+      'obejscie.cjs',
+      'interpolacja.mjs',
+      'sklejenie.mjs',
+      'ze-srodowiska.mjs',
+      'ipv6.mjs',
+    ]) {
+      expect(zgloszone, `${plik} przeszedl regule`).toContain(plik);
+    }
+    // Komentarz z nazwą bramki nie zwalnia: plik deklaruje „bez sieci” i kłamie.
+    expect(zgloszone).toContain('klamie.mjs: zadeklarowany jako bez sieci');
+    expect(problemy.length).toBe(7);
+  });
+
+  it('kontrola przeciwna: plik z prawdziwym importem bramki przechodzi', () => {
+    // Bez tego poprzedni test przeszedłby też na regule odrzucającej wszystko.
+    const root = tmpKatalog();
+    writeFileSync(
+      resolve(root, 'uczciwy.mjs'),
+      "import { requireAcceptanceInstance } from './lib/acceptance-target.mjs';\n" +
+        'await requireAcceptanceInstance(process.env);\n' +
+        "await fetch('http://127.0.0.1:8791/api/x');\n",
+    );
+    expect(problemyKlasyfikacji(root, {})).toEqual([]);
+  });
+
+  it('wpis wskazujacy nieistniejacy plik jest bledem', () => {
+    const root = tmpKatalog();
+    writeFileSync(resolve(root, 'jest.mjs'), 'console.log(1);\n');
+    expect(problemyKlasyfikacji(root, { 'jest.mjs': { siec: false, powod: '' }, 'nie-ma.mjs': { siec: false, powod: '' } })).toEqual(
+      ['nie-ma.mjs: wpis w klasyfikacji wskazuje nieistniejący plik'],
+    );
   });
 });
 

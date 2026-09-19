@@ -136,8 +136,17 @@ export const currentMutation = () => applied;
 export function installRescue() {
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
     process.on(signal, () => {
+      /*
+       * Sciezka odczytana PRZED przywroceniem: `restore` zeruje stan, wiec
+       * komunikat skladany po nim mowil zawsze „brak mutacji" — takze wtedy,
+       * gdy wlasnie przywrocil plik. Komunikat, ktory nie potrafi powiedziec
+       * dwoch roznych rzeczy, nie jest obserwacja.
+       */
+      const path = applied?.path ?? null;
       if (applied) restore(applied);
-      console.error(`\nPrzerwano (${signal}) — plik przywrocony: ${applied?.path ?? 'brak mutacji'}`);
+      console.error(
+        path ? `\nPrzerwano (${signal}) — przywrocono ${path}` : `\nPrzerwano (${signal}) — nie bylo czego przywracac`,
+      );
       process.exit(130);
     });
   }
