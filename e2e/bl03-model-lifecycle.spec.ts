@@ -61,17 +61,25 @@ const BASE = instance.baseUrl;
 const run = paidRun({ file: FILE, przebieg: 'C/D' });
 
 /**
- * Praca, ktora naprawde trwa — i naprawde cos uruchamia.
+ * Praca, ktora naprawde trwa.
  *
- * Pierwotnie bylo to dlugie generowanie tekstu. Sonda bez modelu pokazala, ze
- * sesja SDK w tej wersji **nie zostawia zadnego procesu potomnego** serwera
- * (CLI jest w tym samym procesie), wiec „Stop dotarl do procesow roboczych”
- * bylo zdaniem o pustym zbiorze. Polecenie w powloce uruchamia prawdziwy proces
- * pod sandboxem, wiec jest co policzyc przed, w trakcie i po.
+ * Dwa podejscia, oba zmierzone:
+ *
+ *  1. dlugie generowanie tekstu — model robi to bez wahania, ale sonda bez
+ *     modelu pokazala, ze sesja SDK w tej wersji **nie zostawia zadnego procesu
+ *     potomnego** serwera (CLI dziala w tym samym procesie);
+ *  2. `sleep 45` w powloce, zeby pod sandboxem powstal prawdziwy proces — model
+ *     tego **nie wykonal**: nie poprosil o zgode i skonczyl ture bez wywolania
+ *     powloki (tura 13 grantu, `decyzjeZgody: []`, zero potomkow).
+ *
+ * Wracamy wiec do (1). Kryterium mowi o tym, co zostaje PO zatrzymaniu, a nie o
+ * tym, ile procesow bylo w trakcie — liczba w trakcie idzie do dowodu, zeby
+ * czytelnik wiedzial, na czym ten wynik stoi.
  */
 const LONG_COMMAND =
-  'Uruchom w powloce (narzedzie Bash) polecenie `sleep 45`, a kiedy skonczy, napisz OK. ' +
-  'Zgodze sie na to wykonanie.';
+  'Wypisz po kolei liczby od 1 do 150. Kazda w osobnej linii, a przy kazdej dopisz ' +
+  'jedno krotkie zdanie o tym, czy jest parzysta i czy jest podzielna przez trzy. ' +
+  'Nie skracaj, nie streszczaj i nie uzywaj zadnych narzedzi — wypisz wszystkie.';
 
 test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () => {
   test.describe.configure({ mode: 'serial', timeout: AGENT_TIMEOUT });
