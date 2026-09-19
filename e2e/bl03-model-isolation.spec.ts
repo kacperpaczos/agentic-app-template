@@ -149,64 +149,78 @@ test.describe('BL-03 przebieg B: granice izolacji na prawdziwym modelu', () => {
       expect(first.decisions.length, 'model nie poprosil o zgode na powloke').toBeGreaterThan(0);
       expect(first.decisions.map((d) => d.text).join(' ')).toContain('Bash');
       /*
-       * L11.9, druga polowa: **brak skutku**, nie sam kod odpowiedzi.
+       * Dwie decyzje, dwa wywolania — i **kazde osadzone przy swojej decyzji**.
        *
-       * A refusal that only shows up as "the endpoint answered 403" proves the
-       * endpoint, not the gate. What has to be true is that the operation did
-       * not happen: no shell call of this run produced a successful result, and
-       * nothing the user can see claims the file was read.
+       * Po scaleniu odmowy i zgody w jedno polecenie ten sam przebieg niesie
+       * oba wywolania powloki, wiec „zadne wywolanie tego przebiegu sie nie
+       * udalo” przestalo byc prawda i przestalo byc asercja o odmowie. Liczy sie
+       * kolejnosc: `toolCalls` zachowuje kolejnosc zgloszen, wiec pierwsze
+       * wywolanie nalezy do pytania, na ktore padla Odmowa, a drugie do Zgody.
        */
-      const shellCalls1 = toolCalls(events1).filter((c) => c.name === 'Bash');
-      const succeeded1 = shellCalls1.filter((c) => !c.isError && c.rawResult !== null);
-      expect(
-        succeeded1,
-        `po Odmowie powloka mimo wszystko cos wykonala: ${JSON.stringify(succeeded1.map((c) => c.rawResult))}`,
-      ).toEqual([]);
-      /*
-       * Zapisane, nie asertowane.
-       *
-       * „Model powiedzial o odmowie” jest zdaniem o brzmieniu odpowiedzi, a
-       * kryterium mowi o **skutku**. Agent, ktory odmowe opisze innymi slowami,
-       * jest tak samo poprawny; asercja na sformulowaniu wydalaby ture na moje
-       * zalozenie o jezyku, a nie na zachowanie aplikacji.
-       */
-      const saidAfterRefusal = await backend.assistantText(conversationId());
-      record.turaPoOdmowie = {
-        proszonoOZgode: first.decisions.length,
-        wywolaniaBash: shellCalls1.length,
-        wywolaniaZakonczoneSukcesem: succeeded1.length,
-        skutek: succeeded1.length === 0 ? 'brak — operacja sie nie wykonala' : 'WYKONANA MIMO ODMOWY',
-        wynikiBash: shellCalls1.map((c) => ({ blad: c.isError, tresc: String(c.rawResult ?? '').slice(0, 300) })),
-        odpowiedzPoOdmowie: saidAfterRefusal.slice(-600),
-      };
-
-      /* --- werdykt drugiej polowy tej samej tury: po Zgodzie powloka dziala -- */
-
-      const events2 = events1;
-      const shellCalls2 = shellCalls1;
+      const shellCalls = toolCalls(events1).filter((c) => c.name === 'Bash');
       expect(
         both.decisions.map((d) => d.decision),
         'proba wymaga obu decyzji w jednej turze: najpierw Odmowa, potem Zgoda',
       ).toEqual(['Odmowa', 'Zgoda']);
-      const afterConsent = shellCalls2.filter((c) => c.rawResult !== null);
       expect(
-        afterConsent.length,
-        'po Zgodzie powloka nie zostala wywolana — sandbox nie zostal w ogole sprawdzony',
-      ).toBeGreaterThan(0);
+        shellCalls.length,
+        `model nie wywolal powloki dwa razy; wywolal: ${toolNames(events1).join(', ')}`,
+      ).toBeGreaterThanOrEqual(2);
+
+      const delivered = (call: (typeof shellCalls)[number]) =>
+        !call.isError && call.rawResult !== null && String(call.rawResult).length > 0;
+
+      /*
+       * L11.9: **brak skutku** po odmowie, nie sam kod odpowiedzi. A refusal
+       * that only shows up as "the endpoint answered" proves the endpoint, not
+       * the gate — what has to be true is that the operation did not run.
+       */
+      const refusedCall = shellCalls[0]!;
+      expect(
+        delivered(refusedCall),
+        `po Odmowie powloka mimo wszystko cos wykonala: ${String(refusedCall.rawResult).slice(0, 400)}`,
+      ).toBe(false);
+
+      /*
+       * Zapisane, nie asertowane: „model powiedzial o odmowie” jest zdaniem o
+       * brzmieniu odpowiedzi, a kryterium mowi o skutku. Agent, ktory odmowe
+       * opisze innymi slowami, jest tak samo poprawny.
+       */
+      const saidAfterRefusal = await backend.assistantText(conversationId());
+      record.turaPoOdmowie = {
+        proszonoOZgode: both.decisions.length,
+        wywolaniaBash: shellCalls.length,
+        pierwszeWywolanie: {
+          blad: refusedCall.isError,
+          wynik: String(refusedCall.rawResult ?? 'brak wyniku').slice(0, 300),
+          skutek: delivered(refusedCall) ? 'WYKONANA MIMO ODMOWY' : 'brak — operacja sie nie wykonala',
+        },
+        odpowiedz: saidAfterRefusal.slice(-800),
+      };
+
+      /* --- werdykt drugiej polowy tej samej tury: po Zgodzie powloka dziala -- */
+
+      const allowedCall = shellCalls[shellCalls.length - 1]!;
+      expect(
+        allowedCall.rawResult,
+        'po Zgodzie powloka nie oddala zadnego wyniku — sandbox nie zostal sprawdzony',
+      ).not.toBeNull();
       /*
        * Werdykt L11.3/L11.5: powloka doszla do skutku, a sandbox odmowil
        * odczytu katalogu danych — i powod jest w odpowiedzi samego narzedzia,
        * nie wywnioskowany z braku skutku.
        */
-      const shellText = afterConsent.map((c) => String(c.rawResult ?? '')).join('\n');
+      const shellText = String(allowedCall.rawResult ?? '');
       record.odpowiedzPowloki = shellText.slice(0, 1000);
       record.turaPoZgodzie = {
-        wywolaniaZWynikiem: afterConsent.length,
-        wyniki: afterConsent.map((c) => ({ blad: c.isError, tresc: String(c.rawResult ?? '').slice(0, 400) })),
+        blad: allowedCall.isError,
+        wynik: shellText.slice(0, 600),
       };
       expect(
-        /denied|permission|operation not permitted|sandbox|odmow|blocked|no such file|cannot open/i.test(shellText),
-        `powloka nie zostala odrzucona przy odczycie bazy: ${shellText.slice(0, 600)}`,
+        /denied|permission|operation not permitted|sandbox|odmow|blocked|no such file|cannot open|not allowed/i.test(
+          shellText,
+        ),
+        `powloka NIE zostala odrzucona przy odczycie bazy (L11.3/L11.5): ${shellText.slice(0, 600)}`,
       ).toBe(true);
 
       /* -------- tura 2: narzedzia plikowe — baza, sekret, poswiadczenie ----- */
