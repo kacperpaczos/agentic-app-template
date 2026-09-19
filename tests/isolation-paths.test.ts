@@ -364,3 +364,69 @@ describe('realResolve: dowiazanie rozwiazywane przed ".."', () => {
     }
   });
 });
+
+/**
+ * Dlaczego zła odpowiedź walkera NIE była (i nie jest) przepustką dla strażników
+ * izolacji — sprawdzone, nie założone.
+ *
+ * Pytanie z rundy 5 brzmiało: czy błędna odpowiedź `realResolve` mogła
+ * przepuścić zapis poza katalog testowy albo pod instancję użytkownika. Dla
+ * `assertTestDataDir` i `assertInsideManagedRoot` odpowiedź brzmi **nie**, i to
+ * nie przez przypadek, tylko dzięki jednej własności: **ścieżka sprawdzana jest
+ * tą samą ścieżką, która jest zwracana i używana**. `..` znika w `resolve()`
+ * *przed* sprawdzeniem, więc jądro, kasując zwrócony napis, idzie tam, gdzie
+ * patrzył strażnik.
+ *
+ * Ta własność jest tu zamrożona testem, bo jest cicha: gdyby któryś strażnik
+ * zaczął zwracać napis surowy zamiast znormalizowanego, obie ścieżki znów by się
+ * rozjechały — i to jest dokładnie ten kształt, który w narzędziach plikowych
+ * agenta kosztował rundę 4.
+ */
+describe('straznicy izolacji: sprawdzana sciezka jest sciezka uzywana', () => {
+  it('assertTestDataDir zwraca dokladnie to, co sprawdzil', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'repo-norm-'));
+    const outside = mkdtempSync(join(tmpdir(), 'poza-norm-'));
+    try {
+      mkdirSync(join(repo, '.e2e-data'), { recursive: true });
+      symlinkSync(outside, join(repo, '.e2e-data', 'link'));
+
+      /*
+       * Nazwa katalogu musi zaczynać się od `.e2e` — strażnik sprawdza to
+       * niezależnie, i dobrze. Tutaj chodzi o inną własność, więc nazwa jest
+       * dobrana tak, żeby tamta reguła nie przesłoniła tej mierzonej.
+       */
+      const surowa = `${repo}/.e2e-data/link/../.e2e-ofiara`;
+      const zwrocona = assertTestDataDir(surowa, repo, 'proba');
+
+      // Zwrócony napis nie niesie już `..`, więc „gdzie sprawdzono" i „co zostanie
+      // skasowane" to jedno miejsce — wewnątrz katalogu testowego.
+      expect(zwrocona).toBe(join(repo, '.e2e-data', '.e2e-ofiara'));
+      expect(zwrocona.includes('..'), 'zwrocona sciezka niesie ".." — check i use moga sie rozjechac').toBe(false);
+      expect(isWithin(realResolve(zwrocona), realResolve(repo))).toBe(true);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('assertInsideManagedRoot zwraca dokladnie to, co sprawdzil', () => {
+    const root = mkdtempSync(join(tmpdir(), 'magazyn-'));
+    const outside = mkdtempSync(join(tmpdir(), 'poza-magazyn-'));
+    try {
+      mkdirSync(join(root, 'wnetrze'), { recursive: true });
+      symlinkSync(outside, join(root, 'wnetrze', 'link'));
+
+      const zwrocona = assertInsideManagedRoot(`${root}/wnetrze/plik.bin`, { root, what: 'magazyn' });
+      expect(zwrocona).toBe(join(root, 'wnetrze', 'plik.bin'));
+      expect(zwrocona.includes('..')).toBe(false);
+
+      // A ścieżka, która fizycznie wychodzi poza magazyn, jest odrzucona.
+      expect(() =>
+        assertInsideManagedRoot(join(root, 'wnetrze', 'link', 'plik.bin'), { root, what: 'magazyn' }),
+      ).toThrow();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+});
