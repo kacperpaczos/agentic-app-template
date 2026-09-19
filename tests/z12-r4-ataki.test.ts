@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   AgentRuntime,
@@ -11,7 +12,14 @@ import {
   platformTools,
 } from '@platform/server';
 import { createHarness, type Harness } from './helpers.ts';
-import { atakujacyAgent, newAtakUchwyt, type AtakKrok, type AtakPlan, type AtakUchwyt } from './support/attack-standin.ts';
+import {
+  atakujacyAgent,
+  newAtakUchwyt,
+  realnie,
+  type AtakKrok,
+  type AtakPlan,
+  type AtakUchwyt,
+} from './support/attack-standin.ts';
 
 /**
  * PRÓBY ATAKU RECENZENTA — pakiet BL-04, runda 4 (gałąź `przeglad/z12-r4`).
@@ -338,6 +346,63 @@ describe('A. sciezki plikowe', () => {
     );
     expect(proby[0]?.denied).toBe(false);
     expect(text.includes(KANAREK)).toBe(true);
+  });
+
+  it('A11 BEZ ZADNEGO PRZYGOTOWANIA: odczyt zrodla biblioteki poza workspace przez "nie-ma/.."', async () => {
+    /*
+     * Zadnego kroku przygotowawczego. Dowiazanie `node_modules/exceljs` tworzy
+     * sam `createRunWorkspace`, a jego cel lezy poza katalogiem roboczym.
+     * Wystarczy poprzedzic je czlonem, ktorego nie ma — straznik przechodzi
+     * wtedy na skladanie leksykalne i juz nie rozwija niczego dalej.
+     */
+    const { proby, text } = await atak(
+      [
+        {
+          kind: 'tool',
+          name: 'Read',
+          input: { file_path: '$ws/nie-ma/../node_modules/exceljs/package.json' },
+        },
+      ],
+      { honorUpdatedInput: true },
+    );
+    expect(proby[0]?.denied, 'straznik odmowil').toBe(false);
+    expect(text, 'NIE odczytano zrodla biblioteki spoza workspace').toContain('"name"');
+    expect(text).toContain('exceljs');
+  });
+
+  it('A11b kontrola: ta sama biblioteka BEZ "nie-ma/.." jest odmowiona', async () => {
+    const { proby } = await atak([
+      { kind: 'tool', name: 'Read', input: { file_path: '$ws/node_modules/exceljs/package.json' } },
+    ]);
+    expect(proby[0]?.denied, 'bez sztuczki straznik odmawia — roznica jest w straznika, nie w celu').toBe(true);
+  });
+
+  it('A12 BEZ ZADNEGO PRZYGOTOWANIA: ZAPIS do katalogu biblioteki poza workspace', async () => {
+    const nazwa = `podrzucone-recenzenta-${Date.now()}.txt`;
+    const { proby, ws } = await atak(
+      [
+        {
+          kind: 'tool',
+          name: 'Write',
+          input: { file_path: `$ws/nie-ma/../node_modules/exceljs/${nazwa}` },
+          content: 'PODRZUCONE-PRZEZ-RECENZENTA',
+        },
+      ],
+      { honorUpdatedInput: true },
+    );
+    /* Katalog biblioteki ustalony niezaleznie od workspace (ten juz nie istnieje). */
+    const prawdziwyKatalog = dirname(createRequire(import.meta.url).resolve('exceljs/package.json'));
+    const cel = join(prawdziwyKatalog, nazwa);
+    try {
+      expect(proby[0]?.denied, 'straznik odmowil').toBe(false);
+      expect(
+        prawdziwyKatalog.startsWith(`${realnie(ws)}/`),
+        `katalog biblioteki lezy w workspace (proba bez sensu): ${prawdziwyKatalog}`,
+      ).toBe(false);
+      expect(existsSync(cel), `POWSTAL PLIK w katalogu biblioteki POZA workspace: ${cel}`).toBe(true);
+    } finally {
+      rmSync(cel, { force: true });
+    }
   });
 
   it('A7 tylda na poczatku sciezki', async () => {
