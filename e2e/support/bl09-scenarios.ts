@@ -296,6 +296,7 @@ export const filesScript = (prompt: string): Step[] => {
             path: 'oferty-poprawione.xlsx',
             originalFileId: attachedWorkbook(calls),
             filename: publishedName,
+            operationId: `e2e-bl09-publikacja-${publishedName}`,
           }),
           maxChars: 500,
         },

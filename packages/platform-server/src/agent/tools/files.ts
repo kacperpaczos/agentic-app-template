@@ -19,6 +19,21 @@ import { resolveInWorkspace, listWorkspaceOutputs } from '../sandbox.ts';
 /** Content identity for a publication's fingerprint (see `files_publish_version`). */
 export const sha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
 
+/*
+ * Required, not optional — the same contract as `artifact_create` /
+ * `artifact_publish_file` in `artifacts.ts`. Publishing a version creates a
+ * new file row and a new artifact; nothing collapses a repeat the way
+ * `canvas_update_card` collapses one via `expectedSpecVersion`. Without a
+ * required key the guard below (`services.idempotency.once`) is never
+ * engaged, because a model never told the field exists never supplies it —
+ * which is how a reconnect's retry produced a second version (L9.7).
+ */
+const OPERATION_ID = z
+  .string()
+  .min(8)
+  .max(200)
+  .describe('Wlasny identyfikator tej publikacji; powtorzenie z tym samym nie publikuje drugiej wersji');
+
 export const MEDIA_BY_EXT: Record<string, string> = {
   '.csv': 'text/csv',
   '.txt': 'text/plain',
@@ -92,13 +107,14 @@ export function fileTools(services: PlatformServices): Array<ModuleToolDefinitio
         'Publikuje plik z katalogu output/ jako NOWA WERSJE wskazanego pliku wejsciowego. ' +
         'Oryginal pozostaje nienaruszony i nadal jest dostepny; wynik dostaje wlasny identyfikator, ' +
         'numer wersji i odnosnik do pobrania. Uzyj tego, gdy modyfikujesz plik uzytkownika. ' +
-        'Jesli tworzysz cos nowego, a nie wersje istniejacego pliku, uzyj artifact_publish_file.',
+        'Jesli tworzysz cos nowego, a nie wersje istniejacego pliku, uzyj artifact_publish_file. ' +
+        'operationId jest wymagane: powtorzone wywolanie z tym samym identyfikatorem zwraca ta sama wersje, a nie druga.',
       effect: 'write',
       inputSchema: z.object({
         path: z.string().max(400),
         originalFileId: z.string(),
         filename: z.string().max(180).optional(),
-        operationId: z.string().min(8).max(200).optional(),
+        operationId: OPERATION_ID,
       }),
       handler: async (input: any, ctx: ToolCallContext) => {
         if (!ctx.workspaceDir) throw new AppError('unsupported_operation', 'Brak workspace uruchomienia.');

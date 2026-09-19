@@ -61,7 +61,11 @@ export function agentViewsScript(prompt: string): Step[] {
       {
         kind: 'call',
         name: 'agent_view_create',
-        input: (calls) => ({ title: TABLE_TITLE, source: tableComposition(caseIdFrom(calls)) }),
+        input: (calls) => ({
+          title: TABLE_TITLE,
+          source: tableComposition(caseIdFrom(calls)),
+          operationId: 'e2e-agent-view-zestawienie',
+        }),
       },
       { kind: 'text', text: 'Zestawienie jest w Widokach agenta.' },
     ];
@@ -80,7 +84,11 @@ export function agentViewsScript(prompt: string): Step[] {
       {
         kind: 'call',
         name: 'agent_view_create',
-        input: (calls) => ({ title: TABLE_TITLE, source: tableComposition(caseIdFrom(calls)) }),
+        input: (calls) => ({
+          title: TABLE_TITLE,
+          source: tableComposition(caseIdFrom(calls)),
+          operationId: 'e2e-agent-view-pierwszy',
+        }),
       },
       { kind: 'text', text: 'Widok jest juz w Widokach agenta. ', delayMs: 100 },
       { kind: 'wait', delayMs: 8000 },
@@ -93,7 +101,11 @@ export function agentViewsScript(prompt: string): Step[] {
       {
         kind: 'call',
         name: 'agent_view_create',
-        input: (calls) => ({ title: CHART_TITLE, source: chartComposition(caseIdFrom(calls)) }),
+        input: (calls) => ({
+          title: CHART_TITLE,
+          source: chartComposition(caseIdFrom(calls)),
+          operationId: 'e2e-agent-view-wykres',
+        }),
       },
       { kind: 'text', text: 'Wykres jest w Widokach agenta.' },
     ];
@@ -145,13 +157,21 @@ export function agentViewsScript(prompt: string): Step[] {
       {
         kind: 'call',
         name: 'agent_view_create',
-        input: { title: 'Liczby wpisane', source: 'root = BarChart(["A", "B"], [Series("Suma", [100, 200])])' },
+        input: {
+          title: 'Liczby wpisane',
+          source: 'root = BarChart(["A", "B"], [Series("Suma", [100, 200])])',
+          operationId: 'e2e-agent-view-odmowa-literal',
+        },
       },
       // A read nobody registered.
       {
         kind: 'call',
         name: 'agent_view_create',
-        input: { title: 'Zla operacja', source: 'root = DataTable({operation: "procurement.nie_ma"})' },
+        input: {
+          title: 'Zla operacja',
+          source: 'root = DataTable({operation: "procurement.nie_ma"})',
+          operationId: 'e2e-agent-view-odmowa-operacja',
+        },
       },
       { kind: 'text', text: 'Zglaszam odmowy.' },
     ];
@@ -164,7 +184,11 @@ export function agentViewsScript(prompt: string): Step[] {
       {
         kind: 'call',
         name: 'agent_view_create',
-        input: (calls) => ({ title: BACKGROUND_TITLE, source: tableComposition(caseIdFrom(calls)) }),
+        input: (calls) => ({
+          title: BACKGROUND_TITLE,
+          source: tableComposition(caseIdFrom(calls)),
+          operationId: 'e2e-agent-view-tlo',
+        }),
       },
       { kind: 'text', text: 'Widok z tla gotowy.' },
     ];

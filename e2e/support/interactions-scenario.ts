@@ -64,7 +64,11 @@ export function interactionsScript(prompt: string): Step[] {
       {
         kind: 'call',
         name: 'agent_view_create',
-        input: (calls) => ({ title: VIEW_TITLE, source: viewComposition(caseIdFrom(calls)) }),
+        input: (calls) => ({
+          title: VIEW_TITLE,
+          source: viewComposition(caseIdFrom(calls)),
+          operationId: 'e2e-interactions-widok',
+        }),
       },
       { kind: 'text', text: 'Tabela i wykres cen projektorow sa w Widokach agenta.' },
     ];

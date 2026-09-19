@@ -92,6 +92,7 @@ export function bl03CanvasScript(prompt: string): Step[] {
             component: 'procurement.costChart',
             props: { caseId: caseOf(calls) },
           },
+          operationId: 'e2e-bl03-canvas-dodaj',
         }),
         maxChars: 300,
       },
@@ -256,7 +257,7 @@ export function bl03LifecycleScript(prompt: string): Step[] {
         name: 'canvas_add_card',
         // A component that is not in the catalog: refused by the real
         // validation, so `PostToolUseFailure` fires with a real reason.
-        input: { title: 'Karta z bledem', spec: { kind: 'component', component: 'nie.istnieje' } },
+        input: { title: 'Karta z bledem', spec: { kind: 'component', component: 'nie.istnieje' }, operationId: 'e2e-bl03-canvas-blad' },
         maxChars: 400,
       },
       { kind: 'text', text: 'Narzedzie odmowilo.' },

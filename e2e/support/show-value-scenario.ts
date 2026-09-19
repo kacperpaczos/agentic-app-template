@@ -91,7 +91,11 @@ export function showValueScript(prompt: string): Step[] {
       {
         kind: 'call',
         name: 'agent_view_create',
-        input: { title: 'Dostawcy w rozmowie', source: suppliersTable('Dostawcy w rozmowie', 5) },
+        input: {
+          title: 'Dostawcy w rozmowie',
+          source: suppliersTable('Dostawcy w rozmowie', 5),
+          operationId: 'e2e-show-value-niejednoznacznie',
+        },
         maxChars: 300,
       },
       search(name),
@@ -140,6 +144,7 @@ export function showValueScript(prompt: string): Step[] {
             'root = Stack([tabela])',
             `tabela = DataTable({operation: "procurement.comparison", input: {caseId: "${caseId}"}}, ["supplierName", "totalMinor"], "Oferty")`,
           ].join('\n'),
+          operationId: 'e2e-show-value-brak-dostepu',
         },
         maxChars: 300,
       },
@@ -184,6 +189,7 @@ export function showValueScript(prompt: string): Step[] {
             `tabela = DataTable({operation: "procurement.case_offer_items", input: {caseId: "${caseId}"}}, ` +
               '["supplierName", "name", "unitPriceMinor"], "Pozycje ofert", 2)',
           ].join('\n'),
+          operationId: 'e2e-show-value-karta-pozycji',
         },
         maxChars: 300,
       },

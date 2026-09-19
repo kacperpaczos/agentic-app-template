@@ -43,7 +43,11 @@ export const appContextScript = (prompt: string): Step[] => {
       {
         kind: 'call',
         name: 'canvas_add_card',
-        input: () => ({ title: 'Karta zadania w tle', spec: { kind: 'component', component: 'platform.markdown', props: { markdown: 'z zadania w tle' } } }),
+        input: () => ({
+          title: 'Karta zadania w tle',
+          spec: { kind: 'component', component: 'platform.markdown', props: { markdown: 'z zadania w tle' } },
+          operationId: 'e2e-app-context-karta-w-tle',
+        }),
         maxChars: 400,
       },
       { kind: 'text', text: 'Dodalem karte.' },

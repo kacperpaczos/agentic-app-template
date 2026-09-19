@@ -408,6 +408,7 @@ const SCENARIOS: Record<string, Step[]> = {
             // Ordered by delivery time the currencies interleave, so grouping reorders the page on screen.
             `tabela = DataTable({operation: "procurement.comparison", input: {caseId: "${found.id}"}}, ["supplierName", "currency", "totalMinor", "deliveryDays"], "Oferty", null, null, {field: "deliveryDays", direction: "asc"}, "currency")`,
           ].join('\n'),
+          operationId: 'e2e-scripted-server-ui-state-agent-views',
         };
       },
       maxChars: 300,
