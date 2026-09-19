@@ -43,9 +43,14 @@ export const test = base.extend<object, { isolatedInstance: void }>({
  * Validates the address first — a spec must not be able to point itself
  * somewhere else — and then that the instance there is labelled as ours.
  */
-export async function verifyIsolatedInstance(baseUrl: string, expectedPort: number): Promise<void> {
+export async function verifyIsolatedInstance(
+  baseUrl: string,
+  expectedPort: number,
+  /** Run identifier, when the caller started the server itself (L1.9). */
+  expectedRunId?: string,
+): Promise<void> {
   assertTestBaseUrl(baseUrl, expectedPort, 'adres instancji scenariuszowej');
-  await assertIsolatedInstance(baseUrl);
+  await assertIsolatedInstance(baseUrl, expectedRunId);
 }
 
 export { expect };

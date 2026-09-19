@@ -7,8 +7,12 @@
  *
  *   node scripts/run-agent.mjs "<prompt>" --case <id> --space <id> [--thread <id>]
  *                              [--deny] [--attach <fileId>]
+ *
+ * The run mutates whatever instance answers, so where it points is checked
+ * before the first request rather than documented: see
+ * `lib/acceptance-target.mjs` (L1.8).
  */
-const BASE = process.env.APP_BASE ?? 'http://127.0.0.1:8791';
+import { requireAcceptanceInstance } from './lib/acceptance-target.mjs';
 
 const args = process.argv.slice(2);
 const prompt = args[0];
@@ -22,6 +26,20 @@ if (!prompt) {
   console.error('usage: run-agent.mjs "<prompt>" --case <id> --space <id> [--thread <id>] [--deny] [--attach <fileId>]');
   process.exit(2);
 }
+
+/*
+ * Before anything at all: not before the first *write*, but before the first
+ * request. `/api/auth/session` below is a POST, and a POST to the user's
+ * instance is already what this prevents.
+ */
+let BASE;
+try {
+  BASE = (await requireAcceptanceInstance(process.env)).base;
+} catch (e) {
+  console.error(e.message);
+  process.exit(3);
+}
+console.log(`# instancja: ${BASE}`);
 
 const jar = [];
 const fetchWithCookies = async (url, init = {}) => {

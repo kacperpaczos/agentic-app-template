@@ -218,6 +218,7 @@ describe('powiazanie rozmowy z wykonaniem, narzedziem, mutacja i artefaktem', ()
         'Lancuch rozmowa → wykonanie → narzedzie → mutacja → artefakt, przejsty wylacznie po ' +
         'danych diagnostycznych (agent_runs, run_events, messages, artifacts), w obie strony.',
       zrodlo: 'pnpm test → tests/diagnostics.test.ts (regresja szablonu)',
+      rodzajWykonania: 'test kontraktu lub logiki',
       warunki:
         'stand-in modelu na granicy adaptera; prawdziwe handlery narzedzi MCP, prawdziwe serwisy ' +
         'domenowe i baza; jedno uruchomienie z zapisem domenowym i zapisem artefaktu',
@@ -363,6 +364,7 @@ describe('klasy bledow sa rozroznialne w zapisanym uruchomieniu', () => {
         'Rozroznialnosc klas bledow w zapisanych danych: blad modelu, blad integracji, odmowa ' +
         'sandboxa, limit dostepu i odmowa reguly domenowej. Kazdy ma inny kod i inne miejsce zapisu.',
       zrodlo: 'pnpm test → tests/diagnostics.test.ts (regresja szablonu)',
+      rodzajWykonania: 'symulacja',
       warunki:
         'stand-in modelu na granicy adaptera; komunikaty bledow w brzmieniu, jakie produkuje SDK; ' +
         'blad integracji to odrzucone wywolanie adaptera, blad modelu to strumien, ktory zglosil awarie',
@@ -532,6 +534,7 @@ describe('sekret ze srodowiska nie trafia do diagnostyki', () => {
         'Wartosc poswiadczenia umieszczona w srodowisku procesu serwera nie wystepuje w zadnej ' +
         'powierzchni diagnostycznej aplikacji ani w plikach dowodow tego zadania.',
       zrodlo: 'pnpm test → tests/diagnostics.test.ts (regresja szablonu)',
+      rodzajWykonania: 'symulacja',
       warunki:
         'kanarki ustawione w ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN i APP_TAJNY_KANAREK w ' +
         'srodowisku procesu przed przebiegami — instancja powstaje wczesniej, w beforeEach pliku, ' +

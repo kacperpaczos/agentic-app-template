@@ -1,7 +1,8 @@
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, type WriteStream } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { resolveTestInstance, type TestInstanceConfig } from './isolation.ts';
+import { TEST_RUN_ID, resolveTestInstance, type TestInstanceConfig } from './isolation.ts';
+import { assertPortFree } from './port-probe.ts';
 import { verifyIsolatedInstance } from './fixtures.ts';
 
 /**
@@ -69,8 +70,19 @@ export class ScriptedInstance {
     return this.#process?.pid ?? null;
   }
 
-  /** Rebuilds this instance's database from scratch. Nothing is running yet. */
+  /**
+   * Rebuilds this instance's database from scratch. Nothing is running yet —
+   * and that is now checked rather than assumed.
+   *
+   * "Nothing is running" used to be a sentence in a comment. A scripted server
+   * orphaned by an interrupted run holds this port and has this database open;
+   * the delete then happened underneath it, the new server could not bind, and
+   * the identity check accepted the survivor because every test instance
+   * carries the same label. The port is asked first, and an occupied one stops
+   * the run before anything is removed (L1.9).
+   */
   prepareDatabase(): void {
+    assertPortFree(this.config.port, `przygotowanie instancji scenariuszowej (${this.config.dataDir})`);
     if (existsSync(this.config.dataDir)) {
       rmSync(this.config.dataDir, { recursive: true, force: true });
     }
@@ -118,9 +130,13 @@ export class ScriptedInstance {
       this.#process.stderr?.pipe(this.#log, { end: false });
     }
     await this.#waitForHealth();
-    // Same gate as the shared instance: proceed only against a server that
-    // identifies itself as one the tests started.
-    await verifyIsolatedInstance(this.baseUrl, this.config.port);
+    /*
+     * Same gate as the shared instance, plus the one thing the label cannot
+     * say: this object spawned the process itself, so it knows which run the
+     * answering server must belong to. A survivor of an earlier run answers
+     * with the right label and the wrong run id, and is refused.
+     */
+    await verifyIsolatedInstance(this.baseUrl, this.config.port, TEST_RUN_ID);
   }
 
   async #waitForHealth(): Promise<void> {

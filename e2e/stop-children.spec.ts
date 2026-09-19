@@ -112,6 +112,7 @@ test.describe('Stop dociera do procesow uruchomienia', () => {
           'poleceniem, w trakcie wykonania i po zakonczeniu, oraz czasy trzech momentow ' +
           '(potwierdzenie zadania, koniec strumienia w karcie, zniknniecie procesu i workspace).',
         zrodlo: 'pnpm evidence:z10 → e2e/stop-children.spec.ts (regresja szablonu)',
+        rodzajWykonania: 'test GUI bez modelu',
         wersjaKodu: codeVersion(pakiety, [EVIDENCE_DIR]),
         pomiary,
       },
@@ -228,7 +229,13 @@ test.describe('Stop dociera do procesow uruchomienia', () => {
     // The record is complete whether or not it is written to disk.
     const record = writeMeasurementRecord(
       'pomiary-stop-procesy.json',
-      { opis: 'kontrola kompletnosci', zrodlo: 'assercja w tescie', pomiary, wersjaKodu: codeVersion({}, [EVIDENCE_DIR]) },
+      {
+        opis: 'kontrola kompletnosci',
+        zrodlo: 'assercja w tescie',
+        rodzajWykonania: 'test GUI bez modelu',
+        pomiary,
+        wersjaKodu: codeVersion({}, [EVIDENCE_DIR]),
+      },
       EVIDENCE_DIR,
     );
     expect(record.body).toContain('koniecProcesow');

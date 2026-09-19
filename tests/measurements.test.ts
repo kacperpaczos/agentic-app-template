@@ -280,6 +280,7 @@ describe('pomiary rozdzielone na punkty, zapisane z warunkami i wersja kodu', ()
         'Punkty pomiaru uruchomienia agenta rozdzielone: kolejka, start wykonania, pierwszy tekst, ' +
         'zakonczenie. Brak tekstu daje brak metryki, nie zero.',
       zrodlo: 'pnpm test → tests/measurements.test.ts (regresja szablonu)',
+      rodzajWykonania: 'symulacja',
       wersjaKodu: codeVersion(h.platform.versions),
       pomiary,
     });
@@ -576,6 +577,7 @@ describe('Stop: rozdzielone potwierdzenie zadania, koniec strumienia i koniec pr
         'zakonczenie strumienia zdarzen i zakonczenie procesow uruchomienia. Po zakonczeniu ' +
         'sprawdzony brak dalszych mutacji domeny i dzialajaca kolejka rozmowy.',
       zrodlo: 'pnpm test → tests/measurements.test.ts (regresja szablonu)',
+      rodzajWykonania: 'symulacja',
       wersjaKodu: codeVersion(h.platform.versions),
       pomiary: {
         stopPotwierdzenieZadania: {

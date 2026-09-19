@@ -1,6 +1,6 @@
-import { realpathSync } from 'node:fs';
-import { basename, dirname, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { claudeConfigDir } from './auth.ts';
+import { realResolve as sharedRealResolve } from '../util/real-path.ts';
 
 /**
  * The permission matrix for the Claude Agent SDK's **built-in** tools.
@@ -191,19 +191,13 @@ export function protectedDirsFor(
  * still judged by where it would really land.
  */
 export function realResolve(base: string, candidate: string): string {
-  let abs = resolve(base, candidate);
-  let rest = '';
-  for (let i = 0; i < 64; i += 1) {
-    try {
-      return rest ? resolve(realpathSync(abs), rest) : realpathSync(abs);
-    } catch {
-      const parent = dirname(abs);
-      if (parent === abs) return resolve(base, candidate);
-      rest = rest ? `${basename(abs)}/${rest}` : basename(abs);
-      abs = parent;
-    }
-  }
-  return resolve(base, candidate);
+  /*
+   * One implementation of this walk, in `util/real-path.ts`. It used to live
+   * here, and the same walk was written again in the maintenance scripts and
+   * missing altogether from the test-isolation guards — the third absence was
+   * found by a reviewer, not by a test. Same behaviour, one place to fix.
+   */
+  return sharedRealResolve(resolve(base, candidate));
 }
 
 /** True when `candidate` is `dir` itself or sits inside it. */

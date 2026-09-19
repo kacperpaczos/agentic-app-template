@@ -23,8 +23,10 @@
  * never coerced to `0`, which would read as "instantly".
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { arch, platform, release } from 'node:os';
+import { dirname, resolve } from 'node:path';
 
 /** Evidence directory of this task. Named after the task, not after older work. */
 export const EVIDENCE_DIR = 'docs/evidence/z3-bl05';
@@ -61,6 +63,212 @@ export const CODE_TREE_DIRTY_ENV = 'APP_CODE_TREE_DIRTY';
 
 /** What a commit looks like, wherever the value came from. */
 const COMMIT_RE = /^[0-9a-f]{7,40}$/;
+
+/* ------------------------- how a proof was executed ----------------------- */
+
+/**
+ * The five kinds of execution this repository recognises, spelled exactly as
+ * `AGENTS.md` and the acceptance matrix spell them.
+ *
+ * Stated on every evidence file, and required by the type, because the kind is
+ * the first thing a reader needs and the easiest thing to leave out. "The test
+ * passed" means something different when a real model answered, when a
+ * stand-in did, and when nothing ran at all and somebody read the code.
+ */
+export const EXECUTION_KINDS = [
+  'rzeczywisty model',
+  'test GUI bez modelu',
+  'test kontraktu lub logiki',
+  'symulacja',
+  'analiza kodu',
+] as const;
+export type ExecutionKind = (typeof EXECUTION_KINDS)[number];
+
+/* ----------------------------- resolved versions -------------------------- */
+
+/**
+ * Packages whose version decides what a result means.
+ *
+ * Deliberately a list and not "everything in the lockfile": a file naming two
+ * thousand transitive versions is not a record anybody reads, and the lockfile
+ * is in the repository at the commit the envelope already names. These are the
+ * ones a reader compares across two runs — the runtime, the UI library, the
+ * agent SDK and the test tooling.
+ */
+const TRACKED_PACKAGES = [
+  'react',
+  'react-dom',
+  'typescript',
+  'vite',
+  'vitest',
+  '@playwright/test',
+  '@openuidev/react-ui',
+  '@openuidev/react-headless',
+  'hono',
+  'drizzle-orm',
+  '@mastra/core',
+  '@mastra/claude',
+  '@anthropic-ai/claude-agent-sdk',
+  'zod',
+] as const;
+
+/** Where to look from: a pnpm workspace hides a dependency from the root. */
+const RESOLUTION_BASES = [
+  'package.json',
+  'apps/web/package.json',
+  'apps/server/package.json',
+  'packages/platform-server/package.json',
+  'packages/platform-ui/package.json',
+];
+
+const REPO_ROOT = resolve(import.meta.dirname, '../..');
+
+/**
+ * The version actually installed, read from the manifest that was resolved.
+ *
+ * Not from `package.json`'s range and not from the lockfile: both say what was
+ * *asked for*. Under pnpm the answer also depends on which workspace package
+ * asks, so several bases are tried — a dependency of `apps/web` is invisible
+ * from the repository root.
+ */
+function installedVersion(name: string): string | null {
+  for (const base of RESOLUTION_BASES) {
+    const from = resolve(REPO_ROOT, base);
+    if (!existsSync(from)) continue;
+    try {
+      const require = createRequire(from);
+      let dir = dirname(require.resolve(name));
+      for (let i = 0; i < 8; i += 1) {
+        const manifest = resolve(dir, 'package.json');
+        if (existsSync(manifest)) {
+          const json = JSON.parse(readFileSync(manifest, 'utf8')) as { name?: string; version?: string };
+          if (json.name === name && json.version) return json.version;
+        }
+        const parent = dirname(dir);
+        if (parent === dir) break;
+        dir = parent;
+      }
+    } catch {
+      /* not resolvable from this base — try the next */
+    }
+  }
+  return null;
+}
+
+/**
+ * Resolved versions of the packages that decide what a result means.
+ *
+ * `null` is kept rather than dropped: a package that could not be resolved is a
+ * fact about the environment, and a silently shorter list reads as "this run
+ * did not depend on it".
+ */
+export function resolvedPackages(extra: Record<string, string> = {}): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const name of TRACKED_PACKAGES) out[name] = installedVersion(name) ?? 'nieustalona';
+  return { ...out, ...extra };
+}
+
+/** Result of asking a command for its version; never throws. */
+function commandVersion(command: string, args: string[]): string | null {
+  try {
+    return execFileSync(command, args, {
+      encoding: 'utf8',
+      timeout: 10_000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .trim()
+      .split('\n')[0]!;
+  } catch {
+    return null;
+  }
+}
+
+/** Memoised: both answers cost a process and neither changes during a run. */
+let cachedPnpm: string | null | undefined;
+let cachedExternalCli: string | null | undefined;
+
+/**
+ * The CLI **inside** the SDK, which is not the CLI on the PATH.
+ *
+ * The SDK ships its own `claude` binary and a `manifest.json` naming its
+ * version, commit and build date. That version and the one `claude --version`
+ * prints drift apart — on the machine this was written they were 2.1.270 and
+ * 2.1.277 — and a run goes through the SDK's copy. A record that names only the
+ * SDK package version (0.3.x) or only the external CLI therefore does not say
+ * which agent produced the result. Kryterium L1.12 says this in as many words:
+ * the lockfile is not the only source of the CLI version.
+ */
+export function sdkCliVersion(): { wersja: string; commit: string; dataBudowy: string } | null {
+  for (const base of ['packages/platform-server/package.json', 'apps/server/package.json', 'package.json']) {
+    const from = resolve(REPO_ROOT, base);
+    if (!existsSync(from)) continue;
+    try {
+      const require = createRequire(from);
+      const entry = require.resolve('@anthropic-ai/claude-agent-sdk');
+      let dir = dirname(entry);
+      for (let i = 0; i < 6; i += 1) {
+        const manifest = resolve(dir, 'manifest.json');
+        if (existsSync(manifest)) {
+          const json = JSON.parse(readFileSync(manifest, 'utf8')) as {
+            version?: string;
+            commit?: string;
+            buildDate?: string;
+          };
+          if (json.version) {
+            return {
+              wersja: json.version,
+              commit: json.commit ?? 'nieznany',
+              dataBudowy: json.buildDate ?? 'nieznana',
+            };
+          }
+        }
+        const parent = dirname(dir);
+        if (parent === dir) break;
+        dir = parent;
+      }
+    } catch {
+      /* try the next base */
+    }
+  }
+  return null;
+}
+
+export interface Environment {
+  /** Operating system and architecture, without any local path. */
+  system: string;
+  node: string;
+  pnpm: string | null;
+  /** CLI found on PATH — may differ from the one the SDK runs. */
+  cliZewnetrzne: string | null;
+  /** CLI shipped inside the SDK: the one an agent run actually executes. */
+  cliWSdk: { wersja: string; commit: string; dataBudowy: string } | null;
+  /** Model the instance is configured with, when the run set one. */
+  model: string | null;
+  pakiety: Record<string, string>;
+}
+
+/**
+ * Where the result was produced — the half of provenance the commit does not
+ * cover.
+ *
+ * No absolute path, user name or home directory is recorded: an evidence file
+ * is published with the repository, and the acceptance conditions forbid local
+ * paths and secrets in it.
+ */
+export function environment(extraPackages: Record<string, string> = {}): Environment {
+  cachedPnpm = cachedPnpm === undefined ? commandVersion('pnpm', ['--version']) : cachedPnpm;
+  cachedExternalCli =
+    cachedExternalCli === undefined ? commandVersion('claude', ['--version']) : cachedExternalCli;
+  return {
+    system: `${platform()} ${release()} ${arch()}`,
+    node: process.versions.node,
+    pnpm: cachedPnpm,
+    cliZewnetrzne: cachedExternalCli,
+    cliWSdk: sdkCliVersion(),
+    model: process.env.APP_MODEL ?? null,
+    pakiety: resolvedPackages(extraPackages),
+  };
+}
 
 /**
  * Whether this run may write into the evidence directory.
@@ -220,6 +428,14 @@ export interface MeasurementRecord {
   opis: string;
   /** How the numbers were produced: which command, run by whom. */
   zrodlo: string;
+  /**
+   * How it was executed, in the repository's own vocabulary.
+   *
+   * Required by the type, not by a convention: a reader's first question about
+   * any number here is whether a real model produced it, a stand-in did, or
+   * nobody ran anything. Leaving it out was possible, and it was left out.
+   */
+  rodzajWykonania: ExecutionKind;
   wersjaKodu: CodeVersion;
   pomiary: Record<string, Measurement>;
 }
@@ -243,8 +459,10 @@ export function writeMeasurementRecord(
   const body = {
     opis: record.opis,
     zrodlo: record.zrodlo,
+    rodzajWykonania: record.rodzajWykonania,
     zapisano: new Date().toISOString(),
     wersjaKodu,
+    srodowisko: environment(),
     uwagaOJednostkach:
       'Wartosci w milisekundach zaleza od maszyny i obciazenia. Powtarzalne jest to, co ' +
       'asertuje regresja: kolejnosc punktow pomiaru, ich rozdzielenie i obecnosc albo brak metryki.',
@@ -264,7 +482,42 @@ export function writeMeasurementRecord(
   return emit(fileName, `${JSON.stringify(body, null, 2)}\n`, dir);
 }
 
-/** Writes a non-measurement proof (correlation, error classes, secret scan). */
-export function writeEvidence(fileName: string, body: unknown, dir: string = EVIDENCE_DIR): EvidenceResult {
-  return emit(fileName, `${JSON.stringify(body, null, 2)}\n`, dir);
+/**
+ * Anything a proof file carries, plus the three things every one of them must.
+ *
+ * `rodzajWykonania` is required; the rest of the shape is the caller's. The
+ * index signature is what lets a caller keep its own vocabulary — this module
+ * has no business naming the fields of somebody else's proof.
+ */
+export interface EvidenceBody {
+  rodzajWykonania: ExecutionKind;
+  /** Overrides the automatic one, e.g. to exclude the task's own directory. */
+  wersjaKodu?: CodeVersion;
+  [key: string]: unknown;
+}
+
+/**
+ * Writes a non-measurement proof (correlation, error classes, secret scan).
+ *
+ * Every file gets the same envelope: when it was written, from which commit and
+ * whether the tree was clean, in which environment, and how it was executed.
+ * Kryterium L12.10 asks exactly that of *each* proof — until this envelope
+ * existed, a result from the template was indistinguishable from one carried
+ * over from another application, and a stale result could keep confirming an
+ * integration that had since changed.
+ */
+export function writeEvidence(
+  fileName: string,
+  body: EvidenceBody,
+  dir: string = EVIDENCE_DIR,
+): EvidenceResult {
+  const { rodzajWykonania, wersjaKodu, ...rest } = body;
+  const envelope = {
+    zapisano: new Date().toISOString(),
+    rodzajWykonania,
+    wersjaKodu: wersjaKodu ?? codeVersion(undefined, [dir]),
+    srodowisko: environment(),
+    ...rest,
+  };
+  return emit(fileName, `${JSON.stringify(envelope, null, 2)}\n`, dir);
 }

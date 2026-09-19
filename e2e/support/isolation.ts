@@ -1,4 +1,5 @@
 import { basename, isAbsolute, relative, resolve } from 'node:path';
+import { isSymlink, realResolve } from '../../packages/platform-server/src/util/real-path.ts';
 
 /**
  * Configuration guard for the browser suites.
@@ -38,6 +39,21 @@ import { basename, isAbsolute, relative, resolve } from 'node:path';
 
 /** Label every server started by this repository's test suites carries. */
 export const TEST_INSTANCE_LABEL = 'agenticapp-test';
+
+/**
+ * Identifier of *this* run, carried by the servers it starts.
+ *
+ * The label answers "is this a test instance"; it is the same string for every
+ * test instance ever started, so it cannot answer "is this **my** test
+ * instance". A scripted server orphaned by an interrupted run answers the
+ * health check with the same label as the one this run meant to start, and the
+ * identity check accepted it — on a database this run had just deleted.
+ *
+ * One value per process, generated once and passed to every server this process
+ * spawns, so the question has an answer that a survivor of an earlier run
+ * cannot give.
+ */
+export const TEST_RUN_ID = `${process.pid.toString(36)}-${Date.now().toString(36)}`;
 
 /** Ports reserved for automated tests; deliberately above the app default. */
 export const TEST_PORT_RANGE = { from: 8792, to: 8799 } as const;
@@ -81,25 +97,57 @@ export function assertTestPort(port: number, what: string): number {
  * one that matters for deletion: `globalSetup` removes this directory outright,
  * and a relative path resolved from an unexpected working directory is exactly
  * how such a call reaches somewhere it should not.
+ *
+ * **Every check is made twice**: once on the path as written and once on where
+ * it really points. Until it was, the whole guard was a statement about text —
+ * a `.e2e-data` that is a symbolic link to the user's `data/` satisfied all
+ * three conditions above (inside the repository, named `.e2e*`, not literally
+ * `data`) and the labelled test instance then wrote into the user's database.
+ * The link is refused outright as well, because the harness *deletes* this
+ * directory and no guard should rest on whether a delete follows a link or
+ * removes it.
  */
 export function assertTestDataDir(dir: string, repoRoot: string, what: string): string {
   const abs = resolve(dir);
   if (!isAbsolute(abs)) throw new TestIsolationError(`${what}: "${dir}" nie jest sciezka bezwzgledna.`);
 
-  const rel = relative(resolve(repoRoot), abs);
-  if (rel.startsWith('..') || isAbsolute(rel)) {
-    throw new TestIsolationError(`${what}: ${abs} lezy poza katalogiem repozytorium (${repoRoot}).`);
-  }
-  if (rel === '') {
-    throw new TestIsolationError(`${what}: ${abs} to katalog glowny repozytorium.`);
-  }
-  if (!basename(abs).startsWith('.e2e')) {
+  if (isSymlink(abs)) {
     throw new TestIsolationError(
-      `${what}: ${abs} nie nazywa sie jak katalog testowy (wymagany prefiks ".e2e").`,
+      `${what}: ${abs} jest dowiazaniem symbolicznym (wskazuje ${realResolve(abs)}). ` +
+        'Katalog testowy musi byc prawdziwym katalogiem — testy go kasuja.',
     );
   }
-  if (abs === resolve(repoRoot, 'data')) {
-    throw new TestIsolationError(`${what}: ${abs} to katalog danych aplikacji.`);
+
+  const realRepo = realResolve(repoRoot);
+  const real = realResolve(abs);
+  /*
+   * Both spellings are checked against both roots: the written path against the
+   * written root, and the real path against the real root. Checking only one
+   * pair leaves the other as the way through.
+   */
+  for (const [candidate, root] of [
+    [abs, resolve(repoRoot)],
+    [real, realRepo],
+  ] as const) {
+    const rel = relative(root, candidate);
+    if (rel.startsWith('..') || isAbsolute(rel)) {
+      throw new TestIsolationError(
+        `${what}: ${candidate} lezy poza katalogiem repozytorium (${root}).` +
+          (candidate === real && real !== abs ? ` Sciezka ${abs} wskazuje tam przez dowiazanie.` : ''),
+      );
+    }
+    if (rel === '') {
+      throw new TestIsolationError(`${what}: ${candidate} to katalog glowny repozytorium.`);
+    }
+    if (!basename(candidate).startsWith('.e2e')) {
+      throw new TestIsolationError(
+        `${what}: ${candidate} nie nazywa sie jak katalog testowy (wymagany prefiks ".e2e").` +
+          (candidate === real && real !== abs ? ` To rzeczywisty cel ${abs}.` : ''),
+      );
+    }
+  }
+  if (abs === resolve(repoRoot, 'data') || real === resolve(realRepo, 'data')) {
+    throw new TestIsolationError(`${what}: ${abs} to katalog danych aplikacji (${real}).`);
   }
   return abs;
 }
@@ -178,6 +226,9 @@ export function resolveTestInstance(input: {
       PORT: String(port),
       APP_DATA_DIR: dataDir,
       APP_INSTANCE_LABEL: TEST_INSTANCE_LABEL,
+      // Identifies this run, so a server left over from an earlier one cannot
+      // pass for the server this run just started. See TEST_RUN_ID.
+      APP_INSTANCE_RUN_ID: TEST_RUN_ID,
       APP_WEB_DIST: input.webDist ?? resolve(repoRoot, 'apps/web/dist'),
       APP_ALLOWED_ORIGINS: `http://127.0.0.1:${port},http://localhost:${port}`,
     },
@@ -196,12 +247,16 @@ export function resolveTestInstance(input: {
  */
 export async function readInstanceLabel(
   baseUrl: string,
-): Promise<{ label: string | null } | { unreachable: string }> {
+): Promise<{ label: string | null; runId: string | null } | { unreachable: string }> {
   try {
     const res = await fetch(`${baseUrl}/api/health`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const body = (await res.json()) as { ok?: boolean; instanceLabel?: string | null };
-    return { label: body.instanceLabel ?? null };
+    const body = (await res.json()) as {
+      ok?: boolean;
+      instanceLabel?: string | null;
+      instanceRunId?: string | null;
+    };
+    return { label: body.instanceLabel ?? null, runId: body.instanceRunId ?? null };
   } catch (e) {
     return { unreachable: (e as Error).message };
   }
@@ -219,6 +274,12 @@ export async function assertInstanceLabel(
   baseUrl: string,
   expected: string,
   what: string,
+  /**
+   * Identifier this run's own servers carry. Passed by a caller that started
+   * the server itself; omitted where the instance may legitimately come from
+   * elsewhere (a `webServer` Playwright started in another process).
+   */
+  expectedRunId?: string,
 ): Promise<void> {
   const answer = await readInstanceLabel(baseUrl);
   if ('unreachable' in answer) {
@@ -231,9 +292,23 @@ export async function assertInstanceLabel(
         'To moze byc instancja uzytkownika — nie bedziemy przez nia pisac.',
     );
   }
+  if (expectedRunId !== undefined && answer.runId !== expectedRunId) {
+    throw new TestIsolationError(
+      `Pod ${baseUrl} odpowiada instancja testowa Z INNEGO PRZEBIEGU ` +
+        `(instanceRunId=${JSON.stringify(answer.runId)}, oczekiwano ${JSON.stringify(expectedRunId)}). ` +
+        'Etykieta jest wspolna dla wszystkich instancji testowych, wiec sama nie odroznia serwera ' +
+        'osieroconego po przerwanym przebiegu od tego, ktory ten przebieg wlasnie uruchomil. ' +
+        'Zatrzymaj tamten proces po jego pid i uruchom przebieg ponownie.',
+    );
+  }
 }
 
-/** The test suites' own policy: only an instance this repository's tests started. */
-export async function assertIsolatedInstance(baseUrl: string): Promise<void> {
-  await assertInstanceLabel(baseUrl, TEST_INSTANCE_LABEL, 'Instancja testowa');
+/**
+ * The test suites' own policy: only an instance this repository's tests started.
+ *
+ * `runId` is checked when the caller started the server itself and can
+ * therefore say which run it belongs to.
+ */
+export async function assertIsolatedInstance(baseUrl: string, expectedRunId?: string): Promise<void> {
+  await assertInstanceLabel(baseUrl, TEST_INSTANCE_LABEL, 'Instancja testowa', expectedRunId);
 }

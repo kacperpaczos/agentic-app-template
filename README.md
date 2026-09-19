@@ -313,8 +313,17 @@ Licznik i to sprawdzenie obejmują **tylko** spec odbiorowy. `e2e/agent-ui.spec.
 kosztuje 11 tur nawet wtedy, gdy spec odbiorowy sam się pominie.
 
 `pnpm acceptance` i `scripts/run-agent.mjs` działają inaczej: łączą się z **działającą** instancją
-(domyślnie `http://127.0.0.1:8791`) i zmieniają jej dane. Kieruj je tylko na osobną instancję z
-osobnym katalogiem danych, np. przez `APP_BASE=http://127.0.0.1:8790`.
+(`APP_BASE`, domyślnie `http://127.0.0.1:8790`) i **zmieniają jej dane** — zmieniają ilość pozycji i
+dodają karty. Dlatego, zanim wyślą pierwsze żądanie, pytają `/api/health`, kto tam odpowiada:
+instancja musi mieć etykietę `agenticapp-dev`, `agenticapp-test` albo `agenticapp-acceptance`.
+Zainstalowana instancja nie ma żadnej etykiety, więc odpowiedź bez etykiety kończy się odmową i
+kodem wyjścia 3, zanim cokolwiek zostanie zapisane; `APP_BASE` wskazujący port 8791 jest odrzucany z
+podaniem powodu, tak samo jak adres spoza pętli zwrotnej. Instancję odbiorową uruchamiasz świadomie:
+
+```bash
+APP_INSTANCE_LABEL=agenticapp-acceptance APP_DATA_DIR=$PWD/.acceptance-data \
+  PORT=8790 APP_ALLOWED_ORIGINS=http://127.0.0.1:8790 pnpm start
+```
 
 ## Własna aplikacja na tym szablonie
 

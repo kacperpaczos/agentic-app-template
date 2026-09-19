@@ -343,7 +343,13 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
    * unauthenticated, so it says who answered, never where their data lives.
    */
   app.get('/api/health', (c) =>
-    json(c, { ok: true, instanceLabel: services.config.instanceLabel }),
+    json(c, {
+      ok: true,
+      instanceLabel: services.config.instanceLabel,
+      // Which *run* started this process. The label says "a test instance";
+      // only this says "the one you started" (see config.ts, L1.9).
+      instanceRunId: services.config.instanceRunId,
+    }),
   );
 
   /* ------------------------------ status -------------------------------- */

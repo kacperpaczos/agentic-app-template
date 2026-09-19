@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
+import { isSymlink, realResolve } from './util/real-path.ts';
 
 const int = (v: string | undefined, d: number) => {
   const n = v ? Number.parseInt(v, 10) : Number.NaN;
@@ -39,6 +40,17 @@ export interface PlatformConfig {
    * labelled process anywhere near real data.
    */
   instanceLabel: string | null;
+  /**
+   * Identifies the *run* that started this process (`APP_INSTANCE_RUN_ID`).
+   *
+   * Set alongside `instanceLabel` by the test harness and echoed on
+   * `/api/health` for the same reason the label is — with one difference that
+   * matters: the label is identical for every test instance ever started, so it
+   * proves "a test instance" and not "the instance this run just started". A
+   * server orphaned by an interrupted run answers with the right label on a
+   * database the new run has already deleted.
+   */
+  instanceRunId: string | null;
 }
 
 /** Label every server started by this repository's test suites carries. */
@@ -77,14 +89,37 @@ export function assertTestInstanceIsIsolated(cfg: PlatformConfig, defaultDataDir
         `(${TEST_PORT_RANGE.from}-${TEST_PORT_RANGE.to})`,
     );
   }
-  if (cfg.dataDir === defaultDataDir) {
-    problems.push(`katalog danych ${cfg.dataDir} to domyslny katalog aplikacji`);
-  }
-  if (!basename(cfg.dataDir).startsWith('.e2e')) {
+
+  /*
+   * The same directory, asked about twice: as written and as the filesystem
+   * would reach it. A lexical comparison alone answers a question about text,
+   * and a `.e2e-data` that is a symbolic link to the application's `data/`
+   * passes every one of these conditions while the database it opens is the
+   * user's. `realResolve` also follows links in the *ancestors*, so an
+   * `APP_DATA_DIR` under a linked parent is judged by where it lands.
+   */
+  const realData = realResolve(cfg.dataDir);
+  const realDefault = realResolve(defaultDataDir);
+
+  if (isSymlink(cfg.dataDir)) {
     problems.push(
-      `katalog danych ${cfg.dataDir} nie nazywa sie jak katalog testowy ` +
-        '(wymagany prefiks ".e2e" w nazwie katalogu)',
+      `katalog danych ${cfg.dataDir} jest dowiazaniem symbolicznym i wskazuje ${realData}`,
     );
+  }
+  if (cfg.dataDir === defaultDataDir || realData === realDefault) {
+    problems.push(
+      `katalog danych ${cfg.dataDir} to domyslny katalog aplikacji` +
+        (realData !== cfg.dataDir ? ` (rzeczywiscie ${realData})` : ''),
+    );
+  }
+  for (const candidate of new Set([cfg.dataDir, realData])) {
+    if (!basename(candidate).startsWith('.e2e')) {
+      problems.push(
+        `katalog danych ${candidate} nie nazywa sie jak katalog testowy ` +
+          '(wymagany prefiks ".e2e" w nazwie katalogu)' +
+          (candidate === realData && realData !== cfg.dataDir ? ` — to rzeczywisty cel ${cfg.dataDir}` : ''),
+      );
+    }
   }
 
   if (problems.length > 0) {
@@ -118,6 +153,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PlatformConfig
     consentTimeoutMs: int(env.APP_CONSENT_TIMEOUT_MS, 120_000),
     maxUploadBytes: int(env.APP_MAX_UPLOAD_BYTES, 8 * 1024 * 1024),
     instanceLabel: env.APP_INSTANCE_LABEL ?? null,
+    instanceRunId: env.APP_INSTANCE_RUN_ID ?? null,
   };
   // Before `mkdirSync`: a misconfigured test instance must not even create a
   // directory next to real data, let alone open the database there.

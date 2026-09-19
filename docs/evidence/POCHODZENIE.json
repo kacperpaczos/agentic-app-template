@@ -1,0 +1,509 @@
+{
+  "opis": "Pochodzenie dowodow zapisanych ZANIM powstala koperta dowodowa (commit, srodowisko, rodzaj wykonania w kazdym pliku). Rejestr jest zamkniety: nowy plik dowodowy bez koperty oblewa tests/evidence-provenance.test.ts, wiec ta lista moze tylko maleć — przy kazdej regeneracji dowodu jego wpis znika stad, bo plik zaczyna niesc kopertę sam.",
+  "dlaczego": "L12.10 wymaga, zeby kazdy dowod wskazywal wersje kodu, srodowisko i rodzaj wykonania, i zeby dawny wynik nie potwierdzal automatycznie zmienionej integracji. Dopisanie tych pol do starych plikow byloby zmysleniem: srodowiska tamtych przebiegow nikt nie zapisal. Zamiast tego kazdy taki plik ma tu commit, w ktorym wszedl do repozytorium, wytworce i rodzaj wykonania — a pole czegoBrakujeWPliku mowi wprost, czego o nim nie wiadomo.",
+  "zasadaKontroli": "Plik *.json w docs/evidence przechodzi, gdy niesie wersje kodu ORAZ rodzaj wykonania. Inaczej musi byc w tym rejestrze. Wpis wskazujacy nieistniejacy plik oraz wpis dla pliku, ktory juz niesie koperte, sa bledem — rejestr nie moze zostac po regeneracji.",
+  "wpisy": [
+    {
+      "plik": "docs/evidence/bl01-bl02-2026-09-17/t25-wskazanie-wartosci.json",
+      "commitDodania": "492bfbca7368bdf1f20ad94e2d1a8bc9a0b15597",
+      "rodzajWykonania": "rzeczywisty model",
+      "wytworca": "e2e/bl01-bl02-model.spec.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/bl01-bl02-2026-09-17/t26-zawezenie-rozmowa.json",
+      "commitDodania": "962e24a9c5986497813984ed01a17cf46356c79f",
+      "rodzajWykonania": "rzeczywisty model",
+      "wytworca": "e2e/bl01-bl02-model.spec.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/bl01-bl02-2026-09-17/t27-kroki-5-6.json",
+      "commitDodania": "15c89947a9359211e72f162b0da4049dc065a570",
+      "rodzajWykonania": "rzeczywisty model",
+      "wytworca": "e2e/bl01-bl02-model.spec.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/bl01-bl02-2026-09-17/t27-proba-a-kod-sprawy-jako-id.json",
+      "commitDodania": "d0083cadf0ee242d2e698aeaed5449afc91d0d45",
+      "rodzajWykonania": "rzeczywisty model",
+      "wytworca": "e2e/bl01-bl02-model.spec.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/bl01-bl02-2026-09-17/t27-przed-task-9-wykres-nienarysowany.json",
+      "commitDodania": "e07fe47bd06b8587e0719bbe6a925299012b3028",
+      "rodzajWykonania": "rzeczywisty model",
+      "wytworca": "e2e/bl01-bl02-model.spec.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/bl01-bl02-2026-09-17/t27-widoki-agenta.json",
+      "commitDodania": "7132b95b39839af4bb853f5e7c2fdc8b7bbb99bc",
+      "rodzajWykonania": "rzeczywisty model",
+      "wytworca": "e2e/bl01-bl02-model.spec.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/bl01-bl02-2026-09-17/tury-modelu.json",
+      "commitDodania": "492bfbca7368bdf1f20ad94e2d1a8bc9a0b15597",
+      "rodzajWykonania": null,
+      "wytworca": "e2e/support/model-turns.ts (licznik grantu)",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "wersja kodu",
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ],
+      "uwaga": "rejestr wydanych tur subskrypcji, nie zapis przebiegu"
+    },
+    {
+      "plik": "docs/evidence/closure-2026-09-15/20-pomiary.json",
+      "commitDodania": "0affbbfd65eb59117fe7befb824af93aa19fd810",
+      "rodzajWykonania": "test GUI bez modelu",
+      "wytworca": "skrypty odbiorowe sprzed konsolidacji (scripts/closure-*.mjs, audit-probes-*.mjs)",
+      "pochodzenie": "AgenticApp 2026-09-15 (poza szablonem) — wynik historyczny, nie dowod z tego repozytorium",
+      "czegoBrakujeWPliku": [
+        "wersja kodu",
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/closure-2026-09-15/21-strumien.json",
+      "commitDodania": "0affbbfd65eb59117fe7befb824af93aa19fd810",
+      "rodzajWykonania": "test GUI bez modelu",
+      "wytworca": "skrypty odbiorowe sprzed konsolidacji (scripts/closure-*.mjs, audit-probes-*.mjs)",
+      "pochodzenie": "AgenticApp 2026-09-15 (poza szablonem) — wynik historyczny, nie dowod z tego repozytorium",
+      "czegoBrakujeWPliku": [
+        "wersja kodu",
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/template-consolidation/przebieg-2-7d6bd78/06-module-swap.json",
+      "commitDodania": "825c0860b4e78a1397728c5c4c832bf80a02d66a",
+      "rodzajWykonania": "test kontraktu lub logiki",
+      "wytworca": "scripts/check-module-swap.mjs",
+      "pochodzenie": "czysta kopia szablonu 7d6bd78 (docs/evidence/template-consolidation/README.md)",
+      "czegoBrakujeWPliku": [
+        "wersja kodu",
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/template-consolidation/przebieg-2-7d6bd78/pomiary-e2e/20-pomiary.json",
+      "commitDodania": "825c0860b4e78a1397728c5c4c832bf80a02d66a",
+      "rodzajWykonania": "test GUI bez modelu",
+      "wytworca": "skrypty odbiorowe sprzed konsolidacji (scripts/closure-*.mjs, audit-probes-*.mjs)",
+      "pochodzenie": "czysta kopia szablonu 7d6bd78 (docs/evidence/template-consolidation/README.md)",
+      "czegoBrakujeWPliku": [
+        "wersja kodu",
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/template-consolidation/przebieg-2-7d6bd78/pomiary-e2e/21-strumien.json",
+      "commitDodania": "825c0860b4e78a1397728c5c4c832bf80a02d66a",
+      "rodzajWykonania": "test GUI bez modelu",
+      "wytworca": "skrypty odbiorowe sprzed konsolidacji (scripts/closure-*.mjs, audit-probes-*.mjs)",
+      "pochodzenie": "czysta kopia szablonu 7d6bd78 (docs/evidence/template-consolidation/README.md)",
+      "czegoBrakujeWPliku": [
+        "wersja kodu",
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/template-consolidation/przebieg-2-7d6bd78/pomiary-e2e/22-strumien-model.json",
+      "commitDodania": "825c0860b4e78a1397728c5c4c832bf80a02d66a",
+      "rodzajWykonania": "rzeczywisty model",
+      "wytworca": "skrypty odbiorowe sprzed konsolidacji (scripts/closure-*.mjs, audit-probes-*.mjs)",
+      "pochodzenie": "czysta kopia szablonu 7d6bd78 (docs/evidence/template-consolidation/README.md)",
+      "czegoBrakujeWPliku": [
+        "wersja kodu",
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/template-update-2026-09-17/przebieg-d142b85/06-module-swap.json",
+      "commitDodania": "1b57f81e332102125f3e0c0976faa5639d187394",
+      "rodzajWykonania": "test kontraktu lub logiki",
+      "wytworca": "scripts/check-module-swap.mjs",
+      "pochodzenie": "czysta kopia szablonu d142b85 (docs/evidence/template-update-2026-09-17/README.md)",
+      "czegoBrakujeWPliku": [
+        "wersja kodu",
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/template-update-2026-09-17/przebieg-d142b85/09-sonda-ui-filter-model.json",
+      "commitDodania": "1b57f81e332102125f3e0c0976faa5639d187394",
+      "rodzajWykonania": "rzeczywisty model",
+      "wytworca": "scripts/audit-probes-model.mjs",
+      "pochodzenie": "czysta kopia szablonu d142b85 (docs/evidence/template-update-2026-09-17/README.md)",
+      "czegoBrakujeWPliku": [
+        "wersja kodu",
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/template-update-2026-09-17/przebieg-d142b85/pomiary-e2e/20-pomiary.json",
+      "commitDodania": "1b57f81e332102125f3e0c0976faa5639d187394",
+      "rodzajWykonania": "test GUI bez modelu",
+      "wytworca": "skrypty odbiorowe sprzed konsolidacji (scripts/closure-*.mjs, audit-probes-*.mjs)",
+      "pochodzenie": "czysta kopia szablonu d142b85 (docs/evidence/template-update-2026-09-17/README.md)",
+      "czegoBrakujeWPliku": [
+        "wersja kodu",
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/template-update-2026-09-17/przebieg-d142b85/pomiary-e2e/21-strumien.json",
+      "commitDodania": "1b57f81e332102125f3e0c0976faa5639d187394",
+      "rodzajWykonania": "test GUI bez modelu",
+      "wytworca": "skrypty odbiorowe sprzed konsolidacji (scripts/closure-*.mjs, audit-probes-*.mjs)",
+      "pochodzenie": "czysta kopia szablonu d142b85 (docs/evidence/template-update-2026-09-17/README.md)",
+      "czegoBrakujeWPliku": [
+        "wersja kodu",
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/template-update-2026-09-17/przebieg-d142b85/pomiary-e2e/22-strumien-model.json",
+      "commitDodania": "1b57f81e332102125f3e0c0976faa5639d187394",
+      "rodzajWykonania": "rzeczywisty model",
+      "wytworca": "skrypty odbiorowe sprzed konsolidacji (scripts/closure-*.mjs, audit-probes-*.mjs)",
+      "pochodzenie": "czysta kopia szablonu d142b85 (docs/evidence/template-update-2026-09-17/README.md)",
+      "czegoBrakujeWPliku": [
+        "wersja kodu",
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z1-bl06/01-check-module-swap.json",
+      "commitDodania": "2b79f2e83fac52d05144a82b47e0cd133f35283a",
+      "rodzajWykonania": "test kontraktu lub logiki",
+      "wytworca": "scripts/check-module-swap.mjs",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "wersja kodu",
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z1-bl06/10-check-module-swap-na-HEAD.json",
+      "commitDodania": "cba68715dd9263ae5812651a10318e7e7078740c",
+      "rodzajWykonania": "test kontraktu lub logiki",
+      "wytworca": "scripts/check-module-swap.mjs",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "wersja kodu",
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z1-bl06/13-check-module-swap-runda3.json",
+      "commitDodania": "eb85c180d1ae1d9a74c7d2eba5b56cf7e5b75ed2",
+      "rodzajWykonania": "test kontraktu lub logiki",
+      "wytworca": "scripts/check-module-swap.mjs",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "wersja kodu",
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z1-bl06/16-check-module-swap-runda4.json",
+      "commitDodania": "7d41f6f20d40893eace84cbf3cc66418f27bd868",
+      "rodzajWykonania": "test kontraktu lub logiki",
+      "wytworca": "scripts/check-module-swap.mjs",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "wersja kodu",
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z10-bl09/pomiary-stop-procesy.json",
+      "commitDodania": "5d60c6ef259cfaedf358613a5a2e91b671a75a9e",
+      "rodzajWykonania": "test GUI bez modelu",
+      "wytworca": "e2e/stop-children.spec.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z2-bl07/04-raport-proby.json",
+      "commitDodania": "68e8564c8a054c7ad6f2de77a074a2fd44c97b41",
+      "rodzajWykonania": "test kontraktu lub logiki",
+      "wytworca": "scripts/migration-rehearsal.mjs",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "wersja kodu",
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z3-bl05/check-module-swap-runda4.json",
+      "commitDodania": "51e51d24d4acbd6168509c6e210e3998a7988d3f",
+      "rodzajWykonania": "test kontraktu lub logiki",
+      "wytworca": "scripts/check-module-swap.mjs",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z3-bl05/check-module-swap.json",
+      "commitDodania": "0a6ac5f57cdfe5d2b4e093a05d1fb2e5b69aaabd",
+      "rodzajWykonania": "test kontraktu lub logiki",
+      "wytworca": "scripts/check-module-swap.mjs",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z3-bl05/klasy-bledow-runda2.json",
+      "commitDodania": "22674a9cf0bba98b8563e8037348c80869a09323",
+      "rodzajWykonania": "symulacja",
+      "wytworca": "tests/measurements.test.ts, tests/diagnostics.test.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z3-bl05/klasy-bledow-runda3.json",
+      "commitDodania": "0a6ac5f57cdfe5d2b4e093a05d1fb2e5b69aaabd",
+      "rodzajWykonania": "symulacja",
+      "wytworca": "tests/measurements.test.ts, tests/diagnostics.test.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z3-bl05/klasy-bledow.json",
+      "commitDodania": "fc6301231b8c203fd0d3121395c1f7cbae8ec272",
+      "rodzajWykonania": "symulacja",
+      "wytworca": "tests/measurements.test.ts, tests/diagnostics.test.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z3-bl05/pomiary-backend-runda2.json",
+      "commitDodania": "22674a9cf0bba98b8563e8037348c80869a09323",
+      "rodzajWykonania": "symulacja",
+      "wytworca": "tests/measurements.test.ts, tests/diagnostics.test.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z3-bl05/pomiary-backend-runda3.json",
+      "commitDodania": "0a6ac5f57cdfe5d2b4e093a05d1fb2e5b69aaabd",
+      "rodzajWykonania": "symulacja",
+      "wytworca": "tests/measurements.test.ts, tests/diagnostics.test.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z3-bl05/pomiary-backend.json",
+      "commitDodania": "fc6301231b8c203fd0d3121395c1f7cbae8ec272",
+      "rodzajWykonania": "symulacja",
+      "wytworca": "tests/measurements.test.ts, tests/diagnostics.test.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z3-bl05/pomiary-przegladarka.json",
+      "commitDodania": "fc6301231b8c203fd0d3121395c1f7cbae8ec272",
+      "rodzajWykonania": "test GUI bez modelu",
+      "wytworca": "e2e/measurements.spec.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z3-bl05/pomiary-stop-runda2.json",
+      "commitDodania": "22674a9cf0bba98b8563e8037348c80869a09323",
+      "rodzajWykonania": "symulacja",
+      "wytworca": "tests/measurements.test.ts, tests/diagnostics.test.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z3-bl05/pomiary-stop-runda3.json",
+      "commitDodania": "0a6ac5f57cdfe5d2b4e093a05d1fb2e5b69aaabd",
+      "rodzajWykonania": "symulacja",
+      "wytworca": "tests/measurements.test.ts, tests/diagnostics.test.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z3-bl05/pomiary-stop.json",
+      "commitDodania": "fc6301231b8c203fd0d3121395c1f7cbae8ec272",
+      "rodzajWykonania": "symulacja",
+      "wytworca": "tests/measurements.test.ts, tests/diagnostics.test.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z3-bl05/powiazanie-diagnostyczne-runda2.json",
+      "commitDodania": "22674a9cf0bba98b8563e8037348c80869a09323",
+      "rodzajWykonania": "symulacja",
+      "wytworca": "tests/measurements.test.ts, tests/diagnostics.test.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z3-bl05/powiazanie-diagnostyczne-runda3.json",
+      "commitDodania": "0a6ac5f57cdfe5d2b4e093a05d1fb2e5b69aaabd",
+      "rodzajWykonania": "symulacja",
+      "wytworca": "tests/measurements.test.ts, tests/diagnostics.test.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z3-bl05/powiazanie-diagnostyczne.json",
+      "commitDodania": "fc6301231b8c203fd0d3121395c1f7cbae8ec272",
+      "rodzajWykonania": "symulacja",
+      "wytworca": "tests/measurements.test.ts, tests/diagnostics.test.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z3-bl05/sekrety-w-diagnostyce-runda2.json",
+      "commitDodania": "22674a9cf0bba98b8563e8037348c80869a09323",
+      "rodzajWykonania": "symulacja",
+      "wytworca": "tests/measurements.test.ts, tests/diagnostics.test.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z3-bl05/sekrety-w-diagnostyce-runda3.json",
+      "commitDodania": "0a6ac5f57cdfe5d2b4e093a05d1fb2e5b69aaabd",
+      "rodzajWykonania": "symulacja",
+      "wytworca": "tests/measurements.test.ts, tests/diagnostics.test.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z3-bl05/sekrety-w-diagnostyce.json",
+      "commitDodania": "fc6301231b8c203fd0d3121395c1f7cbae8ec272",
+      "rodzajWykonania": "symulacja",
+      "wytworca": "tests/measurements.test.ts, tests/diagnostics.test.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z5-bl11a/kontekst-aplikacji.json",
+      "commitDodania": "cca98a6d99049e9934899d7c9f5dc3b84ef41399",
+      "rodzajWykonania": "test kontraktu lub logiki",
+      "wytworca": "tests/app-context.test.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    },
+    {
+      "plik": "docs/evidence/z7-bl11c/bl11c-cache-i-artefakty.json",
+      "commitDodania": "0eded16258b7014bc30b627071fa1cf0a22c3862",
+      "rodzajWykonania": "test kontraktu lub logiki",
+      "wytworca": "tests/cache-evidence.test.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)"
+      ]
+    }
+  ]
+}
