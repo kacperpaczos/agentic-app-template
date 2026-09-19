@@ -23,7 +23,7 @@ sprzątanie i procesy prawdziwe) albo *test GUI bez modelu*.
 | `pnpm check:module-swap` | 0 | podmiana modułu na kontrolny; 163 s |
 | `pnpm evidence:z10` | 0 | `pomiary-stop-procesy.json` (commit `c1c9d7c`, `brudneDrzewo: false`) |
 
-## Domknięcie L9.7 — przebiegi i dowód z interfejsu (wrzesień, commit `a590e70`)
+## Domknięcie L9.7 — przebiegi i dowód z interfejsu (wrzesień, dowód na czystym drzewie `6a59a74`)
 
 Kontekst: `canvas_add_card`, `agent_view_create`, `files_publish_version` i — znalezione audytem —
 `probe_add_note` dostały wymagane `operationId`; reguła wyliczana z rejestru w
@@ -36,7 +36,7 @@ Kontekst: `canvas_add_card`, `agent_view_create`, `files_publish_version` i — 
 | `pnpm test:e2e` (cały domyślny przebieg, **przed** poprawką scenariuszy) | 1 | 216 zielonych, 1 oblany, 3 niewykonane — patrz „Znalezisko” niżej |
 | `pnpm test:e2e` (cały domyślny przebieg, **po** poprawce scenariuszy) | 0 | **220/220**, 17.4 min |
 | `pnpm exec playwright test e2e/agent-views.spec.ts` ×2 (po poprawce) | 0 | 7/7 i 7/7 — powtórzone zgodnie z protokołem rozstrzygania |
-| `APP_WRITE_EVIDENCE=1 pnpm exec playwright test e2e/idempotent-tools.spec.ts` (czyste drzewo `a590e70`) | 0 | `dowod-l97-idempotencja-narzedzi.json` (`brudneDrzewo: false`) |
+| `APP_WRITE_EVIDENCE=1 pnpm exec playwright test e2e/idempotent-tools.spec.ts` (czyste drzewo `6a59a74`) | 0 | `dowod-l97-idempotencja-narzedzi.json` (`brudneDrzewo: false`, liczebniki 1/1/1/1) |
 
 ### Dowód z rzeczywistego interfejsu L9.7 i czego dowód dotyczy
 
