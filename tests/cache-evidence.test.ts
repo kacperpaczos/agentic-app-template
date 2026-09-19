@@ -199,6 +199,7 @@ describe('dowod pakietu BL-11c', () => {
         'Pakiet BL-11c (cache i artefakty): rozroznienie wersji definicji artefaktu live od stanu ' +
         'zrodla, oraz zakres stanu klienta czyszczonego przy zmianie wlasciciela.',
       zrodlo: 'tests/cache-evidence.test.ts w regresji szablonu (pnpm evidence)',
+      rodzajWykonania: 'test kontraktu lub logiki' as const,
       wersjaKodu: codeVersion(),
       artefaktLive: {
         artefakt: meta.id,

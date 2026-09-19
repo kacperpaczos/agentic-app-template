@@ -1,0 +1,192 @@
+{
+  "opis": "Kontrolowane warianty wadliwe krytycznych napraw. Kazdy wpis mowi, ktora naprawe chroni, ktora linie zepsuc i ktory test ma wtedy oblac. Test, ktory mimo wadliwego wariantu PRZECHODZI, jest znaleziskiem: naprawa nie jest chroniona.",
+  "zrodlo": "node scripts/detection-trials.mjs (APP_WRITE_EVIDENCE=1)",
+  "rodzajWykonania": "test kontraktu lub logiki",
+  "zapisano": "2026-09-19T10:15:00.884Z",
+  "wersjaKodu": {
+    "commit": "9dfee11355eedec749c8ac89501c2be1ea8bcb79",
+    "brudneDrzewoPrzedProbami": false,
+    "node": "24.19.0"
+  },
+  "srodowisko": {
+    "system": "linux 7.2.5-200.fc44.x86_64 x64",
+    "node": "24.19.0",
+    "pnpm": "9.15.9"
+  },
+  "drzewoPoProbach": "czyste",
+  "wyniki": [
+    {
+      "id": "N-3-szeregowanie-rozmowy",
+      "kryterium": "L7.10",
+      "naprawa": "Polecenia jednej rozmowy sa szeregowane: drugie czeka na zakonczenie pierwszego, zamiast wznawiac te sama sesje SDK rownolegle (defekt N-3).",
+      "plik": "packages/platform-server/src/agent/runtime.ts",
+      "test": "tests/orchestration.test.ts",
+      "nazwaTestu": "okna wykonania sa rozlaczne",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
+      "fragmentWyniku": "Tests  1 failed | 7 skipped (8)"
+    },
+    {
+      "id": "D-2-projekcja-segmentu",
+      "kryterium": "L4.15",
+      "naprawa": "Tekst po wywolaniu narzedzia otwiera nowy segment wiadomosci — projekcja backendu zgadza sie z reduktorem biblioteki (defekt D-2).",
+      "plik": "packages/platform-server/src/agent/projection.ts",
+      "test": "tests/projection.test.ts",
+      "nazwaTestu": null,
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 12,
+      "fragmentWyniku": "Tests  1 failed | 11 passed (12)"
+    },
+    {
+      "id": "abort-na-cancel-w-tle",
+      "kryterium": "L11.6",
+      "naprawa": "Zatrzymane zadanie w tle konczy sie statusem cancelled, nie failed — przerwanie po Stop jest mapowane na anulowanie, a nie na blad.",
+      "plik": "packages/platform-server/src/agent/runtime.ts",
+      "test": "tests/background-runs.test.ts",
+      "nazwaTestu": "konczy wskazane wykonanie i nie rusza pozostalych",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
+      "fragmentWyniku": "Tests  1 failed | 9 skipped (10)"
+    },
+    {
+      "id": "detektor-strumienia",
+      "kryterium": "L5.1",
+      "naprawa": "Probki o tej samej dlugosci nie sa zaliczane jako przyrost — werdykt strumieniowania wymaga co najmniej dwoch ROZNYCH dlugosci w trakcie wykonania.",
+      "plik": "e2e/support/streamProbe.ts",
+      "test": "tests/stream-verdict.test.ts",
+      "nazwaTestu": "dwie probki o pelnej dlugosci to nadal nie strumieniowanie",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
+      "fragmentWyniku": "Tests  1 failed | 12 skipped (13)"
+    },
+    {
+      "id": "guard-izolacji-dowiazanie",
+      "kryterium": "L1.11",
+      "naprawa": "Katalog danych instancji testowej nie moze byc dowiazaniem symbolicznym — nawet gdy jego cel jest prawdziwym katalogiem testowym w repozytorium i wszystkie kontrole sciezki go przepuszczaja. Harness ten katalog KASUJE, a to, czy `rm` pojdzie za linkiem, nie jest wlasnoscia, na ktorej wolno opierac bezpieczenstwo.",
+      "plik": "packages/platform-server/src/config.ts",
+      "test": "tests/isolation-paths.test.ts",
+      "nazwaTestu": "dowiazanie do innego katalogu testowego tez jest odrzucone",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
+      "fragmentWyniku": "Tests  1 failed | 11 skipped (12)"
+    },
+    {
+      "id": "guard-izolacji-magazyn",
+      "kryterium": "L1.11",
+      "naprawa": "Operacje kasujace serwera porownuja sciezke rowniez po rozwiazaniu dowiazan, wiec podkatalog-dowiazanie nie wyprowadza zapisu poza magazyn.",
+      "plik": "packages/platform-server/src/util/managed-fs.ts",
+      "test": "tests/isolation-paths.test.ts",
+      "nazwaTestu": "rename pod dowiazanym podkatalogiem magazynu jest odrzucony",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
+      "fragmentWyniku": "Tests  1 failed | 11 skipped (12)"
+    },
+    {
+      "id": "guard-osieroconego-serwera",
+      "kryterium": "L1.9",
+      "naprawa": "Przygotowanie bazy scenariuszowej odmawia, gdy port jest zajety przez dzialajacy proces — katalog nie jest kasowany pod osieroconym serwerem.",
+      "plik": "e2e/support/scripted.ts",
+      "test": "tests/isolation-orphan.test.ts",
+      "nazwaTestu": "prepareDatabase NIE kasuje katalogu, gdy port jest zajety",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
+      "fragmentWyniku": "Tests  1 failed | 11 skipped (12)"
+    },
+    {
+      "id": "cel-proby-etykieta",
+      "kryterium": "L1.8",
+      "naprawa": "Proba odbiorowa sprawdza etykiete instancji przed pierwszym zadaniem; instancja bez etykiety (czyli instancja uzytkownika) konczy sie odmowa.",
+      "plik": "scripts/lib/acceptance-target.mjs",
+      "test": "tests/acceptance-target.test.ts",
+      "nazwaTestu": null,
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 14,
+      "fragmentWyniku": "Tests  3 failed | 11 passed (14)"
+    },
+    {
+      "id": "cel-proby-domyslny-port",
+      "kryterium": "L1.8",
+      "naprawa": "Domyslny cel proby odbiorowej nie jest portem zainstalowanej aplikacji.",
+      "plik": "scripts/lib/acceptance-target.mjs",
+      "test": "tests/acceptance-target.test.ts",
+      "nazwaTestu": "domyslny cel nie jest portem zainstalowanej aplikacji",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
+      "fragmentWyniku": "Tests  1 failed | 13 skipped (14)"
+    },
+    {
+      "id": "koperta-rodzaj-wykonania",
+      "kryterium": "L12.10",
+      "naprawa": "Kazdy zapisany dowod niesie rodzaj wykonania obok commita i srodowiska.",
+      "plik": "tests/support/measurement-evidence.ts",
+      "test": "tests/evidence-provenance.test.ts",
+      "nazwaTestu": "rodzaj wykonania jest wymagany i nazwany slownikiem repozytorium",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
+      "fragmentWyniku": "Tests  1 failed | 9 skipped (10)"
+    },
+    {
+      "id": "D-1-szuflada-nad-canvasem",
+      "wynik": "pominiete",
+      "powod": "proba przegladarkowa: buduje pakiet i bierze blokade wspoldzielona; uruchamiana swiadomie (--browser albo --only)"
+    },
+    {
+      "id": "przypiecie-cli-w-sdk",
+      "kryterium": "L12.10",
+      "naprawa": "Zapisany dowod uwierzytelnienia jest przypiety do wersji CLI, ktora naprawde wykonala przebieg (CLI wbudowane w pakiet SDK), a nie do `claude` z PATH, ktory w przebiegu nie bral udzialu.",
+      "plik": "docs/evidence/z12-bl04/sesja-sdk.json",
+      "test": "tests/sdk-session-evidence.test.ts",
+      "nazwaTestu": "wersje, na ktorych wziety jest dowod, to wersje zainstalowane teraz",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
+      "fragmentWyniku": "Tests  1 failed | 18 skipped (19)"
+    },
+    {
+      "id": "guard-izolacji-realpath",
+      "kryterium": "L1.11",
+      "naprawa": "Kontrola katalogu testowego rozwiazuje dowiazania takze w RODZICACH: katalog o poprawnej nazwie, lezacy pod dowiazanym rodzicem, naprawde jest poza repozytorium.",
+      "plik": "e2e/support/isolation.ts",
+      "test": "tests/isolation-paths.test.ts",
+      "nazwaTestu": "odrzuca katalog pod dowiazanym rodzicem",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
+      "fragmentWyniku": "Tests  1 failed | 11 skipped (12)"
+    },
+    {
+      "id": "sciezka-sygnalowa-harnessu",
+      "kryterium": "L12.12",
+      "naprawa": "Przerwanie proby sygnalem przywraca zmutowany plik: obsluga sygnalu widzi nalozona mutacje, bo ta lezy w stanie modulu, a nie w lokalnej zmiennej funkcji.",
+      "plik": "scripts/detection-trials.mjs",
+      "test": "tests/detection-trials.test.ts",
+      "nazwaTestu": "PRZERWANIE SYGNALEM przywraca plik",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
+      "fragmentWyniku": "Tests  1 failed | 15 skipped (16)"
+    },
+    {
+      "id": "regula-bramki-skryptow",
+      "kryterium": "L1.8",
+      "naprawa": "Regula klasyfikujaca skrypty jest REKURENCYJNA: skrypt w podkatalogu scripts/ nie jest poza zasiegiem. Recenzent obszedl poprzednia wersje miedzy innymi plikiem scripts/zzevade/probe.mjs.",
+      "plik": "tests/acceptance-target.test.ts",
+      "test": "tests/acceptance-target.test.ts",
+      "nazwaTestu": "szesc obejsc recenzenta oblewa regule",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
+      "fragmentWyniku": "Tests  1 failed | 13 skipped (14)"
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { environment } from '../../tests/support/measurement-evidence.ts';
 
 /**
  * The three specs that answer with the **real model**, and everything that
@@ -221,6 +222,14 @@ export function writeEvidence(name: string, body: Record<string, unknown>): void
       {
         zapisano: new Date().toISOString(),
         kodCommit: codeCommit(),
+        /*
+         * The same envelope every other proof of this repository carries
+         * (L1.12, L12.10): which runtime produced it, including the CLI version
+         * *inside* the SDK — the one a model turn actually runs, which is not
+         * the one on PATH and is not the SDK package version either.
+         */
+        rodzajWykonania: 'rzeczywisty model',
+        srodowisko: environment(),
         zrodlo: 'prawdziwy model (subskrypcja Claude), instancja testowa suity przegladarkowej',
         spec: 'e2e/bl01-bl02-model.spec.ts',
         przebieg: RUN_STAMP,

@@ -67,6 +67,22 @@ const packageVersion = (name: string): string => {
   }
 };
 
+/** Wersja CLI **wbudowanej w zainstalowany SDK** — tej, ktora wykonuje prace. */
+function sdkBundledCli(): { wersja: string; commit: string } | null {
+  let dir = dirname(require.resolve('@anthropic-ai/claude-agent-sdk'));
+  for (let i = 0; i < 6; i += 1) {
+    const manifest = resolve(dir, 'manifest.json');
+    if (existsSync(manifest)) {
+      const json = JSON.parse(readFileSync(manifest, 'utf8')) as { version?: string; commit?: string };
+      if (json.version) return { wersja: json.version, commit: json.commit ?? 'nieznany' };
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
 const shell = (cmd: string, args: string[]): string => {
   try {
     return execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -97,7 +113,15 @@ const record = {
   zapisano: new Date().toISOString(),
   wersje: {
     node: process.versions.node,
+    /*
+     * Dwa CLI, nie jedno. `claude` z PATH jest srodowiskiem — sonda idzie przez SDK,
+     * a SDK uruchamia wlasne CLI z pakietu (obserwacja: scripts/probe-which-cli.mjs,
+     * docs/evidence/z13-bl12/ktore-cli-uruchamia-sdk.json). Aktualnosc zapisu
+     * rozstrzyga `claudeCliWSdk`, bo tylko ono bralo udzial w przebiegu.
+     */
     claudeCli: shell('claude', ['--version']).split('\n')[0] ?? 'nieznana',
+    claudeCliWSdk: sdkBundledCli()?.wersja ?? 'nieznana',
+    claudeCliWSdkCommit: sdkBundledCli()?.commit ?? 'nieznany',
     claudeAgentSdk: packageVersion('@anthropic-ai/claude-agent-sdk'),
     mastraClaude: packageVersion('@mastra/claude'),
     mastraCore: packageVersion('@mastra/core'),

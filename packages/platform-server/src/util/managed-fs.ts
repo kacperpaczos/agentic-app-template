@@ -1,6 +1,7 @@
 import { renameSync, rmSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import { AppError } from '@platform/contracts';
+import { isWithin, realResolve } from './real-path.ts';
 
 /**
  * The destructive filesystem operations of the server, and the check they all
@@ -39,10 +40,23 @@ export interface ManagedRoot {
 export function assertInsideManagedRoot(path: string, { root, what }: ManagedRoot): string {
   const target = resolve(path);
   const base = resolve(root);
-  if (target === base || !target.startsWith(base + sep)) {
+  /*
+   * Asked as text *and* as filesystem. A prefix comparison is exactly what a
+   * symbolic link walks through: a directory inside the files store that links
+   * elsewhere makes `<store>/link/x` a path whose text is inside the store and
+   * whose `rename()` lands outside it. Both roots are resolved the same way, so
+   * a store that itself sits under a linked parent still compares equal — the
+   * check gets stricter, not fussier.
+   */
+  const realTarget = realResolve(target);
+  const realBase = realResolve(base);
+  const insideText = target !== base && target.startsWith(base + sep);
+  const insideReal = realTarget !== realBase && isWithin(realTarget, realBase);
+  if (!insideText || !insideReal) {
     throw new AppError(
       'internal',
       `Odmowa operacji na ${target}: sciezka lezy poza katalogiem ${what} (${base}). ` +
+        (insideText && !insideReal ? `Rzeczywisty cel to ${realTarget}. ` : '') +
         'Kazda operacja kasujaca w serwerze sprawdza to w chwili wykonania, niezaleznie od tego, ' +
         'skad wziela sie sciezka.',
       { target, root: base },

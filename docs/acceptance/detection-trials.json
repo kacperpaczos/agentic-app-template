@@ -1,0 +1,212 @@
+{
+  "opis": "Kontrolowane warianty wadliwe krytycznych napraw. Kazdy wpis mowi, ktora naprawe chroni, ktora linie zepsuc i ktory test ma wtedy oblac. Test, ktory mimo wadliwego wariantu PRZECHODZI, jest znaleziskiem: naprawa nie jest chroniona.",
+  "jakUruchomic": "node scripts/detection-trials.mjs (czyste drzewo wymagane; pliki wracaja bajt w bajt)",
+  "zasada": "Wzorzec musi wystepowac w pliku dokladnie raz — rejestr, ktory rozjechal sie z kodem, oblewa probe zamiast po cichu nic nie zmienic i zaliczyc naprawy.",
+  "proby": [
+    {
+      "id": "N-3-szeregowanie-rozmowy",
+      "kryterium": "L7.10",
+      "naprawa": "Polecenia jednej rozmowy sa szeregowane: drugie czeka na zakonczenie pierwszego, zamiast wznawiac te sama sesje SDK rownolegle (defekt N-3).",
+      "plik": "packages/platform-server/src/agent/runtime.ts",
+      "szukaj": "    const previous = this.#conversationQueue.get(conversation.id) ?? Promise.resolve();",
+      "zamien": "    const previous = Promise.resolve(); /* wariant wadliwy proby wykrycia: brak szeregowania */",
+      "test": "tests/orchestration.test.ts",
+      "nazwaTestu": "okna wykonania sa rozlaczne",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "D-2-projekcja-segmentu",
+      "kryterium": "L4.15",
+      "naprawa": "Tekst po wywolaniu narzedzia otwiera nowy segment wiadomosci — projekcja backendu zgadza sie z reduktorem biblioteki (defekt D-2).",
+      "plik": "packages/platform-server/src/agent/projection.ts",
+      "szukaj": "        if (this.#current.toolCalls.length > 0) this.#startNewSegment();",
+      "zamien": "        /* wariant wadliwy proby wykrycia: brak nowego segmentu */",
+      "test": "tests/projection.test.ts",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "abort-na-cancel-w-tle",
+      "kryterium": "L11.6",
+      "naprawa": "Zatrzymane zadanie w tle konczy sie statusem cancelled, nie failed — przerwanie po Stop jest mapowane na anulowanie, a nie na blad.",
+      "plik": "packages/platform-server/src/agent/runtime.ts",
+      "szukaj": "      const cancelled = abort.signal.aborted && !message.includes('run_timeout');",
+      "zamien": "      const cancelled = false; /* wariant wadliwy proby wykrycia */",
+      "test": "tests/background-runs.test.ts",
+      "nazwaTestu": "konczy wskazane wykonanie i nie rusza pozostalych",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "detektor-strumienia",
+      "kryterium": "L5.1",
+      "naprawa": "Probki o tej samej dlugosci nie sa zaliczane jako przyrost — werdykt strumieniowania wymaga co najmniej dwoch ROZNYCH dlugosci w trakcie wykonania.",
+      "plik": "e2e/support/streamProbe.ts",
+      "szukaj": "  if (distinct < 2) {",
+      "zamien": "  if (false) { /* wariant wadliwy proby wykrycia */",
+      "test": "tests/stream-verdict.test.ts",
+      "oczekiwanyKomunikat": "Tests.*failed",
+      "nazwaTestu": "dwie probki o pelnej dlugosci to nadal nie strumieniowanie"
+    },
+    {
+      "id": "guard-izolacji-dowiazanie",
+      "kryterium": "L1.11",
+      "naprawa": "Katalog danych instancji testowej nie moze byc dowiazaniem symbolicznym — nawet gdy jego cel jest prawdziwym katalogiem testowym w repozytorium i wszystkie kontrole sciezki go przepuszczaja. Harness ten katalog KASUJE, a to, czy `rm` pojdzie za linkiem, nie jest wlasnoscia, na ktorej wolno opierac bezpieczenstwo.",
+      "plik": "packages/platform-server/src/config.ts",
+      "szukaj": "  if (isSymlink(cfg.dataDir)) {",
+      "zamien": "  if (false) {",
+      "test": "tests/isolation-paths.test.ts",
+      "nazwaTestu": "dowiazanie do innego katalogu testowego tez jest odrzucone",
+      "oczekiwanyKomunikat": "Tests.*failed",
+      "uwaga": "Wariant wadliwy jest ZACHOWANIOWY: w tym przypadku strazniki sciezki nie maja zastrzezen, wiec po wylaczeniu kontroli dowiazania konfiguracja przechodzi, zamiast zmienic brzmienie komunikatu. Pierwsza wersja tej proby celowala w przypadek, w ktorym straznik odmawia takze inna droga, wiec test oblewal tylko na tekscie — to byla proba komunikatu, nie zachowania."
+    },
+    {
+      "id": "guard-izolacji-magazyn",
+      "kryterium": "L1.11",
+      "naprawa": "Operacje kasujace serwera porownuja sciezke rowniez po rozwiazaniu dowiazan, wiec podkatalog-dowiazanie nie wyprowadza zapisu poza magazyn.",
+      "plik": "packages/platform-server/src/util/managed-fs.ts",
+      "szukaj": "  if (!insideText || !insideReal) {",
+      "zamien": "  if (!insideText) {",
+      "test": "tests/isolation-paths.test.ts",
+      "nazwaTestu": "rename pod dowiazanym podkatalogiem magazynu jest odrzucony",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "guard-osieroconego-serwera",
+      "kryterium": "L1.9",
+      "naprawa": "Przygotowanie bazy scenariuszowej odmawia, gdy port jest zajety przez dzialajacy proces — katalog nie jest kasowany pod osieroconym serwerem.",
+      "plik": "e2e/support/scripted.ts",
+      "szukaj": "    assertPortFree(this.config.port, `przygotowanie instancji scenariuszowej (${this.config.dataDir})`);",
+      "zamien": "    /* wariant wadliwy proby wykrycia: brak sprawdzenia portu */",
+      "test": "tests/isolation-orphan.test.ts",
+      "nazwaTestu": "prepareDatabase NIE kasuje katalogu, gdy port jest zajety",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "cel-proby-etykieta",
+      "kryterium": "L1.8",
+      "naprawa": "Proba odbiorowa sprawdza etykiete instancji przed pierwszym zadaniem; instancja bez etykiety (czyli instancja uzytkownika) konczy sie odmowa.",
+      "plik": "scripts/lib/acceptance-target.mjs",
+      "szukaj": "  if (!target.allowedLabels.includes(label)) {",
+      "zamien": "  if (false) {",
+      "test": "tests/acceptance-target.test.ts",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "cel-proby-domyslny-port",
+      "kryterium": "L1.8",
+      "naprawa": "Domyslny cel proby odbiorowej nie jest portem zainstalowanej aplikacji.",
+      "plik": "scripts/lib/acceptance-target.mjs",
+      "szukaj": "export const DEFAULT_ACCEPTANCE_PORT = 8790;",
+      "zamien": "export const DEFAULT_ACCEPTANCE_PORT = 8791;",
+      "test": "tests/acceptance-target.test.ts",
+      "nazwaTestu": "domyslny cel nie jest portem zainstalowanej aplikacji",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "koperta-rodzaj-wykonania",
+      "kryterium": "L12.10",
+      "naprawa": "Kazdy zapisany dowod niesie rodzaj wykonania obok commita i srodowiska.",
+      "plik": "tests/support/measurement-evidence.ts",
+      "szukaj": "    zapisano: new Date().toISOString(),\n    rodzajWykonania,\n    wersjaKodu: wersjaKodu ?? codeVersion(undefined, [dir]),",
+      "zamien": "    zapisano: new Date().toISOString(),\n    wersjaKodu: wersjaKodu ?? codeVersion(undefined, [dir]),",
+      "test": "tests/evidence-provenance.test.ts",
+      "nazwaTestu": "rodzaj wykonania jest wymagany i nazwany slownikiem repozytorium",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "D-1-szuflada-nad-canvasem",
+      "kryterium": "L2.10",
+      "naprawa": "Zamknieta szuflada rozmow zostaje poza kadrem (left: -294px) i nie przykrywa watku; wariant wadliwy przywraca faktyczna przyczyne defektu D-1, czyli left: 0 !important.",
+      "plik": "packages/platform-ui/src/styles.css",
+      "szukaj": ".pf-chat__body\n  .openui-agent-container--mobile\n  .openui-agent-sidebar-container:not(.openui-agent-sidebar-container--collapsed)\n  .openui-agent-sidebar-header__toggle-button {",
+      "zamien": "/* wariant wadliwy proby wykrycia: przywrocony defekt D-1 */\n.pf-chat__body .openui-agent-sidebar-container { left: 0 !important; }\n\n.pf-chat__body\n  .openui-agent-container--mobile\n  .openui-agent-sidebar-container:not(.openui-agent-sidebar-container--collapsed)\n  .openui-agent-sidebar-header__toggle-button {",
+      "test": "e2e/chat-drawer.spec.ts",
+      "nazwaTestu": "zamknieta szuflada nie zaslania rozmowy",
+      "powodPominiecia": "proba przegladarkowa: buduje pakiet i bierze blokade wspoldzielona; uruchamiana swiadomie (--browser albo --only)",
+      "rodzaj": "playwright",
+      "oczekiwanyKomunikat": "failed"
+    },
+    {
+      "id": "przypiecie-cli-w-sdk",
+      "kryterium": "L12.10",
+      "naprawa": "Zapisany dowod uwierzytelnienia jest przypiety do wersji CLI, ktora naprawde wykonala przebieg (CLI wbudowane w pakiet SDK), a nie do `claude` z PATH, ktory w przebiegu nie bral udzialu.",
+      "plik": "docs/evidence/z12-bl04/sesja-sdk.json",
+      "szukaj": "\"claudeCliWSdk\": \"2.1.270\",",
+      "zamien": "\"claudeCliWSdk\": \"2.1.269\",",
+      "test": "tests/sdk-session-evidence.test.ts",
+      "nazwaTestu": "wersje, na ktorych wziety jest dowod, to wersje zainstalowane teraz",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "guard-izolacji-realpath",
+      "kryterium": "L1.11",
+      "naprawa": "Kontrola katalogu testowego rozwiazuje dowiazania takze w RODZICACH: katalog o poprawnej nazwie, lezacy pod dowiazanym rodzicem, naprawde jest poza repozytorium.",
+      "plik": "e2e/support/isolation.ts",
+      "szukaj": "  const real = realResolve(abs);",
+      "zamien": "  const real = abs; /* wariant wadliwy proby wykrycia: bez rozwiazania dowiazan */",
+      "test": "tests/isolation-paths.test.ts",
+      "nazwaTestu": "odrzuca katalog pod dowiazanym rodzicem",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    },
+    {
+      "id": "sciezka-sygnalowa-harnessu",
+      "kryterium": "L12.12",
+      "naprawa": "Przerwanie proby sygnalem przywraca zmutowany plik: obsluga sygnalu widzi nalozona mutacje, bo ta lezy w stanie modulu, a nie w lokalnej zmiennej funkcji.",
+      "plik": "scripts/detection-trials.mjs",
+      "szukaj": "      if (applied) restore(applied);",
+      "zamien": "      /* wariant wadliwy proby wykrycia: brak przywrocenia po sygnale */",
+      "test": "tests/detection-trials.test.ts",
+      "nazwaTestu": "PRZERWANIE SYGNALEM przywraca plik",
+      "oczekiwanyKomunikat": "Tests.*failed",
+      "uwaga": "Proba mutuje sam harness. Dziala, bo modul jest juz wczytany do pamieci procesu, ktory ja prowadzi, a test uruchamia OSOBNY proces, ktory importuje plik z dysku — czyli wariant wadliwy."
+    },
+    {
+      "id": "regula-bramki-skryptow",
+      "kryterium": "L1.8",
+      "naprawa": "Regula klasyfikujaca skrypty jest REKURENCYJNA: skrypt w podkatalogu scripts/ nie jest poza zasiegiem. Recenzent obszedl poprzednia wersje miedzy innymi plikiem scripts/zzevade/probe.mjs.",
+      "plik": "tests/acceptance-target.test.ts",
+      "szukaj": "    if (entry.isDirectory()) out.push(...skryptyPod(resolve(dir, entry.name), rel));",
+      "zamien": "    if (entry.isDirectory()) continue; /* wariant wadliwy proby wykrycia: skan nierekurencyjny */",
+      "test": "tests/acceptance-target.test.ts",
+      "nazwaTestu": "szesc obejsc recenzenta oblewa regule",
+      "oczekiwanyKomunikat": "Tests.*failed"
+    }
+  ],
+  "uwagaOFiltrze": "Pole nazwaTestu trafia do vitest jako -t, czyli jako WYRAZENIE REGULARNE. Nazwa z kropka albo gwiazdka dopasuje sie inaczej, niz wyglada; harness wykrywa to teraz sam (przebieg wzorcowy musi uruchomic co najmniej jeden test), ale w rejestrze trzymaj fragmenty bez metaznakow.",
+  "znaleziska": [
+    {
+      "kiedy": "2026-09-19, pierwszy przebieg prob (docs/evidence/z13-bl12/proby-wykrycia.json)",
+      "co": "Proba guard-izolacji-dowiazanie zostala zgloszona jako NIEWYKRYTE, a naprawa jest chroniona: filtr -t z '.e2e-*' nie dopasowal zadnego testu, 11 testow zostalo pominietych, a kod wyjscia 0 harness przeczytal jako 'test przeszedl na wadliwym wariancie'.",
+      "skutek": "Harness wykonuje teraz przebieg wzorcowy przed mutacja i wymaga, zeby test PRZESZEDL i zeby uruchomil sie co najmniej jeden. Przebieg, w ktorym nic nie bieglo, to BLAD-PROBY, nie wynik."
+    },
+    {
+      "kiedy": "2026-09-19, pierwszy przebieg prob",
+      "co": "Galaz `if (!sawPartialAnswer)` w e2e/support/streamProbe.ts jest nieosiagalna: po wczesniejszych regulach (co najmniej dwie probki, co najmniej dwie rozne dlugosci, niemalejaca dlugosc) pierwsza dlugosc jest zawsze mniejsza od najwiekszej widzianej. Ustawienie sawPartialAnswer na true nie zmienilo zadnego werdyktu — pole jest informacyjne, nie decyduje.",
+      "skutek": "Proba detektora strumienia celuje teraz w regule, ktora naprawde decyduje (distinct < 2). Martwa galaz zostaje zgloszona wlascicielowi pakietu BL-05/BL-08, nie jest usuwana tutaj."
+    },
+    {
+      "kiedy": "2026-09-19, pierwszy przebieg prob",
+      "co": "Usuniecie `.catch(() => undefined)` z lancucha kolejki rozmowy (runtime.ts) nie oblewa zadnego testu: #execute obsluguje bledy u siebie i nigdy nie odrzuca obietnicy, wiec ta linia chroni przed wyjatkiem, ktorego regresja nie produkuje. To obrona bez proby — nie defekt.",
+      "skutek": "Proba N-3 celuje w samo szeregowanie, ktore testy pokrywaja. Brak pokrycia dla odrzuconej obietnicy #execute zgloszony w raporcie zadania jako obserwacja, nie naprawiany tutaj."
+    },
+    {
+      "kiedy": "2026-09-19, po aktualizacji Claude CLI 2.1.277 -> 2.1.278",
+      "co": "Zapisane dowody uwierzytelnienia byly przypiete do wersji `claude` z PATH, a ten plik nie bral udzialu w zadnym z tych przebiegow: SDK uruchamia wlasne CLI z pakietu (obserwacja przy PATH bez `claude`, docs/evidence/z13-bl12/ktore-cli-uruchamia-sdk.json). Aktualizacja CLI po stronie uzytkownika, bez zadnej zmiany w repozytorium, wywracala cala bramke pnpm verify.",
+      "skutek": "Przypiecie przeniesione na wersje CLI wbudowanej w SDK — funkcje wersji pakietu, ktora pilnuje lockfile. `claude` z PATH jest nadal zapisywany jako srodowisko i jego zmiana jest wypisywana, ale nie oblewa regresji. Proba przypiecie-cli-w-sdk pokazuje, ze nowe przypiecie potrafi oblac."
+    },
+    {
+      "kiedy": "2026-09-19, recenzja bezpieczenstwa rundy 1",
+      "co": "Przywracanie po sygnale bylo martwym kodem: CLI trzymalo wlasna zmienna `inFlight`, ktorej nic nie przypisywalo, bo nalozona mutacja siedziala w lokalnej zmiennej wewnatrz runTrials. Przerwanie w trakcie proby zostawialo zmutowany plik w drzewie, a naglowek skryptu, raport i opis dowodu L12.12 gloslily, ze tak nie jest.",
+      "skutek": "Stan mutacji przeniesiony na poziom modulu (currentMutation), obsluga sygnalu wspolna (installRescue), a sciezka sygnalowa dostala wlasna probe: osobny proces, prawdziwa mutacja na dysku, prawdziwy SIGINT, asercja o zawartosci pliku po smierci procesu i o kodzie 130. Do rejestru doszla proba sciezka-sygnalowa-harnessu."
+    },
+    {
+      "kiedy": "2026-09-19, recenzja bezpieczenstwa rundy 1",
+      "co": "Proba guard-izolacji-dowiazanie byla KOMUNIKATOWA, nie zachowaniowa: po wylaczeniu kontroli dowiazania straznik nadal odmawial inna droga (rzeczywisty cel nazywa sie `data`), wiec test oblewal wylacznie na brzmieniu komunikatu.",
+      "skutek": "Proba celuje teraz w przypadek, w ktorym decyduje wylacznie kontrola dowiazania (link do innego katalogu .e2e-* w repozytorium), a rozwiazywanie dowiazan dostalo osobna probe zachowaniowa guard-izolacji-realpath."
+    },
+    {
+      "kiedy": "2026-09-19, rerecenzja rundy 1",
+      "co": "Regula L1.8 byla TEKSTOWA — szukala adresu petli zwrotnej z literalnym portem i zwalniala plik, w ktorym gdziekolwiek padl napis z nazwa bramki. Recenzent obszedl ja szesc razy na szesc prob (skan nierekurencyjny, .cjs, port w interpolacji, adres ze sklejenia, port z process.env, http://[::1]:8791), kazde obejscie POST-owalo na 8791, a komentarz z nazwa bramki zwalnial plik, ktory jej nie importowal. Zdania w opisie dowodu i w raporcie byly przez to nieprawdziwe.",
+      "skutek": "Regula liczy teraz od OPERACJI, nie od adresu: kazdy plik wykonywalny w scripts/ (rekurencyjnie, takze .cjs i .sh) musi byc sklasyfikowany, zwolnienie wynika z prawdziwego IMPORTU bramki, a deklaracja 'bez sieci' jest sprawdzana krzyzowo. Kontrola krzyzowa od razu zlapala dwa moje wlasne bledy klasyfikacji (audit-server.sh, closure-server.sh uzywaja curl). Proba na samej regule: siedem przypadkow na kontrolowanym drzewie + wpis regula-bramki-skryptow."
+    }
+  ]
+}

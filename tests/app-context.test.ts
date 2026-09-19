@@ -982,6 +982,7 @@ describe('dowod pakietu', () => {
           'Stany opisu zasobu i okno odczytu narzedzi agenta, z regresji tests/app-context.test.ts. ' +
           'Bez modelu i bez przegladarki: prawdziwe serwisy, prawdziwe handlery MCP.',
         zrodlo: 'pnpm evidence:z5 (APP_WRITE_EVIDENCE=1 vitest run tests/app-context.test.ts)',
+        rodzajWykonania: 'test kontraktu lub logiki',
         wersjaKodu: codeVersion(h.platform.versions, ['docs/evidence/z5-bl11a']),
         stanyOpisuZasobu: states,
         oknoOdczytu: {

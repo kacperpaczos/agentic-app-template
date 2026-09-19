@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { resolveTestInstance } from './isolation.ts';
+import { assertDirectoryFree, assertPortFree } from './port-probe.ts';
 
 /**
  * Prepares the browser suite's database and then starts the production server
@@ -26,6 +27,15 @@ const instance = resolveTestInstance({
   dataDirName: process.env.APP_E2E_DATA_DIR_NAME ?? '.e2e-data',
   defaultPort: 8799,
 });
+
+/*
+ * Before the delete, not after: a process still listening on this port is a
+ * process with this database open, and wiping the directory underneath it is
+ * the failure this order exists to prevent (L1.9). We refuse; we never kill
+ * what we did not start.
+ */
+assertPortFree(instance.port, 'przygotowanie instancji testowej');
+assertDirectoryFree(instance.dataDir, 'przygotowanie instancji testowej');
 
 if (existsSync(instance.dataDir)) rmSync(instance.dataDir, { recursive: true, force: true });
 

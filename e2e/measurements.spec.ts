@@ -41,6 +41,7 @@ test.afterAll(() => {
       'Pomiary przez interfejs: widoczne odswiezenie po mutacji oraz Stop rozdzielony na ' +
       'potwierdzenie zadania, koniec strumienia widziany w karcie i koniec procesow uruchomienia.',
     zrodlo: 'pnpm test:e2e → e2e/measurements.spec.ts (regresja szablonu)',
+    rodzajWykonania: 'test GUI bez modelu',
     wersjaKodu,
     pomiary,
   });
