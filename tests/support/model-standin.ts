@@ -80,6 +80,14 @@ export type Step =
        * one field is present.
        */
       subagent?: boolean;
+      /**
+       * Treść do zapisania, gdy `name` to `Write`.
+       *
+       * Zapis jest **wykonywany naprawdę**, gdy hook nie odmówi — inaczej
+       * „zapis został zablokowany" byłoby asercją o zwróconym obiekcie, a nie o
+       * tym, czy plik powstał.
+       */
+      content?: string;
     }
   /** The model's stream reports a failure — a stream existed and then failed. */
   | { kind: 'streamError'; message: string }
@@ -268,10 +276,24 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
           }
           if (step.kind === 'fileTool') {
             callSeq += 1;
+            /*
+             * `$workspace/` wskazuje katalog roboczy TEGO uruchomienia, którego
+             * test nie zna z góry. Bez tego nie dałoby się napisać kontroli
+             * odwrotnej — a kontrola odwrotna jest tu równie ważna jak odmowa:
+             * ochrona, która blokuje wszystko, nie jest ochroną.
+             */
+            const resolved = Object.fromEntries(
+              Object.entries(step.input).map(([k, v]) => [
+                k,
+                typeof v === 'string' && v.startsWith('$workspace/')
+                  ? resolveInWorkspace(ctx?.workspaceDir ?? '', v.slice('$workspace/'.length))
+                  : v,
+              ]),
+            );
             const refusal = await firePreToolUse({
               tool_use_id: `tu_file_${callSeq}`,
               tool_name: step.name,
-              tool_input: step.input,
+              tool_input: resolved,
               ...(step.subagent ? { agent_id: 'agent_podwykonawca' } : {}),
             });
             handle.fileTools.push({ name: step.name, denied: refusal !== null, reason: refusal });
@@ -279,15 +301,25 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
               yield { type: 'text-delta', payload: { text: `[plik:${step.name}] odmowa ` } };
               continue;
             }
+            const targetPath = String(resolved.file_path ?? resolved.path ?? '');
+            if (step.name === 'Write') {
+              // Naprawdę zapisuje: inaczej „zapis zablokowany" nie byłoby sprawdzalne.
+              try {
+                writeFileSync(targetPath, step.content ?? 'tresc zapisana przez narzedzie');
+                yield { type: 'text-delta', payload: { text: `[plik:Write] zapisano ${targetPath} ` } };
+              } catch (err) {
+                yield { type: 'text-delta', payload: { text: `[plik:Write] blad=${(err as Error).message} ` } };
+              }
+              continue;
+            }
             /*
              * Not refused, so the tool runs — and the bytes reach the answer,
              * exactly as they would have if the application had no protection.
              * That is the negative control built into the step itself.
              */
-            const target = String(step.input.file_path ?? step.input.path ?? '');
             let contents: string;
             try {
-              contents = readFileSync(target, 'utf8');
+              contents = readFileSync(targetPath, 'utf8');
             } catch (err) {
               contents = `blad odczytu: ${(err as Error).message}`;
             }

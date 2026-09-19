@@ -210,6 +210,66 @@ function isInside(candidate: string, dir: string): boolean {
 const normalizeSlashes = (p: string): string => p.replace(/\\/g, '/');
 
 /**
+ * Refuses a file tool that reaches **outside the run workspace** — in either
+ * direction, read or write.
+ *
+ * ## Why this exists beside `protectedPathRefusal`, and why it is not a longer list
+ *
+ * The other rule names directories that must be unreachable. It closed four real
+ * routes to the credential file, and it could not have closed the fifth: a real
+ * model was given `Read` and handed back a canary from a directory nobody had
+ * thought to list, then used `Write` to create a file on a path the shell had
+ * been refused a second earlier. Twelve packages of tests never saw it.
+ *
+ * The shell is in a sandbox. **The SDK's own file tools are not** — the only
+ * thing bounding them was a list of three directories, and a list of forbidden
+ * places can never be complete. The set of places that must be unreachable has
+ * to be enumerated; the set of places that may be reached is *one directory*,
+ * and its complement needs no enumeration at all. So this rule is stated
+ * positively: everything outside the run workspace is refused, and the question
+ * "did we remember this directory?" stops being askable.
+ *
+ * This is the fourth time this repository has reached the same conclusion — the
+ * path flags of the state scripts, the destructive operations, the script
+ * directory scan, and now the file tools. Each time a guard counting from the
+ * *argument* had a way around it, and each time what closed the class was a
+ * guard counting from the *operation*, or a positive rule.
+ *
+ * ## What it deliberately does not allow
+ *
+ * The toolkit libraries are symlinked into the workspace's own `node_modules`,
+ * and their real paths lie outside it — so reading a library's source through
+ * `Read` is refused by this rule. That is a real behaviour change and it is the
+ * intended one: it is exactly what the SDK's own
+ * `permissions.blockReadsOutsideWorkingDirectories` does, model-authored code
+ * imports those libraries rather than reading them, and an exception would put
+ * a second list next to the one this rule exists to abolish.
+ */
+export function workspaceConfinementRefusal(
+  toolName: string,
+  toolInput: unknown,
+  workspaceDir: string,
+  resolvePath: (p: string) => string = (p) => realResolve(workspaceDir, p),
+): string | null {
+  const args = PATH_ARGUMENTS[toolName];
+  if (!args) return null;
+  const root = realResolve(workspaceDir, '.');
+  const input = (toolInput ?? {}) as Record<string, unknown>;
+  for (const key of args) {
+    const raw = input[key];
+    if (typeof raw !== 'string' || raw.length === 0) continue;
+    const abs = resolvePath(raw);
+    if (!isInside(abs, root)) {
+      return (
+        `Narzedzie ${toolName} moze siegac wylacznie katalogu roboczego tego uruchomienia. ` +
+        'Sciezka wskazuje poza niego i zostala odrzucona, niezaleznie od zgody uzytkownika.'
+      );
+    }
+  }
+  return null;
+}
+
+/**
  * Refuses a file tool aimed at a directory the application protects.
  *
  * Two directories qualify and for the same reason: reaching either one would
@@ -235,6 +295,23 @@ export function protectedPathRefusal(
   toolInput: unknown,
   protectedDirs: ReadonlyArray<{ dir: string; what: string }>,
   resolvePath: (p: string) => string = (p) => p,
+  /**
+   * Subtrees carved **out** of the guards above.
+   *
+   * There is exactly one, and leaving it out was a shipped regression: the run
+   * workspace is `<dataDir>/workspaces/<runId>`, so it sits *inside* the
+   * protected data directory. Without this exemption the data-directory guard
+   * refused every legitimate file-tool call the agent made in its own
+   * workspace — reading its own input, writing its own output — and no test
+   * noticed, because until the reverse control demanded it, no test had the
+   * agent touch a file inside the workspace at all.
+   *
+   * The exemption is safe precisely because paths are resolved for real before
+   * this comparison: a symlink inside the workspace pointing at the credential
+   * directory resolves *out* of the workspace, so it is not exempt and the
+   * guards still fire.
+   */
+  exempt: readonly string[] = [],
 ): string | null {
   const args = PATH_ARGUMENTS[toolName];
   if (!args) return null;
@@ -243,6 +320,7 @@ export function protectedPathRefusal(
     const raw = input[key];
     if (typeof raw !== 'string' || raw.length === 0) continue;
     const abs = resolvePath(raw);
+    if (exempt.some((dir) => dir && isInside(abs, dir))) continue;
     for (const guard of protectedDirs) {
       if (!guard.dir) continue;
       if (isInside(abs, guard.dir)) {

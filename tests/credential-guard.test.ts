@@ -286,7 +286,13 @@ describe('uruchomienie nie moze odczytac poswiadczenia (symulacja na granicy ada
     expect(stand.fileTools).toEqual([
       expect.objectContaining({ name: 'Read', denied: true }),
     ]);
-    expect(stand.fileTools[0]?.reason).toContain('poswiadczen Claude');
+    /*
+     * Powód odmowy jest teraz regułą POZYTYWNĄ („poza katalogiem roboczym"), bo
+     * ona sprawdzana jest pierwsza i obejmuje ten przypadek. To, że lista
+     * chronionych katalogów też by go złapała, sprawdza osobno test jednostkowy
+     * `protectedPathRefusal` — warstwa nie zniknęła, zmieniła się kolejność.
+     */
+    expect(stand.fileTools[0]?.reason).toMatch(/katalogu roboczego|poswiadczen Claude/);
   });
 
   it('odmowa jest widoczna w historii jako nieudany krok narzedzia', async () => {
@@ -336,7 +342,7 @@ describe('uruchomienie nie moze odczytac poswiadczenia (symulacja na granicy ada
     const text = answerText(events);
     expect(text.includes(CANARY), 'podwykonawca odczytal poswiadczenie').toBe(false);
     expect(stand.fileTools[0]).toMatchObject({ denied: true });
-    expect(stand.fileTools[0]?.reason).toContain('poswiadczen Claude');
+    expect(stand.fileTools[0]?.reason).toMatch(/katalogu roboczego|poswiadczen Claude/);
     // Odmowa jest widoczna, mimo że zwykła aktywność podwykonawcy jest wyciszona.
     expect(text).toContain('odmowa');
   });
@@ -515,28 +521,67 @@ describe('uruchomienie nie moze odczytac poswiadczenia (symulacja na granicy ada
     expect(fs.denyRead).toContain(h.platform.config.dataDir);
   });
 
-  it('plik w workspace uruchomienia pozostaje dostepny', async () => {
+  it('KONTROLA ODWROTNA: zwykly odczyt i zapis W katalogu roboczym dzialaja', async () => {
     /*
-     * The control that keeps the rule honest in the other direction: a
-     * protection that refused every file would pass every assertion above and
-     * break the product.
+     * Obowiązkowa druga strona reguły pozytywnej. Ochrona, która psuje produkt,
+     * nie jest ochroną — a reguła „wszystko poza katalogiem roboczym odmawiane"
+     * ma ten dokładnie kształt, w którym łatwo odmówić też tego, co wolno.
      */
+    const { stand, events } = await startRun([
+      { kind: 'fileTool', name: 'Write', input: { file_path: '$workspace/output/notatka.txt' }, content: 'TRESC-ROBOCZA' },
+      { kind: 'fileTool', name: 'Read', input: { file_path: '$workspace/output/notatka.txt' } },
+      { kind: 'text', text: 'Koniec.' },
+    ]);
+    expect(stand.fileTools.map((f) => f.denied), 'praca we wlasnym katalogu zostala zablokowana').toEqual([
+      false,
+      false,
+    ]);
+    // I odczyt naprawdę zwrócił to, co zapis naprawdę zapisał.
+    expect(answerText(events)).toContain('TRESC-ROBOCZA');
+  });
+
+  it('plik poza workspace jest nieczytelny, nawet gdy nie jest poswiadczeniem', async () => {
     /*
-     * We własnym katalogu tymczasowym, nie w gołym `/tmp`: stała nazwa w `/tmp`
-     * zderzyłaby się z równoległym przebiegiem i jest dokładnie tą niechlujnością,
-     * którą ten pakiet tropi gdzie indziej.
+     * Piąta droga w swojej właściwej postaci. Prawdziwy model dostał kanarka z
+     * katalogu, którego nikt nie wymienił na liście zakazów — bo lista zakazów
+     * nie może być kompletna. Kanarek jest WYMYŚLONY i leży w katalogu
+     * tymczasowym; nie jest ani poświadczeniem użytkownika, ani jego kopią.
      */
-    const plainDir = mkdtempSync(join(tmpdir(), 'kanarek-zwykly-'));
-    const readable = join(plainDir, 'nie-poswiadczenie.txt');
-    writeFileSync(readable, 'zwykla tresc robocza');
+    const outside = mkdtempSync(join(tmpdir(), 'kanarek-poza-ws-'));
+    const file = join(outside, 'zwykly-sekret.txt');
+    writeFileSync(file, `NIEZWIAZANY-KANAREK-${CANARY}`);
     try {
-      const { stand } = await startRun([
-        { kind: 'fileTool', name: 'Read', input: { file_path: readable } },
+      const { stand, events } = await startRun([
+        { kind: 'fileTool', name: 'Read', input: { file_path: file } },
         { kind: 'text', text: 'Koniec.' },
       ]);
-      expect(stand.fileTools[0]).toMatchObject({ denied: false });
+      expect(answerText(events).includes(CANARY), 'odczytano plik spoza katalogu roboczego').toBe(false);
+      expect(stand.fileTools[0]).toMatchObject({ denied: true });
+      expect(stand.fileTools[0]?.reason).toContain('katalogu roboczego');
     } finally {
-      rmSync(plainDir, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
     }
   });
+
+  it('zapis poza workspace jest odrzucony, a plik NIE powstaje', async () => {
+    /*
+     * Druga operacja z raportu prób modelowych: `Write` utworzył plik na
+     * ścieżce, której powłoce odmówiono sekundę wcześniej. Asercja jest o
+     * SYSTEMIE PLIKÓW, nie o zwróconym obiekcie — stand-in naprawdę zapisuje,
+     * gdy hook nie odmówi.
+     */
+    const outside = mkdtempSync(join(tmpdir(), 'zapis-poza-ws-'));
+    const target = join(outside, 'podrzucony.txt');
+    try {
+      const { stand } = await startRun([
+        { kind: 'fileTool', name: 'Write', input: { file_path: target }, content: 'PODRZUCONA-TRESC' },
+        { kind: 'text', text: 'Koniec.' },
+      ]);
+      expect(existsSync(target), 'POWSTAL PLIK poza katalogiem roboczym').toBe(false);
+      expect(stand.fileTools[0]).toMatchObject({ denied: true });
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
 });
