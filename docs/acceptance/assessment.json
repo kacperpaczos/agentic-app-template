@@ -1411,11 +1411,12 @@
       }
     },
     "L8.7": {
-      "status": "potwierdzone",
-      "evidence": "gui",
+      "status": "czesciowe",
+      "evidence": "test",
       "origin": "szablon",
       "proof": "Dwie strony problemu. (1) Co aplikacja wypisuje: tests/durability.test.ts skanuje zbudowany frontend, bundle serwera, baze, diagnostyke startowa, raporty i slady Playwright, katalogi robocze uruchomien i magazyn plikow — prawdziwa wartoscia tokena, czytana przez credentialFilePath (czyli takze z CLAUDE_CONFIG_DIR), a brak poswiadczenia trzeba zadeklarowac zamiast przejsc pusto. (2) Czego agent nie moze siegnac — brak wykryty w tym pakiecie: Read byl wstepnie zatwierdzony, wiec bramka zgody nigdy go nie widziala, a sandbox blokowal tylko katalog danych. Teraz katalog poswiadczen jest w denyRead/denyWrite sandboxa oraz odrzucany przez protectedPathRefusal w hooku PreToolUse i w bramce. tests/credential-guard.test.ts (13 testow, kanarek w tymczasowym CLAUDE_CONFIG_DIR) i e2e/auth-limits.spec.ts: proba odczytu konczy sie odmowa widoczna w czacie, a kanarek nie pojawia sie w odpowiedzi, historii ani zdarzeniach. Proba wykrycia: wylaczenie odmowy w hooku => testy oblewaja na asercji o kanarku w odpowiedzi i w historii.",
-      "gap": "—",
+      "gap": "Piata droga (niezalezny przeglad, rundy 4 i 6): polaczenie nieistniejacego komponentu, znaku \"..\" i dowiazania omijalo straznika sciezek (proby A6/A6e) i publikowalo plik spoza workspace jako artefakt do pobrania (C1); odczyt zrodel bibliotek toolkitu przez zwykly wzorzec Grep/Glob przechodzil, bo createRunWorkspace sam dowiazuje biblioteki poza workspace (A11/A12/B8); tylda i pusty napis omijaly sprawdzenie w calosci (A7/A7b/A8). Naprawa rundy 6 (fail-closed walker, fail-closed wzorce, budzetowany pre-walk, odmowa tyldy i pustego napisu) jest zweryfikowana pakietem 33 prob recenzji, ale dowod na PRAWDZIWYM modelu (L11.4/L11.11 — czy SDK honoruje updatedInput, blockReadsOutsideWorkingDirectories i semantyke wzorcow) pozostaje niewykonany. Do czasu tego przebiegu kryterium jest czesciowe.",
+      "backlog": "BL-04",
       "scenarios": [
         "T17"
       ],
