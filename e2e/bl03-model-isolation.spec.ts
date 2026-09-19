@@ -128,12 +128,30 @@ test.describe('BL-03 przebieg B: granice izolacji na prawdziwym modelu', () => {
       // proves nothing about what a refusal prevents.
       expect(first.decisions.length, 'model nie poprosil o zgode na powloke').toBeGreaterThan(0);
       expect(first.decisions.map((d) => d.text).join(' ')).toContain('Bash');
-      // And the refusal was carried through: no Bash call has a result.
+      /*
+       * L11.9, druga polowa: **brak skutku**, nie sam kod odpowiedzi.
+       *
+       * A refusal that only shows up as "the endpoint answered 403" proves the
+       * endpoint, not the gate. What has to be true is that the operation did
+       * not happen: no shell call of this run produced a successful result, and
+       * nothing the user can see claims the file was read.
+       */
       const shellCalls1 = toolCalls(events1).filter((c) => c.name === 'Bash');
+      const succeeded1 = shellCalls1.filter((c) => !c.isError && c.rawResult !== null);
+      expect(
+        succeeded1,
+        `po Odmowie powloka mimo wszystko cos wykonala: ${JSON.stringify(succeeded1.map((c) => c.rawResult))}`,
+      ).toEqual([]);
+      const saidAfterRefusal = await backend.assistantText(conversationId());
+      // The refusal is stated to the user rather than passed over in silence.
+      expect(saidAfterRefusal.toLowerCase()).toMatch(/odmow|nie zgod|nie udalo|brak zgody|odrzuc/);
       record.turaPoOdmowie = {
         proszonoOZgode: first.decisions.length,
         wywolaniaBash: shellCalls1.length,
-        wynikiBash: shellCalls1.map((c) => c.rawResult),
+        wywolaniaZakonczoneSukcesem: succeeded1.length,
+        skutek: succeeded1.length === 0 ? 'brak — operacja sie nie wykonala' : 'WYKONANA MIMO ODMOWY',
+        wynikiBash: shellCalls1.map((c) => ({ blad: c.isError, tresc: String(c.rawResult ?? '').slice(0, 300) })),
+        odpowiedzPoOdmowie: saidAfterRefusal.slice(-600),
       };
 
       /* ------------- tura 2: ta sama proba, uzytkownik sie zgadza ---------- */
