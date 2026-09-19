@@ -57,6 +57,7 @@ interface Harness {
   POMINIETE: string;
   BLAD_PROBY: string;
   ranTests: (output: string) => number;
+  childEnv: () => Record<string, string | undefined>;
   readRegistry: (path?: string) => { proby: Trial[] };
   assertCleanTree: (repo?: string, what?: string) => void;
   applyMutation: (trial: Trial, repo?: string) => { path: string; original: string };
@@ -221,6 +222,27 @@ describe('harness prob zdolnosci wykrycia', () => {
     });
     expect(results[0]!.wynik).toBe(harness.BLAD_PROBY);
     expect(results[0]!.powod).toContain('oblewa juz na czystym kodzie');
+  });
+
+  it('przebieg proby nie oddaje testom przelacznika zapisu dowodow', () => {
+    /*
+     * Found by running this harness with `APP_WRITE_EVIDENCE=1`: the switch
+     * reached every test it spawned, so a trial over an evidence-writing test
+     * wrote that test's files into the evidence directory — from mutated code.
+     * The trial's evidence is the trial's own report; the tests it runs are
+     * instruments and leave nothing behind.
+     */
+    const before = process.env.APP_WRITE_EVIDENCE;
+    process.env.APP_WRITE_EVIDENCE = '1';
+    try {
+      expect(harness.childEnv().APP_WRITE_EVIDENCE).toBeUndefined();
+      // Everything else is passed through: this removes one variable, not the
+      // environment.
+      expect(harness.childEnv().PATH).toBe(process.env.PATH);
+    } finally {
+      if (before === undefined) delete process.env.APP_WRITE_EVIDENCE;
+      else process.env.APP_WRITE_EVIDENCE = before;
+    }
   });
 
   it('liczba uruchomionych testow czytana jest z podsumowania, nie z kodu wyjscia', () => {

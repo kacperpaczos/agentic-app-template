@@ -137,8 +137,24 @@ export function vitestRunner(trial, repo = REPO) {
   if (trial.rodzaj === 'playwright') return playwrightRunner(trial, repo);
   const args = ['exec', 'vitest', 'run', trial.test];
   if (trial.nazwaTestu) args.push('-t', trial.nazwaTestu);
-  const out = spawnSync('pnpm', args, { cwd: repo, encoding: 'utf8', timeout: 600_000 });
+  const out = spawnSync('pnpm', args, { cwd: repo, encoding: 'utf8', timeout: 600_000, env: childEnv() });
   return { code: out.status, output: `${out.stdout ?? ''}${out.stderr ?? ''}` };
+}
+
+/**
+ * The environment a trial's test run gets — with `APP_WRITE_EVIDENCE` removed.
+ *
+ * Found by this harness's own evidence run, which is the only reason it is
+ * written down rather than assumed: `APP_WRITE_EVIDENCE=1 node
+ * scripts/detection-trials.mjs` passed the switch to every test it spawned, so
+ * a trial over an evidence-writing test wrote **its** files into the evidence
+ * directory — on mutated code, no less. Evidence of a trial is the trial's
+ * report; the tests it runs are instruments and must leave nothing behind.
+ */
+export function childEnv() {
+  const env = { ...process.env };
+  delete env.APP_WRITE_EVIDENCE;
+  return env;
 }
 
 /**
@@ -154,7 +170,7 @@ export function vitestRunner(trial, repo = REPO) {
  * phase is the built mutated code.
  */
 export function playwrightRunner(trial, repo = REPO) {
-  const build = spawnSync('pnpm', ['build'], { cwd: repo, encoding: 'utf8', timeout: 900_000 });
+  const build = spawnSync('pnpm', ['build'], { cwd: repo, encoding: 'utf8', timeout: 900_000, env: childEnv() });
   if (build.status !== 0) {
     return { code: build.status, output: `pnpm build oblal:\n${build.stdout ?? ''}${build.stderr ?? ''}` };
   }
@@ -169,7 +185,7 @@ export function playwrightRunner(trial, repo = REPO) {
     trial.test,
     ...(trial.nazwaTestu ? ['-g', trial.nazwaTestu] : []),
   ];
-  const out = spawnSync('flock', args, { cwd: repo, encoding: 'utf8', timeout: 3_600_000 });
+  const out = spawnSync('flock', args, { cwd: repo, encoding: 'utf8', timeout: 3_600_000, env: childEnv() });
   return { code: out.status, output: `${out.stdout ?? ''}${out.stderr ?? ''}` };
 }
 
