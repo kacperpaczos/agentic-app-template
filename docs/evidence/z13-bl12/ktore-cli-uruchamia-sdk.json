@@ -1,0 +1,40 @@
+{
+  "opis": "Ktore CLI wykonuje prace, gdy aplikacja uzywa Claude Agent SDK: wbudowane w pakiet czy to z PATH. Zadanie sterujace accountInfo() z PATH pozbawionym katalogu z `claude` uzytkownika i z CLAUDE_CONFIG_DIR w katalogu tymczasowym z fabrykowanym poswiadczeniem.",
+  "zrodlo": "node scripts/probe-which-cli.mjs",
+  "rodzajWykonania": "przebieg odbiorowy z logiem",
+  "czegoToNieDowodzi": [
+    "To nie jest tura modelu. accountInfo() jest zadaniem sterujacym — CLI odpowiada na nie samo, prompt nie jest wysylany, model nie jest pytany. Koszt: zero tur.",
+    "To nie mowi nic o koncie uzytkownika: poswiadczenie jest zmyslone, a odpowiedz to stan sesji, nie dane konta."
+  ],
+  "zapisano": "2026-09-19T09:14:34.742Z",
+  "wersjaKodu": {
+    "commit": "b824f4aadf8eb44f73b0964b3209eb217f2816dc",
+    "brudneDrzewo": true
+  },
+  "srodowisko": {
+    "system": "linux 7.2.5-200.fc44.x86_64 x64",
+    "node": "24.19.0",
+    "claudeNaPath": "2.1.278 (Claude Code)",
+    "sciezkaClaudeNaPath": "/home/paczos/.local/bin/claude",
+    "pakietSdk": "0.3.270",
+    "cliWbudowaneWSdk": {
+      "wersja": "2.1.270",
+      "commit": "97ecbf7abeb4170dcfd26c4d4b397afd9015030e",
+      "dataBudowy": "2026-09-12T18:17:55Z"
+    }
+  },
+  "warunki": {
+    "pathBezClaude": true,
+    "claudeConfigDir": "katalog tymczasowy, skasowany po probie",
+    "poswiadczenie": "fabrykowane — wartosci, ktore nigdy nie byly tokenem"
+  },
+  "wynik": {
+    "sdkOdpowiedzialoBezClaudeNaPath": true,
+    "odpowiedz": {
+      "tokenSource": "none",
+      "apiProvider": "firstParty"
+    },
+    "blad": null
+  },
+  "wniosek": "SDK wykonalo zadanie sterujace bez `claude` na PATH, wiec uruchomilo CLI wbudowane w pakiet (2.1.270, commit 97ecbf7abeb4170dcfd26c4d4b397afd9015030e). `claude` z PATH (2.1.278 (Claude Code)) nie bral udzialu w przebiegu — przypinanie dowodu do jego wersji przypina go do programu, ktory nie wykonal pracy."
+}

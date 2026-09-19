@@ -70,6 +70,42 @@ const cliVersion = (): string | null => {
   }
 };
 
+/**
+ * Version of the CLI **bundled inside the installed SDK** — the binary that
+ * actually did the work in every one of these records.
+ *
+ * This replaced a comparison against `claude --version`, and the reason is an
+ * observation rather than an opinion. `scripts/probe-which-cli.mjs` ran an SDK
+ * control request with `claude` removed from `PATH` and a fabricated credential
+ * in a temporary `CLAUDE_CONFIG_DIR`; the SDK answered anyway
+ * (`docs/evidence/z13-bl12/ktore-cli-uruchamia-sdk.json`). So the SDK spawns its
+ * own binary from `@anthropic-ai/claude-agent-sdk-<platform>`, and the `claude`
+ * on `PATH` took no part in any recorded run.
+ *
+ * Pinning evidence to the version of a program that did not run is not
+ * strictness — it is a false condition. It also had a cost that was paid: a
+ * user-side upgrade of that CLI (2.1.277 → 2.1.278, overnight, with no change
+ * in this repository) turned the whole `pnpm verify` gate red.
+ *
+ * What replaces it is *stricter where it matters*: this version is a function of
+ * the SDK package, which the lockfile pins, so it moves only when somebody
+ * deliberately changes a dependency — and then the record really is stale.
+ */
+const sdkBundledCliVersion = (): string | null => {
+  let dir = dirname(require.resolve('@anthropic-ai/claude-agent-sdk'));
+  for (let i = 0; i < 6; i += 1) {
+    const manifest = resolve(dir, 'manifest.json');
+    if (existsSync(manifest)) {
+      const json = JSON.parse(readFileSync(manifest, 'utf8')) as { version?: string };
+      if (json.version) return json.version;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+};
+
 describe('zapisany dowod sposobu logowania sesji SDK', () => {
   const path = resolve(process.cwd(), EVIDENCE);
   const present = existsSync(path);
@@ -130,14 +166,34 @@ describe('zapisany dowod sposobu logowania sesji SDK', () => {
     expect(record.wersje?.mastraClaude, `dowod z innej wersji adaptera. Wykonaj: ${REGENERATE}`).toBe(
       installedVersion('@mastra/claude'),
     );
-    const cli = cliVersion();
-    if (cli === null) {
-      // Stated, not assumed: without the CLI the triple cannot be checked here,
-      // and the record's own value is left to speak for itself.
-      expect(record.wersje?.claudeCli).toBeTruthy();
-      return;
+    /*
+     * The CLI that ran, not the one on the operator's PATH. See
+     * `sdkBundledCliVersion` above and the observation it rests on.
+     */
+    const bundled = sdkBundledCliVersion();
+    expect(bundled, 'nie odczytano wersji CLI wbudowanej w SDK').toBeTruthy();
+    expect(
+      record.wersje?.claudeCliWSdk,
+      `dowod z innej wersji CLI wbudowanej w SDK. Wykonaj: ${REGENERATE}`,
+    ).toBe(bundled);
+
+    /*
+     * The CLI on PATH is environment, so it is **recorded and not asserted
+     * equal**. It is what a human runs by hand, it moves when the user updates
+     * it, and it did not take part in the run. Requiring it to be present keeps
+     * the record complete; requiring it to match would keep the repository
+     * hostage to somebody else's release schedule.
+     */
+    expect(record.wersje?.claudeCli, 'zapis nie podaje CLI z PATH jako srodowiska').toBeTruthy();
+    const onPath = cliVersion();
+    if (onPath !== null && record.wersje?.claudeCli !== onPath) {
+      // Visible, not fatal: the reader learns the environment moved.
+      console.log(
+        `[dowod] CLI na PATH zmienilo sie od zapisu: ${record.wersje?.claudeCli} → ${onPath}. ` +
+          'To srodowisko, nie mechanizm — przebieg szedl przez CLI wbudowane w SDK ' +
+          `(${bundled}).`,
+      );
     }
-    expect(record.wersje?.claudeCli, `dowod z innej wersji Claude CLI. Wykonaj: ${REGENERATE}`).toBe(cli);
   });
 });
 
@@ -226,17 +282,19 @@ describe('zapisane proby graniczne uwierzytelnienia', () => {
         expect(found!.body.poswiadczenieProbyPoPrzebiegu?.skasowanePrzezCli).toBe(true);
       });
 
-      it('zapis pochodzi z zainstalowanej wersji CLI', () => {
-        const cli = cliVersion();
-        if (cli === null) {
-          expect(found!.body.wersje?.claudeCli).toBeTruthy();
-          return;
-        }
+      it('zapis pochodzi z zainstalowanej wersji CLI — tej, ktora wykonala przebieg', () => {
+        /*
+         * Ta sama zasada, co wyżej. Próba idzie przez aplikację, aplikacja przez SDK,
+         * a SDK uruchamia własne CLI z pakietu. `claude` z PATH jest środowiskiem i
+         * jest zapisany, ale nie rozstrzyga o aktualności zapisu.
+         */
+        const bundled = sdkBundledCliVersion();
         expect(
-          found!.body.wersje?.claudeCli,
-          `zapis proby "${prefix}" z innej wersji CLI. Powtorz: node --experimental-transform-types ` +
-            `scripts/probe-refresh-refused.ts${prefix === 'revoked' ? ' --revoked' : ''}`,
-        ).toBe(cli);
+          found!.body.wersje?.claudeCliWSdk,
+          `zapis proby "${prefix}" z innej wersji CLI wbudowanej w SDK. Powtorz: node ` +
+            `--experimental-transform-types scripts/probe-refresh-refused.ts${prefix === 'revoked' ? ' --revoked' : ''}`,
+        ).toBe(bundled);
+        expect(found!.body.wersje?.claudeCli, 'zapis nie podaje CLI z PATH jako srodowiska').toBeTruthy();
       });
     });
   }

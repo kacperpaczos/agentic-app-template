@@ -81,6 +81,14 @@ export const EXECUTION_KINDS = [
   'test kontraktu lub logiki',
   'symulacja',
   'analiza kodu',
+  /*
+   * A recorded run of an acceptance command — `pnpm verify` on a clean copy,
+   * `pnpm check:module-swap`, a probe script — with its log kept. G17 allows
+   * exactly this ("skrypt odbiorowy z logiem"), and none of the five above fits
+   * it: it was executed, so "analiza kodu" would be false, and no test file
+   * carries it.
+   */
+  'przebieg odbiorowy z logiem',
 ] as const;
 export type ExecutionKind = (typeof EXECUTION_KINDS)[number];
 

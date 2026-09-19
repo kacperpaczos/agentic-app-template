@@ -31,6 +31,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { arch, platform, release } from 'node:os';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -345,6 +346,11 @@ if (isMain) {
       rodzajWykonania: 'test kontraktu lub logiki',
       zapisano: new Date().toISOString(),
       wersjaKodu: { commit, brudneDrzewoPrzedProbami: false, node: process.versions.node },
+      srodowisko: {
+        system: `${platform()} ${release()} ${arch()}`,
+        node: process.versions.node,
+        pnpm: (spawnSync('pnpm', ['--version'], { encoding: 'utf8' }).stdout ?? '').trim() || null,
+      },
       drzewoPoProbach: dirty ? 'BRUDNE' : 'czyste',
       wyniki: results,
     };

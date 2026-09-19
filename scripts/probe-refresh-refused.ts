@@ -44,7 +44,8 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { createRequire } from 'node:module';
+import { dirname, resolve } from 'node:path';
 import {
   DEFAULT_USER_ID,
   classifyAccessFailure,
@@ -231,6 +232,44 @@ const untouched =
   JSON.stringify({ ...before, mtimeMs: undefined }) === JSON.stringify({ ...after, mtimeMs: undefined }) &&
   before.mtimeMs === after.mtimeMs;
 
+/** Wersja CLI **wbudowanej w zainstalowany SDK** — tej, ktora wykonala ten przebieg. */
+function sdkBundledCli(): { wersja: string; commit: string } | null {
+  const req = createRequire(resolve(process.cwd(), 'packages/platform-server/package.json'));
+  let dir = dirname(req.resolve('@anthropic-ai/claude-agent-sdk'));
+  for (let i = 0; i < 6; i += 1) {
+    const manifest = resolve(dir, 'manifest.json');
+    if (existsSync(manifest)) {
+      const json = JSON.parse(readFileSync(manifest, 'utf8')) as { version?: string; commit?: string };
+      if (json.version) return { wersja: json.version, commit: json.commit ?? 'nieznany' };
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
+/** Wersja zainstalowanego pakietu, czytana z jego manifestu. */
+function packageVersion(name: string): string {
+  const req = createRequire(resolve(process.cwd(), 'packages/platform-server/package.json'));
+  try {
+    let dir = dirname(req.resolve(name));
+    for (let i = 0; i < 8; i += 1) {
+      const manifest = resolve(dir, 'package.json');
+      if (existsSync(manifest)) {
+        const json = JSON.parse(readFileSync(manifest, 'utf8')) as { name?: string; version?: string };
+        if (json.name === name && json.version) return json.version;
+      }
+      const parent = dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  } catch {
+    /* nieustalona */
+  }
+  return 'nieustalona';
+}
+
 const git = (args: string[]): string => {
   try {
     return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -261,6 +300,11 @@ const record = {
   zapisano: new Date().toISOString(),
   wersje: {
     node: process.versions.node,
+    /*
+     * `claude` z PATH jest **srodowiskiem**, nie mechanizmem: przebieg idzie przez SDK, a SDK
+     * uruchamia wlasne CLI z pakietu. Zapisane sa obie wartosci, ale aktualnosc zapisu rozstrzyga
+     * ta ponizej — zob. docs/evidence/z13-bl12/ktore-cli-uruchamia-sdk.json.
+     */
     claudeCli: (() => {
       try {
         return execFileSync('claude', ['--version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
@@ -270,6 +314,10 @@ const record = {
         return 'nieznana';
       }
     })(),
+    claudeCliWSdk: sdkBundledCli()?.wersja ?? 'nieznana',
+    claudeCliWSdkCommit: sdkBundledCli()?.commit ?? 'nieznany',
+    claudeAgentSdk: packageVersion('@anthropic-ai/claude-agent-sdk'),
+    mastraClaude: packageVersion('@mastra/claude'),
     commit: git(['rev-parse', 'HEAD']),
     brudneDrzewo: git(['status', '--porcelain']) !== '',
   },
