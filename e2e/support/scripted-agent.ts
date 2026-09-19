@@ -112,7 +112,15 @@ export type Step =
    * measurement can count the server's descendant processes before, during and
    * after, instead of stopping at a status in the database.
    */
-  | { kind: 'spawnChild' }
+  /**
+   * Starts a real OS child process bound to the run's abort signal.
+   *
+   * `leak: true` deliberately **breaks** that binding and makes the child
+   * ignore `SIGTERM` as well — the shape of a worker process that outlives the
+   * run. It exists so a detection trial can show that the leak check is able to
+   * fail; nothing else may use it.
+   */
+  | { kind: 'spawnChild'; leak?: boolean }
   /**
    * Asks the browser to move the interface, through the real runtime gate, and
    * records what the client reported back.
@@ -460,12 +468,22 @@ export function scriptedAgent(
              * Five minutes is far longer than any assertion here waits, so it
              * weakens nothing and bounds the damage of a failing trial.
              */
+            const step = e.step as Extract<Step, { kind: 'spawnChild' }> | undefined;
+            const leaks = step?.leak === true;
             const child = spawn(
               process.execPath,
-              ['-e', 'setTimeout(() => process.exit(0), 300000)'],
-              { stdio: 'ignore' },
+              [
+                '-e',
+                leaks
+                  ? // Ignores SIGTERM and is not bound to the run: a leak.
+                    "process.on('SIGTERM', () => {}); setTimeout(() => process.exit(0), 300000)"
+                  : 'setTimeout(() => process.exit(0), 300000)',
+              ],
+              { stdio: 'ignore', ...(leaks ? { detached: true } : {}) },
             );
+            if (leaks) child.unref();
             const kill = () => {
+              if (leaks) return;
               if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
             };
             if (signal?.aborted) kill();

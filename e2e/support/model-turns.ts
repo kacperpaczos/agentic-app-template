@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { environment } from '../../tests/support/measurement-evidence.ts';
+import { relative, resolve } from 'node:path';
+import { codeVersion, environment } from '../../tests/support/measurement-evidence.ts';
 
 /**
  * The three specs that answer with the **real model**, and everything that
@@ -66,11 +66,20 @@ export const modelSpecsRequested = (env: NodeJS.ProcessEnv = process.env): boole
 /** What the run prints about the specs it did not run, so the skip is never silent. */
 export function modelSpecsNotice(env: NodeJS.ProcessEnv = process.env): string {
   const listed = MODEL_SPEC_FILES.map((f) => `${f} (${MODEL_SPEC_TURNS[f]})`).join(', ');
-  return modelSpecsRequested(env)
-    ? `[e2e] ${MODEL_OPT_IN_ENV}=1 — projekt „model”: ${listed}. ` +
-        `Ten przebieg wyda do ${MODEL_TURNS_PER_RUN} tur subskrypcji.`
-    : `[e2e] pominieto spece z prawdziwym modelem: ${listed}. ` +
-        `Kosztuja ${MODEL_TURNS_PER_RUN} tur subskrypcji na przebieg — uruchamia sie je swiadomie: pnpm test:e2e:model.`;
+  const z11 = Z11_MODEL_SPEC_FILES.map((f) => `${f} (${Z11_SPEC_TURNS[f]})`).join(', ');
+  if (!modelSpecsRequested(env)) {
+    return (
+      `[e2e] pominieto spece z prawdziwym modelem: ${listed}. ` +
+      `Kosztuja ${MODEL_TURNS_PER_RUN} tur subskrypcji na przebieg — uruchamia sie je swiadomie: pnpm test:e2e:model. ` +
+      `Pominieto takze spece pakietu BL-03: ${z11} — druga zgoda, ${Z11_OPT_IN_ENV}=1 (pnpm test:e2e:z11).`
+    );
+  }
+  return z11SpecsRequested(env)
+    ? `[e2e] ${MODEL_OPT_IN_ENV}=1 i ${Z11_OPT_IN_ENV}=1 — projekt „model-z11”: ${z11}. ` +
+        `Ten przebieg wyda do ${Z11_TURNS_PLANNED} tur z grantu BL-03 (${Z11_TURN_BUDGET}).`
+    : `[e2e] ${MODEL_OPT_IN_ENV}=1 — projekt „model”: ${listed}. ` +
+        `Ten przebieg wyda do ${MODEL_TURNS_PER_RUN} tur subskrypcji. ` +
+        `Spece pakietu BL-03 (${z11}) wymagaja dodatkowo ${Z11_OPT_IN_ENV}=1.`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -224,6 +233,164 @@ export function writeEvidence(name: string, body: Record<string, unknown>): void
         zrodlo: 'prawdziwy model (subskrypcja Claude), instancja testowa suity przegladarkowej',
         spec: 'e2e/bl01-bl02-model.spec.ts',
         przebieg: RUN_STAMP,
+        ...body,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  BL-03 (Z11) — a second grant, with its own ledger and its own switch       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Why a second set of everything rather than four more entries above.
+ *
+ * **A separate switch.** `pnpm test:e2e:model` costs 11 turns and is documented
+ * as costing 11. Adding these files to the same project would silently change
+ * that number for everyone who runs it, which is how the default run came to
+ * spend turns in the first place. `APP_E2E_MODEL_Z11=1` is a second, deliberate
+ * choice on top of the first, and the default browser run ignores both.
+ *
+ * **A separate ledger.** The ledger under `docs/evidence/bl01-bl02-2026-09-17/`
+ * records a **closed** grant of 22 turns, 21 of them spent. Counting this
+ * grant's turns into a tally seeded from that one would either refuse every run
+ * here (one turn left of 22) or, worse, make the closed grant's numbers move.
+ * Two grants, two counters, and neither writes the other's file.
+ */
+
+/** Spec files of this package that spend subscription turns. */
+export const Z11_MODEL_SPEC_FILES = [
+  'bl03-model-canvas.spec.ts',
+  'bl03-model-isolation.spec.ts',
+  'bl03-model-lifecycle.spec.ts',
+  'bl03-model-relations.spec.ts',
+] as const;
+export type Z11ModelSpecFile = (typeof Z11_MODEL_SPEC_FILES)[number];
+
+export const Z11_MODEL_SPEC_PATTERNS: string[] = Z11_MODEL_SPEC_FILES.map((f) => `**/${f}`);
+
+/**
+ * Turns one clean run of each spec spends — one per command typed into the
+ * composer, which is the unit the ledger has always counted.
+ *
+ * Declared per file for the same reason `ACCEPTANCE_TEST_TURNS` is: the
+ * pre-flight has to be able to answer "can what is left pay for this whole
+ * spec" before the first command leaves the browser.
+ */
+export const Z11_SPEC_TURNS: Record<Z11ModelSpecFile, number> = {
+  'bl03-model-canvas.spec.ts': 4,
+  /* 3, nie 4: odmowa i zgoda na te sama operacje mieszcza sie w jednym poleceniu. */
+  'bl03-model-isolation.spec.ts': 3,
+  'bl03-model-lifecycle.spec.ts': 7,
+  'bl03-model-relations.spec.ts': 1,
+};
+
+/** What one clean pass of all four costs: 15 of the granted 25. */
+export const Z11_TURNS_PLANNED = Object.values(Z11_SPEC_TURNS).reduce((a, b) => a + b, 0);
+
+/**
+ * The grant. 25 turns, from the coordinator, for BL-03 and nothing else.
+ *
+ * The ceiling, not the plan: 15 turns buy one clean pass of the four specs and
+ * the remaining 10 are for retries. Raising it needs a new grant, and the ledger
+ * on disk carries every turn with the spec that spent it, so a later number
+ * cannot quietly become a fresh start.
+ */
+export const Z11_TURN_BUDGET = 25;
+
+/** The second switch. Set *in addition to* `APP_E2E_MODEL`. */
+export const Z11_OPT_IN_ENV = 'APP_E2E_MODEL_Z11';
+
+export const z11SpecsRequested = (env: NodeJS.ProcessEnv = process.env): boolean =>
+  modelSpecsRequested(env) && env[Z11_OPT_IN_ENV] === '1';
+
+/** This grant's tally, in the working copy (gitignored), starting at zero. */
+export const Z11_WORKING_LEDGER = resolve(REPO_ROOT, '.e2e-model-turns/z11-bl03.json');
+
+/** Where this package's evidence lives. Run-stamped; nothing is overwritten. */
+export const Z11_EVIDENCE_ROOT = resolve(REPO_ROOT, 'docs/evidence/z11-bl03');
+
+export function readZ11Ledger(): TurnLedger {
+  if (existsSync(Z11_WORKING_LEDGER)) {
+    return JSON.parse(readFileSync(Z11_WORKING_LEDGER, 'utf8')) as TurnLedger;
+  }
+  return {
+    budzet: Z11_TURN_BUDGET,
+    wydane: 0,
+    tury: [],
+    zrodlo: 'grant koordynatora dla pakietu BL-03 (zadanie Z11): 25 tur, licznik wlasny',
+  };
+}
+
+export function writeZ11Ledger(ledger: TurnLedger): void {
+  mkdirSync(resolve(Z11_WORKING_LEDGER, '..'), { recursive: true });
+  writeFileSync(Z11_WORKING_LEDGER, `${JSON.stringify(ledger, null, 2)}\n`);
+}
+
+/** Can what is left of this grant pay for a whole spec? Asked before the first command. */
+export function z11Preflight(needed: number): BudgetPreflight {
+  return budgetPreflight({ budget: Z11_TURN_BUDGET, spent: readZ11Ledger().wydane, needed });
+}
+
+/** This run's own evidence directory, beside every earlier run's. */
+export const z11RunEvidenceDir = (): string => resolve(Z11_EVIDENCE_ROOT, 'runs', RUN_STAMP);
+
+export function z11EvidencePath(name: string): string {
+  if (!/^[\w.-]+$/.test(name) || name.startsWith('.')) {
+    throw new Error(`nazwa dowodu „${name}” nie jest zwykla nazwa pliku`);
+  }
+  return resolve(z11RunEvidenceDir(), name);
+}
+
+/**
+ * One evidence file of this run, written whether the proba passed or not.
+ *
+ * Assembled from named fields, never from whole API objects: a run record
+ * carries `claudeSessionId`, and a conversation can carry anything the user
+ * typed. What goes in is what the caller chose to put in.
+ *
+ * **Koperta dowodowa (L12.10).** The envelope — commit, tree state, environment,
+ * resolved package versions and the version of the CLI *inside* the SDK — comes
+ * from the shared writer, not from fields spelled out here. The first eleven
+ * proofs of this package were written before the envelope existed and had to be
+ * entered in `docs/evidence/POCHODZENIE.json` by hand, because inventing an
+ * environment nobody recorded would be worse than admitting it was not. Every
+ * proof written from here on carries its own, so the register can only shrink.
+ *
+ * `rodzajWykonania` is `'rzeczywisty model'` and is not a parameter: this
+ * function is only reachable from a spec that both switches let through, and a
+ * proof of this package that was produced any other way would be a different
+ * kind of mistake than a mislabelled one.
+ *
+ * **Why this writes unconditionally**, unlike every other evidence writer in the
+ * repository. G18 makes a proof optional because a regression that rewrites
+ * files dirties the tree it is being judged on — and that reasoning is about
+ * runs that are free to repeat. A turn is not: the record of what a paid turn
+ * did is the only copy there will ever be, and `APP_WRITE_EVIDENCE` being unset
+ * would throw it away silently. These specs are outside `pnpm verify` and
+ * outside the default browser run, so nothing they write can dirty a regression.
+ */
+export function writeZ11Evidence(
+  name: string,
+  body: Record<string, unknown> & { spec: string },
+): void {
+  mkdirSync(z11RunEvidenceDir(), { recursive: true });
+  writeFileSync(
+    z11EvidencePath(name),
+    `${JSON.stringify(
+      {
+        zapisano: new Date().toISOString(),
+        /* Slownikiem repozytorium, nie proza — tak czyta to rejestr pochodzenia. */
+        rodzajWykonania: 'rzeczywisty model',
+        wersjaKodu: codeVersion(undefined, [relative(REPO_ROOT, Z11_EVIDENCE_ROOT)]),
+        srodowisko: environment(),
+        zrodlo: 'prawdziwy model (subskrypcja Claude) przez @mastra/claude i proces Claude Agent SDK',
+        pakiet: 'BL-03 (Z11)',
+        przebieg: RUN_STAMP,
+        kodCommit: codeCommit(),
         ...body,
       },
       null,

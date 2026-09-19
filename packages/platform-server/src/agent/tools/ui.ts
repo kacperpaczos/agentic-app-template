@@ -90,7 +90,10 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
       name: 'ui_navigate',
       description:
         'Otwiera wskazany widok lub ustawienie, przelacza przestrzen pracy, przewija do elementu ' +
-        'i chwilowo go podswietla. Uzywaj tego RUTYNOWO: jesli odpowiadasz na pytanie o dane, ' +
+        'i chwilowo go podswietla. PRZESTRZEN PRACY przelaczasz tak: targetId = "platform.canvas" ' +
+        'ORAZ spaceId = identyfikator przestrzeni z ui_catalog (pole spaces[].spaceId). ' +
+        'Identyfikator przestrzeni NIE jest celem — podany jako targetId zostanie odrzucony. ' +
+        'Uzywaj tego RUTYNOWO: jesli odpowiadasz na pytanie o dane, ' +
         'ktore maja swoj widok, otworz ten widok w tej samej turze, zamiast tylko opisywac dane ' +
         'w rozmowie. Zwraca to, co KLIENT faktycznie wykonal — wywolanie moze ' +
         'zakonczyc sie niepowodzeniem (nieznany cel, element nieobecny, uzytkownik oglada inna ' +
@@ -99,8 +102,14 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
       effect: 'read',
       alwaysLoad: true,
       inputSchema: z.object({
-        targetId: z.string().max(120),
-        spaceId: z.string().max(80).optional(),
+        targetId: z.string().max(120).describe('Identyfikator celu z ui_catalog (targets[].id), np. "platform.canvas".'),
+        spaceId: z
+          .string()
+          .max(80)
+          .optional()
+          .describe(
+            'Przestrzen pracy do pokazania (ui_catalog: spaces[].spaceId). Tu, a nie w targetId.',
+          ),
         reason: z.string().max(200).optional(),
       }),
       handler: async (input: any, ctx: ToolCallContext) => {
@@ -114,11 +123,41 @@ export function uiTools(services: PlatformServices): Array<ModuleToolDefinition<
          */
         const known = services.modules.uiTargets().find((t) => t.id === input.targetId);
         if (!known) {
+          /*
+           * The one wrong guess this tool actually gets, and what it costs.
+           *
+           * Observed on a real turn (BL-03, przebieg A): asked to switch the
+           * workspace, the agent read `ui_catalog`, took `spaces[].spaceId` and
+           * passed it as `targetId`. That is a reasonable reading — the catalog
+           * hands back two lists of identifiers and the schema took a bare
+           * string — and the refusal it got back was a correct `unknown_target`
+           * with a list of targets, none of which is a workspace. The agent had
+           * no way to work out from the answer that the id belonged in another
+           * field, so the switch simply did not happen.
+           *
+           * A refusal that names the fix turns that into a correction the agent
+           * makes inside the same turn. The check is cheap and only runs on a
+           * miss, and it confirms ownership first, so it never tells a caller
+           * about a space that is not theirs.
+           */
+          let hint: string | undefined;
+          if (/^spc_/.test(input.targetId)) {
+            const owned = services.canvas
+              .listSpaces(ctx.ownerId)
+              .find((sp) => sp.id === input.targetId);
+            if (owned) {
+              hint =
+                `"${input.targetId}" to przestrzen pracy, nie cel interfejsu. ` +
+                'Zeby ja pokazac, wywolaj ponownie z targetId: "platform.canvas" i spaceId: ' +
+                `"${input.targetId}".`;
+            }
+          }
           return {
             executed: false,
             reason: UI_COMMAND_FAILURES.unknownTarget,
             requested: input.targetId,
             available: services.modules.uiTargets().map((t) => t.id),
+            ...(hint ? { hint } : {}),
           };
         }
         if (input.spaceId) {

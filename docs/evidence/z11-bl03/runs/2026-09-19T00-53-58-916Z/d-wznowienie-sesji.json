@@ -1,0 +1,38 @@
+{
+  "zapisano": "2026-09-19T00:54:34.975Z",
+  "kodCommit": "9a6846a5a86ecf382404feaa00f34a59939510c2",
+  "zrodlo": "prawdziwy model (subskrypcja Claude) przez @mastra/claude i proces Claude Agent SDK",
+  "pakiet": "BL-03 (Z11)",
+  "przebieg": "2026-09-19T00-53-58-916Z",
+  "spec": "e2e/bl03-model-lifecycle.spec.ts",
+  "przebiegPlanu": "C/D",
+  "turyWydaneWTymPliku": 2,
+  "turyWydaneLacznie": 10,
+  "budzet": 25,
+  "kroki": [
+    {
+      "cel": "druga tura po restarcie",
+      "runId": "run_ecf8593153ac4d14920d",
+      "faza": "succeeded"
+    }
+  ],
+  "kryteria": [
+    "L8.5"
+  ],
+  "obserwacjaDla": "L7.13",
+  "turaPierwsza": {
+    "runId": "run_ea05f04e98ac47248eaf",
+    "wiadomosci": 2
+  },
+  "odpowiedzDrugiejTury": "OK.\n4721",
+  "l713": {
+    "sesjaPierwszejTury": true,
+    "sesjeIdentyczne": true,
+    "zdarzeniaCustom": [
+      "platform.session_bound"
+    ],
+    "transkryptUtracony": false,
+    "kodBledu": null
+  },
+  "wynik": "zaliczona"
+}

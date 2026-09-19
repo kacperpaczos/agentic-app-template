@@ -1,0 +1,81 @@
+{
+  "zapisano": "2026-09-19T00:35:48.807Z",
+  "kodCommit": "a481893bbfc11c7787bd8c39458e522f6d0a6b05",
+  "zrodlo": "prawdziwy model (subskrypcja Claude) przez @mastra/claude i proces Claude Agent SDK",
+  "pakiet": "BL-03 (Z11)",
+  "przebieg": "2026-09-19T00-33-31-539Z",
+  "spec": "e2e/bl03-model-canvas.spec.ts",
+  "przebiegPlanu": "A",
+  "turyWydaneWTymPliku": 4,
+  "turyWydaneLacznie": 6,
+  "budzet": 25,
+  "kroki": [
+    {
+      "tura": 1,
+      "cel": "dodanie karty",
+      "runId": "run_237674a9453b478789e6",
+      "faza": "succeeded",
+      "narzedzia": [
+        "ToolSearch",
+        "canvas_add_card"
+      ]
+    },
+    {
+      "tura": 2,
+      "cel": "zmiana i przesuniecie",
+      "runId": "run_a4138f2bb7c94309a858",
+      "faza": "succeeded",
+      "narzedzia": [
+        "ToolSearch",
+        "ToolSearch",
+        "canvas_update_card",
+        "canvas_move_card"
+      ]
+    },
+    {
+      "tura": 3,
+      "cel": "usuniecie",
+      "runId": "run_0b3f5c3030b34903afbe",
+      "faza": "succeeded",
+      "narzedzia": [
+        "ToolSearch",
+        "canvas_remove_card"
+      ]
+    },
+    {
+      "tura": 4,
+      "cel": "ustawienie i przestrzen",
+      "runId": "run_c50c09294c854f9b80fd",
+      "faza": "succeeded",
+      "narzedzia": [
+        "ui_navigate",
+        "ui_catalog",
+        "ui_navigate"
+      ]
+    }
+  ],
+  "znacznik": "Z11AMU7NMBHB",
+  "kryteria": [
+    "L3.2",
+    "L3.10",
+    "L3.13",
+    "L6.6",
+    "L2.13"
+  ],
+  "sprawa": "pcs_4f2ad7e6466c42cfb2f9",
+  "kartaWykonania": "crd_224c9a714fde469bbd06",
+  "komponent": "procurement.costChart",
+  "kartaWskazujeSprawe": "pcs_4f2ad7e6466c42cfb2f9",
+  "poZmianie": {
+    "tytul": "ZMIENIONY-Z11AMU7NMBHB",
+    "specVersion": 2,
+    "geometria": {
+      "x": 300,
+      "y": 1200,
+      "width": 520,
+      "height": 360,
+      "z": 0
+    }
+  },
+  "wynik": "niezaliczona"
+}
