@@ -811,19 +811,32 @@ export class AgentRuntime {
       disallowedTools: [...FORBIDDEN_TOOLS],
       permissionMode: 'default',
       /*
-       * Ta sama reguła pozytywna, ale wyegzekwowana przez samo SDK.
+       * Reguła pozytywna po stronie SDK — **wyłącznie dla odczytów**.
        *
        * `blockReadsOutsideWorkingDirectories` istnieje w zainstalowanej wersji
-       * 0.3.270 (sprawdzone w `sdk.d.ts`, nie przyjęte na słowo) i opisane jest
-       * tak: „Refuse file-tool reads (Read, Grep, Glob, LSP) outside the working
-       * directories in every permission mode". Katalogiem roboczym jest `cwd`,
-       * czyli workspace uruchomienia, i celowo **nie** podajemy
-       * `additionalDirectories`, bo każdy dopisany katalog poszerza ten obszar.
+       * 0.3.270 (sprawdzone w `sdk.d.ts`, nie przyjęte na słowo) i jej własny
+       * opis wyznacza jej zasięg: „Refuse **file-tool reads** (Read, Grep, Glob,
+       * LSP) outside the working directories in every permission mode".
        *
-       * Warstwa dodatkowa, nie jedyna: obowiązuje odmowa w hooku wyżej, którą
-       * regresja potrafi sprawdzić. Czy SDK naprawdę honoruje tę opcję, jest
-       * wypowiedzią o cudzym kodzie i należy do prób modelowych (L11.4, L11.11)
-       * — dlatego reguła jest wyegzekwowana po obu stronach.
+       * **Zapisów ta opcja NIE obejmuje.** `Write`, `Edit` i `NotebookEdit`
+       * zamyka `workspaceConfinementRefusal` w hooku `PreToolUse` i w bramce —
+       * to one są regułą dla zapisu, nie ta linia. Ktokolwiek uzna kiedyś tę
+       * opcję za komplet, zostawi otwartą nogę, którą prawdziwy model już raz
+       * przeszedł: `Write` utworzył plik na ścieżce odmówionej powłoce sekundę
+       * wcześniej.
+       *
+       * Że to nie jest deklaracja: dowód dla zapisu stoi na teście, który biegnie
+       * przeciwko **zastępnikowi modelu**. Zastępnik nie czyta `sdkOptions.settings`
+       * w ogóle, więc test „zapis poza workspace nie tworzy pliku" nie ma jak
+       * przejść dzięki tej opcji — przechodzi wyłącznie dzięki regule powyżej.
+       *
+       * Katalogiem roboczym jest `cwd`, czyli workspace uruchomienia, i celowo
+       * **nie** podajemy `additionalDirectories`: każdy dopisany katalog
+       * poszerza obszar, w którym odczyt jest dozwolony.
+       *
+       * Czy SDK naprawdę honoruje tę opcję, jest wypowiedzią o cudzym kodzie i
+       * należy do prób modelowych (L11.4, L11.11) — dlatego odczyt też ma
+       * odmowę po naszej stronie i nie zależy od niej wyłącznie.
        */
       settings: {
         permissions: { blockReadsOutsideWorkingDirectories: true },
