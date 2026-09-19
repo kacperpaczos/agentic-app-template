@@ -2,6 +2,7 @@ import { mkdirSync, existsSync, readdirSync, statSync, symlinkSync } from 'node:
 import { resolve, sep } from 'node:path';
 import { AppError } from '@platform/contracts';
 import { removeManagedTree } from '../util/managed-fs.ts';
+import { UnresolvablePathError } from '../util/real-path.ts';
 import { realResolve } from './permissions.ts';
 import type { ToolkitEntry } from './toolkit.ts';
 
@@ -102,7 +103,20 @@ export function createRunWorkspace(
  */
 export function resolveInWorkspace(workspaceDir: string, relative: string): string {
   const root = realResolve(workspaceDir, '.');
-  const abs = realResolve(workspaceDir, relative);
+  let abs: string;
+  try {
+    abs = realResolve(workspaceDir, relative);
+  } catch (err) {
+    // Z1 — `..` po komponencie nieistniejącym jest nierozwiązywalne; dokładnie
+    // kształt A6 z przeglądu zewnętrznego. Fail-closed: odmowa.
+    if (err instanceof UnresolvablePathError) {
+      throw new AppError('sandbox_denied', 'Sciezka wychodzi poza workspace uruchomienia.', {
+        requested: relative,
+        reason: err.reason,
+      });
+    }
+    throw err;
+  }
   if (abs !== root && !abs.startsWith(root + sep)) {
     throw new AppError('sandbox_denied', 'Sciezka wychodzi poza workspace uruchomienia.', {
       requested: relative,

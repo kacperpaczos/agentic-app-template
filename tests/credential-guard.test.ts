@@ -9,6 +9,7 @@ import {
   platformTools,
   createRunWorkspace,
   invokeTool,
+  AUTO_APPROVED_FILE_TOOLS,
   TOOL_PERMISSION_MATRIX,
   declaresPathArguments,
   decideTool,
@@ -66,10 +67,11 @@ const EMPTY_CONTEXT = {
   ui: null,
 };
 
-async function startRun(script: Step[]) {
+async function startRun(script: Step[], opts: { honorUpdatedInput?: boolean } = {}) {
   promptSeq += 1;
   const prompt = `polecenie poswiadczenia ${promptSeq}`;
   const handle: StandInHandle = newStandInHandle();
+  handle.honorUpdatedInput = opts.honorUpdatedInput ?? true;
   plans.set(prompt, { script, handle });
   const conversationId = h.platform.services.conversations.create({
     ownerId: h.ownerId,
@@ -576,6 +578,174 @@ describe('uruchomienie nie moze odczytac poswiadczenia (symulacja na granicy ada
     }
     // A narzędzie nieznane nadal trafia do zgody, nie do auto.
     expect(decideTool('NarzedzieBezDeklaracji', [])).toBe('consent');
+  });
+
+  /* ------------- Z7: dowod, ze narzedzie otwiera PRZEPISANA sciezke -------- */
+
+  /**
+   * Centralna teza rundy 4 — „narzędzie otwiera dokładnie ten plik, który
+   * sprawdzono" — ma mieć pokrycie dowodowe. Ustawiamy wyścig TOCTOU dokładnie
+   * jak recenzent (A10 kontra A10b):
+   *
+   *   `<ws>/link` → `<ws>/prawy` (wewnątrz workspace), plik po prawej stronie
+   *   NIE istnieje. Hook przepisuje `<ws>/link/sekret.txt` na
+   *   `<ws>/prawy/sekret.txt` — i to musi otworzyć narzędzie. Po powrocie z
+   *   hooka test podmienia `<ws>/link` na katalog POZA workspace z kanarkiem.
+   *
+   * Przy honorowaniu przepisania narzędzie otwiera `<ws>/prawy/…` (ENOENT —
+   * kanarek nie wycieka). Przy wyłączonym — otwiera `<ws>/link/…` po podmianie
+   * i kanarek wycieka, więc test oblewa. Zweryfikowane próbą (Z7-neg).
+   */
+  it('Z7 narzedzie otwiera PRZEPISANA sciezke — wyścig TOCTOU zostaje zamkniety', async () => {
+    /*
+     * Scenariusz (A10 recenzji): w chwili sprawdzenia `<ws>/link` wskazuje
+     * WEWNĄTRZ workspace — więc odmowa nie zapada, a hook przepisuje wejście na
+     * `<ws>/prawy/sekret.txt`. Między powrotem z hooka a otwarciem test podmienia
+     * `<ws>/link` na katalog POZA workspace z kanarkiem.
+     *
+     * Przy honorowaniu przepisania narzędzie otwiera `<ws>/prawy/sekret.txt`
+     * (ścieżkę sprawdzoną) — kanarek nie wycieka.
+     */
+    const outside = mkdtempSync(join(tmpdir(), 'wyscig-poza-'));
+    const podmieniony = join(outside, 'podmieniony');
+    mkdirSync(podmieniony, { recursive: true });
+    writeFileSync(join(podmieniony, 'sekret.txt'), `WYSCIG-${CANARY}`);
+
+    const { stand, events } = await startRun(
+      [
+        { kind: 'mkdir', path: 'prawy' },
+        { kind: 'linkIntoWorkspace', from: '$workspace/prawy', to: 'link' },
+        {
+          kind: 'fileTool',
+          name: 'Read',
+          input: { file_path: '$workspace/link/sekret.txt' },
+          swapBeforeOpen: { link: 'link', to: podmieniony },
+        },
+        { kind: 'text', text: 'Koniec.' },
+      ],
+      { honorUpdatedInput: true },
+    );
+    try {
+      const text = answerText(events);
+      expect(text.includes(CANARY), 'wyścig oddał treść spoza workspace mimo przepisania').toBe(false);
+      // Narzędzie otworzyło DOKŁADNIE ścieżkę, którą sprawdził strażnik.
+      expect(stand.opened[0]).toContain('/prawy/sekret.txt');
+      expect(stand.opened[0]).not.toContain('/link/');
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('Z7-neg ta sama próba z wylaczonym przepisywaniem OBLEWA sie (wiazanie dziala)', async () => {
+    const outside = mkdtempSync(join(tmpdir(), 'wyscig-poza-'));
+    const podmieniony = join(outside, 'podmieniony');
+    mkdirSync(podmieniony, { recursive: true });
+    writeFileSync(join(podmieniony, 'sekret.txt'), `WYSCIG-${CANARY}`);
+
+    try {
+      const { stand, events } = await startRun(
+        [
+          { kind: 'mkdir', path: 'prawy' },
+          { kind: 'linkIntoWorkspace', from: '$workspace/prawy', to: 'link' },
+          {
+            kind: 'fileTool',
+            name: 'Read',
+            input: { file_path: '$workspace/link/sekret.txt' },
+            swapBeforeOpen: { link: 'link', to: podmieniony },
+          },
+          { kind: 'text', text: 'Koniec.' },
+        ],
+        { honorUpdatedInput: false },
+      );
+      const text = answerText(events);
+      // Dowód wiązania: narzędzie otworzyło surową ścieżkę (już podmienioną) i
+      // kanarek wycieka. Ten test MUSI oblewać przy wyłączonym przepisywaniu.
+      expect(text.includes(CANARY), 'bez przepisywania wyścig powinien wyciec').toBe(true);
+      // Narzędzie otworzyło SUROWĄ ścieżkę (przez link, już podmieniony) — dowód,
+      // że różnica między Z7 a Z7-neg leży dokładnie w honorowaniu przepisania.
+      expect(stand.opened[0]).toContain('/link/sekret.txt');
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  /* ------------- Z8 / Z9: wiazania na poziomie sdkOptions ---------------- */
+
+  /**
+   * Z8 — `allowedTools` wyprowadzone z tej samej reguły, która decyduje o
+   * auto/zgoda. Próba M4 recenzji: dopisanie narzędzia do listy wstępnie
+   * zatwierdzonych bez deklaracji ścieżki stawiało je w `allowedTools`, gdzie
+   * bramka nigdy go nie widzi (auto-zatwierdzenie na starszeństwie listy).
+   * Filtr w runtime czyni rozjazd niemożliwym; ten test oblewa, gdy ktoś filtr
+   * usunie (próba T).
+   */
+  it('Z8 allowedTools nie zawiera narzedzi plikowych bez zadeklarowanej sciezki', async () => {
+    let captured: Record<string, any> | null = null;
+    const capturing = new AgentRuntime(h.platform.services, {
+      stream: async (_p: unknown, o: any) => {
+        captured = o.sdkOptions as Record<string, any>;
+        return { fullStream: (async function* () { yield { type: 'text-delta', payload: { text: 'ok' } }; })() };
+      },
+      resumeStream: async (_i: unknown, o: any) => {
+        captured = o.sdkOptions as Record<string, any>;
+        return { fullStream: (async function* () { yield { type: 'text-delta', payload: { text: 'ok' } }; })() };
+      },
+    });
+    const conversationId = h.platform.services.conversations.create({
+      ownerId: h.ownerId,
+      title: 'Z8',
+    }).id;
+    const started = await capturing.start({
+      ownerId: h.ownerId,
+      conversationId,
+      prompt: 'sprawdz z8',
+      appContext: { ...EMPTY_CONTEXT, conversationId },
+    });
+    await started.done;
+
+    const options = captured as unknown as { allowedTools: string[] };
+    expect(options.allowedTools, 'stand-in nie dostal allowedTools').toBeTruthy();
+    for (const tool of options.allowedTools) {
+      expect(
+        declaresPathArguments(tool) || !AUTO_APPROVED_FILE_TOOLS.includes(tool as never),
+        `${tool} jest w allowedTools, ale nie zadeklarowalo argumentu sciezki`,
+      ).toBe(true);
+    }
+  });
+
+  /**
+   * Z9 — opcja `settings.permissions.blockReadsOutsideWorkingDirectories`
+   * (odczyty po stronie SDK) musi mieć wiązanie w regresji. Próba M3 recenzji:
+   * usunięcie całego bloku `settings` → 64/64 zielonych. Ten test oblewa.
+   */
+  it('Z9 uruchomienie przekazuje SDK blokade odczytow poza katalogiem roboczym', async () => {
+    let captured: Record<string, any> | null = null;
+    const capturing = new AgentRuntime(h.platform.services, {
+      stream: async (_p: unknown, o: any) => {
+        captured = o.sdkOptions as Record<string, any>;
+        return { fullStream: (async function* () { yield { type: 'text-delta', payload: { text: 'ok' } }; })() };
+      },
+      resumeStream: async (_i: unknown, o: any) => {
+        captured = o.sdkOptions as Record<string, any>;
+        return { fullStream: (async function* () { yield { type: 'text-delta', payload: { text: 'ok' } }; })() };
+      },
+    });
+    const conversationId = h.platform.services.conversations.create({
+      ownerId: h.ownerId,
+      title: 'Z9',
+    }).id;
+    const started = await capturing.start({
+      ownerId: h.ownerId,
+      conversationId,
+      prompt: 'sprawdz z9',
+      appContext: { ...EMPTY_CONTEXT, conversationId },
+    });
+    await started.done;
+
+    expect(
+      (captured as any)?.settings?.permissions?.blockReadsOutsideWorkingDirectories,
+      'brak blockReadsOutsideWorkingDirectories w sdkOptions.settings',
+    ).toBe(true);
   });
 
   it('uruchomienie NAPRAWDE przekazuje SDK liste chronionych katalogow', async () => {

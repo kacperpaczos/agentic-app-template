@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { invokeTool, resolveInWorkspace, type ModelAgentLike, type ToolEntry } from '@platform/server';
 import type { ToolCallContext } from '@platform/contracts';
@@ -82,6 +82,12 @@ export type Step =
        */
       subagent?: boolean;
       /**
+       * Z7 — wyścig TOCTOU: podmienia dowiązanie **po** powrocie z hooka,
+       * a **przed** otwarciem. Dokładnie okno, w którym przepisanie wejścia ma
+       * znaczenie.
+       */
+      swapBeforeOpen?: { link: string; to: string };
+      /**
        * Treść do zapisania, gdy `name` to `Write`.
        *
        * Zapis jest **wykonywany naprawdę**, gdy hook nie odmówi — inaczej
@@ -100,6 +106,8 @@ export type Step =
    * z zewnątrz przez test.
    */
   | { kind: 'linkIntoWorkspace'; from: string; to: string }
+  /** Tworzy katalog wewnątrz workspace (do budowania scenariuszy z dowiązaniami). */
+  | { kind: 'mkdir'; path: string }
   /** The model's stream reports a failure — a stream existed and then failed. */
   | { kind: 'streamError'; message: string }
   /**
@@ -129,6 +137,10 @@ export interface StandInHandle {
   consents: Array<{ toolName: string; allowed: boolean }>;
   /** Every `fileTool` step: whether a hook refused it, and with what reason. */
   fileTools: Array<{ name: string; denied: boolean; reason: string | null }>;
+  /** Z7 — ścieżki, które narzędzie NAPRAWDĘ otworzyło (w kolejności kroków). */
+  opened: string[];
+  /** Z7 — czy zastępnik podstawia `updatedInput` z hooka (domyślnie tak). */
+  honorUpdatedInput: boolean;
   /**
    * The Claude session this run asked the adapter to continue, or null for a
    * fresh one.
@@ -144,6 +156,8 @@ export interface StandInHandle {
 
 /** A handle with every field at its empty value; scenarios fill it as they run. */
 export const newStandInHandle = (): StandInHandle => ({
+  opened: [],
+  honorUpdatedInput: true,
   childExitedAt: null,
   childPid: null,
   performed: [],
@@ -205,17 +219,26 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
      * such refusal untestable — the hook would be called, the assertion on its
      * return value would pass, and the tool would still have run.
      */
+    let updatedInput: Record<string, unknown> | null = null;
     const firePreToolUse = async (payload: Record<string, unknown>): Promise<string | null> => {
       let refusal: string | null = null;
       for (const group of hooks.PreToolUse ?? []) {
         for (const hook of group.hooks ?? []) {
           const answer = (await hook({ hook_event_name: 'PreToolUse', ...payload })) as
-            | { hookSpecificOutput?: { permissionDecision?: string; permissionDecisionReason?: string } }
+            | {
+                hookSpecificOutput?: {
+                  permissionDecision?: string;
+                  permissionDecisionReason?: string;
+                  updatedInput?: Record<string, unknown>;
+                };
+              }
             | undefined;
           const specific = answer?.hookSpecificOutput;
           if (specific?.permissionDecision === 'deny') {
             refusal = specific.permissionDecisionReason ?? 'odmowa hooka PreToolUse';
           }
+          /* Z7 — zapamiętane, żeby narzędzie mogło otworzyć PRZEPISANĄ ścieżkę. */
+          if (specific?.updatedInput) updatedInput = specific.updatedInput;
         }
       }
       return refusal;
@@ -285,11 +308,20 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
             else signal?.addEventListener('abort', kill, { once: true });
             continue;
           }
-          if (step.kind === 'linkIntoWorkspace') {
+          if (step.kind === 'mkdir') {
             if (!ctx?.workspaceDir) throw new Error('stand-in: brak workspace uruchomienia');
+            mkdirSync(join(ctx.workspaceDir, step.path), { recursive: true });
+            continue;
+          }
+          if (step.kind === 'linkIntoWorkspace') {
+            if (!ctx?.workspaceDir) throw Error('stand-in: brak workspace uruchomienia');
             const target = join(ctx.workspaceDir, step.to);
+            /* `$workspace/` w źródle wskazuje katalog roboczy TEGO uruchomienia. */
+            const from = step.from.startsWith('$workspace/')
+              ? join(ctx.workspaceDir, step.from.slice('$workspace/'.length))
+              : step.from;
             mkdirSync(dirname(target), { recursive: true });
-            if (!existsSync(target)) symlinkSync(step.from, target);
+            if (!existsSync(target)) symlinkSync(from, target);
             continue;
           }
           if (step.kind === 'fileTool') {
@@ -327,12 +359,39 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
               tool_input: resolved,
               ...(step.subagent ? { agent_id: 'agent_podwykonawca' } : {}),
             });
+            /*
+             * Z7 — narzędzie otwiera to, co hook KAZAŁ podstawić (o ile
+             * honorowanie przepisania jest włączone); inaczej surowy napis
+             * modelu. Cała różnica między próbami A10 i A10b recenzji.
+             */
+            const effective =
+              handle.honorUpdatedInput && updatedInput ? { ...resolved, ...updatedInput } : resolved;
+            const targetPath = String(effective.file_path ?? effective.path ?? '');
+            handle.opened.push(targetPath);
+
+            if (step.swapBeforeOpen) {
+              const link = step.swapBeforeOpen.link.startsWith('/')
+                ? step.swapBeforeOpen.link
+                : `${ctx?.workspaceDir ?? ''}/${step.swapBeforeOpen.link}`;
+              try {
+                unlinkSync(link);
+              } catch {
+                /* nie istnieje */
+              }
+              mkdirSync(dirname(link), { recursive: true });
+              symlinkSync(
+                step.swapBeforeOpen.to.startsWith('/')
+                  ? step.swapBeforeOpen.to
+                  : `${ctx?.workspaceDir ?? ''}/${step.swapBeforeOpen.to}`,
+                link,
+              );
+            }
+
             handle.fileTools.push({ name: step.name, denied: refusal !== null, reason: refusal });
             if (refusal !== null) {
               yield { type: 'text-delta', payload: { text: `[plik:${step.name}] odmowa ` } };
               continue;
             }
-            const targetPath = String(resolved.file_path ?? resolved.path ?? '');
             if (step.name === 'Write') {
               // Naprawdę zapisuje: inaczej „zapis zablokowany" nie byłoby sprawdzalne.
               try {

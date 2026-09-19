@@ -1,7 +1,7 @@
-import { realpathSync } from 'node:fs';
+import { lstatSync, readdirSync, readlinkSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, parse, resolve } from 'node:path';
 import { claudeConfigDir } from './auth.ts';
-import { realResolveFrom } from '../util/real-path.ts';
+import { isWithin, realResolveFrom, UnresolvablePathError } from '../util/real-path.ts';
 
 /**
  * The permission matrix for the Claude Agent SDK's **built-in** tools.
@@ -172,9 +172,158 @@ const PATTERN_ARGUMENTS: Record<string, readonly string[]> = {
   Grep: ['glob'],
 };
 
-/** Czy wzorzec zawiera człon `..`, czyli próbuje wyjść w górę. */
+/**
+ * Z3 — wzorce: fail-closed.
+ *
+ * Runda 4 rozpoznawała wyłącznie dosłowny człon `..`, więc przepuszczała klamrę
+ * (`{..,.}` + `/gwiazdki` — żaden człon nie jest równy `..`, a rozwinięcie wychodzi w górę)
+ * i wzorzec bezwzględny (`/tmp/…` — nie zawiera `..` wcale). Próby B1, B2, B4
+ * i B7 przeszły przez tę dziurę.
+ *
+ * Zasada po rundzie 6: **odmawiam wszystkiego, czego nie umiem rozwinąć** —
+ * klamra, wzorzec bezwzględny, `..` gdziekolwiek. Zwykłe wzorce robocze
+ * (podwójna gwiazdka, ukośnik, kropka, txt) przechodzi; to, co przez nie wychodzi dowiązaniem katalogowym,
+ * łapie osobna reguła (`directoryWalkRefusal`, Z4).
+ */
+/** Czy wzorzec zawiera człon "..", czyli próbuje wyjść w górę. */
 function patternClimbsUp(pattern: string): boolean {
   return pattern.split(/[/\\]+/).some((part) => part === '..');
+}
+function patternEscapeRefusal(toolName: string, pattern: string): string | null {
+  if (pattern === '') return `Wzorzec narzedzia ${toolName} jest pusty.`;
+  if (pattern.startsWith('/')) {
+    return `Wzorzec narzedzia ${toolName} jest sciezka bezwzgledna — wzorce moga wskazywac wylacznie katalog roboczy.`;
+  }
+  if (/[{}]/.test(pattern)) {
+    return `Wzorzec narzedzia ${toolName} zawiera klamre rozwijania — nie umiem jej rozwinac, wiec odmawiam.`;
+  }
+  if (patternClimbsUp(pattern)) {
+    return `Wzorzec narzedzia ${toolName} wychodzi poza katalog roboczy (czlon "..").`;
+  }
+  return null;
+}
+
+/**
+ * Z4 — pre-walk drzewa pod `path` narzędzia `Glob`/`Grep`, budżetowany.
+ *
+ * `path` jest rozwiązywany fizycznie i musi leżeć w katalogu roboczym, ale
+ * rozwinięcie wzorca robi narzędzie — i zwykły wzorzec podwójnej gwiazdki
+ * przechodzi przez dowiązania katalogowe, które leżą w workspace od jego
+ * powstania (`createRunWorkspace` linkuje biblioteki toolkitu do
+ * `node_modules/`, a ich cele są na zewnątrz). Próba B8 czytała źródła
+ * biblioteki bez żadnego przygotowania; B5 i B6 — po podstawieniu dowiązania.
+ *
+ * Reguła: przechodząc drzewo pod ścieżką, każde dowiązanie, którego
+ * rozwiązanie wypada poza katalog roboczy, jest odmową — grepanie bibliotek ma
+ * być odmawiane (L11.4: wszystko poza katalogiem roboczym odmawiane).
+ *
+ * Budżet, uczciwie: głębokość do 16 poziomów, do 20000 obejrzanych wpisów.
+ * Przekroczenie czegokolwiek = odmowa (fail-closed), z liczbą w komunikacie.
+ * To jest prawdziwe ograniczenie: gigantyczne drzewo w workspace będzie
+ * odmawiane zamiast przeszukane częściowo. Drzewa, które ten produkt tworzy,
+ * są płytkie.
+ */
+export function directoryWalkRefusal(
+  toolName: string,
+  toolInput: unknown,
+  workspaceDir: string,
+): string | null {
+  if (!PATTERN_ARGUMENTS[toolName]) return null;
+  const input = (toolInput ?? {}) as Record<string, unknown>;
+  const rawPath = input.path;
+  if (rawPath !== undefined && typeof rawPath !== 'string') return null;
+  if (typeof rawPath === 'string' && rawPath.length === 0) return emptyPathRefusal(toolName);
+  if (typeof rawPath === 'string') {
+    const tilde = tildeRefusal(rawPath);
+    if (tilde) return tilde;
+  }
+
+  const root = realResolve(workspaceDir, '.');
+  let start: string;
+  try {
+    start = realResolve(workspaceDir, typeof rawPath === 'string' && rawPath !== '' ? rawPath : '.');
+  } catch (err) {
+    if (err instanceof UnresolvablePathError) {
+      return `Narzedzie ${toolName} wskazuje sciezke nierozwiazywalna (${err.reason}). Odmowa.`;
+    }
+    throw err;
+  }
+  if (!isInside(start, root)) {
+    return `Narzedzie ${toolName} moze przeszukiwac wylacznie katalog roboczy tego uruchomienia.`;
+  }
+
+  const MAX_DEPTH = 16;
+  const MAX_ENTRIES = 20000;
+  let seen = 0;
+  const queue: Array<{ dir: string; depth: number }> = [{ dir: start, depth: 0 }];
+  const visited = new Set<string>();
+  while (queue.length > 0) {
+    const item = queue.shift() as { dir: string; depth: number };
+    if (visited.has(item.dir)) continue;
+    visited.add(item.dir);
+    let entries: string[];
+    try {
+      entries = readdirSync(item.dir);
+    } catch {
+      continue;
+    }
+    for (const name of entries) {
+      seen += 1;
+      if (seen > MAX_ENTRIES) {
+        return (
+          `Drzewo pod ${item.dir} przekroczylo budzet przeszukiwania (${MAX_ENTRIES} wpisow). ` +
+          'Odmowa zamiast przeszukiwania czesciowego.'
+        );
+      }
+      const abs = join(item.dir, name);
+      const st = lstatSync(abs, { throwIfNoEntry: false });
+      if (st === undefined) continue;
+      if (st.isSymbolicLink()) {
+        let target: string;
+        try {
+          target = realResolveFrom(root, abs);
+        } catch (err) {
+          if (err instanceof UnresolvablePathError) {
+            return `Narzedzie ${toolName} wskazuje sciezke nierozwiazywalna (${err.reason}). Odmowa.`;
+          }
+          throw err;
+        }
+        if (!isWithin(target, root)) {
+          return (
+            `Drzewo przeszukiwane przez ${toolName} zawiera dowiazanie wychodzace poza katalog roboczy ` +
+            `(${abs} wskazuje ${target}). Odmowa.`
+          );
+        }
+        continue;
+      }
+      if (st.isDirectory()) {
+        if (item.depth >= MAX_DEPTH) {
+          return (
+            `Drzewo pod ${start} jest glebsze niz ${MAX_DEPTH} poziomow. ` +
+            'Odmowa zamiast przeszukiwania czesciowego.'
+          );
+        }
+        queue.push({ dir: abs, depth: item.depth + 1 });
+      }
+    }
+  }
+  return null;
+}
+/** Z5 — tylda: „sprawdzono A, otwarto B" w czystej postaci (próby A7/A7b). */
+function tildeRefusal(candidate: string): string | null {
+  if (candidate === '~' || candidate.startsWith('~/')) {
+    return 'Sciezki z tylda (~) sa odrzucane: straznik nie rozwija skrotow domowych.';
+  }
+  const component = candidate.split(/[/\\]+/).some((part) => part === '~' || part.startsWith('~'));
+  if (component) {
+    return 'Sciezki z komponentem zaczynajacym sie od tyldy (~) sa odrzucane.';
+  }
+  return null;
+}
+
+/** Z10 — pusty napis jako ścieżka: odmowa, nie `continue` (próba A8). */
+function emptyPathRefusal(toolName: string): string | null {
+  return `Narzedzie ${toolName} dostalo pusta sciezke — odmowa.`;
 }
 
 const PATH_ARGUMENTS: Record<string, readonly string[]> = {
@@ -324,7 +473,13 @@ export function resolvedPathInput(
   for (const key of args) {
     const raw = input[key];
     if (typeof raw !== 'string' || raw.length === 0) continue;
-    const abs = resolvePath(raw);
+    let abs: string;
+    try {
+      abs = resolvePath(raw);
+    } catch (err) {
+      if (err instanceof UnresolvablePathError) return null; // odmowa zapadnie u straznika
+      throw err;
+    }
     if (abs !== raw) {
       input[key] = abs;
       changed = true;
@@ -377,15 +532,12 @@ export function workspaceConfinementRefusal(
 ): string | null {
   const input = (toolInput ?? {}) as Record<string, unknown>;
 
-  /* Wzorce: własna, węższa reguła — patrz `PATTERN_ARGUMENTS`. */
+  /* Z3 — wzorce: fail-closed, patrz `patternEscapeRefusal`. */
   for (const key of PATTERN_ARGUMENTS[toolName] ?? []) {
     const raw = input[key];
-    if (typeof raw === 'string' && patternClimbsUp(raw)) {
-      return (
-        `Wzorzec narzedzia ${toolName} wychodzi poza katalog roboczy tego uruchomienia ` +
-        '(zawiera czlon ".."). Zostal odrzucony.'
-      );
-    }
+    if (typeof raw !== 'string') continue;
+    const refusal = patternEscapeRefusal(toolName, raw);
+    if (refusal) return refusal;
   }
 
   const args = PATH_ARGUMENTS[toolName];
@@ -393,8 +545,25 @@ export function workspaceConfinementRefusal(
   const root = realResolve(workspaceDir, '.');
   for (const key of args) {
     const raw = input[key];
-    if (typeof raw !== 'string' || raw.length === 0) continue;
-    const abs = resolvePath(raw);
+    if (typeof raw !== 'string') continue;
+    /* Z10 — pusty napis: odmowa, nie `continue` (próba A8). */
+    if (raw.length === 0) return emptyPathRefusal(toolName);
+    /* Z5 — tylda: „sprawdzono A, otwarto B" w czystej postaci (próby A7/A7b). */
+    const tilde = tildeRefusal(raw);
+    if (tilde) return tilde;
+    /* Z1 — `..` po członie nieistniejącym albo zerwanym dowiązaniem: odmowa. */
+    let abs: string;
+    try {
+      abs = resolvePath(raw);
+    } catch (err) {
+      if (err instanceof UnresolvablePathError) {
+        return (
+          `Narzedzie ${toolName} wskazuje sciezke, ktorej nie da sie jednoznacznie rozwiazac ` +
+          `(${err.reason}). Odmowa bez probowania.`
+        );
+      }
+      throw err;
+    }
     if (!isInside(abs, root)) {
       return (
         `Narzedzie ${toolName} moze siegac wylacznie katalogu roboczego tego uruchomienia. ` +
@@ -454,7 +623,10 @@ export function protectedPathRefusal(
   const input = (toolInput ?? {}) as Record<string, unknown>;
   for (const key of args) {
     const raw = input[key];
-    if (typeof raw !== 'string' || raw.length === 0) continue;
+    if (typeof raw !== 'string') continue;
+    if (raw.length === 0) return emptyPathRefusal(toolName);
+    const tilde = tildeRefusal(raw);
+    if (tilde) return tilde;
     const abs = resolvePath(raw);
     if (exempt.some((dir) => dir && isInside(abs, dir))) continue;
     for (const guard of protectedDirs) {

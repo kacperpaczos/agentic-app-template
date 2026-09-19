@@ -32,6 +32,8 @@ import {
   AUTO_APPROVED_FILE_TOOLS,
   FORBIDDEN_TOOLS,
   decideTool,
+  declaresPathArguments,
+  directoryWalkRefusal,
   forbiddenToolMessage,
   protectedDirsFor,
   protectedPathRefusal,
@@ -729,6 +731,7 @@ export class AgentRuntime {
         const toolName = String(input.tool_name ?? '');
         const refusal =
           workspaceConfinementRefusal(toolName, input.tool_input, args.workspace.dir) ??
+          directoryWalkRefusal(toolName, input.tool_input, args.workspace.dir) ??
           protectedPathRefusal(
             toolName,
             input.tool_input,
@@ -845,7 +848,21 @@ export class AgentRuntime {
       systemPrompt: { type: 'preset', preset: 'claude_code', append: systemPrompt },
       // Only the application's own tools and the workspace file tools are
       // pre-approved; Bash is deliberately absent (see `permissions.ts`).
-      allowedTools: [...this.#toolNames, ...AUTO_APPROVED_FILE_TOOLS],
+      /*
+       * Z8 — wyprowadzone z TEJ SAMEJ reguły, która decyduje o auto/zgoda.
+       *
+       * Poprzednio była to osobna, ręcznie trzymana lista: narzędzie dopisane do
+       * `AUTO_APPROVED_FILE_TOOLS` bez wpisu w `PATH_ARGUMENTS` dostawało
+       * `decideTool → 'consent'`, a jednocześnie trafiało tutaj — czyli
+       * auto-zatwierdzało się na starszeństwie listy dozwolonych i bramka
+       * nigdy go nie widziała (próba M4 recenzji). Filtr czyni rozjazd
+       * niemożliwym: strażnik ścieżek sprawdzi tylko narzędzia, które
+       * zadeklarowały, jak podają ścieżkę.
+       */
+      allowedTools: [
+        ...this.#toolNames,
+        ...AUTO_APPROVED_FILE_TOOLS.filter(declaresPathArguments),
+      ],
       /*
        * The forbidden category. These reach the network from inside the SDK
        * process, where the shell sandbox's empty domain allowlist does not
@@ -1158,6 +1175,7 @@ export class AgentRuntime {
        */
       const guarded =
         workspaceConfinementRefusal(toolName, input, run.workspaceDir) ??
+        directoryWalkRefusal(toolName, input, run.workspaceDir) ??
         protectedPathRefusal(
         toolName,
         input,
