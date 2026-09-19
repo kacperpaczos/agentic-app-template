@@ -42,6 +42,26 @@ const EVIDENCE_DIR = 'docs/evidence/z13-bl12';
 export const WYKRYTE = 'wykryte';
 export const NIEWYKRYTE = 'NIEWYKRYTE';
 export const POMINIETE = 'pominiete';
+/** The trial could not be carried out — which is never the same as a pass. */
+export const BLAD_PROBY = 'BLAD-PROBY';
+
+/**
+ * How many tests actually ran, read off the runner's summary line.
+ *
+ * This exists because of a finding on the harness itself. A trial named its
+ * test with `-t 'nie wstanie na .e2e-* bedacym…'`; vitest reads that as a
+ * *regular expression*, `-*` did not match the literal `*`, **eleven tests were
+ * skipped, the exit code was 0** — and the harness read the zero as "the test
+ * passed on broken code" and reported a finding about a fix that is in fact
+ * guarded. A run of nothing must never be read as a run of something, in either
+ * direction.
+ */
+export function ranTests(output) {
+  const line = (output.match(/Tests\s+.*$/m) ?? [''])[0];
+  let total = 0;
+  for (const m of line.matchAll(/(\d+)\s+(passed|failed)/g)) total += Number(m[1]);
+  return total;
+}
 
 export function readRegistry(path = REGISTRY) {
   const data = JSON.parse(readFileSync(path, 'utf8'));
@@ -133,22 +153,52 @@ export async function runTrials({ trials, repo = REPO, runner = vitestRunner, lo
       continue;
     }
     log(`… ${trial.id}: ${trial.plik} → ${trial.test}`);
+    const common = {
+      id: trial.id,
+      kryterium: trial.kryterium,
+      naprawa: trial.naprawa,
+      plik: trial.plik,
+      test: trial.test,
+      nazwaTestu: trial.nazwaTestu ?? null,
+    };
+
+    /*
+     * The baseline, before anything is broken: the named test has to RUN and
+     * PASS on the untouched code. Without it a trial cannot tell "the test does
+     * not catch this" from "no test ran at all" — and the second is what a
+     * mistyped filter, a renamed test or a missing file produces, all of them
+     * with a green exit code.
+     */
+    const base = await runner(trial, repo, 'baseline');
+    const baseCount = ranTests(base.output);
+    if (base.code !== 0 || baseCount === 0) {
+      const outcome = {
+        ...common,
+        wynik: BLAD_PROBY,
+        kodWyjsciaTestu: base.code,
+        powod:
+          baseCount === 0
+            ? 'na czystym kodzie nie uruchomil sie ZADEN test (zly plik albo filtr -t, ktory nic nie pasuje)'
+            : 'test oblewa juz na czystym kodzie — proba nie moze niczego wykazac',
+        fragmentWyniku: (base.output.match(/Tests\s+.*$/m) ?? [''])[0].trim() || base.output.trim().slice(-300),
+      };
+      results.push(outcome);
+      log(`${outcome.wynik}  ${outcome.id}  ${outcome.powod}`);
+      continue;
+    }
+
     let applied = null;
     let outcome;
     try {
       applied = applyMutation(trial, repo);
-      const { code, output } = await runner(trial, repo);
+      const { code, output } = await runner(trial, repo, 'mutated');
       const failed = code !== 0;
       const expected = trial.oczekiwanyKomunikat ? new RegExp(trial.oczekiwanyKomunikat).test(output) : true;
       outcome = {
-        id: trial.id,
-        kryterium: trial.kryterium,
-        naprawa: trial.naprawa,
-        plik: trial.plik,
-        test: trial.test,
-        nazwaTestu: trial.nazwaTestu ?? null,
+        ...common,
         wynik: failed && expected ? WYKRYTE : NIEWYKRYTE,
         kodWyjsciaTestu: code,
+        testowPrzedMutacja: baseCount,
         ...(failed && !expected
           ? { powod: `test oblal, ale nie z oczekiwanego powodu (${trial.oczekiwanyKomunikat})` }
           : {}),
@@ -206,8 +256,7 @@ if (isMain) {
     log: (line) => console.log(line),
     runner: (trial, repo) => {
       inFlight = null;
-      const out = vitestRunner(trial, repo);
-      return out;
+      return vitestRunner(trial, repo);
     },
   });
 
@@ -216,10 +265,12 @@ if (isMain) {
   console.log('\n================ PROBY ZDOLNOSCI WYKRYCIA ================');
   for (const r of results) console.log(`${String(r.wynik).padEnd(11)} ${r.id.padEnd(28)} ${r.powod ?? ''}`);
   const missed = results.filter((r) => r.wynik === NIEWYKRYTE);
+  const broken = results.filter((r) => r.wynik === BLAD_PROBY);
   const skipped = results.filter((r) => r.wynik === POMINIETE);
   console.log(
-    `\n${results.length - missed.length - skipped.length}/${results.length - skipped.length} napraw ma test, ktory oblewa na wadliwym wariancie` +
-      (skipped.length ? `; pominietych: ${skipped.length}` : ''),
+    `\n${results.filter((r) => r.wynik === WYKRYTE).length}/${results.length - skipped.length} napraw ma test, ktory oblewa na wadliwym wariancie` +
+      (skipped.length ? `; pominietych: ${skipped.length}` : '') +
+      (broken.length ? `; prob niewykonanych: ${broken.length}` : ''),
   );
   console.log(`drzewo po probach: ${dirty ? `BRUDNE\n${status}` : 'czyste'}`);
 
@@ -241,5 +292,5 @@ if (isMain) {
     console.log(`dowod: ${relative(REPO, path)}`);
   }
 
-  process.exit(missed.length > 0 || dirty ? 1 : 0);
+  process.exit(missed.length > 0 || broken.length > 0 || dirty ? 1 : 0);
 }

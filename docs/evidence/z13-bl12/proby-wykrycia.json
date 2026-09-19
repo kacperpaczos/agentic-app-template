@@ -1,0 +1,132 @@
+{
+  "opis": "Kontrolowane warianty wadliwe krytycznych napraw. Kazdy wpis mowi, ktora naprawe chroni, ktora linie zepsuc i ktory test ma wtedy oblac. Test, ktory mimo wadliwego wariantu PRZECHODZI, jest znaleziskiem: naprawa nie jest chroniona.",
+  "zrodlo": "node scripts/detection-trials.mjs (APP_WRITE_EVIDENCE=1)",
+  "rodzajWykonania": "test kontraktu lub logiki",
+  "zapisano": "2026-09-19T01:21:48.308Z",
+  "wersjaKodu": {
+    "commit": "5f988a5cf966f3a61d13bcc26fe4a12d537aa968",
+    "brudneDrzewoPrzedProbami": false,
+    "node": "24.19.0"
+  },
+  "drzewoPoProbach": "BRUDNE",
+  "wyniki": [
+    {
+      "id": "N-3-kolejka-rozmowy",
+      "kryterium": "L7.10",
+      "naprawa": "Nieudane uruchomienie zwalnia kolejke rozmowy — lancuch obietnic per rozmowa pochlania blad poprzednika, zamiast przekazywac odrzucenie dalej (zakleszczenie N-3).",
+      "plik": "packages/platform-server/src/agent/runtime.ts",
+      "test": "tests/orchestration.test.ts",
+      "nazwaTestu": "po bledzie pierwszego polecenia drugie w tej samej rozmowie konczy sie sukcesem",
+      "wynik": "NIEWYKRYTE",
+      "kodWyjsciaTestu": 0,
+      "powod": "test PRZESZEDL na wadliwym wariancie — naprawa nie jest chroniona",
+      "fragmentWyniku": "Tests  1 passed | 7 skipped (8)"
+    },
+    {
+      "id": "D-2-projekcja-segmentu",
+      "kryterium": "L4.15",
+      "naprawa": "Tekst po wywolaniu narzedzia otwiera nowy segment wiadomosci — projekcja backendu zgadza sie z reduktorem biblioteki (defekt D-2).",
+      "plik": "packages/platform-server/src/agent/projection.ts",
+      "test": "tests/projection.test.ts",
+      "nazwaTestu": null,
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "fragmentWyniku": "Tests  1 failed | 11 passed (12)"
+    },
+    {
+      "id": "abort-na-cancel-w-tle",
+      "kryterium": "L11.6",
+      "naprawa": "Zatrzymane zadanie w tle konczy sie statusem cancelled, nie failed — przerwanie po Stop jest mapowane na anulowanie, a nie na blad.",
+      "plik": "packages/platform-server/src/agent/runtime.ts",
+      "test": "tests/background-runs.test.ts",
+      "nazwaTestu": "konczy wskazane wykonanie i nie rusza pozostalych",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "fragmentWyniku": "Tests  1 failed | 9 skipped (10)"
+    },
+    {
+      "id": "detektor-strumienia",
+      "kryterium": "L5.1",
+      "naprawa": "Odpowiedz podana w calosci na koncu nie jest zaliczana jako strumieniowanie — werdykt wymaga widocznej niepelnej odpowiedzi w trakcie wykonania.",
+      "plik": "e2e/support/streamProbe.ts",
+      "test": "tests/stream-verdict.test.ts",
+      "nazwaTestu": null,
+      "wynik": "NIEWYKRYTE",
+      "kodWyjsciaTestu": 0,
+      "powod": "test PRZESZEDL na wadliwym wariancie — naprawa nie jest chroniona",
+      "fragmentWyniku": "Tests  13 passed (13)"
+    },
+    {
+      "id": "guard-izolacji-dowiazanie",
+      "kryterium": "L1.11",
+      "naprawa": "Oznaczona instancja testowa nie wstanie na katalogu danych bedacym dowiazaniem symbolicznym ani na katalogu, ktorego rzeczywisty cel to dane aplikacji.",
+      "plik": "packages/platform-server/src/config.ts",
+      "test": "tests/isolation-paths.test.ts",
+      "nazwaTestu": "oznaczona instancja nie wstanie na .e2e-* bedacym dowiazaniem do danych",
+      "wynik": "NIEWYKRYTE",
+      "kodWyjsciaTestu": 0,
+      "powod": "test PRZESZEDL na wadliwym wariancie — naprawa nie jest chroniona",
+      "fragmentWyniku": "Tests  11 skipped (11)"
+    },
+    {
+      "id": "guard-izolacji-magazyn",
+      "kryterium": "L1.11",
+      "naprawa": "Operacje kasujace serwera porownuja sciezke rowniez po rozwiazaniu dowiazan, wiec podkatalog-dowiazanie nie wyprowadza zapisu poza magazyn.",
+      "plik": "packages/platform-server/src/util/managed-fs.ts",
+      "test": "tests/isolation-paths.test.ts",
+      "nazwaTestu": "rename pod dowiazanym podkatalogiem magazynu jest odrzucony",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "fragmentWyniku": "Tests  1 failed | 10 skipped (11)"
+    },
+    {
+      "id": "guard-osieroconego-serwera",
+      "kryterium": "L1.9",
+      "naprawa": "Przygotowanie bazy scenariuszowej odmawia, gdy port jest zajety przez dzialajacy proces — katalog nie jest kasowany pod osieroconym serwerem.",
+      "plik": "e2e/support/scripted.ts",
+      "test": "tests/isolation-orphan.test.ts",
+      "nazwaTestu": "prepareDatabase NIE kasuje katalogu, gdy port jest zajety",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "fragmentWyniku": "Tests  1 failed | 7 skipped (8)"
+    },
+    {
+      "id": "cel-proby-etykieta",
+      "kryterium": "L1.8",
+      "naprawa": "Proba odbiorowa sprawdza etykiete instancji przed pierwszym zadaniem; instancja bez etykiety (czyli instancja uzytkownika) konczy sie odmowa.",
+      "plik": "scripts/lib/acceptance-target.mjs",
+      "test": "tests/acceptance-target.test.ts",
+      "nazwaTestu": null,
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "fragmentWyniku": "Tests  3 failed | 5 passed (8)"
+    },
+    {
+      "id": "cel-proby-domyslny-port",
+      "kryterium": "L1.8",
+      "naprawa": "Domyslny cel proby odbiorowej nie jest portem zainstalowanej aplikacji.",
+      "plik": "scripts/lib/acceptance-target.mjs",
+      "test": "tests/acceptance-target.test.ts",
+      "nazwaTestu": "domyslny cel nie jest portem zainstalowanej aplikacji",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "fragmentWyniku": "Tests  1 failed | 7 skipped (8)"
+    },
+    {
+      "id": "koperta-rodzaj-wykonania",
+      "kryterium": "L12.10",
+      "naprawa": "Kazdy zapisany dowod niesie rodzaj wykonania obok commita i srodowiska.",
+      "plik": "tests/support/measurement-evidence.ts",
+      "test": "tests/evidence-provenance.test.ts",
+      "nazwaTestu": "rodzaj wykonania jest wymagany i nazwany slownikiem repozytorium",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "fragmentWyniku": "Tests  1 failed | 9 skipped (10)"
+    },
+    {
+      "id": "D-1-szuflada-nad-canvasem",
+      "wynik": "pominiete",
+      "powod": "proba przegladarkowa: wymaga pnpm build i blokady wspoldzielonej (.e2e.lock), wiec uruchamiana swiadomie poleceniem --only, nie w regresji jednostkowej"
+    }
+  ]
+}

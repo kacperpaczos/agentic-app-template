@@ -55,6 +55,8 @@ interface Harness {
   WYKRYTE: string;
   NIEWYKRYTE: string;
   POMINIETE: string;
+  BLAD_PROBY: string;
+  ranTests: (output: string) => number;
   readRegistry: (path?: string) => { proby: Trial[] };
   assertCleanTree: (repo?: string, what?: string) => void;
   applyMutation: (trial: Trial, repo?: string) => { path: string; original: string };
@@ -62,7 +64,7 @@ interface Harness {
   runTrials: (input: {
     trials: Trial[];
     repo?: string;
-    runner?: (t: Trial, repo: string) => { code: number | null; output: string };
+    runner?: (t: Trial, repo: string, phase: 'baseline' | 'mutated') => { code: number | null; output: string };
     log?: (line: string) => void;
   }) => Promise<TrialResult[]>;
 }
@@ -108,8 +110,11 @@ describe('harness prob zdolnosci wykrycia', () => {
     const results = await harness.runTrials({
       trials: [trial()],
       repo,
-      // The test noticed: non-zero exit.
-      runner: () => ({ code: 1, output: 'Tests  1 failed | 0 passed' }),
+      // Passes on clean code, notices the mutation: that is a trial.
+      runner: (_t, _r, phase) =>
+        phase === 'baseline'
+          ? { code: 0, output: 'Tests  4 passed (4)' }
+          : { code: 1, output: 'Tests  1 failed | 3 passed (4)' },
     });
     expect(results[0]!.wynik).toBe(harness.WYKRYTE);
     // Restored byte for byte.
@@ -121,8 +126,8 @@ describe('harness prob zdolnosci wykrycia', () => {
     const results = await harness.runTrials({
       trials: [trial()],
       repo,
-      // The test passed on broken code — the whole point of the harness.
-      runner: () => ({ code: 0, output: 'Tests  3 passed' }),
+      // Passes on clean code and *still* passes on broken code — the finding.
+      runner: () => ({ code: 0, output: 'Tests  3 passed (3)' }),
     });
     expect(results[0]!.wynik).toBe(harness.NIEWYKRYTE);
     expect(results[0]!.powod).toContain('test PRZESZEDL na wadliwym wariancie');
@@ -135,7 +140,10 @@ describe('harness prob zdolnosci wykrycia', () => {
       trials: [trial({ oczekiwanyKomunikat: 'Tests.*failed' })],
       repo,
       // A crash before the assertions ran is not the test catching the defect.
-      runner: () => ({ code: 1, output: 'Error: Cannot find module' }),
+      runner: (_t, _r, phase) =>
+        phase === 'baseline'
+          ? { code: 0, output: 'Tests  4 passed (4)' }
+          : { code: 1, output: 'Error: Cannot find module' },
     });
     expect(results[0]!.wynik).toBe(harness.NIEWYKRYTE);
     expect(results[0]!.powod).toContain('nie z oczekiwanego powodu');
@@ -164,7 +172,8 @@ describe('harness prob zdolnosci wykrycia', () => {
       harness.runTrials({
         trials: [trial()],
         repo,
-        runner: () => {
+        runner: (_t, _r, phase) => {
+          if (phase === 'baseline') return { code: 0, output: 'Tests  4 passed (4)' };
           throw new Error('runner padl');
         },
       }),
@@ -183,6 +192,42 @@ describe('harness prob zdolnosci wykrycia', () => {
     });
     expect(results[0]!.wynik).toBe(harness.POMINIETE);
     expect(results[0]!.powod).toBe('wymaga przegladarki');
+  });
+
+  it('proba, ktorej filtr nie dopasowal zadnego testu, to BLAD-PROBY, nie zaliczenie', async () => {
+    /*
+     * The harness's own finding, locked down. A trial named its test with a
+     * string vitest reads as a regular expression; nothing matched, eleven
+     * tests were skipped, the exit code was 0 — and the harness called it "the
+     * test passed on broken code". A run of nothing is not a run.
+     */
+    const { repo } = repoWithFile('const strzezone = true;\n');
+    const results = await harness.runTrials({
+      trials: [trial({ nazwaTestu: 'nazwa, ktora nic nie pasuje' })],
+      repo,
+      runner: () => ({ code: 0, output: 'Tests  11 skipped (11)' }),
+    });
+    expect(results[0]!.wynik).toBe(harness.BLAD_PROBY);
+    expect(results[0]!.powod).toContain('ZADEN test');
+    expect(readFileSync(resolve(repo, 'src/plik.ts'), 'utf8')).toBe('const strzezone = true;\n');
+  });
+
+  it('test oblewajacy juz na czystym kodzie nie moze niczego wykazac', async () => {
+    const { repo } = repoWithFile('const strzezone = true;\n');
+    const results = await harness.runTrials({
+      trials: [trial()],
+      repo,
+      runner: () => ({ code: 1, output: 'Tests  1 failed | 2 passed (3)' }),
+    });
+    expect(results[0]!.wynik).toBe(harness.BLAD_PROBY);
+    expect(results[0]!.powod).toContain('oblewa juz na czystym kodzie');
+  });
+
+  it('liczba uruchomionych testow czytana jest z podsumowania, nie z kodu wyjscia', () => {
+    expect(harness.ranTests('Tests  11 skipped (11)')).toBe(0);
+    expect(harness.ranTests('Tests  1 failed | 7 skipped (8)')).toBe(1);
+    expect(harness.ranTests('Tests  13 passed (13)')).toBe(13);
+    expect(harness.ranTests('nic takiego')).toBe(0);
   });
 
   it('brudne drzewo zatrzymuje proby, zanim cokolwiek zostanie zmienione', () => {
@@ -216,12 +261,21 @@ describe('rejestr prob zgadza sie z kodem', () => {
     expect(problems, problems.join('\n')).toEqual([]);
   });
 
+  it('filtr nazwy testu nie zawiera metaznakow wyrazenia regularnego', () => {
+    // vitest reads `-t` as a regular expression; `.e2e-*` matched nothing and
+    // the trial reported a finding about a fix that was guarded all along.
+    for (const t of registry.proby) {
+      if (!t.nazwaTestu) continue;
+      expect(t.nazwaTestu, `${t.id}: metaznaki w filtrze -t`).not.toMatch(/[.*+?^${}()|[\]\\]/);
+    }
+  });
+
   it('rejestr obejmuje naprawy wymienione w kryterium L12.12', () => {
     const ids = registry.proby.map((t) => t.id);
     for (const required of [
       'D-1-szuflada-nad-canvasem',
       'D-2-projekcja-segmentu',
-      'N-3-kolejka-rozmowy',
+      'N-3-szeregowanie-rozmowy',
       'abort-na-cancel-w-tle',
       'detektor-strumienia',
       'guard-izolacji-dowiazanie',

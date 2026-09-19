@@ -4,14 +4,14 @@
   "zasada": "Wzorzec musi wystepowac w pliku dokladnie raz — rejestr, ktory rozjechal sie z kodem, oblewa probe zamiast po cichu nic nie zmienic i zaliczyc naprawy.",
   "proby": [
     {
-      "id": "N-3-kolejka-rozmowy",
+      "id": "N-3-szeregowanie-rozmowy",
       "kryterium": "L7.10",
-      "naprawa": "Nieudane uruchomienie zwalnia kolejke rozmowy — lancuch obietnic per rozmowa pochlania blad poprzednika, zamiast przekazywac odrzucenie dalej (zakleszczenie N-3).",
+      "naprawa": "Polecenia jednej rozmowy sa szeregowane: drugie czeka na zakonczenie pierwszego, zamiast wznawiac te sama sesje SDK rownolegle (defekt N-3).",
       "plik": "packages/platform-server/src/agent/runtime.ts",
-      "szukaj": "    const done = previous\n      .catch(() => undefined)\n      .then(() =>",
-      "zamien": "    const done = previous\n      .then(() =>",
+      "szukaj": "    const previous = this.#conversationQueue.get(conversation.id) ?? Promise.resolve();",
+      "zamien": "    const previous = Promise.resolve(); /* wariant wadliwy proby wykrycia: brak szeregowania */",
       "test": "tests/orchestration.test.ts",
-      "nazwaTestu": "po bledzie pierwszego polecenia drugie w tej samej rozmowie konczy sie sukcesem",
+      "nazwaTestu": "okna wykonania sa rozlaczne",
       "oczekiwanyKomunikat": "Tests.*failed"
     },
     {
@@ -38,12 +38,13 @@
     {
       "id": "detektor-strumienia",
       "kryterium": "L5.1",
-      "naprawa": "Odpowiedz podana w calosci na koncu nie jest zaliczana jako strumieniowanie — werdykt wymaga widocznej niepelnej odpowiedzi w trakcie wykonania.",
+      "naprawa": "Probki o tej samej dlugosci nie sa zaliczane jako przyrost — werdykt strumieniowania wymaga co najmniej dwoch ROZNYCH dlugosci w trakcie wykonania.",
       "plik": "e2e/support/streamProbe.ts",
-      "szukaj": "  const sawPartialAnswer = first !== null && first < largestSeen;",
-      "zamien": "  const sawPartialAnswer = true; /* wariant wadliwy proby wykrycia */",
+      "szukaj": "  if (distinct < 2) {",
+      "zamien": "  if (false) { /* wariant wadliwy proby wykrycia */",
       "test": "tests/stream-verdict.test.ts",
-      "oczekiwanyKomunikat": "Tests.*failed"
+      "oczekiwanyKomunikat": "Tests.*failed",
+      "nazwaTestu": "dwie probki o pelnej dlugosci to nadal nie strumieniowanie"
     },
     {
       "id": "guard-izolacji-dowiazanie",
@@ -53,7 +54,7 @@
       "szukaj": "  if (isSymlink(cfg.dataDir)) {",
       "zamien": "  if (false) {",
       "test": "tests/isolation-paths.test.ts",
-      "nazwaTestu": "oznaczona instancja nie wstanie na .e2e-* bedacym dowiazaniem do danych",
+      "nazwaTestu": "bedacym dowiazaniem do danych",
       "oczekiwanyKomunikat": "Tests.*failed"
     },
     {
@@ -121,6 +122,24 @@
       "nazwaTestu": "zamknieta szuflada nie zaslania rozmowy",
       "wRegresji": false,
       "powodPominiecia": "proba przegladarkowa: wymaga pnpm build i blokady wspoldzielonej (.e2e.lock), wiec uruchamiana swiadomie poleceniem --only, nie w regresji jednostkowej"
+    }
+  ],
+  "uwagaOFiltrze": "Pole nazwaTestu trafia do vitest jako -t, czyli jako WYRAZENIE REGULARNE. Nazwa z kropka albo gwiazdka dopasuje sie inaczej, niz wyglada; harness wykrywa to teraz sam (przebieg wzorcowy musi uruchomic co najmniej jeden test), ale w rejestrze trzymaj fragmenty bez metaznakow.",
+  "znaleziska": [
+    {
+      "kiedy": "2026-09-19, pierwszy przebieg prob (docs/evidence/z13-bl12/proby-wykrycia.json)",
+      "co": "Proba guard-izolacji-dowiazanie zostala zgloszona jako NIEWYKRYTE, a naprawa jest chroniona: filtr -t z '.e2e-*' nie dopasowal zadnego testu, 11 testow zostalo pominietych, a kod wyjscia 0 harness przeczytal jako 'test przeszedl na wadliwym wariancie'.",
+      "skutek": "Harness wykonuje teraz przebieg wzorcowy przed mutacja i wymaga, zeby test PRZESZEDL i zeby uruchomil sie co najmniej jeden. Przebieg, w ktorym nic nie bieglo, to BLAD-PROBY, nie wynik."
+    },
+    {
+      "kiedy": "2026-09-19, pierwszy przebieg prob",
+      "co": "Galaz `if (!sawPartialAnswer)` w e2e/support/streamProbe.ts jest nieosiagalna: po wczesniejszych regulach (co najmniej dwie probki, co najmniej dwie rozne dlugosci, niemalejaca dlugosc) pierwsza dlugosc jest zawsze mniejsza od najwiekszej widzianej. Ustawienie sawPartialAnswer na true nie zmienilo zadnego werdyktu — pole jest informacyjne, nie decyduje.",
+      "skutek": "Proba detektora strumienia celuje teraz w regule, ktora naprawde decyduje (distinct < 2). Martwa galaz zostaje zgloszona wlascicielowi pakietu BL-05/BL-08, nie jest usuwana tutaj."
+    },
+    {
+      "kiedy": "2026-09-19, pierwszy przebieg prob",
+      "co": "Usuniecie `.catch(() => undefined)` z lancucha kolejki rozmowy (runtime.ts) nie oblewa zadnego testu: #execute obsluguje bledy u siebie i nigdy nie odrzuca obietnicy, wiec ta linia chroni przed wyjatkiem, ktorego regresja nie produkuje. To obrona bez proby — nie defekt.",
+      "skutek": "Proba N-3 celuje w samo szeregowanie, ktore testy pokrywaja. Brak pokrycia dla odrzuconej obietnicy #execute zgloszony w raporcie zadania jako obserwacja, nie naprawiany tutaj."
     }
   ]
 }
