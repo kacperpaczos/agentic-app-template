@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { Link, useRouterState } from '@tanstack/react-router';
-import { MENU_SECTIONS, authIsUsable } from '@platform/contracts';
+import { MENU_SECTIONS, authIsConfirmed, authIsUsable } from '@platform/contracts';
 import { useStatus } from '../api/queries.ts';
 import { CanvasHost } from '../canvas/CanvasHost.tsx';
 import { ChatPanel } from '../chat/ChatPanel.tsx';
@@ -69,30 +69,50 @@ function Nav() {
   );
 }
 
+/**
+ * The one line of the shell that talks about the subscription.
+ *
+ * Three facts, never merged: whether the application may try a run
+ * (`authIsUsable`), whether a call has actually succeeded (`authIsConfirmed`)
+ * and what went wrong last. The dot follows the second, not the first, which is
+ * the correction L8.9 asks for — a present credential file used to paint it
+ * green, so "logged in" and "the model answered" looked identical, and a failed
+ * run left it green as well.
+ *
+ * `data-auth-state` carries the access state itself. A browser test asserting
+ * the wording would be asserting a label; the attribute is the state.
+ */
 function StatusBar() {
   const { data } = useStatus();
   const lastRunId = useAppState((s) => s.lastRunId);
   if (!data) return null;
   const auth = data.auth;
-  /*
-   * The dot reflects *access*, not the presence of a file: a revoked or
-   * unrenewable login used to show green because the credential existed.
-   * A stale local expiry alone stays green — the SDK renews on the next call.
-   */
-  const ok = authIsUsable(auth);
+  const usable = authIsUsable(auth);
+  const confirmed = authIsConfirmed(auth);
   const plan = auth.credential.subscriptionType ? ` (${auth.credential.subscriptionType})` : '';
   const label =
-    auth.access.state === 'revoked' || auth.access.state === 'refresh_refused'
-      ? 'logowanie wygaslo — wykonaj /login'
-      : auth.access.state === 'rate_limited'
-        ? `limit uzycia wyczerpany${plan}`
-        : auth.credential.present
-          ? `subskrypcja${plan}`
-          : 'brak logowania';
+    auth.sdkSession.state === 'api_key'
+      ? 'sesja SDK na kluczu API — niezgodna z polityka'
+      : auth.access.state === 'revoked' || auth.access.state === 'refresh_refused'
+        ? 'logowanie wygaslo — wykonaj /login'
+        : auth.access.state === 'rate_limited'
+          ? `limit uzycia wyczerpany${plan}`
+          : auth.access.state === 'failed'
+            ? `blad polaczenia z modelem${plan}`
+            : !auth.credential.present
+              ? 'brak logowania'
+              : confirmed
+                ? `subskrypcja${plan} — dostep potwierdzony`
+                : `subskrypcja${plan} — dostep niesprawdzony`;
+  /* Green only for a confirmed call; a warning for anything unusable; neutral
+     for "we have not tried yet", which is neither good news nor bad. */
+  const dot = confirmed ? 'pf-dot--ok' : usable ? 'pf-dot--idle' : 'pf-dot--warn';
   return (
     <div className="pf-statusbar" data-testid="statusbar">
-      <span className={`pf-dot ${ok ? 'pf-dot--ok' : 'pf-dot--warn'}`} aria-hidden="true" />
-      <span data-testid="statusbar-auth">Claude: {label}</span>
+      <span className={`pf-dot ${dot}`} aria-hidden="true" />
+      <span data-testid="statusbar-auth" data-auth-state={auth.access.state} data-auth-confirmed={String(confirmed)}>
+        Claude: {label}
+      </span>
       <span className="pf-statusbar__sep">·</span>
       <span>model {data.model}</span>
       <span className="pf-statusbar__sep">·</span>

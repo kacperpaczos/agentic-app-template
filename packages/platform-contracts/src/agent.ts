@@ -201,6 +201,74 @@ export const accessStateSchema = z.enum([
 ]);
 export type AccessState = z.infer<typeof accessStateSchema>;
 
+/**
+ * What the **SDK session itself** says about how it authenticates.
+ *
+ * A fourth dimension, and the only one that is not this application's own
+ * opinion: `method` above is the configured policy, `credential` is a file on
+ * disk and `access` is the outcome of a run. None of the three can answer "did
+ * the Claude Agent SDK use the subscription OAuth login, or an API key?" — the
+ * SDK is the only party that knows, and it answers through a control request
+ * (`accountInfo`) that costs no model turn.
+ *
+ * `unknown` is the honest default: the probe is explicit, not automatic, so a
+ * status that was never probed says so rather than claiming a subscription.
+ */
+export const sdkSessionStateSchema = z.enum([
+  /** No probe has been run in this process. */
+  'unknown',
+  /** OAuth subscription login: no API key source, first-party provider, a plan. */
+  'subscription',
+  /** An API key is the session's credential — outside this application's policy. */
+  'api_key',
+  /** The session authenticates in a way that is neither of the two above. */
+  'other',
+  /** The probe could not be performed (no CLI, no login, timeout). */
+  'unavailable',
+]);
+export type SdkSessionState = z.infer<typeof sdkSessionStateSchema>;
+
+/**
+ * The redacted result of the session probe.
+ *
+ * Deliberately narrow. The SDK's `accountInfo()` also returns the account's
+ * e-mail address and organisation name; neither is needed to answer "is this a
+ * subscription session", both are personal data, and this application does not
+ * carry personal data it has no use for. The probe copies the four fields
+ * below and discards the rest — the same rule the credential reader follows.
+ */
+export const sdkSessionSchema = z.object({
+  state: sdkSessionStateSchema,
+  /**
+   * Where the SDK's credential came from, verbatim: `ANTHROPIC_API_KEY`,
+   * `apiKeyHelper`, `/login managed key`, `none`, or absent when no API key is
+   * in use at all.
+   */
+  apiKeySource: z.string().nullable(),
+  /** `firstParty` is Anthropic's own backend; anything else is a gateway or a cloud. */
+  apiProvider: z.string().nullable(),
+  /** The plan the *session* reports, which an API-key session does not have. */
+  subscriptionType: z.string().nullable(),
+  /**
+   * Plan limit utilisation the session reports, in percent.
+   *
+   * `available: false` is itself a signal: plan limits do not exist for an API
+   * key, Bedrock or Vertex session. These are readings of the real limit, never
+   * a simulation of one, and a reading is not an exhaustion.
+   */
+  planLimits: z
+    .object({
+      available: z.boolean(),
+      fiveHourPercent: z.number().nullable(),
+      sevenDayPercent: z.number().nullable(),
+    })
+    .nullable(),
+  checkedAt: z.string().nullable(),
+  /** Why the probe could not answer. Never carries a token value. */
+  error: z.string().nullable(),
+});
+export type SdkSession = z.infer<typeof sdkSessionSchema>;
+
 export const authStatusSchema = z.object({
   method: authMethodSchema,
   credential: z.object({
@@ -220,6 +288,8 @@ export const authStatusSchema = z.object({
   apiKeyDetected: z.boolean(),
   apiKeyPolicy: z.literal('refused'),
   cliVersion: z.string().nullable(),
+  /** What the SDK session reports about itself; `unknown` until probed. */
+  sdkSession: sdkSessionSchema,
 });
 export type AuthStatus = z.infer<typeof authStatusSchema>;
 
@@ -233,8 +303,36 @@ export type AuthStatus = z.infer<typeof authStatusSchema>;
 export function authIsUsable(status: AuthStatus): boolean {
   if (status.method !== 'subscription') return false;
   if (!status.credential.present) return false;
+  // A session the SDK itself says is running on an API key is outside the
+  // policy this build states, whatever the local credential file looks like.
+  if (status.sdkSession.state === 'api_key') return false;
   return status.access.state !== 'revoked' && status.access.state !== 'refresh_refused';
 }
+
+/**
+ * Whether the interface may present the connection as **healthy**.
+ *
+ * Narrower than {@link authIsUsable} on purpose, and the difference is the
+ * point of L8.9: a credential file that exists makes the application *usable*
+ * (it is worth trying a run), but only a call that succeeded makes the
+ * connection *confirmed*. The status bar used to show one green dot for both,
+ * so "the file is there" and "the model answered" looked identical — including
+ * after a failed run.
+ */
+export function authIsConfirmed(status: AuthStatus): boolean {
+  return authIsUsable(status) && status.access.state === 'verified';
+}
+
+/** The empty session report: nothing has been probed yet. */
+export const UNPROBED_SDK_SESSION: SdkSession = {
+  state: 'unknown',
+  apiKeySource: null,
+  apiProvider: null,
+  subscriptionType: null,
+  planLimits: null,
+  checkedAt: null,
+  error: null,
+};
 
 /**
  * Name of the MCP server the platform exposes its tools through.

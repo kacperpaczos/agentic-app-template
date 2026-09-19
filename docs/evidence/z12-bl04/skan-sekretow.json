@@ -1,0 +1,60 @@
+{
+  "opis": "Przeszukanie powierzchni uruchomienia pod katem wartosci poswiadczenia. Instancja scenariuszowa dziala z CLAUDE_CONFIG_DIR wskazujacym katalog tymczasowy z kanarkiem; prawdziwe logowanie uzytkownika nie bierze udzialu w probie.",
+  "zrodlo": "APP_WRITE_EVIDENCE=1 pnpm exec playwright test e2e/auth-limits.spec.ts",
+  "rodzajDowodu": "test GUI bez modelu + skan powierzchni (symulacja na granicy adaptera)",
+  "wersjaKodu": {
+    "commit": "7d1c18d426bd02d717ea17bf967a7a639cfc8d8b",
+    "brudneDrzewo": false,
+    "node": "24.19.0",
+    "pakiety": {}
+  },
+  "przeszukanePowierzchnie": {
+    "status": {
+      "bajtow": 7198,
+      "kanarek": false
+    },
+    "watek": {
+      "bajtow": 2253,
+      "kanarek": false
+    },
+    "listaWatkow": {
+      "bajtow": 962,
+      "kanarek": false
+    },
+    "uruchomienia": {
+      "bajtow": 431,
+      "kanarek": false
+    },
+    "zdarzeniaUruchomien": {
+      "bajtow": 4489,
+      "kanarek": false
+    },
+    "artefakty": {
+      "bajtow": 477,
+      "kanarek": false
+    },
+    "trescArtefaktow": {
+      "bajtow": 15337,
+      "kanarek": false
+    },
+    "pliki": {
+      "bajtow": 1900,
+      "kanarek": false
+    },
+    "logSerwera": {
+      "bajtow": 16517,
+      "kanarek": false
+    },
+    "bazaDanych": {
+      "bajtow": 380928,
+      "kanarek": false
+    },
+    "zbudowanyFrontend": {
+      "bajtow": 13793708,
+      "kanarek": false
+    }
+  },
+  "niePrzeszukane": [
+    "slady i raporty Playwright — powstaja po zakonczeniu testu, wiec sprawdza je osobny krok regresji (tests/durability.test.ts, skan docs/evidence/playwright-report)."
+  ]
+}

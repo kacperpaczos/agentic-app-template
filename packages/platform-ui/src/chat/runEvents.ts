@@ -110,6 +110,18 @@ export function applyRunEvent(
         });
       }
 
+      /*
+       * The run is the only thing that exercises the subscription, so the end of
+       * a run is the only moment at which the reported access state can change.
+       * Without this the status bar kept saying the connection was fine while
+       * the chat showed a usage limit, and Settings only caught up when the tab
+       * was reloaded — a distinguishable state the user could not see (L8.9).
+       *
+       * A prefix, not `qk.status()`: the key carries the access scope, and the
+       * entry that has to go stale is the one for whoever is on screen.
+       */
+      void ctx.qc.invalidateQueries({ queryKey: ['status'] });
+
       // Final safety net: refresh anything the run might have touched without
       // announcing it. Cheap, and it guarantees the UI is never stale after a run.
       void ctx.qc.invalidateQueries({ queryKey: ['canvas'] });

@@ -111,6 +111,8 @@ body {
 .pf-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .pf-dot--ok { background: var(--pf-ok); }
 .pf-dot--warn { background: var(--pf-warn); }
+/* "Not tried yet" is neither confirmed nor broken, and must not look like either. */
+.pf-dot--idle { background: var(--pf-muted, #9aa3ad); }
 
 .pf-surface { flex: 1; min-height: 0; position: relative; overflow: auto; }
 

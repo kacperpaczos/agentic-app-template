@@ -83,7 +83,15 @@ export class ScriptedInstance {
     }
   }
 
-  async start(scenario: string): Promise<void> {
+  /**
+   * Starts the instance on one scenario.
+   *
+   * `extraEnv` is for settings that belong to a single test rather than to the
+   * instance — the scripted answer of the SDK session probe, say. It is applied
+   * with the constructor's environment and, like it, cannot override the port
+   * or the data directory: `config.env` is still written last.
+   */
+  async start(scenario: string, extraEnv: Record<string, string> = {}): Promise<void> {
     if (this.#process) throw new Error('instancja scenariuszowa juz dziala');
     if (this.#logFile) {
       mkdirSync(dirname(this.#logFile), { recursive: true });
@@ -101,7 +109,7 @@ export class ScriptedInstance {
         cwd: this.config.repoRoot,
         // `config.env` last: a canary must never be able to redirect the
         // instance's port or data directory.
-        env: { ...process.env, ...this.#extraEnv, ...this.config.env, SCRIPT: scenario },
+        env: { ...process.env, ...this.#extraEnv, ...extraEnv, ...this.config.env, SCRIPT: scenario },
         stdio: this.#log ? ['ignore', 'pipe', 'pipe'] : 'ignore',
       },
     );
@@ -161,8 +169,8 @@ export class ScriptedInstance {
     return this.#logFile;
   }
 
-  async restart(scenario: string): Promise<void> {
+  async restart(scenario: string, extraEnv: Record<string, string> = {}): Promise<void> {
     await this.stop();
-    await this.start(scenario);
+    await this.start(scenario, extraEnv);
   }
 }
