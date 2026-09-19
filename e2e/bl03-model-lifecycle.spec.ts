@@ -63,18 +63,19 @@ const run = paidRun({ file: FILE, przebieg: 'C/D' });
 /**
  * Praca, ktora naprawde trwa.
  *
- * Dwa podejscia, oba zmierzone:
+ * Trzy podejscia, wszystkie zmierzone — i drugi wniosek byl **bledny**:
  *
- *  1. dlugie generowanie tekstu — model robi to bez wahania, ale sonda bez
- *     modelu pokazala, ze sesja SDK w tej wersji **nie zostawia zadnego procesu
- *     potomnego** serwera (CLI dziala w tym samym procesie);
- *  2. `sleep 45` w powloce, zeby pod sandboxem powstal prawdziwy proces — model
- *     tego **nie wykonal**: nie poprosil o zgode i skonczyl ture bez wywolania
- *     powloki (tura 13 grantu, `decyzjeZgody: []`, zero potomkow).
+ *  1. dlugie generowanie tekstu — model robi to bez wahania;
+ *  2. sonda bez modelu pokazala zero procesow potomnych serwera, z czego
+ *     wyciagnalem wniosek, ze sesja SDK ich nie ma. **Wniosek byl za szeroki**:
+ *     sonda pytala sesje, ktora wykonuje wylacznie zadania sterujace i nigdy nie
+ *     wola modelu;
+ *  3. `sleep 45` w powloce — model tego nie wykonal (tura 13).
  *
- * Wracamy wiec do (1). Kryterium mowi o tym, co zostaje PO zatrzymaniu, a nie o
- * tym, ile procesow bylo w trakcie — liczba w trakcie idzie do dowodu, zeby
- * czytelnik wiedzial, na czym ten wynik stoi.
+ * Tury 19 i 20 rozstrzygnely: prawdziwa tura **uruchamia** procesy robocze —
+ * `claude` (CLI w SDK) i `socat` (proxy sieciowe sandboxu). Dlatego wracamy do
+ * (1) i dlatego test **wymaga**, zeby cos w trakcie dzialalo: bez tego
+ * „zatrzymanie nie zostawilo procesow" byloby zdaniem o pustym zbiorze.
  */
 const LONG_COMMAND =
   'Wypisz po kolei liczby od 1 do 150. Kazda w osobnej linii, a przy kazdej dopisz ' +
@@ -393,13 +394,11 @@ test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () 
         'wykonanie modelu nie uruchomilo zadnego procesu — nie ma czego sprawdzac po zatrzymaniu',
       ).toBeGreaterThan(0);
       /*
-       * Ile ich jest, **zapisujemy**; czego nie ma po Stopie, **asercjujemy**.
-       *
-       * Sonda bez modelu pokazala, ze sesja SDK sama z siebie nie zostawia
-       * procesu potomnego. Wymaganie „w trakcie musi byc co najmniej jeden”
-       * obleweloby wiec poprawne zachowanie platformy i wydaloby ture na moje
-       * zalozenie o wnetrzu SDK. Kryterium mowi o tym, co zostaje PO
-       * zatrzymaniu — i to jest asercja ponizej.
+       * Ile ich jest, **zapisujemy z identyfikatorami**; ze zadnego nie ma po
+       * Stopie, **asercjujemy** — po tej samej tozsamosci, ktorej uzywa test
+       * sygnalu. Wymaganie „w trakcie musi byc co najmniej jeden" jest tu
+       * zasadne (tury 19/20 pokazaly `claude` i `socat`), bo bez niego nie ma
+       * czego sprawdzac po zatrzymaniu.
        */
 
       await page.getByTestId('run-stop').click();

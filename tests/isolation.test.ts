@@ -317,8 +317,19 @@ describe('spece z prawdziwym modelem: opt-in i nienaruszalnosc dowodow', () => {
     if (!existsSync(Z11_WORKING_LEDGER)) expect(readZ11Ledger().wydane).toBe(0);
     expect(readZ11Ledger().budzet).toBe(Z11_TURN_BUDGET);
 
-    // The plan fits inside the grant, with room for retries.
-    expect(Object.values(Z11_SPEC_TURNS).reduce((a, b) => a + b, 0)).toBe(Z11_TURNS_PLANNED);
+    /*
+     * The plan fits inside the grant, with room for retries.
+     *
+     * The first version of this compared `Z11_TURNS_PLANNED` with the sum it is
+     * *defined as* — a tautology that could not fail. What can actually drift is
+     * the declaration against the specs: each paid file must be named in the
+     * cost table, and the total must be the number the documentation quotes.
+     */
+    expect(Object.keys(Z11_SPEC_TURNS).sort()).toEqual([...Z11_MODEL_SPEC_FILES].sort());
+    for (const file of Z11_MODEL_SPEC_FILES) {
+      expect(Z11_SPEC_TURNS[file], `${file}: koszt musi byc dodatni`).toBeGreaterThan(0);
+    }
+    expect(Z11_TURNS_PLANNED, 'suma kosztow specek rozjechala sie z dokumentacja').toBe(15);
     expect(Z11_TURNS_PLANNED).toBeLessThan(Z11_TURN_BUDGET);
 
     /*

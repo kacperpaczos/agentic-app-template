@@ -43,7 +43,9 @@ blokach `finally`, więc przebieg nieudany też zostawia zapis — z `wynik: "ni
 | Plik | Przebieg | Kryteria |
 |---|---|---|
 | `a-kanwa-rekord-nawigacja.json` | A | L3.2, L3.10, L3.13, L6.6, L2.13 |
-| `b-granice-izolacji.json` | B | L11.3, L11.4, L11.5, L11.11, L9.16, L11.9 |
+| `b1-powloka-do-bazy.json` | B | L11.9, L11.3 (odczyt), L11.5 (powłoka) |
+| `b2-narzedzia-plikowe.json` | B | L11.4, L11.11 — **dziś oblewa**: to test odbiorczy naprawy |
+| `b3-siec-i-zapis.json` | B | L11.3 (sieć, zapis), L9.16 |
 | `c-blad-narzedzia.json`, `c-stop.json`, `c-sygnal.json` | C | L5.8, L7.3, L1.6 |
 | `d-wznowienie-sesji.json`, `d-szkic-a-dane.json` | D | L8.5, L6.5 |
 | `e-relacje.json` | E | L9.4 |
@@ -55,10 +57,18 @@ to zapis jednego zrecenzowanego przebiegu. Rejestr **zamkniętego** grantu BL-01
 
 ## Czego tu nie ma
 
-- **Sekretów.** Przebieg B celowo prosi model o próbę odczytu pliku poświadczeń subskrypcji; zapisuje
-  wyłącznie werdykt („odmowa” / „odczytane”), a test bierze prawdziwy token z dysku i sprawdza, że nie
-  występuje ani w rozmowie, ani w dowodzie. Kanarek spoza workspace jest ciągiem wymyślonym przez
-  test, więc można go szukać bezpiecznie.
+- **Sekretów.** Przebieg B **nie dotyka** pliku poświadczeń subskrypcji: ani jako celu, ani jako
+  kopii, ani przez odseparowany katalog. Decyzja koordynatora, z powodem asymetrycznym — jeśli
+  strażnik działa, ten sam dowód daje kanarek; jeśli nie działa, prawdziwy token trafiłby do
+  transkryptu i do zapisanego dowodu. Pomiar, który tę decyzję potwierdził, jest w raporcie zadania:
+  CLI **przepisuje** plik poświadczenia (193 → 121 B, `accessToken` zniknął), więc próba na prawdziwym
+  katalogu wylogowałaby użytkownika (G21).
+
+  Sprawdzana jest **druga chroniona ścieżka tej samej reguły** — katalog danych aplikacji. Ramię
+  poświadczeń jest pokryte symulacją (`tests/credential-guard.test.ts`) i **zgłoszone jako
+  niesprawdzone na prawdziwym modelu**.
+
+  Kanarek spoza workspace jest ciągiem wymyślonym przez test, więc można go szukać bezpiecznie.
 - **Symulacji podanej jako model.** Próba generalna scenariuszy (`e2e/bl03-rehearsal.spec.ts`) jest
   symulacją na granicy adaptera i nie zapisuje niczego do tego katalogu. Jej rolą jest wyłapać błąd w
   skrypcie, zanim kosztuje turę — nie dowieść kryterium.

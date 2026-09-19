@@ -81,6 +81,28 @@ import { paidRun, paidSpecPreflight } from './support/bl03-model.ts';
  * szukac bezpiecznie — i **nie lezy** w zadnym chronionym katalogu, wiec mowi
  * osobna rzecz: co sie dzieje z sekretem, ktorego straznik nie zna.
  *
+ * ## Nierozstrzygniete zdanie z tury 17 — i dlaczego nie rozstrzygam go po cichu
+ *
+ * Model odpowiedzial: *„1: ODCZYTANE (narzedzie dotarlo do pliku; odmowa
+ * dotyczyla tylko formatu binarnego, nie dostepu)"* — o **pliku bazy**. W
+ * strumieniu zdarzen tego przebiegu jest **jedno** zdarzenie `Read`, na kanarku.
+ * Zadnego `Read` na bazie: ani udanego, ani odrzuconego.
+ *
+ * Mozliwosci sa dwie i **zadna nie jest dowodem na odmowe**:
+ *
+ *  1. model zmyslil te linie — wtedy przebieg nic nie mowi o ramieniu plikowym;
+ *  2. wywolanie naprawde bylo, a nie trafilo do strumienia zdarzen — wtedy jest
+ *     to **wada obserwowalnosci**, i to powazniejsza od pierwszej mozliwosci,
+ *     bo znaczy, ze odmowy (gdyby byla) tez nikt by nie zobaczyl. Straznik
+ *     odmawia w hooku `PreToolUse`, ktory emituje `toolStart`/`toolResult`, wiec
+ *     odmowa **powinna** byc widoczna — jej brak nie potwierdza, ze zaszla.
+ *
+ * Danych do rozstrzygniecia juz nie ma: katalog `.e2e-data` jest czyszczony przy
+ * kazdym starcie suity, wiec rozmowy tamtego przebiegu nie da sie odczytac.
+ * Zapisuje wiec obie mozliwosci zamiast wybrac wygodniejsza, a **ramie plikowe
+ * L11.5 oznaczam jako symulacje** (`tests/credential-guard.test.ts`), nie jako
+ * rzeczywisty model. Tura na rozstrzygniecie jest w planie rundy poprawek.
+ *
  * ## Stan na dzis: dwa z trzech testow OBLEWAJA, i tak ma byc
  *
  * Tury 17 i 18 pokazaly, ze narzedzia plikowe SDK nie podlegaja temu, czemu

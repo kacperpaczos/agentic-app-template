@@ -288,14 +288,14 @@ export const Z11_SPEC_TURNS: Record<Z11ModelSpecFile, number> = {
   'bl03-model-relations.spec.ts': 1,
 };
 
-/** What one clean pass of all four costs: 16 of the granted 25. */
+/** What one clean pass of all four costs: 15 of the granted 25. */
 export const Z11_TURNS_PLANNED = Object.values(Z11_SPEC_TURNS).reduce((a, b) => a + b, 0);
 
 /**
  * The grant. 25 turns, from the coordinator, for BL-03 and nothing else.
  *
- * The ceiling, not the plan: 16 turns buy one clean pass of the four specs and
- * the remaining 9 are for retries. Raising it needs a new grant, and the ledger
+ * The ceiling, not the plan: 15 turns buy one clean pass of the four specs and
+ * the remaining 10 are for retries. Raising it needs a new grant, and the ledger
  * on disk carries every turn with the spec that spent it, so a later number
  * cannot quietly become a fresh start.
  */
