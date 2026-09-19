@@ -68,7 +68,7 @@ Nie uruchamiano: `pnpm test:e2e:model`, `e2e/bl01-bl02-model.spec.ts`, `e2e/agen
 ## Próby zdolności wykrycia (G16)
 
 Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** linii, przebieg,
-`git checkout -- <plik>`, kontrola czystości. Wszystkie **szesnaście** oblało na spodziewanej asercji;
+Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** linii, przebieg, `git checkout -- <plik>`, kontrola czystości. Prób jest **dwadzieścia**; dziewiętnaście oblało na spodziewanej asercji, a **jedna wyszła nieoczekiwanie zielona i to było znalezisko** (próba R, niżej).
 żadna nie wyszła nieoczekiwanie zielona.
 
 | # | Wycofana linia | Test | Jak oblał |
@@ -90,6 +90,9 @@ Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** lini
 | M-odczyt | reguła pozytywna wyłączona **tylko** dla `Read` | `tests/credential-guard.test.ts` | „odczytano plik spoza katalogu roboczego”; zapis nadal blokowany |
 | M-zapis | reguła pozytywna wyłączona **tylko** dla `Write` | `tests/credential-guard.test.ts` | „POWSTAL PLIK poza katalogiem roboczym”; odczyt nadal blokowany |
 | N | cofnięte wyłączenie workspace z listy zakazów | `tests/credential-guard.test.ts` | „praca we wlasnym katalogu zostala zablokowana”: `[true, true]` zamiast `[false, false]` — kontrola odwrotna |
+| **O** | powrót do rozwiązywania leksykalnego (`resolve()` przed `realpath`) | `tests/credential-guard.test.ts` | 3 testy: zapis **tworzy** plik poza workspace, odczyt **oddaje** treść spoza, dowiązanie do katalogu poświadczeń **oddaje** kanarka |
+| **P** | wycofana reguła wzorców `Glob`/`Grep` | `tests/credential-guard.test.ts` | `expected [false, false] to deeply equal [true, false]` — wzorzec `../../**` przechodzi |
+| **R** | `decideTool` daje `auto` bez deklaracji ścieżki (+ narzędzie dopisane do listy) | `tests/credential-guard.test.ts` | **za pierwszym razem ZIELONA** — patrz znalezisko; po poprawce asercji: „NoweNarzedzie jest wstepnie zatwierdzone, ale nie zadeklarowalo argumentu sciezki” |
 
 ### Znalezisko z próby A
 
@@ -98,6 +101,21 @@ bo ta druga stała w teście niżej. Test sprawdzał właściwą rzecz, ale nie 
 czyta się jego wynik. Kolejność asercji zmieniono (commit `82c61c9`) tak, żeby asercja o kanarku była
 pierwsza, i próbę powtórzono: oblewa teraz na wycieku. To jest przykład próby, która złapała **test**,
 nie kod — zgodnie z G16 potraktowany jako znalezisko, nie jako formalność.
+
+### Znalezisko z próby R — próba, która wyszła zielona
+
+Próba R w pierwszym podejściu **nie oblała**, mimo że reguła była wyłączona. Asercja brzmiała: „każde
+narzędzie z listy `auto` daje `decideTool → 'auto'`" — co pod zepsutą wersją (`return 'auto'`
+bezwarunkowo) jest tym **bardziej** prawdziwe. Asercja nie mogła oblać na wadzie, której dotyczyła.
+
+Niezmiennik brzmi inaczej i dopiero on oblewa: **narzędzie wstępnie zatwierdzone musi mieć
+zadeklarowany argument ścieżki** (`declaresPathArguments`). Oblewa w chwili dopisania takiego
+narzędzia, czyli tam, gdzie popełnia się błąd.
+
+Osobno, i też do zapisania: **próbę R wykonałem najpierw na niezatwierdzonym drzewie**, więc
+`git checkout` cofnął razem z nią mój własny, potrzebny eksport — `pnpm verify` oblał na brakującym
+symbolu. To jest dokładnie powód, dla którego G16 mówi „commit najpierw": bez tego próba i praca
+mieszają się w jednym cofnięciu. Powtórzona na czystym drzewie, zgodnie z procedurą.
 
 ### Znalezisko z próby G — i ostrzeżenie o niej samej
 
