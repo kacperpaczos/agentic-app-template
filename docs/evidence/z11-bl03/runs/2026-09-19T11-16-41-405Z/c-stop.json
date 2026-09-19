@@ -1,0 +1,71 @@
+{
+  "zapisano": "2026-09-19T11:16:59.641Z",
+  "rodzajWykonania": "rzeczywisty model",
+  "wersjaKodu": {
+    "commit": "83caf5ef07a923055d193031b2829743ca320f18",
+    "brudneDrzewo": false,
+    "node": "24.19.0",
+    "pakiety": {}
+  },
+  "srodowisko": {
+    "system": "linux 7.2.5-200.fc44.x86_64 x64",
+    "node": "24.19.0",
+    "pnpm": "9.15.9",
+    "cliZewnetrzne": "2.1.278 (Claude Code)",
+    "cliWSdk": {
+      "wersja": "2.1.270",
+      "commit": "97ecbf7abeb4170dcfd26c4d4b397afd9015030e",
+      "dataBudowy": "2026-09-12T18:17:55Z"
+    },
+    "model": null,
+    "pakiety": {
+      "react": "19.3.0",
+      "react-dom": "19.3.0",
+      "typescript": "7.0.2",
+      "vite": "8.3.0",
+      "vitest": "5.0.0",
+      "@playwright/test": "1.63.0",
+      "@openuidev/react-ui": "0.13.10",
+      "@openuidev/react-headless": "0.9.13",
+      "hono": "4.13.7",
+      "drizzle-orm": "0.45.2",
+      "@mastra/core": "1.66.0",
+      "@mastra/claude": "0.3.1",
+      "@anthropic-ai/claude-agent-sdk": "0.3.270",
+      "zod": "4.6.5"
+    }
+  },
+  "zrodlo": "prawdziwy model (subskrypcja Claude) przez @mastra/claude i proces Claude Agent SDK",
+  "pakiet": "BL-03 (Z11)",
+  "przebieg": "2026-09-19T11-16-41-405Z",
+  "kodCommit": "83caf5ef07a923055d193031b2829743ca320f18",
+  "spec": "e2e/bl03-model-lifecycle.spec.ts",
+  "przebiegPlanu": "C/D",
+  "turyWydaneWTymPliku": 1,
+  "turyWydaneLacznie": 19,
+  "budzet": 25,
+  "kroki": [],
+  "kryteria": [
+    "L7.3",
+    "L1.6"
+  ],
+  "decyzjeZgody": [],
+  "fazaWChwiliDzialania": "running",
+  "procesyWTrakcie": {
+    "potomkowiePrzed": 0,
+    "potomkowieWTrakcie": 2,
+    "uruchomionePrzezWykonanie": [
+      "claude",
+      "socat"
+    ],
+    "robocze": [
+      "claude"
+    ]
+  },
+  "poZatrzymaniu": {
+    "status": "cancelled",
+    "kod": "cancelled",
+    "potomkowie": 0
+  },
+  "wynik": "zaliczona"
+}

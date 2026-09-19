@@ -35,23 +35,36 @@ export interface PaidRun {
 }
 
 /**
- * Pre-flight for a whole spec, asked once at load.
+ * Pre-flight, asked before anything is sent.
  *
  * Per-command guarding is not enough on its own, and the reason is recorded in
  * `model-turns.ts`: with one turn left of the grant it lets the first command
  * through, the first command spends a real turn, and the second trips the
- * guard. A paid turn is gone and nothing is proved. This refuses the spec
- * instead, as a **skip** — nothing sent, nothing claimed, no evidence touched.
+ * guard. A paid turn is gone and nothing is proved. This refuses **up front**
+ * instead, as a skip — nothing sent, nothing claimed, no evidence touched.
+ *
+ * ## Why the unit is a test, not a file
+ *
+ * `bl01-bl02-model.spec.ts` asks the question for the whole file, and must: its
+ * probas build on one another, so a run that stops halfway has spent turns and
+ * proved nothing. The specs of this package are the opposite — each test closes
+ * its own criterion and writes its own evidence file, so a completed test is a
+ * complete proof whatever happens to the next one.
+ *
+ * Asking the file's question here cost nothing but nearly cost a criterion: with
+ * six turns left and a file declaring seven, the guard skipped a **single**
+ * one-turn test that the budget covered easily. The guard was right about the
+ * file and wrong about the run. So each test declares what it costs and is
+ * refused only when *its own* cost is not covered.
  */
-export function paidSpecPreflight(file: Z11ModelSpecFile) {
-  const needed = Z11_SPEC_TURNS[file];
+export function paidSpecPreflight(file: Z11ModelSpecFile, needed = Z11_SPEC_TURNS[file]) {
   const answer = z11Preflight(needed);
   return {
     ...answer,
     needed,
     skipReason: answer.ok
       ? null
-      : `[BL-03] ${file}: ${'message' in answer ? answer.message : 'brak budzetu'}`,
+      : `[BL-03] ${file} (${needed} tur): ${'message' in answer ? answer.message : 'brak budzetu'}`,
   };
 }
 

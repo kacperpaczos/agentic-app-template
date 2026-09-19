@@ -47,7 +47,6 @@ import { paidRun, paidSpecPreflight } from './support/bl03-model.ts';
  */
 
 const FILE = 'bl03-model-lifecycle.spec.ts';
-const preflight = paidSpecPreflight(FILE);
 const AGENT_TIMEOUT = 420_000;
 
 const instance = new ScriptedInstance({
@@ -83,7 +82,12 @@ const LONG_COMMAND =
 
 test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () => {
   test.describe.configure({ mode: 'serial', timeout: AGENT_TIMEOUT });
-  test.skip(!preflight.ok, preflight.skipReason ?? '');
+  /*
+   * Skip per test, with that test's own cost — see `paidSpecPreflight`. Kazdy
+   * test tego pliku zamyka wlasne kryterium i zapisuje wlasny dowod, wiec
+   * ukonczony test jest pelnym dowodem niezaleznie od losu nastepnego.
+   */
+  const dla = (tur: number) => paidSpecPreflight(FILE, tur);
 
   test.beforeAll(async () => {
     instance.prepareDatabase();
@@ -100,6 +104,7 @@ test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () 
   test('druga tura po restarcie backendu wznawia te sama sesje i nie powiela historii', async ({
     page,
   }) => {
+    test.skip(!dla(2).ok, dla(2).skipReason ?? '');
     const backend = new Backend(page, BASE);
     const record: Record<string, unknown> = { kryteria: ['L8.5'], obserwacjaDla: 'L7.13' };
     try {
@@ -183,6 +188,7 @@ test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () 
   /* ---------------------------------------------------------------------- */
 
   test('agent podaje wartosc zapisana i odnotowuje niezapisany szkic', async ({ page }) => {
+    test.skip(!dla(1).ok, dla(1).skipReason ?? '');
     const backend = new Backend(page, BASE);
     const record: Record<string, unknown> = { kryteria: ['L6.5'] };
     try {
@@ -302,6 +308,7 @@ test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () 
   /* ---------------------------------------------------------------------- */
 
   test('blad narzedzia przechodzi przez adapter do rozmowy, z trescia argumentow', async ({ page }) => {
+    test.skip(!dla(1).ok, dla(1).skipReason ?? '');
     const backend = new Backend(page, BASE);
     const record: Record<string, unknown> = { kryteria: ['L5.8', 'L7.3'] };
     try {
@@ -350,6 +357,7 @@ test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () 
   /* ---------------------------------------------------------------------- */
 
   test('Stop konczy wykonanie modelu i nie zostawia procesow roboczych', async ({ page }) => {
+    test.skip(!dla(1).ok, dla(1).skipReason ?? '');
     const backend = new Backend(page, BASE);
     const record: Record<string, unknown> = { kryteria: ['L7.3', 'L1.6'] };
     try {
@@ -421,6 +429,7 @@ test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () 
   /* ---------------------------------------------------------------------- */
 
   test('SIGTERM w trakcie wykonania nie zostawia procesow, a trwale dane wracaja', async ({ page }) => {
+    test.skip(!dla(1).ok, dla(1).skipReason ?? '');
     const backend = new Backend(page, BASE);
     const record: Record<string, unknown> = { kryteria: ['L1.6'] };
     try {

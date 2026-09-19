@@ -321,13 +321,29 @@ describe('spece z prawdziwym modelem: opt-in i nienaruszalnosc dowodow', () => {
     expect(Object.values(Z11_SPEC_TURNS).reduce((a, b) => a + b, 0)).toBe(Z11_TURNS_PLANNED);
     expect(Z11_TURNS_PLANNED).toBeLessThan(Z11_TURN_BUDGET);
 
-    // Every paid spec refuses before the first command when the grant is short.
+    /*
+     * Every paid spec refuses **before the first command** when the grant is
+     * short — checked as an ordering, not as a spelling.
+     *
+     * The earlier version looked for the literal `paidSpecPreflight(FILE)` and
+     * `test.skip(!preflight.ok`. It caught a real change (the pre-flight moved
+     * from the file to the individual test, so a one-turn test would stop being
+     * refused for a seven-turn file it does not belong to) — but it caught it by
+     * matching text, which would equally have failed on a rename. What has to
+     * hold is that the refusal exists and comes first; that is what is asserted
+     * now, and it survives either spelling.
+     */
     for (const file of Z11_MODEL_SPEC_FILES) {
       const source = readFileSync(resolve(REPO, 'e2e', file), 'utf8');
-      expect(source, `${file}: brak sprawdzenia wstepnego`).toContain('paidSpecPreflight(FILE)');
-      expect(source, `${file}: brak pominiecia przy braku budzetu`).toContain(
-        'test.skip(!preflight.ok',
-      );
+      expect(source, `${file}: brak sprawdzenia wstepnego`).toContain('paidSpecPreflight(');
+      const skip = source.indexOf('test.skip(!');
+      expect(skip, `${file}: brak pominiecia przy braku budzetu`).toBeGreaterThan(-1);
+      const firstCommand = source.indexOf('run.command(');
+      expect(firstCommand, `${file}: spec nie wysyla zadnego polecenia?`).toBeGreaterThan(-1);
+      expect(
+        skip,
+        `${file}: pominiecie przy braku budzetu jest PO pierwszym poleceniu — tura poszlaby mimo pustego grantu`,
+      ).toBeLessThan(firstCommand);
       // Evidence lands under the run stamp, written from a `finally`.
       expect(source, `${file}: dowod nie jest zapisywany bezwarunkowo`).toContain('} finally {');
     }
