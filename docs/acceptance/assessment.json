@@ -2382,7 +2382,7 @@
       "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "docs/acceptance/detection-trials.json i scripts/detection-trials.mjs: 11 kontrolowanych wariantow wadliwych, kazdy wskazuje naprawe, linie do zepsucia i test, ktory ma wtedy oblac. Harness wymaga czystego drzewa (commit najpierw), robi PRZEBIEG WZORCOWY na czystym kodzie (test musi przejsc i musi uruchomic co najmniej jeden test), potem mutuje, uruchamia test ponownie, przywraca plik bajt w bajt w finally i na sygnalach, a na koniec sprawdza czystosc drzewa. Test, ktory mimo wadliwego wariantu PRZECHODZI, jest raportowany jako NIEWYKRYTE i konczy przebieg kodem 1. Objete naprawy: szuflada D-1, projekcja D-2, szeregowanie rozmowy N-3, mapowanie abort na cancel w zadaniach w tle, detektor strumienia, guardy izolacji (dowiazanie, magazyn, osierocony serwer), cel proby odbiorowej i koperta dowodowa. tests/detection-trials.test.ts jest proba na samym bezpieczniku: na prawdziwym repozytorium tymczasowym sprawdza, ze harness potrafi zglosic znalezisko, ze przebieg bez ani jednego uruchomionego testu to BLAD-PROBY a nie zaliczenie, ze niepasujacy albo dwukrotnie pasujacy wzorzec jest bledem i ze plik wraca po wyjatku. Wyniki: docs/evidence/z13-bl12/proby-wykrycia.json.",
+      "proof": "docs/acceptance/detection-trials.json i scripts/detection-trials.mjs: 11 kontrolowanych wariantow wadliwych, kazdy wskazuje naprawe, linie do zepsucia i test, ktory ma wtedy oblac. Harness wymaga czystego drzewa (commit najpierw), robi PRZEBIEG WZORCOWY na czystym kodzie (test musi przejsc i musi uruchomic co najmniej jeden test), potem mutuje, uruchamia test ponownie, przywraca plik bajt w bajt w finally i na sygnalach, a na koniec sprawdza czystosc drzewa. Test, ktory mimo wadliwego wariantu PRZECHODZI, jest raportowany jako NIEWYKRYTE i konczy przebieg kodem 1. Objete naprawy: szuflada D-1, projekcja D-2, szeregowanie rozmowy N-3, mapowanie abort na cancel w zadaniach w tle, detektor strumienia, guardy izolacji (dowiazanie, magazyn, osierocony serwer), cel proby odbiorowej i koperta dowodowa. tests/detection-trials.test.ts jest proba na samym bezpieczniku: na prawdziwym repozytorium tymczasowym sprawdza, ze harness potrafi zglosic znalezisko, ze przebieg bez ani jednego uruchomionego testu to BLAD-PROBY a nie zaliczenie, ze niepasujacy albo dwukrotnie pasujacy wzorzec jest bledem i ze plik wraca po wyjatku. Wyniki: docs/evidence/z13-bl12/proby-wykrycia.json (11 prob jednostkowych, wszystkie WYKRYTE, drzewo po probach czyste) i docs/evidence/z13-bl12/proby-wykrycia-D-1-szuflada-nad-canvasem.json (proba przegladarkowa D-1 pod blokada: buduje pakiet dla przebiegu wzorcowego i dla wariantu wadliwego, bo suita przegladarkowa czyta produkcyjny build — WYKRYTE). Razem 12 z 12.",
       "gap": "—",
       "scenarios": [
         "T05",
@@ -2706,7 +2706,8 @@
         "e2e/support/isolation.ts",
         "e2e/support/port-probe.ts",
         "scripts/lib/acceptance-target.mjs",
-        "docs/evidence/template-consolidation/przebieg-2-7d6bd78"
+        "docs/evidence/template-consolidation/przebieg-2-7d6bd78",
+        "docs/evidence/z13-bl12/proby-wykrycia.json"
       ]
     },
     "T20": {
