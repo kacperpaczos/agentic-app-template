@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { environment } from '../../tests/support/measurement-evidence.ts';
+import { relative, resolve } from 'node:path';
+import { codeVersion, environment } from '../../tests/support/measurement-evidence.ts';
 
 /**
  * The three specs that answer with the **real model**, and everything that
@@ -351,6 +351,27 @@ export function z11EvidencePath(name: string): string {
  * Assembled from named fields, never from whole API objects: a run record
  * carries `claudeSessionId`, and a conversation can carry anything the user
  * typed. What goes in is what the caller chose to put in.
+ *
+ * **Koperta dowodowa (L12.10).** The envelope — commit, tree state, environment,
+ * resolved package versions and the version of the CLI *inside* the SDK — comes
+ * from the shared writer, not from fields spelled out here. The first eleven
+ * proofs of this package were written before the envelope existed and had to be
+ * entered in `docs/evidence/POCHODZENIE.json` by hand, because inventing an
+ * environment nobody recorded would be worse than admitting it was not. Every
+ * proof written from here on carries its own, so the register can only shrink.
+ *
+ * `rodzajWykonania` is `'rzeczywisty model'` and is not a parameter: this
+ * function is only reachable from a spec that both switches let through, and a
+ * proof of this package that was produced any other way would be a different
+ * kind of mistake than a mislabelled one.
+ *
+ * **Why this writes unconditionally**, unlike every other evidence writer in the
+ * repository. G18 makes a proof optional because a regression that rewrites
+ * files dirties the tree it is being judged on — and that reasoning is about
+ * runs that are free to repeat. A turn is not: the record of what a paid turn
+ * did is the only copy there will ever be, and `APP_WRITE_EVIDENCE` being unset
+ * would throw it away silently. These specs are outside `pnpm verify` and
+ * outside the default browser run, so nothing they write can dirty a regression.
  */
 export function writeZ11Evidence(
   name: string,
@@ -362,10 +383,14 @@ export function writeZ11Evidence(
     `${JSON.stringify(
       {
         zapisano: new Date().toISOString(),
-        kodCommit: codeCommit(),
+        /* Slownikiem repozytorium, nie proza — tak czyta to rejestr pochodzenia. */
+        rodzajWykonania: 'rzeczywisty model',
+        wersjaKodu: codeVersion(undefined, [relative(REPO_ROOT, Z11_EVIDENCE_ROOT)]),
+        srodowisko: environment(),
         zrodlo: 'prawdziwy model (subskrypcja Claude) przez @mastra/claude i proces Claude Agent SDK',
         pakiet: 'BL-03 (Z11)',
         przebieg: RUN_STAMP,
+        kodCommit: codeCommit(),
         ...body,
       },
       null,
