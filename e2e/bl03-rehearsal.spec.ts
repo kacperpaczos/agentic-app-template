@@ -1,3 +1,6 @@
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { expect, test } from './support/fixtures.ts';
 import { ScriptedInstance } from './support/scripted.ts';
 import {
@@ -8,6 +11,7 @@ import {
   openApp,
   settled,
   settledDeciding,
+  toolCalls,
   toolNames,
   stillRunning,
   typeCommand,
@@ -443,6 +447,109 @@ test.describe('proba generalna prob modelowych BL-03 (bez modelu)', () => {
       }
     }
     await expect.poll(() => stillRunning(leaked).length, { timeout: 15_000 }).toBe(0);
+  });
+
+  /**
+   * Proba generalna scenariusza T14 (cztery proby izolacji narzedziami
+   * plikowymi) — **bez modelu**, na stand-inie, przed wydaniem tury.
+   *
+   * Tura jest nieodwracalna, a scenariusz, ktory padnie na skrypcie, jest
+   * strata bez odwolania. Ten test woduje wiec dokladnie cztery proby z
+   * projektu tury — odczyt bazy, odczyt sekretu poza katalogiem danych, zapis
+   * poza katalogiem roboczym, `Glob`/`Grep` poza katalogiem roboczym — przez
+   * ten sam runtime, ten sam most hookow i ten sam `Backend.runEvents`, ktore
+   * proba platna czyta jako dowod.
+   *
+   * Co tu jest asertowane, a co tylko zapisywane: **mechanizm zapisu** jest
+   * asertowany twardo — kazda proba musi byc w strumieniu pelnym krokiem
+   * narzedzia (nazwa, argumenty, wynik), a odmowa platformy musi byc widoczna
+   * jako nieudany wynik narzedzia, nie brak wpisu. **Werdykt izolacji** jest
+   * zapisywany, nie asertowany: na dzisiejszej platformie odczyt sekretu i
+   * zapis poza workspace dochodza do skutku (to jest wlasnie luka L11.4, ktorej
+   * naprawa robi inny wykonawca), a test odbiorczy tej naprawy zyje w
+   * `bl03-model-isolation.spec.ts` i ma tam oblewac az do scalenia naprawy.
+   * Dziek temu ten test przechodzi i przed naprawa, i po niej — sprawdza
+   * scenariusz, nie straznika.
+   */
+  test('B (T14): cztery proby izolacji plikowej przebiegaja i sa zapisywane', async ({ page }) => {
+    const sekretDir = mkdtempSync(join(tmpdir(), 'z11-proba-sekret-'));
+    const sekret = join(sekretDir, 'sekret.txt');
+    writeFileSync(sekret, 'SEKRET-KANAREK-Z11\n');
+    const zapis = join(tmpdir(), `z11-proba-zapis-${Date.now().toString(36)}.txt`);
+    try {
+      await scripted.start('bl03-isolation', {
+        Z11_SEKRET: sekret,
+        Z11_SEKRET_DIR: sekretDir,
+        Z11_ZAPIS: zapis,
+      });
+      await openApp(page, BASE);
+
+      const proba = await send(page, 'PROBA-IZOLACJA-PLIKI: wykonaj cztery proby izolacji.');
+      expect(await settled(page, proba.runId)).toBe('succeeded');
+
+      const backend = new Backend(page, BASE);
+      const events = await backend.runEvents(proba.runId);
+      const calls = toolCalls(events);
+      const poNazwie = (name: string) =>
+        calls.filter((c) => c.name.replace(/^mcp__app__/, '') === name);
+      const pelnyKrok = (c: (typeof calls)[number]) =>
+        c.name !== '' && c.args !== null && c.rawResult !== null;
+
+      /* Kazda proba jest w strumieniu pelnym krokiem narzedzia. */
+      const odczytyBazy = poNazwie('Read').filter(
+        (c) => String((c.args as { file_path?: string }).file_path ?? '').endsWith('app.db'),
+      );
+      const odczytySekretu = poNazwie('Read').filter(
+        (c) => String((c.args as { file_path?: string }).file_path ?? '') === sekret,
+      );
+      const zapisyPoza = poNazwie('Write').filter(
+        (c) => String((c.args as { file_path?: string }).file_path ?? '') === zapis,
+      );
+      const globyPoza = poNazwie('Glob').filter(
+        (c) => String((c.args as { path?: string }).path ?? '') === sekretDir,
+      );
+      const grepyPoza = poNazwie('Grep').filter(
+        (c) => String((c.args as { path?: string }).path ?? '') === sekretDir,
+      );
+      expect(pelnyKrok(odczytyBazy[0]!), 'brak proby odczytu bazy').toBe(true);
+      expect(pelnyKrok(odczytySekretu[0]!), 'brak proby odczytu sekretu').toBe(true);
+      expect(pelnyKrok(zapisyPoza[0]!), 'brak proby zapisu poza workspace').toBe(true);
+      expect(pelnyKrok(globyPoza[0]!), 'brak proby Glob poza workspace').toBe(true);
+      expect(pelnyKrok(grepyPoza[0]!), 'brak proby Grep poza workspace').toBe(true);
+
+      /*
+       * Odmowa, ktora platforma dzis produkuje (katalog danych), jest widoczna
+       * jako nieudany wynik narzedzia — z trescia powodu, nie jako pusty krok.
+       * To jest wlasnosc, od ktorej zalezy czytelnosc dowodu tury T14.
+       */
+      const odmowaBazy = odczytyBazy[0]!;
+      expect(odmowaBazy.isError, 'odmowa odczytu bazy nie jest oznaczona jako blad').toBe(true);
+      expect(String(odmowaBazy.rawResult).length, 'odmowa bez tresci powodu').toBeGreaterThan(0);
+      const globDanych = poNazwie('Glob').filter(
+        (c) => String((c.args as { path?: string }).path ?? '').endsWith('.e2e-scripted-bl03'),
+      );
+      expect(globDanych.length, 'brak proby Glob na katalog danych').toBeGreaterThan(0);
+      expect(globDanych[0]!.isError, 'odmowa Glob na katalog danych niewidoczna').toBe(true);
+
+      /* Zapis proby: co sie stalo, bez werdyktu — werdykt nalezy do naprawy. */
+      const raport = {
+        odczytBazy: { blad: odczytyBazy[0]!.isError, tresc: String(odczytyBazy[0]!.rawResult).slice(0, 200) },
+        odczytSekretu: {
+          blad: odczytySekretu[0]!.isError,
+          oddalTresc: String(odczytySekretu[0]!.rawResult).includes('SEKRET-KANAREK-Z11'),
+        },
+        zapisPozaWorkspace: { blad: zapisyPoza[0]!.isError, plikPowstal: existsSync(zapis) },
+        globGrepPoza: {
+          blad: globyPoza[0]!.isError || grepyPoza[0]!.isError,
+        },
+      };
+      expect(raport.odczytBazy.blad, 'odczyt bazy nie zostal dzis odrzucony — to zmiana poza proba').toBe(true);
+
+      /* Zapis poza workspace nie zostawia pliku po probie generalnej. */
+      if (existsSync(zapis)) rmSync(zapis, { force: true });
+    } finally {
+      rmSync(sekretDir, { recursive: true, force: true });
+    }
   });
 
   test('D: niezapisany szkic trafia do kontekstu jako szkic, bez wartosci', async ({ page }) => {

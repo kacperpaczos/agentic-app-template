@@ -1,3 +1,4 @@
+import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer, type Server } from 'node:net';
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
 import { closeSync, existsSync, mkdirSync, openSync, rmSync, writeFileSync } from 'node:fs';
@@ -12,6 +13,7 @@ import {
 } from '../e2e/support/isolation.ts';
 import { assertDirectoryFree, assertPortFree, directoryInUse, portInUse } from '../e2e/support/port-probe.ts';
 import { ScriptedInstance } from '../e2e/support/scripted.ts';
+import { descendants, stillRunning } from '../e2e/support/bl03-checks.ts';
 
 /**
  * L1.9 — nothing is deleted while a process is still using it, and a survivor
@@ -255,5 +257,165 @@ describe('tozsamosc przebiegu, nie tylko etykieta', () => {
     await expect(
       assertInstanceLabel(base, TEST_INSTANCE_LABEL, 'Instancja', TEST_RUN_ID),
     ).rejects.toThrow(/instanceRunId=null/);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/*  L1.6 — kontrola wycieku procesow roboczych, postawiona na probie          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Czy `stillRunning` POTRAFI oblac — i czy potrafi przejsc.
+ *
+ * Poprzednia kontrola wycieku pytala `descendants(serverPid)` **po** wyjsciu
+ * serwera. Proces osierocony przez to wyjscie jest przepiety do init, wiec z
+ * definicji przestaje byc potomkiem: lista wracala pusta niezaleznie od tego,
+ * czy cokolwiek wyciekło. Kontrola, ktora nie potrafi oblac, jest dokladnie tym
+ * defektem, ktory opis braku L1.6 nazywa — „regresja nie wykryje wycieku
+ * procesow roboczych" — odtworzonym w kontroli majacej go lapac.
+ *
+ * Zastapila ja para **pid + czas startu**, chwytana PRZED sygnalem. Ten plik
+ * stawia ja na probie bez zadnej tury modelu i bez przegladarki: prawdziwe
+ * procesy systemu wystarczaja, zeby pokazac obie odpowiedzi.
+ *
+ *  1. proces, ktory przezyl sygnal, jest **znajdowany** (a stara kontrola nadal
+ *     mowi „pusto", co jest tu zmierzone, nie zalozone);
+ *  2. przy uporzadkowanym zamknieciu kontrola mowi „pusto" — inaczej byłaby
+ *     stalą w druga strone;
+ *  3. sam pid nie wystarcza: ten sam pid z innym czasem startu **nie** jest
+ *     tym procesem, wiec ponownie uzyty numer nie uchodzi za wyciek.
+ *
+ * Sprzatanie idzie po pid, nigdy po nazwie, i nie dotyka niczego, czego ten
+ * plik sam nie uruchomil.
+ *
+ * **Czego to NIE dowodzi.** Ze prawdziwy przebieg modelu nie zostawia procesow.
+ * To jest zdanie o aplikacji i o SDK, nie o kontroli; domknie je dopiero tura
+ * z `e2e/bl03-model-lifecycle.spec.ts`. Tutaj sprawdzany jest przyrzad.
+ */
+describe('kontrola wycieku procesow roboczych (L1.6) — przyrzad na probie', () => {
+  const NA_LINUKSIE = existsSync('/proc');
+
+  /** Zyje, dopoki go nie zabijemy; ignoruje SIGTERM, tak jak wyciek z opisu L1.6. */
+  const UPARTY = "process.on('SIGTERM', () => {}); process.on('SIGINT', () => {}); setInterval(() => {}, 1000);";
+  /** Zwykly potomek, ktorego rodzic sprzata przy zamknieciu. */
+  const ZWYKLY = 'setInterval(() => {}, 1000);';
+
+  const spawnedPids: number[] = [];
+
+  /** „Serwer": proces, ktory uruchamia jednego potomka i sam czeka. */
+  const startParent = (childCode: string, tidy: boolean): ChildProcess => {
+    const parent = spawn(
+      process.execPath,
+      [
+        '-e',
+        `const { spawn } = require('node:child_process');` +
+          `const child = spawn(process.execPath, ['-e', ${JSON.stringify(childCode)}], { stdio: 'ignore' });` +
+          (tidy ? `process.on('SIGTERM', () => { child.kill('SIGKILL'); process.exit(0); });` : '') +
+          `setInterval(() => {}, 1000);`,
+      ],
+      { stdio: 'ignore' },
+    );
+    if (parent.pid) spawnedPids.push(parent.pid);
+    return parent;
+  };
+
+  const waitFor = async (predicate: () => boolean, ms = 10_000): Promise<boolean> => {
+    const deadline = Date.now() + ms;
+    while (Date.now() < deadline) {
+      if (predicate()) return true;
+      await new Promise((done) => setTimeout(done, 50));
+    }
+    return predicate();
+  };
+
+  const alive = (pid: number): boolean => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  afterEach(() => {
+    // Wylacznie po pid i wylacznie to, co ten blok uruchomil.
+    for (const pid of spawnedPids.splice(0)) {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        /* zdazyl wyjsc sam */
+      }
+    }
+  });
+
+  it.skipIf(!NA_LINUKSIE)('ZNAJDUJE proces, ktory przezyl sygnal — stara kontrola nadal mowi „pusto"', async () => {
+    const parent = startParent(UPARTY, false);
+    const parentPid = parent.pid!;
+    expect(await waitFor(() => descendants(parentPid).length > 0), 'scenariusz proby nie uruchomil potomka').toBe(true);
+
+    // Tozsamosc chwytana PRZED sygnalem — na tym polega cala zmiana.
+    const zapamietane = descendants(parentPid);
+    expect(zapamietane.length).toBeGreaterThan(0);
+    for (const p of zapamietane) spawnedPids.push(p.pid);
+
+    process.kill(parentPid, 'SIGTERM');
+    expect(await waitFor(() => !alive(parentPid)), 'rodzic nie zakonczyl sie po SIGTERM').toBe(true);
+
+    /*
+     * Zmierzone, nie zalozone: stara kontrola po wyjsciu rodzica odpowiada
+     * „pusto" mimo wycieku. To jest powod wymiany, zapisany jako obserwacja.
+     */
+    expect(
+      descendants(parentPid),
+      'kontrola po potomstwie niespodziewanie cos zobaczyla — uzasadnienie wymiany wymaga sprawdzenia',
+    ).toEqual([]);
+
+    // A nowa go widzi. To jest zdolnosc do oblania.
+    const wyciek = stillRunning(zapamietane);
+    expect(wyciek.length, 'kontrola wycieku NIE wykryla procesu, ktory przezyl sygnal').toBeGreaterThan(0);
+    expect(wyciek.map((p) => p.pid)).toEqual(zapamietane.map((p) => p.pid));
+  });
+
+  it.skipIf(!NA_LINUKSIE)('mowi „pusto", gdy zamkniecie posprzatalo po sobie', async () => {
+    const parent = startParent(ZWYKLY, true);
+    const parentPid = parent.pid!;
+    expect(await waitFor(() => descendants(parentPid).length > 0), 'scenariusz proby nie uruchomil potomka').toBe(true);
+
+    const zapamietane = descendants(parentPid);
+    for (const p of zapamietane) spawnedPids.push(p.pid);
+
+    process.kill(parentPid, 'SIGTERM');
+    expect(await waitFor(() => !alive(parentPid)), 'rodzic nie zakonczyl sie po SIGTERM').toBe(true);
+
+    /*
+     * Kontrola w druga strone. Bez niej test powyzej zaliczylby takze
+     * `stillRunning`, ktore zawsze zwraca cos — czyli kontrole tak samo
+     * bezuzyteczna jak ta, ktora zastapila, tylko oblewajaca zamiast zaliczac.
+     */
+    expect(await waitFor(() => stillRunning(zapamietane).length === 0), 'potomek nie zostal sprzatniety').toBe(true);
+    expect(stillRunning(zapamietane)).toEqual([]);
+  });
+
+  it.skipIf(!NA_LINUKSIE)('ten sam pid z innym czasem startu NIE jest tym procesem', async () => {
+    /*
+     * Pid sam w sobie nie jest tozsamoscia — numery sa ponownie uzywane, a
+     * kontrola pytajaca „czy /proc/1234 istnieje" potrafi po minucie
+     * odpowiedziec „tak" o zupelnie innym procesie i zglosic wyciek, ktorego
+     * nie ma. Tu ten przypadek jest podstawiony wprost: ten sam, zyjacy pid z
+     * cudzym czasem startu ma zostac odrzucony.
+     */
+    const parent = startParent(ZWYKLY, false);
+    const parentPid = parent.pid!;
+    expect(await waitFor(() => descendants(parentPid).length > 0)).toBe(true);
+    const [potomek] = descendants(parentPid);
+    spawnedPids.push(potomek!.pid);
+
+    // Ten sam, zyjacy proces jest widziany…
+    expect(stillRunning([potomek!]).map((p) => p.pid)).toEqual([potomek!.pid]);
+    // …a ten sam pid podszyty innym czasem startu — nie.
+    expect(
+      stillRunning([{ ...potomek!, startTime: `${Number(potomek!.startTime) + 1}` }]),
+      'kontrola uznala obcy proces za nasz tylko dlatego, ze ma ten sam pid',
+    ).toEqual([]);
   });
 });

@@ -326,6 +326,16 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
           }
           if (step.kind === 'fileTool') {
             callSeq += 1;
+            const fileId = `tu_file_${callSeq}`;
+            /**
+             * The subagent marker, carried on **every** hook of this call.
+             *
+             * The SDK marks the whole call, not only its announcement, so a
+             * stand-in that put `agent_id` on `PreToolUse` alone would let a
+             * bridge look correct on the one hook a test happened to watch and
+             * wrong on the two it did not.
+             */
+            const origin = step.subagent ? { agent_id: 'agent_podwykonawca' } : {};
             /*
              * `$workspace/` wskazuje katalog roboczy TEGO uruchomienia, którego
              * test nie zna z góry. Bez tego nie dałoby się napisać kontroli
@@ -353,11 +363,12 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
                   : v,
               ]),
             );
+
             const refusal = await firePreToolUse({
-              tool_use_id: `tu_file_${callSeq}`,
+              tool_use_id: fileId,
               tool_name: step.name,
               tool_input: resolved,
-              ...(step.subagent ? { agent_id: 'agent_podwykonawca' } : {}),
+              ...origin,
             });
             /*
              * Z7 — narzędzie otwiera to, co hook KAZAŁ podstawić (o ile
@@ -389,6 +400,9 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
 
             handle.fileTools.push({ name: step.name, denied: refusal !== null, reason: refusal });
             if (refusal !== null) {
+              // A refused call never runs, so no `Post*` hook follows it — the
+              // same asymmetry the SDK has, and the reason a refusal has to be
+              // announced from `PreToolUse` or not at all.
               yield { type: 'text-delta', payload: { text: `[plik:${step.name}] odmowa ` } };
               continue;
             }
@@ -408,11 +422,26 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
              * That is the negative control built into the step itself.
              */
             let contents: string;
+            let failed = false;
             try {
               contents = readFileSync(targetPath, 'utf8');
             } catch (err) {
               contents = `blad odczytu: ${(err as Error).message}`;
+              failed = true;
             }
+            /*
+             * The outcome, through the same `Post*` hooks an MCP tool uses.
+             *
+             * Not an embellishment: the SDK reports a **built-in** file tool
+             * this way too, and turn 17's own evidence shows it — the `Read` of
+             * the canary was recorded with `blad: false` and a `rawResult`, and
+             * the only thing in the platform that writes a tool result is the
+             * `PostToolUse` branch of the bridge. A stand-in that fired
+             * `PreToolUse` alone could never tell a bridge that loses results
+             * from one that does not.
+             */
+            if (failed) await fire('PostToolUseFailure', { tool_use_id: fileId, error: contents, ...origin });
+            else await fire('PostToolUse', { tool_use_id: fileId, tool_response: contents, ...origin });
             yield { type: 'text-delta', payload: { text: `[plik:${step.name}] ${contents} ` } };
             continue;
           }

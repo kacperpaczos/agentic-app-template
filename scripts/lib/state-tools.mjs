@@ -646,20 +646,55 @@ function assertApproved(path, operacja) {
   );
 }
 
-/* The guarded operations. Nothing in these scripts calls the raw ones. */
-export const usun = (path, options) => (assertApproved(path, 'usuniecie'), rmSync(path, options));
-export const utworzKatalog = (path, options) => (
-  assertApproved(path, 'utworzenie katalogu'), mkdirSync(path, options)
-);
-export const zapisz = (path, data) => (assertApproved(path, 'zapis'), writeFileSync(path, data));
-export const kopiujPlik = (from, to) => (assertApproved(to, 'kopiowanie do'), copyFileSync(from, to));
-export const kopiujDrzewo = (from, to, options) => (
-  assertApproved(to, 'kopiowanie drzewa do'), cpSync(from, to, options)
-);
+/**
+ * The guarded operations. Nothing in these scripts calls the raw ones.
+ *
+ * Each one passes the **return value** of `assertApproved` into the
+ * underlying `node:fs` call — never the raw argument. `assertApproved`
+ * returns a symlink-resolved path (`realResolve`, the same walk the kernel
+ * does), and until this was fixed every wrapper here threw that value away
+ * and operated on the argument exactly as given: the gate checked one path
+ * and the call opened another. The gap was silent rather than active, because
+ * `realResolve` happens to agree with the kernel on a filesystem nothing else
+ * is touching — but the entire point of checking *at the call* (see
+ * `assertApproved`, above) is to stop trusting that a path means the same
+ * thing it meant a moment earlier. Passing on the value that was actually
+ * checked is what keeps that promise; passing the raw one back only looked
+ * like it did. `packages/platform-server/src/util/managed-fs.ts` — the server
+ * side of this codebase — already does it this way
+ * (`renameWithinManagedRoot`); this mirrors that shape rather than inventing
+ * a new one.
+ *
+ * The claim is whole-file and enforced whole-file: a raw `rmSync`, `renameSync`,
+ * `writeFileSync`, `copyFileSync`, `cpSync` or `mkdirSync` anywhere else in this
+ * module fails `tests/state-tools-gate.test.ts`. Route the call through one of
+ * these wrappers, or add the enclosing function to that test's
+ * `WYJATKI_SUROWYCH` — with a reason; the one entry is
+ * `removeSideFilesWeCreated`.
+ *
+ * `from` in `kopiujPlik`/`kopiujDrzewo` is deliberately **not** run through
+ * `assertApproved`. Both are read from directories `assertApproved` would
+ * refuse on purpose: `backup-state.mjs` reads `from` out of the *live data
+ * directory*, and `restore-state.mjs` / `migration-rehearsal.mjs` read it out
+ * of a backup the user handed them — neither is a directory these scripts are
+ * approved to write into, which is the only thing `assertApproved` decides.
+ * Guarding the read the same way the write is guarded would not add safety;
+ * it would make the read — the whole point of a backup or a restore —
+ * impossible. What protects a destination that is filled from `from` is
+ * `assertOwnOrEmptyDir` / `approveRestoreTarget` on `to`, upstream of these
+ * calls, same as before.
+ */
+export const usun = (path, options) => rmSync(assertApproved(path, 'usuniecie'), options);
+export const utworzKatalog = (path, options) =>
+  mkdirSync(assertApproved(path, 'utworzenie katalogu'), options);
+export const zapisz = (path, data) => writeFileSync(assertApproved(path, 'zapis'), data);
+export const kopiujPlik = (from, to) => copyFileSync(from, assertApproved(to, 'kopiowanie do'));
+export const kopiujDrzewo = (from, to, options) =>
+  cpSync(from, assertApproved(to, 'kopiowanie drzewa do'), options);
 export const przenies = (from, to) => {
-  assertApproved(from, 'przeniesienie');
-  assertApproved(to, 'przeniesienie do');
-  renameSync(from, to);
+  const src = assertApproved(from, 'przeniesienie');
+  const dst = assertApproved(to, 'przeniesienie do');
+  renameSync(src, dst);
 };
 
 /* --------------------------------- sqlite --------------------------------- */
