@@ -115,6 +115,31 @@ export const forbiddenToolMessage = (toolName: string): string =>
  * search pattern, and would still miss a tool whose path argument is spelled
  * differently. `Grep` and `Glob` search a directory, so `path` is where they
  * are pointed; the editors take `file_path`.
+ *
+ * ## Why the application's own publishing tools are deliberately absent
+ *
+ * `artifact_publish_file` and `files_publish_version` also take a `path`, and a
+ * symlink under `output/` once let one of them publish the credential file as a
+ * downloadable artifact. They are still **not** listed here, and the reason is
+ * that adding them would be weaker *and* misleading:
+ *
+ *  - **`resolveInWorkspace` is strictly stronger.** It confines them to the run
+ *    workspace — it refuses *everything* outside it, not merely the two guarded
+ *    directories — and since it resolves real paths, the symlink route is closed
+ *    at the point where the file is actually opened.
+ *  - **The path checked here would not be the path used.** Both handlers force
+ *    the `output/` prefix (`input.path.startsWith('output/') ? … : 'output/' + …`)
+ *    before resolving. A hook reading the raw `path` would therefore evaluate a
+ *    *different* string than the one the tool opens — a check that is green for
+ *    the wrong reason, which is worse than no check at all.
+ *  - **An absolute path is already inert.** That same forced prefix turns
+ *    `/home/…/.claude/.credentials.json` into `<workspace>/output//home/…`, which
+ *    exists nowhere; the call fails as `not_found` without reading anything.
+ *
+ * This list is for tools that legitimately address absolute paths anywhere on
+ * the disk — the SDK's own file tools. A tool confined to one directory is
+ * guarded by the confinement, at the chokepoint, not by a second list that would
+ * have to be kept in step with the first.
  */
 const PATH_ARGUMENTS: Record<string, readonly string[]> = {
   Read: ['file_path', 'path'],

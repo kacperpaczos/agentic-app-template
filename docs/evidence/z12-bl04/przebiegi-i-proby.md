@@ -68,7 +68,7 @@ Nie uruchamiano: `pnpm test:e2e:model`, `e2e/bl01-bl02-model.spec.ts`, `e2e/agen
 ## Próby zdolności wykrycia (G16)
 
 Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** linii, przebieg,
-`git checkout -- <plik>`, kontrola czystości. Wszystkie **dwanaście** oblało na spodziewanej asercji;
+`git checkout -- <plik>`, kontrola czystości. Wszystkie **trzynaście** oblało na spodziewanej asercji;
 żadna nie wyszła nieoczekiwanie zielona.
 
 | # | Wycofana linia | Test | Jak oblał |
@@ -85,6 +85,7 @@ Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** lini
 | I5 | dotknięcie pliku użytkownika w **ostatnim** teście pliku | `tests/credential-guard.test.ts` | `afterAll` na poziomie pliku oblewa, kod wyjścia 1 — hook wewnątrz `describe` tego nie widział |
 | J | filtr w `runtime.ts` gubi `<configDir>.json` przy budowaniu `credentialDirs` | `tests/credential-guard.test.ts` | „plik konfiguracji obok katalogu nie trafil do sandboxa” — asercja nad `sdkOptions` faktycznie podanymi SDK |
 | K | zapis do pliku poświadczeń z testu (próba na **ścieżce tymczasowej**, `CLAUDE_CONFIG_DIR` → atrapa) | `tests/setup-credential-guard.ts` | „plik poswiadczen uzytkownika … zmienil sie w trakcie tego pliku testowego”, kod wyjścia 1 |
+| **L** | cofnięte rozwiązywanie rzeczywistych ścieżek w `resolveInWorkspace` | `tests/credential-guard.test.ts` | „POWSTAL ARTEFAKT DO POBRANIA mimo dowiazania poza workspace”: `expected 1 to be +0` |
 
 ### Znalezisko z próby A
 
@@ -258,5 +259,11 @@ pojawia się w żadnej z dwunastu przeszukanych powierzchni.
    próba na kopii wylogowałaby użytkownika (wyżej). To jest pozostały brak L8.10.
 4. **Kolejności, w jakiej SDK stosuje swoje trzy mechanizmy uprawnień.** Odmowa w hooku `PreToolUse`
    jest sprawdzona na stand-inie, który honoruje decyzję hooka tak, jak opisuje to kontrakt SDK.
-   Że prawdziwy SDK też ją uhonoruje, jest wypowiedzią o cudzym kodzie — dlatego ochrona katalogu
-   poświadczeń ma **trzy** niezależne warstwy (sandbox `denyRead`/`denyWrite`, hook, bramka).
+   Że prawdziwy SDK też ją uhonoruje, jest wypowiedzią o cudzym kodzie.
+
+   Sformułowanie „**trzy niezależne warstwy**”, które stało tu wcześniej, zostało **wycofane** —
+   warstwy mają **różne zasięgi**, a nie ten sam zasięg trzy razy (raport §3a). Sandbox obejmuje
+   polecenia powłoki, hook obejmuje każde wywołanie narzędzia, bramka obejmuje to, co do niej
+   dociera — a dla `Read` nie dociera nic. Dla `Read` z podwykonawcy chroni dokładnie **jedna**
+   warstwa: hook. Publikację artefaktu nie chroni żadna z nich — tam chokepointem jest
+   `resolveInWorkspace`, co wyszło dopiero w rerecenzji (piąta droga, runda poprawek 2).

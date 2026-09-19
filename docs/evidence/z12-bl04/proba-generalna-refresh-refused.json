@@ -1,24 +1,27 @@
 {
-  "opis": "Odmowa odnowienia tokena: komunikat, ktory naprawde produkuje Claude Agent SDK, i to, co robi z nim aplikacja. Poswiadczenie proby ma CELOWO ZEPSUTE oba tokeny, wiec zadna prawdziwa wartosc nie jest uzywana ani uniewazniana.",
+  "przypadek": "refresh-refused",
+  "opis": "Odmowa odnowienia tokena: komunikat, ktory naprawde produkuje Claude Agent SDK, i to, co robi z nim aplikacja. Poswiadczenie proby ma CELOWO ZEPSUTE oba tokeny, wiec zadna prawdziwa wartosc nie jest uzywana ani uniewazniana. Przebieg nie przechodzi uwierzytelnienia, wiec nie dociera do modelu i NIE WYDAJE TURY SUBSKRYPCJI.",
   "rodzajDowodu": "proba generalna na zastepniku (bez SDK, bez sieci) — NIE jest dowodem",
   "zrodlo": "node --experimental-transform-types scripts/probe-refresh-refused.ts --rehearsal",
-  "zapisano": "2026-09-18T22:58:37.323Z",
+  "turySubskrypcji": 0,
+  "zapisano": "2026-09-19T00:44:58.170Z",
   "wersje": {
     "node": "24.19.0",
     "claudeCli": "2.1.277 (Claude Code)",
-    "commit": "fff0222cefe3851c883ab3ea4ec4650cd12185b1",
+    "commit": "97e6adf8766247301bf72d25755d3c9c06dc492f",
     "brudneDrzewo": true
   },
   "warunki": {
-    "katalogKonfiguracji": "/tmp/proba-odmowy-odnowienia-Ny5fzk",
+    "katalogKonfiguracji": "/tmp/proba-odmowy-odnowienia-07TQ3L",
     "accessToken": "zastapiony wartoscia, ktora nigdy nie byla tokenem",
     "refreshToken": "zastapiony wartoscia, ktora nigdy nie byla tokenem",
-    "expiresAt": "godzine w przeszlosci, wiec CLI musi sprobowac odnowienia"
+    "expiresAt": "godzine w PRZESZLOSCI, wiec CLI musi sprobowac odnowienia",
+    "czegoTenTrybNIEodtwarza": "Nie odtwarza wyczerpania limitu ani bledu sieci."
   },
   "wynik": {
     "statusUruchomienia": "failed",
     "kodBledu": "unauthenticated",
-    "komunikatSdk": "OAuth token refresh failed: invalid_grant",
+    "komunikatSdk": "Claude Code returned an error result: Failed to authenticate: OAuth session expired and could not be refreshed",
     "klasyfikacjaAplikacji": "refresh_refused",
     "stanDostepuPoPrzebiegu": "refresh_refused",
     "zdarzenRunError": 1
@@ -36,7 +39,7 @@
       "plik": "/home/paczos/.claude/.credentials.json",
       "obecny": true,
       "bajtow": 524,
-      "mtimeMs": 1789771106157.6829,
+      "mtimeMs": 1789777600860.4153,
       "accessTokenSha": "6749d3f422e64897",
       "refreshTokenSha": "c4ffe5d5ebe855d8",
       "expiresAt": 1789799906144
@@ -45,7 +48,7 @@
       "plik": "/home/paczos/.claude/.credentials.json",
       "obecny": true,
       "bajtow": 524,
-      "mtimeMs": 1789771106157.6829,
+      "mtimeMs": 1789777600860.4153,
       "accessTokenSha": "6749d3f422e64897",
       "refreshTokenSha": "c4ffe5d5ebe855d8",
       "expiresAt": 1789799906144

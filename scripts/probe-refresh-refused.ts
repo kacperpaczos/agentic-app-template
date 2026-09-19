@@ -57,6 +57,10 @@ import {
 import { composeApp } from '../apps/server/src/compose.ts';
 
 const REHEARSAL = process.argv.includes('--rehearsal');
+
+/** Tekst zaobserwowany na rzeczywistej awarii SDK 0.3.270. */
+const REAL_SDK_AUTH_FAILURE =
+  'Claude Code returned an error result: Failed to authenticate: OAuth session expired and could not be refreshed';
 /**
  * Który przypadek graniczny odtwarzamy.
  *
@@ -150,16 +154,23 @@ mkdirSync(dataDir, { recursive: true });
 
 /* ------------------------------- przebieg -------------------------------- */
 
-/** Zastępnik do próby generalnej: rzuca komunikatem, którego dotąd używała symulacja. */
+/**
+ * Zastępnik do próby generalnej: rzuca **tym komunikatem, który SDK naprawdę
+ * produkuje** (potwierdzonym w `docs/evidence/z12-bl04/refresh-refused-*.json`).
+ *
+ * Wcześniej rzucał zakładanym `OAuth token refresh failed: invalid_grant`, więc
+ * próba generalna ćwiczyła inny tekst niż przebieg rzeczywisty — czyli
+ * sprawdzała trochę nie to.
+ */
 const rehearsalAgent: ModelAgentLike = {
   stream: async () => ({
     fullStream: (async function* () {
-      yield { type: 'error', payload: { error: new Error('OAuth token refresh failed: invalid_grant') } };
+      yield { type: 'error', payload: { error: new Error(REAL_SDK_AUTH_FAILURE) } };
     })(),
   }),
   resumeStream: async () => ({
     fullStream: (async function* () {
-      yield { type: 'error', payload: { error: new Error('OAuth token refresh failed: invalid_grant') } };
+      yield { type: 'error', payload: { error: new Error(REAL_SDK_AUTH_FAILURE) } };
     })(),
   }),
 };

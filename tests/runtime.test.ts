@@ -491,7 +491,16 @@ describe('token subskrypcji nie wycieka z aplikacji', () => {
           'Zaloguj sie (claude /login) albo zadeklaruj brak logowania: APP_ALLOW_NO_CREDENTIAL=1.',
       ).toBe(true);
     }
-    expect(Array.isArray(readTokens())).toBe(true);
+    /*
+     * `Array.isArray(...)` byloby asercja, ktora nie moze oblac — dokladnie ta
+     * klasa, ktora ten pakiet tropi gdzie indziej. Znaczenie ma to, czy skan ma
+     * IGLE: albo poswiadczenie jest i daje wartosci, albo jego brak jest
+     * zadeklarowany.
+     */
+    expect(
+      readTokens().length > 0 || process.env.APP_ALLOW_NO_CREDENTIAL === '1',
+      'skan nie ma igly i nikt tego nie zadeklarowal',
+    ).toBe(true);
   });
 
   it('rzeczywista wartosc tokena nie wystepuje w wyniku probeAuth()', () => {
