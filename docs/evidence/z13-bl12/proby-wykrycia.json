@@ -2,9 +2,9 @@
   "opis": "Kontrolowane warianty wadliwe krytycznych napraw. Kazdy wpis mowi, ktora naprawe chroni, ktora linie zepsuc i ktory test ma wtedy oblac. Test, ktory mimo wadliwego wariantu PRZECHODZI, jest znaleziskiem: naprawa nie jest chroniona.",
   "zrodlo": "node scripts/detection-trials.mjs (APP_WRITE_EVIDENCE=1)",
   "rodzajWykonania": "test kontraktu lub logiki",
-  "zapisano": "2026-09-19T09:54:16.457Z",
+  "zapisano": "2026-09-19T10:15:00.884Z",
   "wersjaKodu": {
-    "commit": "f9ada427744293557cc2abaf3656355a6d48c99e",
+    "commit": "9dfee11355eedec749c8ac89501c2be1ea8bcb79",
     "brudneDrzewoPrzedProbami": false,
     "node": "24.19.0"
   },
@@ -97,7 +97,7 @@
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 1,
-      "fragmentWyniku": "Tests  1 failed | 8 skipped (9)"
+      "fragmentWyniku": "Tests  1 failed | 11 skipped (12)"
     },
     {
       "id": "cel-proby-etykieta",
@@ -108,8 +108,8 @@
       "nazwaTestu": null,
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
-      "testowPrzedMutacja": 11,
-      "fragmentWyniku": "Tests  3 failed | 8 passed (11)"
+      "testowPrzedMutacja": 14,
+      "fragmentWyniku": "Tests  3 failed | 11 passed (14)"
     },
     {
       "id": "cel-proby-domyslny-port",
@@ -121,7 +121,7 @@
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 1,
-      "fragmentWyniku": "Tests  1 failed | 10 skipped (11)"
+      "fragmentWyniku": "Tests  1 failed | 13 skipped (14)"
     },
     {
       "id": "koperta-rodzaj-wykonania",
@@ -175,6 +175,18 @@
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 1,
       "fragmentWyniku": "Tests  1 failed | 15 skipped (16)"
+    },
+    {
+      "id": "regula-bramki-skryptow",
+      "kryterium": "L1.8",
+      "naprawa": "Regula klasyfikujaca skrypty jest REKURENCYJNA: skrypt w podkatalogu scripts/ nie jest poza zasiegiem. Recenzent obszedl poprzednia wersje miedzy innymi plikiem scripts/zzevade/probe.mjs.",
+      "plik": "tests/acceptance-target.test.ts",
+      "test": "tests/acceptance-target.test.ts",
+      "nazwaTestu": "szesc obejsc recenzenta oblewa regule",
+      "wynik": "wykryte",
+      "kodWyjsciaTestu": 1,
+      "testowPrzedMutacja": 1,
+      "fragmentWyniku": "Tests  1 failed | 13 skipped (14)"
     }
   ]
 }
