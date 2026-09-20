@@ -1,157 +1,143 @@
-# Raport domknięcia platformy — 2026-09-20
+# Raport domknięcia platformy — 2026-09-20 (sesja kontrolowanego dokończenia)
 
-Gałąź `domkniecie/integracja` @ `ad2ae79`; `main` = `e4fe9d7` = `origin/main`, nietknięte.
-Zmiana względem `main`: **278 commitów, 395 plików, +68 822 / −2 583 linii**, 27 scaleni pakietów
-i rund poprawek. **Nic nie zostało wypchnięte na GitHub — publikacja to osobna decyzja właściciela.**
+Gałąź `domkniecie/integracja` @ `3d87dda`; `main` = `e4fe9d7` = `origin/main`, nietknięte.
+**Nic nie zostało wypchnięte na GitHub — publikacja to osobna decyzja właściciela (§8).**
 
-## 1. Co znaczy „potwierdzone”
+Sesja to kontynuacja porannego programu (raport z rana opisywał stan `ad2ae79`/`3692094`).
+Ta sesja NIE domyka nowych kryteriów modelowych (dostęp organizacyjny nadal zablokowany) —
+domyka infrastrukturę odbioru: P0 bramki macierzowe, dziury izolacji testów i decyzję o
+storage Mastry. Macierz pozostaje **187 / 11 / 2 = 200** — celowo, bo żaden z 13 otwartych
+kryteriów nie wisi na pracach tej sesji (§3).
 
-Kryterium jest potwierdzone wyłącznie na dowód z rzeczywistego działania. Właściciel wykluczył
-sześć podstaw (sam kod; sam endpoint; deklaracja agenta; pusta asercja; test przechodzący na
-wcześniej zapisanym artefakcie; test API zamiast testu rzeczywistego interfejsu) — ten raport
-żadnej nie używa. Raport rozdziela **kod, który istnieje**, od **kodu, który został sprawdzony**;
-to rozróżnienie jest jego głównym tematem, bo w trakcie programu zdarzył się raport o 16
-domknięciach przy pliku `assessment.json` bajtowo identycznym z bazą. Od tamtej pory każde
-domknięcie weryfikowano w pliku, nie w raporcie.
+## 1. Co się zmieniło w tej sesji (3 pakiety, pełny cykl implementacja → recenzja → scalenie)
 
-## 2. Macierz końcowa
+### ETAP 1 (P0) — jedna kanoniczna macierz (`bf97be6`)
+- `check:acceptance` i `check:matrix` czytają **to samo źródło** (kanon: `docs/ARCHITECTURE.md` +
+  `docs/acceptance/assessment.json`) przez wspólny rdzeń `scripts/lib/matrix-core.mjs`;
+  oba podsumowania pokazują **200 / 187-11-2**.
+- Rozjazd liczby kryteriów **kończy się błędem**: usunięcie jednego kryterium → exit 1
+  (próba orkiestratora: 84 problemy + ROZJAZD 18 z nazwaniem liczb „raport mówi X, a oceny dają Y”).
+- Kontrola archiwum 95 zostaje w `check:closure`, jawnie nazwana jako archiwalna: oceny
+  przeniesione VERBATIM z kodu do `docs/archive/agenticapp-2026-09/oceny-95.json`, twarda stała
+  95, problemy na STDERR (wcześniej cichy fail). Martwy duplikat `audit-matrix.mjs` usunięty.
+- Kros-kontrola światów: dokładnie 95 pól `historical` w kanonie, ID zgodne ze spec-95 —
+  luka „nic nie porównuje 95 z 200” zamknięta.
+- 8 nowych testów bramek (`tests/matrix-gates.test.ts`); niezależny recenzent wykonał 5 prób
+  negatywnych na kopiach /tmp (wszystkie oblewają) + potwierdził translokację VERBATIM (95/95).
 
-**187 potwierdzonych / 11 częściowych / 2 niespełnione = 200.** Zero kryteriów bez decyzji.
-`check:acceptance` = 0; rejestr pochodzenia dowodów kompletny (redakcja higieniczna opisana w §6).
+### ETAP 2 — dziury izolacji testów (`b9467ac` + fix `3d87dda`)
+Audyt (9-punktowa checklisty zlecenia): 4 OK, 6 dziur. Naprawione na warstwie skryptów
+testowych/audytowych — **`pnpm start` bez etykiety działa jak dotychczas** (decyzja świadoma:
+właściciel ma prawo uruchamiać swoją aplikację na swoich danych; kotwica `tests/isolation.test.ts:215-223`):
+1. Skrypty startujące (`dev-server.sh`, `audit-server.sh`, `closure-server.sh`): odmowa, gdy
+   `APP_DATA_DIR` nosi cechy żywych danych (`session.secret`) — przed startem.
+2. Fingerprint poświadczeń w `acceptance-agent.mjs`/`run-agent.mjs` — brany przy bramce,
+   porównywany w `finally` (przeżywa nieprzechwycony wyjątek; plik-przenośnik w gitignorowanym
+   `test-results/`, kontakt z poświadczeniami wyłącznie `statSync`).
+3. `dev-server.sh`: sonda portu PRZED startem + potwierdzenie własnego pid z /proc (koniec z
+   fałszywym „started” przy zajętych 8791).
+4. Bramka odbiorowa: wymagane `APP_INSTANCE_RUN_ID` + testowy katalog danych (odmowa przed
+   pierwszym żądaniem zapisującym).
+5. Porządki e2e: kasowanie katalogów instancji **po kształcie danych** (`app.db`/`session.secret`),
+   nie po prefiksie — `.e2e-model-turns/` (rejestr budżetu tur 21/25) jest z natury bezpieczny
+   (testy przeżycia w `tests/global-teardown.test.ts` 9/9). Poprawka po final review, które
+   wykryło, że pierwsza wersja (reguła prefiksowa) kasowałaby rejestr tur.
+6. `assertDirectoryFree` bez /proc: fail-closed.
+Pełne e2e przeglądarkowe po pakiecie: 224/224 (18,5 min).
 
-### 2a. Kryteria otwarte NA ZAWSZE — powód nie znika przez dolożenie pracy
+### ETAP 3 — storage Mastry: świadome ograniczenie (`5cfc97c`)
+Faktografia (@mastra/core 1.66.0): magazyn Mastry jest **martwy** — aplikacja trzyma trwałość
+wyłącznie we własnej SQLite (`app.db`), jedyna referencja to `getAgent('appAgent')`, zero
+asercji opartych o pamięć Mastry. Decyzja (wariant B): jawny `InMemoryStore` z publicznego
+eksportu `@mastra/core/storage` + komentarz + sekcja „Storage Mastry — świadome ograniczenie”
+(`docs/observability.md`) + strażnik testowy (asercja dokładnego komunikatu o fallbacku;
+mutacja oblewa). **Zero nowych zależności; żaden status kryterium nie zmieniony** (kryteria
+restartu potwierdzone na właściwej warstwie — własnej bazie).
 
-| Kryterium | Powód (zmierzony, nie domniemany) |
-|---|---|
-| **L8.11** | Komunikat przy WYCZERPANYM limicie subskrypcji: przebiegu nie da się wywołać na żądanie; symulacja limitu dowodzi symulacji, nie platformy. |
-| **L8.10** | Skuteczne odświeżenie tokenu: bezpieczna obserwacja niemożliwa w tej konfiguracji — świadomie poza zakresem, nie brak dowodu. |
-| **L5.8** | Błąd strumienia modelu (chunk error → `RUN_ERROR` z klasyfikacją): niewywoływalny na żądanie; pokryty symulacją `tests/run-lifecycle.test.ts`. |
-| **L12.10** | 44 dowody sprzed koperty pochodzenia: commit i wytwórca znane, środowisko nieodtwarzalne wstecz. Rejestr zamknięty (może tylko maleć); nowe dowody kopertę mają. |
-| **L11.11 ramię katalogu poświadczeń** (część kryterium) | NIEWYWOŁYWALNE BEZ SZKODY: zmierzono, że CLI przepisuje plik poświadczeń ze 193 na 121 bajtów i `accessToken` znika — próba wylogowałaby właściciela. Odseparowany `CLAUDE_CONFIG_DIR` z wymyślonym poświadczeniem nie uwierzytelnia sesji. Pokryte symulacją `tests/credential-guard.test.ts`. |
-
-### 2b. Kryteria gotowe do domknięcia turą modelu — ZABLOKOWANE dostępem
-
-Blokada: *„Your organization has disabled Claude subscription access for Claude Code"* — trwała,
-po stronie konta/admina organizacji. Diagnoza bez tury: `docs/evidence/z11-bl03/runs/2026-09-20T02-26-53-975Z/`
-i `diagnoza-blokady-org.md`. Tura 21 (T14) została wydana, skonsumowana i uczciwie zapisana jako
-`niezaliczona` — zero wywołań, zero zgód; rezerwa niewydana, bo powtórka odtworzyłaby wynik.
-Rejestr tur: **21/25**. Żadne z poniższych nie jest domknięte i żadne nie jest udawane.
-
-| Grupa | Kryteria | Spec (jedno polecenie po przywróceniu dostępu) | Budżet |
-|---|---|---|---|
-| T14 | L11.4, L11.5, ramię sekretów L11.11 | `npx playwright test e2e/bl03-model-t14.spec.ts` | 1+1 rezerwy |
-| T15 | L1.6, L7.13, L11.7 | `npx playwright test e2e/bl03-model-t15.spec.ts` | 4 — dokładnie pozostałe |
-| T16 | L6.11, L11.23 | `npx playwright test e2e/bl03-model-t16.spec.ts` | 1 (wymaga podniesienia sufitu) |
-| T17 | L11.12 (+ obserwacje `updatedInput`, „odmawia czy pyta") | `npx playwright test e2e/bl03-model-t17.spec.ts` | 1 (j.w.) |
-
-**Warunek uruchomienia (ważne):** licznik grantu jest per kopia robocza i nie zasiewa się z dowodów —
-jedno-polecenia biegać w kopii `agentic-app-template-wt/z11-bl03` (prawdziwy rejestr) albo przenieść
-`.e2e-model-turns/z11-bl03.json`. **Kolejność T15 → T16 → T17 obowiązkowa**: przy 21/25 preflight
-T16/T17 przepuści przed T15 i skonsumuje tury T15. Każdy spec ma próbę generalną zieloną na
-stand-inie (łącznie 14/14) i rejestry zapisywane przed asercjami (naprawa obroniła się empirycznie:
-tura 21 padła na asercji nr 1, a `finally` i tak zapisał pełny rekord).
-
-**L8.7** — wróciło na `potwierdzone`: pierwotny dowód `gui` istnieje, a obie drogi kontrprzykładów
-znalezione w trakcie programu (kanarek poświadczeń w czacie; publikacja pliku spoza workspace jako
-artefakt) są zamknięte i związane regresją (odwrócone próby A6e/C1 w pakiecie ataków). Historia
-zapisana w polu `proof`.
-
-## 3. Warstwy
-
-- **Zamknięte z kompletem dowodów:** L2, L3, L4, L10.
-- **Częściowo otwarte:** L1 (L1.6 — przyrząd pid+czas-startu dowiedziony próbami i mutacjami, tura
-  czeka), L5/L6/L7/L8/L9/L11/L12 — patrz §2a/§2b.
-
-## 4. Pakiety
-
-Scalone z pełnym cyklem (implementacja → niezależna recenzja → poprawki → próby pozytywne i negatywne
-→ scalenie → bramka): BL-05, BL-06, BL-07, BL-10, BL-11a, BL-11b, BL-11c, BL-08a, BL-08b, BL-09,
-BL-04 (9 rund strażnika + mikrorundy), BL-12, BL-03 (fazy A/B, przedtura, tura T14 zablokowana).
-Wykaz scaleni: `git log --first-parent --oneline e4fe9d7..HEAD | grep -i scalenie`.
-
-## 5. Wyniki bramek końcowych (na `ad2ae79`)
+## 2. Bramki końcowe (drzewo złożone `3d87dda`)
 
 | Bramka | Wynik |
 |---|---|
 | `pnpm install --frozen-lockfile` | 0 |
-| `pnpm verify` | 0 — 68 plików / **1059 testów** |
-| `pnpm check:module-swap` | 0 |
-| `pnpm check:acceptance` | 0 |
-| `pnpm test:e2e` (pełny, przeglądarkowy) | patrz adnotacja poniżej |
-| Macierz | 187/11/2 — odchylenia jawnie uzasadnione w §2a/§2b |
-| Plik poświadczeń | nietknięty przez program; trzy obserwowane rotacje ~8 h (10:40 / 18:40 / 02:36) to własna kadencja sesji właściciela — potwierdzone strukturą i świeżością tokenu; strażniki vitest i e2e zielone w oknach wszystkich przebiegów |
+| `pnpm verify` (worktree) | 0 — 71 plików / **1135 testów** |
+| `pnpm verify` (świeży klon `3d87dda`, izolowany) | 0 — **1135/1135**, zgodny z worktree |
+| `pnpm test:e2e` (pełny, przeglądarkowy) | **224/224** na `5cfc97c` (18,5 min) i **224/224** na finalnym `3d87dda` (16,5 min); log końcowy pokazuje naprawiony teardown przy pracy (katalog nieinstancyjny zostaje z podanym powodem) |
+| `check:acceptance` | 0 — 200 kryteriów, 187/11/2, spójność OK |
+| `check:matrix` | 0 — kanon 200, kros-kontrola archiwum 95 OK |
+| `check:closure` | 0 — archiwum 95, stała twarda, STDERR |
+| `check:module-swap` | 0 |
+| Skan sekretów diffu sesji | czysty (jedyna trafiona linia = zadeklarowana atrapa w teście) |
+| Ścieżki `/home/paczos` w diffie sesji | 0 |
+| `docs/acceptance/assessment.json` w diffie sesji | **nietknięty** (żaden status nie zmieniony) |
+| Nieśledzone bazy/tokeny | brak (katalogi `.e2e-*` z poprzednich sesji są gitignorowane) |
 
+## 3. Macierz — bez zmian statusów, uczciwie
 
+**187 potwierdzonych / 11 częściowych / 2 niespełnione = 200. 5/12 warstw zamkniętych.**
+Otwarte kryteria (13) i otwarte próby (17/27) — bez zmian wobec porannego raportu:
 
-### 5a. Pełny test przeglądarkowy na `ad2ae79`
+- **Zablokowane dostępem organizacyjnym** (T14–T17 gotowe, próby generalne 14/14 na stand-inie,
+  kolejność T15→T16→T17, budżet 21/25): L1.6, L6.11, L7.13, L11.4, L11.5, L11.7, L11.11 (ramię
+  sekretów), L11.12, L11.23. Sekwencja tur po przywróceniu dostępu: REPEAT izolacji plikowej
+  ~5–6 tur + T15 (4) + T16/T17 (sufit do podniesienia). REUSE-MATRIX (`docs/evidence/REUSE-MATRIX.md`)
+  dowodzi: 13 dowodów aktualnych (oszczędność 14 tur), 5 do powtórzenia — dokładnie obszar
+  przebudowany przez BL-04.
+- **Trwale ograniczone** (poranny raport §2a bez zmian): L5.8, L8.10, L8.11, L12.10, ramię
+  poświadczeń L11.11. Klasyfikacja końcowa (`out-of-scope`/`library-limit`/`blocked-by-access`)
+  pozostaje **decyzją właściciela** — w tej sesji żadnych statusów nie przestawiano.
+- Nowy wymóg dla przyszłych prób ujawniony przez REUSE-MATRIX: koperty dowodów muszą zapisywać
+  nazwę modelu (do dziś każda miała `model: null`); istniejących dowodów nie wolno dosztukować.
 
-**224/224 zielone, exit 0 (16,5 min).** W trakcie przebiegu strażnik poświadczeń z rundy 7
-potwierdził sam: *„[e2e] poświadczenie użytkownika nietknięte (odcisk zgodny z globalSetup)"* —
-mechanizm wykrywania zadziałał w produkcji, nie tylko w próbie zdolności wykrycia.
+## 4. Defekty znalezione i zamknięte w tej sesji
 
-## 6. Wady bezpieczeństwa znalezione i zamknięte w programie
+1. **P0**: trzy ręczne kopie ocen historycznych + cichy fail `check:closure` + brak więzi
+   95↔200 (ETAP 1).
+2. **Important**: crash-path omijał porównanie odcisku poświadczeń (recenzja ETAP 2, fix runda 1).
+3. **Important**: teardown prefiksowy kasowałby rejestr budżetu tur `.e2e-model-turns/`
+   (final review, fix runda 2 — obrona kształtem danych).
+4. Dziury izolacji 1–6 (audyt ETAP 2), w tym brak odcisku poświadczeń w acceptance i fałszywe
+   „started" `dev-server.sh` przy cudzym 8791.
+5. Systemowe: `model: null` w kopertach dowodów (do uzupełnienia w przyszłych próbach).
 
-Odczyt pliku poświadczeń; obejście strażnika przez podwykonawcę; publikacja przez dowiązanie
-symboliczne; domyślne celowanie proxy deweloperskiego w port instancji użytkownika (8791) i to samo
-w komendzie akceptacyjnej; leksykalne zwijanie `..` przed rozwiązaniem fizycznym — w **dwóch
-niezależnych miejscach** (strażnik narzędzi agenta i `util/real-path.ts` strażników izolacji);
-wyrocznia istnienia w komunikatach odmów; martwa gałąź `decideTool` (narzędzie w `allowedTools`
-z pominięciem bramki); brak wiązania `settings.permissions` w dowolnym teście; zaszyta ścieżka
-właściciela w harnessie prób. W dowodach: odciski prawdziwych tokenów i ścieżki `/home/paczos` —
-**zredagowane mechanicznie z pełnym rejestrem** (`docs/evidence/HIGIENA-REDAKCJA.md`); koperta
-pochodzenia nie wiąże plików hashami, więc redakcja nie łamie żadnego łańcucha.
+Odroczone minory (13, z triage final review — żadne nie blokuje publikacji): pełna lista w
+`.sdd-zlecenie/final-review.md` i ledgerze; najistotniejsze: M-2 (prefiks `.e2e` akceptowany
+poza repo — do przepisania razem z M-R2N1 „containment added by harness" bez pokrycia w kodzie),
+M-5 (ręcznie nazwany `.e2e-*` katalog użytkownika w korzeniu repo), M-1 (testy statują prawdziwy
+plik poświadczeń), sprzężenie strażnika Mastry z brzmieniem 1.66.0.
 
-## 7. Ograniczenia biblioteki i znane kształty (uczciwie)
+## 5. Koszt sesji
 
-- Semantyka `updatedInput` na prawdziwym CLI — nieweryfikowalna bez tury (otwarte Z7); **odmowa
-  działa niezależnie od przepisywania** — potwierdzone mutacją (wyłączenie przepisywania nie oblewa
-  ani jednego testu odmów).
-- `blockReadsOutsideWorkingDirectories` — poszlaki z łańcuchów binarki mówią „pyta", nie „odmawia";
-  rozstrzygnięcie wymaga tury (Read poza workspace). Pozostaje otwarte.
-- TOCTOU pre-walka wzorców (W4) oraz kształty A10b/D1 — wymagają zdolności Bash, czyli zgody
-  użytkownika: kategoria **„zgoda to pytanie, nie ochrona"**, wpisana jawnie w gap L11.4/L11.11.
-- `Query.readFile()` nie jest świadkiem decyzji bramki uprawnień — sprawdzone i odrzucone jako dowód.
-- Ograniczenie stand-inu: odrzucone `ask` nie zostawia kroku narzędzia (realny SDK ogłasza wywołanie
-  przed bramką — potwierdzone dowodem tury z 2026-09-19); asercja kroku Bash należy do tury T17.
+- **Tury modelu Claude: 0** (budżet 21/25 nietknięty; ETAP 6 zamrożony do czasu przywrócenia
+  dostępu organizacyjnego; nie powtarzano prób z aktualnymi dowodami — patrz REUSE-MATRIX).
+- Subagenci: **13** (4 analizy read-only na modelu tanim: mapa macierzy, faktografia Mastry,
+  reuse-dowodów, audyt izolacji; 3 implementatorów Sonnet; 4 recenzentów Sonnet; 1 final review
+  najmocniejszym modelem). 7 pełnych recenzji pakietowych + 2 re-review + final review.
+- Fix-loops: ETAP 2 — 2 rundy (I-1 odcisk/crash, I-1 teardown/rejestr tur); pozostałe pakiety
+  bez rund.
+- Czas aktywny sesji: ~5 h wall-clock (ETAP 0 → ETAP 8); oczekiwanie na e2e: ~37 min w dwóch
+  przebiegach.
+- Incydent bez skutku: równoległość „świeży verify + pełne e2e" spowodowała kolizję portu 8798
+  (wada harmonogramu orkiestratora, nie repo; powtórzono w izolacji — zielono).
+- SHA końcowego drzewa: **3d87dda431ffeba95fda3e5fd29741e40838d28c**.
 
-## 8. Kod istniejący vs kod sprawdzony
+## 6. Kod istniejący vs kod sprawdzony
 
-Wszystko, co scalono, ma regresję. Rozróżnienie dotyczy dowodów z prawdziwym modelem: platforma jest
-testowana na granicy adaptera skryptowanym stand-inem (ograniczenie stand-inu nazwane w §7), a
-kryteria wymagające prawdziwego modelu są otwarte do czasu tury — z gotowymi specami i próbami
-generalnymi. Kryteria zamknięte na „rzeczywisty model" mają dowody z przebiegów t1–t20
-(`docs/evidence/*/runs/`), związane rejestrem pochodzenia.
+Wszystko, co scalono w tej sesji, ma regresję (verify 1135) i przegląd (7 pakietów +
+2 re-review + final review). Zmiany tej sesji nie dotykają granicy adaptera modelowego, więc
+nie wymagają tur; kryteria wymagające prawdziwego modelu pozostają otwarte i nie są udawane.
 
-## 9. Wnioski metodyczne (pełna wersja w `FEEDBACK.md`)
+## 7. Zmiany nieopublikowane
 
-1. **Kod bezpieczeństwa „wyglądający poprawnie" nie jest dowodem poprawności** — strażnik granic
-   przeszedł trzy recenzje przez lekturę i za każdym razem padał na próbach; sedno: tryb awaryjny
-   walkera był leksykalny, a ucieczki nie wymagały przygotowania (dowiązania `node_modules` tworzył
-   sam `createRunWorkspace`).
-2. **Równoważność kopii mierzy się na kształtach rozbieżnych** — TS↔`.mjs` „zgodne" w teście,
-   które nie porównuje kształtów rozbieżnych, dowodzi zgody już istniejącej, nie braku dryfu.
-3. **Granica testu ma zbiegać się z granicą twierdzenia** — dwa razy test egzekwował mniej, niż
-   obiecywał komentarz; poprawki tanie, rozjazdy ciche.
-4. **Liczy się zdarzenie narzędzia ze strumienia, nie zdanie modelu** — i rejestry dowodu zapisuje
-   się przed asercjami.
-5. **Mechanizm naprawiający klasę potrafi w niej stworzyć nową dziurę** (przepisywanie
-   `updatedInput` zamieniające ENOENT w udany odczyt poza workspace) — każda poprawka strażnika
-   dostaje własny pakiet ataków.
-6. **Zgoda użytkownika to pytanie, nie ochrona** — trzy kształty wymagające Bash zapisane jawnie
-   jako kategoria, z nazwaniem zdolności przeciwnika.
-7. **Audyt wyliczany z rejestru znajduje więcej niż skarga** — luka mówiła o trzech narzędziach,
-   audyt znalazł czwarte; reguła z rejestru MCP psuje się sama przy nowym narzędziu.
-8. **Wykrywanie bije zapobieganie — ale tylko tam, gdzie biega** — zakaz dotykania pliku
-   poświadczeń złamano cztery razy, mechanizm odcisku nie zawiódł nigdy; luką okazało się pokrycie
-   (Playwright miał zakaz, nie miał mechanizmu — domknięte rundą 7).
-9. **Recenzja przed turami to nie formalność** — licznik zdarzeń w T17 z błędną nazwą oblewałby
-   każdą wydaną turę; wyłapała go recenzja, nie próba generalna (bliźniak nie asertował
-   rozstrzygnięć).
+`domkniecie/integracja` = 283 commity przed `main` (280 z porannego programu + 3 commity
+dokumentacyjne + scalenia tej sesji; dokładnie: 763dd31..3d87dda = 21 commitów sesji + raport).
+Zero push, zero tagów. Worktree pakietowe sesji (`z14-bramka`, `etap2-izolacja`, `etap3-mastra`)
+pozostają na dysku, scalone i czyste — do usunięcia po decyzji właściciela.
 
-## 10. Decyzje właściciela
+## 8. Decyzje właściciela (po tej sesji)
 
-1. **Publikacja** — push to osobna decyzja; nic nie wypchnięto.
-2. **Tury modelowe** — po przywróceniu dostępu: §2b, z warunkiem licznika i kolejnością.
-3. **Sufit grantu** — T16/T17 wymagają podniesienia `MODEL_TURN_BUDGET` (plan 22 → realny stan 21/25;
-  T15 mieści się na styk).
-4. **Akceptacja odchyleń** — §2a jako stan końcowy części kryteriów.
+1. **Publikacja** — gałąź gotowa do prezentacji; push/tag wyłącznie na Twoje polecenie.
+2. **Dostęp organizacyjny** — po przywróceniu: sekwencja REPEAT izolacji (~5–6 tur) → T15 (4
+   tury, dokładnie reszta budżetu) → T16/T17 (wymaga podniesienia sufitu 25). Przed pierwszą
+   turą: recalibracja wzorców komunikatów (CLI 2.1.277 → 2.1.278).
+3. **Klasyfikacja odchyleń** — statusy końcowe kryteriów trwale ograniczonych (§3) do akceptacji.
+4. **Sufit grantu** — podniesienie `MODEL_TURN_BUDGET` dla T16/T17, jeśli akceptujesz §2b.
