@@ -80,6 +80,39 @@ karcie użytkownika) i zakończenie procesów uruchomienia (zniknięty katalog
 Jedna liczba musiałaby znaczyć albo „backend cię usłyszał”, albo „praca
 stanęła”, a to są różne chwile.
 
+## Storage Mastry — świadome ograniczenie
+
+Przy każdym uruchomieniu platformy @mastra/core 1.66.0 bez konfiguracji
+`storage` sam buduje sobie zapasowy magazyn w pamięci i ostrzega: „No
+`storage` configured on Mastra — falling back to an in-memory store…”.
+Ostrzeżenie było prawdziwe, ale magazyn, którego dotyczyło, jest w tej
+aplikacji martwy:
+
+- Mastra służy wyłącznie jako rejestr agenta — aplikacja sięga do instancji
+  tylko po `getAgent('appAgent')` (`agent/runtime.ts`), a adapter
+  `@mastra/claude` 0.3.1 nie odwołuje się do storage w ogóle;
+- trwałość realizuje **własna baza** (`app.db`): rozmowy i wiadomości
+  (`conversations`, `messages`), przebiegi i ich zdarzenia (`agent_runs`,
+  `run_events`), artefakty (`artifacts`, `artifact_versions`); wznowienie
+  sesji idzie po `claude_session_id` z tej bazy, nie z pamięci Mastry;
+- żadna asercja regresji i żadne kryterium restartu nie czyta z magazynu
+  Mastry — wszystkie próby trwałości asertują po własnej bazie albo po
+  procesie.
+
+Dlatego konfiguracja jest **jawna i świadomie in-memory** (`InMemoryStore`
+z publicznego eksportu `@mastra/core/storage`), z komentarzem na miejscu w
+`agent/runtime.ts`. Wariant z prawdziwym adapterem (@mastra/libsql,
+@mastra/pg) odrzucony: żaden adapter storage nie występuje w drzewie
+zależności, więc oznaczałby nową zależność — decyzję właściciela — a nie dał
+nic, bo nie ma czego w Mastrze przechowywać. Ta sama jawna konfiguracja jest
+w instancjach testowych `tests/observability.test.ts`, które bez tego
+zanieczyszczały wyjście regresji i mok loggera ostrzeżeniem o fallbacku.
+
+Regresję pilnuje strażnik w `tests/runtime.test.ts`: tworzy platformę przez
+`createPlatform`, przechwytuje ostrzeżenia i asertuje, że dokładnie ten
+komunikat nie wrócił. Kontrola negatywna potwierdziła, że po usunięciu jawnej
+konfiguracji strażnik pada z pełną treścią ostrzeżenia.
+
 ## Langfuse — stan faktyczny
 
 **Langfuse nie jest zainstalowany i nie jest wymagany.** Aplikacja uruchamia się,
