@@ -43,7 +43,7 @@ Test przepisany tak, by zadna inna ochrona nie mogla zadzialac (brak sekretu, ce
 nieistniejacy, katalog danych wskazany przez APP_DATA_DIR sciezka rzeczywista).
 Proba powtorzona:
      × dowiazanie symboliczne nie obchodzi kontroli 994ms
-AssertionError: [syntetyk] katalog: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-rHWFKv/dowiazanie-do-danych/nowy
+AssertionError: [syntetyk] katalog: ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-rHWFKv/dowiazanie-do-danych/nowy
     468|     expect(existsSync(resolve(prawdziwe, 'nowy')), 'skrypt wszedl do k…
       Tests  1 failed | 32 skipped (33)
 przywrocono: git checkout -- scripts/lib/state-tools.mjs
@@ -51,14 +51,14 @@ przywrocono: git checkout -- scripts/lib/state-tools.mjs
 === C1/3 — odmowa skasowania katalogu, ktorego te skrypty nie utworzyly
 wycofane linie: state-tools.mjs, prepareScratchDir bez wymogu znacznika
      × odmawia skasowania cudzego niepustego katalogu bez znacznika 1047ms
-AssertionError: [syntetyk] katalog: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-ZXc705/cudze-zdjecia
+AssertionError: [syntetyk] katalog: ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-ZXc705/cudze-zdjecia
       Tests  1 failed | 32 skipped (33)
 przywrocono: git checkout -- scripts/lib/state-tools.mjs
 
 === C1/4 — restore-state.mjs odmawia --data, ktory nie wyglada na katalog danych
 wycofana linia: restore-state.mjs, wywolanie assertLooksLikeDataDir
      × odtworzenie odmawia katalogu --data, ktory nie wyglada na katalog danych 1015ms
-AssertionError: [odtworzenie] kopia /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-DhlcQN/ofiara-kopia: sprawdzona (sumy, census, integrity_check)
+AssertionError: [odtworzenie] kopia ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-DhlcQN/ofiara-kopia: sprawdzona (sumy, census, integrity_check)
       Tests  1 failed | 32 skipped (33)
 przywrocono: git checkout -- scripts/restore-state.mjs
 

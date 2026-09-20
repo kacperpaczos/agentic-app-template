@@ -1,7 +1,7 @@
 {
   "at": "2026-09-18T10:42:36.422Z",
-  "backup": "/home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia",
-  "workdir": "/home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/proba",
+  "backup": "~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia",
+  "workdir": "~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/proba",
   "migrationsBefore": [
     "platform-0001-init",
     "platform-0002-run-measurement-points",

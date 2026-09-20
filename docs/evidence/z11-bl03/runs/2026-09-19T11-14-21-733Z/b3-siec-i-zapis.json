@@ -85,7 +85,7 @@
     "L11.4",
     "L9.16"
   ],
-  "katalogDanych": "/home/paczos/Documents/agentic-app-template-wt/z11-bl03/.e2e-data",
+  "katalogDanych": "~/Documents/agentic-app-template-wt/z11-bl03/.e2e-data",
   "sciezkaSekretu": "/tmp/z11-sekret-M2GH0o/sekret.txt",
   "sciezkaZapisuPozaWorkspace": "/tmp/z11-zapis-mu8aiftm.txt",
   "sandboxDostepny": true,

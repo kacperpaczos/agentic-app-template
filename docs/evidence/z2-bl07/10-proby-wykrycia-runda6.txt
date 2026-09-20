@@ -6,7 +6,7 @@ wycofane linie: backup-state.mjs i restore-state.mjs znow uzywaja tidy(), ktore 
                 pomija katalogi niezatwierdzone
 -- recznie:
 kopia przed:   app.db  files  manifest.json 
-[backup] kopia /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/p61/kopia sprawdzona: bez zastrzezen
+[backup] kopia ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/p61/kopia sprawdzona: bez zastrzezen
 kopia po:      app.db  app.db-shm  app.db-wal  files  manifest.json 
 -- test:
      × odczyt cudzej kopii nie zostawia w niej sladu — z plikami pomocniczymi wlacznie 2278ms

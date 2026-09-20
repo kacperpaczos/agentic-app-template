@@ -15,7 +15,7 @@
     "system": "linux 7.2.5-200.fc44.x86_64 x64",
     "node": "24.19.0",
     "claudeNaPath": "2.1.278 (Claude Code)",
-    "sciezkaClaudeNaPath": "/home/paczos/.local/bin/claude",
+    "sciezkaClaudeNaPath": "~/.local/bin/claude",
     "pakietSdk": "0.3.270",
     "cliWbudowaneWSdk": {
       "wersja": "2.1.270",

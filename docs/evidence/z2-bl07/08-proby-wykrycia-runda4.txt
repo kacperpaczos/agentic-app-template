@@ -41,7 +41,7 @@ prepareScratchDir) nie miala zadnego testu; dlatego ucieczka recenzenta przezyla
 poprawke. Dopisany test 'skopiowany znacznik nie autoryzuje SKASOWANIA katalogu' i proba
 powtorzona:
      × skopiowany znacznik nie autoryzuje SKASOWANIA katalogu 4587ms
-AssertionError: [syntetyk] katalog: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-d2GM07/kasowanie-kopia
+AssertionError: [syntetyk] katalog: ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-d2GM07/kasowanie-kopia
       Tests  1 failed | 40 skipped (41)
 przywrocono: git checkout -- scripts/lib/state-tools.mjs
 

@@ -3,7 +3,7 @@ commit: 71e70c4
 data: 2026-09-18T12:09:50+02:00
 
 $ pnpm exec vitest run tests/backup-migration.test.ts tests/session-transcript.test.ts
- RUN  v5.0.0 /home/paczos/Documents/agentic-app-template-wt/z2-bl07
+ RUN  v5.0.0 ~/Documents/agentic-app-template-wt/z2-bl07
  ✓ tests/session-transcript.test.ts (19 tests) 194ms
  ✓ tests/backup-migration.test.ts (33 tests) 44856ms
    ✓ kopia zachowuje zatwierdzony stan SQLite wraz z WAL (5)

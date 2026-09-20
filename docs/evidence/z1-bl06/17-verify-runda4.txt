@@ -1,11 +1,11 @@
 # pnpm verify — 2026-09-18T13:16:54+02:00, runda 4, drzewo z BL-06 + scalona integracja
 
 
-> agentic-app-template@0.1.0 verify /home/paczos/Documents/agentic-app-template-wt/z1-bl06
+> agentic-app-template@0.1.0 verify ~/Documents/agentic-app-template-wt/z1-bl06
 > pnpm check:boundaries && pnpm check:acceptance && pnpm check:matrix && pnpm check:closure && pnpm typecheck && pnpm build && pnpm test
 
 
-> agentic-app-template@0.1.0 check:boundaries /home/paczos/Documents/agentic-app-template-wt/z1-bl06
+> agentic-app-template@0.1.0 check:boundaries ~/Documents/agentic-app-template-wt/z1-bl06
 > node scripts/check-boundaries.mjs
 
 Granica platforma-domena zachowana:
@@ -18,7 +18,7 @@ Granica platforma-domena zachowana:
   - kazdy modul zalezy od platformy (kierunek prawidlowy)
   - zaden modul nie deklaruje ani nie importuje @tanstack/react-router
 
-> agentic-app-template@0.1.0 check:acceptance /home/paczos/Documents/agentic-app-template-wt/z1-bl06
+> agentic-app-template@0.1.0 check:acceptance ~/Documents/agentic-app-template-wt/z1-bl06
 > node scripts/acceptance-matrix.mjs --check
 
 kryteria: 200, warstwy: 12, próby: 27
@@ -27,7 +27,7 @@ warstwy zamknięte: 0/12
 pakiety backlogu: 8
 spójność: OK
 
-> agentic-app-template@0.1.0 check:matrix /home/paczos/Documents/agentic-app-template-wt/z1-bl06
+> agentic-app-template@0.1.0 check:matrix ~/Documents/agentic-app-template-wt/z1-bl06
 > node scripts/matrix-summary.mjs --check
 
 kryteriow: 95
@@ -49,34 +49,34 @@ warstwy otwarte  (9/12):
 
 Podsumowanie macierzy zgodne z tabelami.
 
-> agentic-app-template@0.1.0 check:closure /home/paczos/Documents/agentic-app-template-wt/z1-bl06
+> agentic-app-template@0.1.0 check:closure ~/Documents/agentic-app-template-wt/z1-bl06
 > node scripts/closure-matrix.mjs --summary > /dev/null
 
 
-> agentic-app-template@0.1.0 typecheck /home/paczos/Documents/agentic-app-template-wt/z1-bl06
+> agentic-app-template@0.1.0 typecheck ~/Documents/agentic-app-template-wt/z1-bl06
 > pnpm typecheck:src && pnpm typecheck:modules && pnpm typecheck:e2e
 
 
-> agentic-app-template@0.1.0 typecheck:src /home/paczos/Documents/agentic-app-template-wt/z1-bl06
+> agentic-app-template@0.1.0 typecheck:src ~/Documents/agentic-app-template-wt/z1-bl06
 > tsc -p tsconfig.json --noEmit
 
 
-> agentic-app-template@0.1.0 typecheck:modules /home/paczos/Documents/agentic-app-template-wt/z1-bl06
+> agentic-app-template@0.1.0 typecheck:modules ~/Documents/agentic-app-template-wt/z1-bl06
 > node scripts/typecheck-modules.mjs
 
 OK   module-devkit-probe — typecheck bez aplikacji
 OK   module-procurement — typecheck bez aplikacji
 Kazdy modul (2) przechodzi typecheck we wlasnym programie, bez apps/.
 
-> agentic-app-template@0.1.0 typecheck:e2e /home/paczos/Documents/agentic-app-template-wt/z1-bl06
+> agentic-app-template@0.1.0 typecheck:e2e ~/Documents/agentic-app-template-wt/z1-bl06
 > tsc -p tsconfig.e2e.json --noEmit
 
 
-> agentic-app-template@0.1.0 build /home/paczos/Documents/agentic-app-template-wt/z1-bl06
+> agentic-app-template@0.1.0 build ~/Documents/agentic-app-template-wt/z1-bl06
 > pnpm --filter @app/web build && pnpm --filter @app/server build
 
 
-> @app/web@0.1.0 build /home/paczos/Documents/agentic-app-template-wt/z1-bl06/apps/web
+> @app/web@0.1.0 build ~/Documents/agentic-app-template-wt/z1-bl06/apps/web
 > vite build
 
 vite v8.3.0 building client environment for production...
@@ -95,7 +95,7 @@ dist/assets/index-Bjurj_5H.js   2,759.70 kB │ gzip: 813.06 kB │ map: 10,620.
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
 ✓ built in 1.06s
 
-> @app/server@0.1.0 build /home/paczos/Documents/agentic-app-template-wt/z1-bl06/apps/server
+> @app/server@0.1.0 build ~/Documents/agentic-app-template-wt/z1-bl06/apps/server
 > node build.mjs
 
 
@@ -104,11 +104,11 @@ dist/assets/index-Bjurj_5H.js   2,759.70 kB │ gzip: 813.06 kB │ map: 10,620.
 
 ⚡ Done in 38ms
 
-> agentic-app-template@0.1.0 test /home/paczos/Documents/agentic-app-template-wt/z1-bl06
+> agentic-app-template@0.1.0 test ~/Documents/agentic-app-template-wt/z1-bl06
 > vitest run
 
 
- RUN  v5.0.0 /home/paczos/Documents/agentic-app-template-wt/z1-bl06
+ RUN  v5.0.0 ~/Documents/agentic-app-template-wt/z1-bl06
 
 stderr | tests/durability.test.ts
 No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage

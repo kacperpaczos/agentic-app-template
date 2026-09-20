@@ -33,7 +33,7 @@ przywrocono: git checkout -- scripts/migration-rehearsal.mjs
 === PROBA B/2 — znacznik ma pierwszenstwo przed regula session.secret
 wycofana linia: state-tools.mjs, dataDirAtOrAbove bez '&& !isOurs(cursor)'
      × proba jest powtarzalna do tego samego --out, mimo ze boot zapisuje tam session.secret 6428ms
-AssertionError: [proba] ODMAWIAM: Katalog proby /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-Sb9m8t/powtorka-proba lezy w katalogu danych aplikacji /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-Sb9m8t/powtorka-proba (rozpoznany po pliku session.secret, ktorego kopia nigdy nie zawiera). Nie tkne go.
+AssertionError: [proba] ODMAWIAM: Katalog proby ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-Sb9m8t/powtorka-proba lezy w katalogu danych aplikacji ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-Sb9m8t/powtorka-proba (rozpoznany po pliku session.secret, ktorego kopia nigdy nie zawiera). Nie tkne go.
       Tests  1 failed | 38 skipped (39)
 (druga proba pokazuje dokladnie zgloszona regresje: katalog utworzony przed chwila przez
  ten sam skrypt zostaje uznany za katalog danych aplikacji)
@@ -42,7 +42,7 @@ przywrocono: git checkout -- scripts/lib/state-tools.mjs
 === PROBA C — dataDirBelow jako osobna regula
 wycofana linia: state-tools.mjs, assertAwayFromLiveData bez wywolania dataDirBelow
      × katalog danych ukryty POD celem jest wykryty osobna regula 1039ms
-AssertionError: [syntetyk] katalog: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-FNEI3X/nad-danymi
+AssertionError: [syntetyk] katalog: ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-FNEI3X/nad-danymi
       Tests  1 failed | 38 skipped (39)
 przywrocono: git checkout -- scripts/lib/state-tools.mjs
 

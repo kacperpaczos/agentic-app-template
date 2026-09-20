@@ -1,9 +1,9 @@
 
-> agentic-app-template@0.1.0 verify /home/paczos/Documents/agentic-app-template-wt/z8-bl08a
+> agentic-app-template@0.1.0 verify ~/Documents/agentic-app-template-wt/z8-bl08a
 > pnpm check:boundaries && pnpm check:acceptance && pnpm check:matrix && pnpm check:closure && pnpm typecheck && pnpm build && pnpm test
 
 
-> agentic-app-template@0.1.0 check:boundaries /home/paczos/Documents/agentic-app-template-wt/z8-bl08a
+> agentic-app-template@0.1.0 check:boundaries ~/Documents/agentic-app-template-wt/z8-bl08a
 > node scripts/check-boundaries.mjs
 
 Granica platforma-domena zachowana:
@@ -16,7 +16,7 @@ Granica platforma-domena zachowana:
   - kazdy modul zalezy od platformy (kierunek prawidlowy)
   - zaden modul nie deklaruje ani nie importuje @tanstack/react-router
 
-> agentic-app-template@0.1.0 check:acceptance /home/paczos/Documents/agentic-app-template-wt/z8-bl08a
+> agentic-app-template@0.1.0 check:acceptance ~/Documents/agentic-app-template-wt/z8-bl08a
 > node scripts/acceptance-matrix.mjs --check
 
 kryteria: 200, warstwy: 12, próby: 27
@@ -25,7 +25,7 @@ warstwy zamknięte: 2/12
 pakiety backlogu: 7
 spójność: OK
 
-> agentic-app-template@0.1.0 check:matrix /home/paczos/Documents/agentic-app-template-wt/z8-bl08a
+> agentic-app-template@0.1.0 check:matrix ~/Documents/agentic-app-template-wt/z8-bl08a
 > node scripts/matrix-summary.mjs --check
 
 kryteriow: 95
@@ -47,34 +47,34 @@ warstwy otwarte  (9/12):
 
 Podsumowanie macierzy zgodne z tabelami.
 
-> agentic-app-template@0.1.0 check:closure /home/paczos/Documents/agentic-app-template-wt/z8-bl08a
+> agentic-app-template@0.1.0 check:closure ~/Documents/agentic-app-template-wt/z8-bl08a
 > node scripts/closure-matrix.mjs --summary > /dev/null
 
 
-> agentic-app-template@0.1.0 typecheck /home/paczos/Documents/agentic-app-template-wt/z8-bl08a
+> agentic-app-template@0.1.0 typecheck ~/Documents/agentic-app-template-wt/z8-bl08a
 > pnpm typecheck:src && pnpm typecheck:modules && pnpm typecheck:e2e
 
 
-> agentic-app-template@0.1.0 typecheck:src /home/paczos/Documents/agentic-app-template-wt/z8-bl08a
+> agentic-app-template@0.1.0 typecheck:src ~/Documents/agentic-app-template-wt/z8-bl08a
 > tsc -p tsconfig.json --noEmit
 
 
-> agentic-app-template@0.1.0 typecheck:modules /home/paczos/Documents/agentic-app-template-wt/z8-bl08a
+> agentic-app-template@0.1.0 typecheck:modules ~/Documents/agentic-app-template-wt/z8-bl08a
 > node scripts/typecheck-modules.mjs
 
 OK   module-devkit-probe — typecheck bez aplikacji
 OK   module-procurement — typecheck bez aplikacji
 Kazdy modul (2) przechodzi typecheck we wlasnym programie, bez apps/.
 
-> agentic-app-template@0.1.0 typecheck:e2e /home/paczos/Documents/agentic-app-template-wt/z8-bl08a
+> agentic-app-template@0.1.0 typecheck:e2e ~/Documents/agentic-app-template-wt/z8-bl08a
 > tsc -p tsconfig.e2e.json --noEmit
 
 
-> agentic-app-template@0.1.0 build /home/paczos/Documents/agentic-app-template-wt/z8-bl08a
+> agentic-app-template@0.1.0 build ~/Documents/agentic-app-template-wt/z8-bl08a
 > pnpm --filter @app/web build && pnpm --filter @app/server build
 
 
-> @app/web@0.1.0 build /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/apps/web
+> @app/web@0.1.0 build ~/Documents/agentic-app-template-wt/z8-bl08a/apps/web
 > vite build
 
 vite v8.3.0 building client environment for production...
@@ -93,7 +93,7 @@ dist/assets/index-BqvKjZA1.js   2,776.36 kB │ gzip: 817.57 kB │ map: 10,729.
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
 ✓ built in 1.60s
 
-> @app/server@0.1.0 build /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/apps/server
+> @app/server@0.1.0 build ~/Documents/agentic-app-template-wt/z8-bl08a/apps/server
 > node build.mjs
 
 
@@ -102,11 +102,11 @@ dist/assets/index-BqvKjZA1.js   2,776.36 kB │ gzip: 817.57 kB │ map: 10,729.
 
 ⚡ Done in 48ms
 
-> agentic-app-template@0.1.0 test /home/paczos/Documents/agentic-app-template-wt/z8-bl08a
+> agentic-app-template@0.1.0 test ~/Documents/agentic-app-template-wt/z8-bl08a
 > vitest run
 
 
- RUN  v5.0.0 /home/paczos/Documents/agentic-app-template-wt/z8-bl08a
+ RUN  v5.0.0 ~/Documents/agentic-app-template-wt/z8-bl08a
 
 stderr | tests/show-value.test.ts > mapowanie rekord-pole na cel prezentacyjny > widok modulu z wlasnym ekranem jest kandydatem; pola to kolumny jego tabeli
 No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
@@ -183,10 +183,10 @@ No `storage` configured on Mastra — falling back to an in-memory store. In-mem
 stderr | tests/chat-history.test.ts > L4.7 — usuniecie rozmowy ma okreslony skutek > zatrzymuje trwajace zadanie, odlacza artefakt, kasuje historie i przestrzen widokow
 [run run_1f6c4c655fa243ad8443] zdarzenia TEXT_MESSAGE_END nie ma juz gdzie zapisac: uruchomienie zniknelo razem z rozmowa
 [run run_1f6c4c655fa243ad8443] status koncowy cancelled nie zostal zapisany (rozmowa usunieta?) AppError: Uruchomienie run_1f6c4c655fa243ad8443 nie istnieje.
-    at RunRegistry.#row (/home/paczos/Documents/agentic-app-template-wt/z8-bl08a/packages/platform-server/src/services/runs.ts:95:21)
-    at RunRegistry.finish (/home/paczos/Documents/agentic-app-template-wt/z8-bl08a/packages/platform-server/src/services/runs.ts:178:23)
-    at settle (/home/paczos/Documents/agentic-app-template-wt/z8-bl08a/packages/platform-server/src/agent/runtime.ts:687:28)
-    at AgentRuntime.#execute (/home/paczos/Documents/agentic-app-template-wt/z8-bl08a/packages/platform-server/src/agent/runtime.ts:760:7) {
+    at RunRegistry.#row (~/Documents/agentic-app-template-wt/z8-bl08a/packages/platform-server/src/services/runs.ts:95:21)
+    at RunRegistry.finish (~/Documents/agentic-app-template-wt/z8-bl08a/packages/platform-server/src/services/runs.ts:178:23)
+    at settle (~/Documents/agentic-app-template-wt/z8-bl08a/packages/platform-server/src/agent/runtime.ts:687:28)
+    at AgentRuntime.#execute (~/Documents/agentic-app-template-wt/z8-bl08a/packages/platform-server/src/agent/runtime.ts:760:7) {
   code: 'not_found',
   details: undefined
 }
