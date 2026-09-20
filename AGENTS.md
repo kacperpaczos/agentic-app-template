@@ -47,9 +47,16 @@ Mapa wszystkich dokumentów: [`docs/DOCUMENTATION-MAP.md`](docs/DOCUMENTATION-MA
   **OpenUI Agent Interface** (rozszerzenia przez publiczne propsy, sloty i wąskie adaptery — nie
   pisze się własnego czatu), Hono, Mastra, Claude Agent SDK, MCP, Zod, SQLite + Drizzle,
   Vitest i Playwright.
-- **Claude wyłącznie z subskrypcji użytkownika.** Nie dodawaj klucza API Anthropic, gatewaya ani
-  płatnego fallbacku, także „tymczasowo” przy błędzie logowania. Brak dostępu to blokada konkretnej
-  próby, nie powód do atrapy.
+- **Provider modelu: decyzja właściciela 2026-09-20.** Claude Code / Claude Agent SDK pozostaje
+  harnesssem w każdym wariancie. Domyślnie model idzie z **subskrypcji użytkownika** — to zachowanie
+  bez zmian. Jawny tryb `APP_MODEL_PROVIDER=glm` kieruje wywołania modelu do GLM/Z.AI przez endpoint
+  kompatybilny z Anthropic (`ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`); w tym trybie subskrypcja
+  Claude i OAuth Anthropic są nieużywane, plik poświadczeń nie jest czytany w ogóle, a
+  `CLAUDE_CONFIG_DIR` musi wskazywać izolowany katalog (domyślny `~/.claude` = odmowa startu).
+  Nie dodawaj klucza API Anthropic, gatewaya ani płatnego fallbacku poza tym jawnym trybem — także
+  „tymczasowo” przy błędzie logowania; trybów nie rozpoznanych przez konfigurację nie obsługuje się
+  po cichu (fail-closed). Token Z.AI nie trafia do kodu, testów, logów, dowodów ani commitów —
+  operátor podaje go w env procesu serwera. Szczegóły: README, „Tryb GLM”.
 - Nie ujawniaj sekretów: nie kopiuj tokenów do logów, raportów, dowodów ani commitów.
 - Langfuse jest opcjonalny; włączony eksport wymaga dowodu odbioru śladu.
 

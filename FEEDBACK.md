@@ -1034,3 +1034,70 @@ decyzję trzeba otworzyć: wtedy adapter storage staje się nową zależnością
 właściciela i regresji trwałości po nim — dzisiejsze kryteria tego nie wymagają i po własnej bazie
 są spełnione.
 
+
+## T11 — 2026-09-20 — Jawny provider GLM/Z.AI przy harnessie Claude Code (odwrót od „wyłącznie subskrypcja" decyzją zamawiającego)
+
+**Problem.** Do dziś stawiano w AGENTS.md: „Claude wyłącznie z subskrypcji użytkownika". Zamawiający
+decyzją z 2026-09-20 odwrócił to ustalenie dla providera modelu — przy zachowaniu harnessu:
+**Claude Code / Claude Agent SDK zostaje harnesssem** (sesja, pętla wykonania, narzędzia, zgody,
+sandbox), a wywołania modelu mają móc iść do **GLM/Z.AI przez endpoint kompatybilny z Anthropic**.
+Prawdziwa subskrypcja Claude i OAuth Anthropic mają być w tym wariancie nieużywane i nieczytane.
+Wymagane jawnie: tryb `APP_MODEL_PROVIDER=glm`, fail-closed wobec nieznanych providerów, zero
+wartości tokena w plikach/commitach/logach/dowodach, port 8791 i dane użytkownika nietykalne.
+
+**Decyzja kształtująca (z briefu, realizowane 1:1).** (1) Domyślny tryb `subscription` zachowuje
+dzisiejsze zachowanie **w każdym szczególe** — żadna ścieżka subskrypcyjna nie zmieniła aż tyle, ile
+jedno „ale". (2) Tryb GLM ma twarde wymagania (APP_MODEL, ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN,
+izolowany CLAUDE_CONFIG_DIR), a ich brak = odmowa startu z pełną listą braków. (3) `subscriptionOnlyEnv`
+jest provider-aware: w glm przepuszcza **wyłącznie** `ANTHROPIC_BASE_URL` i `ANTHROPIC_AUTH_TOKEN`,
+a `ANTHROPIC_API_KEY`, Bedrock, Vertex i `ANTHROPIC_MODEL` skrubuje bezwarunkowo w obu trybach —
+przepust dwóch zmiennych nie jest „mniejszym scrubowaniem", tylko inną, nazwaną polityką
+(`apiKeyPolicy: 'glm_explicit'` w kontrakcie). (4) `probeAuth` w glm **nie dotyka** pliku poświadczeń
+(bez stat, bez odczytu) — wymóg „nieczytane" nie może zależeć od dyscypliny, tylko od kodu. (5) Model
+zawsze z `sdkOptions.model` z configu; `ANTHROPIC_MODEL` pozostaje skrubowany. (6) Macierz: status
+**„informacyjne / poza bramką odbioru"** (L8.10, L8.11, L5.8, L12.10; L11.11 dopisek w braku, bez
+rozdzielania ID) — klasyfikacja właściciela: kryteria proceduralne/niewywoływalne nie blokują
+zamknięcia warstwy i nie należą do backlogu.
+
+**Zmiana** (etapami, po jednym commicie na etap): konfiguracja+kontrakt+auth+runtime+diag
+(`packages/platform-server/src/config.ts`, `agent/auth.ts`, `agent/runtime.ts`, `agent/session-probe.ts`,
+`http/app.ts`, `packages/platform-contracts/src/agent.ts`, `apps/server/src/main.ts`,
+`apps/server/src/cli/diag-agent.ts`, `scripts/probe-*.ts`); UI i e2e (`AppShell.tsx`, `SettingsPage.tsx`,
+`e2e/auth-limits.spec.ts` — blok trybu GLM na instancji z endpointem `.invalid` i atrapą tokena,
+`e2e/app.spec.ts`, `e2e/measurements.spec.ts` — kanarek w AUTH_TOKEN tylko w subskrypcji,
+`scripted-server.ts` — odpowiedz sesji `glm`); dowody i rejestr (`e2e/support/model-turns.ts` —
+koperta `zrodlo`/`model` provider-aware, nowy licznik `.e2e-model-turns/glm.json`, sufit 25,
+źródło „grant koordynatora dla prób GLM"; rejestry subskrypcyjne nietknięte); macierz
+(`scripts/lib/matrix-core.mjs`, `scripts/acceptance-matrix.mjs`, `docs/acceptance/assessment.json`,
+regeneracja ACCEPTANCE/BACKLOG); dokumentacja (AGENTS.md, README).
+
+**Środowisko procesu serwera a środowisko dziecka.** Sonda i /api/status czytają teraz env, z którego
+platforma została zbudowana (`createPlatformApp` dostaje `env`), więc odpowiedź o trybie opisuje tę
+konfigurację, nie powłokę wołającą. Runtime buduje env dziecka z tego samego env — polityka
+aplikowana do dziecka jest polityką zwalidowanej konfiguracji.
+
+**Kontrola negatywna** (tests/provider-mode.test.ts, 21 testów): nieznany provider odmawia startu;
+każdy brak wymaganej zmiennej odmawia z wymienieniem WSZYSTKICH braków; `CLAUDE_CONFIG_DIR=~/.claude`
+odrzucony leksykalnie i po rozwiązaniu dowiązania; glm przepuszcza tylko BASE_URL+AUTH_TOKEN, a
+skruby API_KEY/Bedrock/Vertex/MODEL (kanarek nie przetrwa serializacji); wartownik braku odczytu —
+istniejący, czytelny plik poświadczeń z tokenami NIE zmienia odpowiedzi na „present", a katalog
+o nazwie `.credentials.json` (odczyt rzuciłby EISDIR → „unreadable") raportowany jest jako „absent",
+czyli sonda na pewno nie otwiera pliku; `authIsUsable` w glm nie wymaga pliku, akceptuje sesję na
+kluczu API (oczekiwaną), odrzuca revoked/refresh_refused; `/api/status` w glm: method `glm`,
+policy `glm_explicit`, model z APP_MODEL, zero wartości tokena. Strażnik macierzy
+(tests/matrix-gates.test.ts 2b): „informacyjne" nie liczy się do otwartych i nie zamyka warstwy
+fałszywie, wymaga uzasadnienia, zakazuje pakietu backlogu.
+
+**Weryfikacja.** `pnpm install --frozen-lockfile` (lockfile nietknięty), baseline `pnpm verify`=0
+(71 plików, 1135 testów) przed zmianą; po pakiecie `pnpm verify`=0 (1157+ testów jednostkowych,
+nowe: provider-mode 21, matrix-gates 2b, rozszerzony credential-guard i diagnostics) i
+`pnpm test:e2e`=0 z blokiem GLM. Bramki macierzowe: `check:acceptance`, `check:matrix`,
+`check:closure` — wszystkie 0 po regeneracji ACCEPTANCE/BACKLOG (187 potwierdzonych, 7 częściowych,
+2 niespełnione, 4 informacyjne, warstwy zamknięte 8/12, backlog 4 pakiety).
+
+**Czego to NIE dowodzi.** Żadna próba modelowa (T15/T16/T17 ani spece BL-01/BL-02/BL-03) nie została
+uruchomiona w trybie GLM — to następuje po recenzji, osobnym rozkazem; komunikaty budżetowe i licznik
+GLM przygotowane, ale puste. Dowody z subskrypcją Claude pozostają dowodami subskrypcji; dopóki próby
+GLM nie pójdą, „informacyjne" nie twierdzi nic o GLM, a GLM nie potwierdza żadnego kryterium.
+Jak potwierdzenie rzetelności trybu do czasu prób: testy kontraktu powyżej + `pnpm diag` (zero tur)
+w trybie glm, który wypisze provider, endpoint jako ORIGIN i model.
