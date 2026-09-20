@@ -1,4 +1,4 @@
-import { readdirSync, rmSync } from 'node:fs';
+import { existsSync, readdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { checkCredentialFingerprint } from './credential-guard.ts';
 import { directoryInUse } from './support/port-probe.ts';
@@ -27,6 +27,17 @@ import { directoryInUse } from './support/port-probe.ts';
  * porządkiem, nie okazją do kasowania na ślepo. Pliki i dowiązania nie są
  * tu w ogóle brane pod uwagę — tylko katalogi o nazwie `.e2e*` w korzeniu
  * repozytorium.
+ *
+ * **Prefiks sam nie wystarcza (ETAP 2, fix final review I-1).** W korzeniu
+ * repozytorium leżą pod `.e2e*` także dane, które instancją nie są — najważniejszy
+ * to `.e2e-model-turns/`, jedyny rejestr wydanego budżetu tur subskrypcji:
+ * skasowanie go ucina pamięć sufitu i kolejny przebieg modelowy startuje od
+ * zera, czyli cicho omija sufit. Reguła jest więc warunkiem KSZTAŁTU danych
+ * instancji, a nie samym prefiksem: kasowany jest wyłącznie katalog, który ma
+ * w sobie `app.db` albo `session.secret` — obie rzeczy zawsze zostawia po sobie
+ * boot instancji (`config.ts` + `auth/session.ts`). Katalog bez tych cech
+ * zostaje z powodem, niezależnie od nazwy; lista wyjątków nie jest potrzebna,
+ * bo nowy nieinstancyjny katalog jest z natury bezpieczny.
  */
 export interface TeardownOptions {
   /** Katalog z zapisanym odciskiem (domyślnie `test-results/`). */
@@ -35,7 +46,19 @@ export interface TeardownOptions {
   repoRoot?: string;
 }
 
-/** Usuwa `.e2e*` katalogi bez żywych procesów; resztę zostawia z powodem. */
+/**
+ * Czy ten katalog `.e2e*` wygląda na dane instancji testowej?
+ *
+ * Kształt, nie prefiks: boot instancji zawsze zostawia bazę (`app.db`) i sekret
+ * sesji (`session.secret`) bezpośrednio w katalogu danych. Cokolwiek innego pod
+ * `.e2e*` — rejestr budżetu tur, notatki, dane przyszłego rodzaju — tych plików
+ * nie ma i z definicji nie jest własnością tego sprzątania.
+ */
+export function nosiCechyDanychInstancji(katalog: string): boolean {
+  return existsSync(resolve(katalog, 'app.db')) || existsSync(resolve(katalog, 'session.secret'));
+}
+
+/** Usuwa `.e2e*` katalogi o kształcie danych instancji, bez żywych procesów; resztę zostawia z powodem. */
 export function usunKatalogiInstancjiTestowych(repoRoot: string): {
   usuniete: string[];
   zostawione: { katalog: string; powod: string }[];
@@ -52,6 +75,15 @@ export function usunKatalogiInstancjiTestowych(repoRoot: string): {
     if (wpis.isSymbolicLink() || !wpis.isDirectory()) continue;
     if (!wpis.name.startsWith('.e2e')) continue;
     const katalog = resolve(repoRoot, wpis.name);
+    if (!nosiCechyDanychInstancji(katalog)) {
+      zostawione.push({
+        katalog,
+        powod:
+          'katalog nie nosi cech danych instancji (brak app.db i session.secret) — ' +
+          'porzadki kasuja tylko dane instancji testowych, nigdy danych nieinstancyjnych',
+      });
+      continue;
+    }
     const odpowiedz = directoryInUse(katalog);
     if (odpowiedz === false) {
       rmSync(katalog, { recursive: true, force: true });
