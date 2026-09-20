@@ -3,7 +3,7 @@
 > Plik generowany przez `node scripts/acceptance-matrix.mjs` z `docs/acceptance/assessment.json`.
 > Każde otwarte kryterium macierzy (`docs/ACCEPTANCE.md`) należy do dokładnie jednego pakietu.
 
-Otwartych kryteriów: **14** z 200, w 6 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.
+Otwartych kryteriów: **13** z 200, w 6 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.
 
 | Pakiet | Tytuł | Kryteria | Liczba |
 |---|---|---|---|
@@ -11,7 +11,7 @@ Otwartych kryteriów: **14** z 200, w 6 pakietach. Kolejność pakietów jest pr
 | BL-04 | Uwierzytelnienie subskrypcyjne i limity — próby graniczne | L8.10, L8.11 | 2 |
 | BL-07 | Trwałość, kopia i migracje | L7.13 | 1 |
 | BL-09 | Pliki, sandbox i zadania w tle | L11.7, L11.12, L11.23 | 3 |
-| BL-11 | Domena, backend i cache | L6.11, L9.7 | 2 |
+| BL-11 | Domena, backend i cache | L6.11 | 1 |
 | BL-12 | Odbiór i jakość dowodów | L12.10 | 1 |
 
 ## BL-03 — Powtarzalne próby na prawdziwym modelu w szablonie
@@ -70,7 +70,6 @@ Braki w warstwach 6, 7, 9 i 10 niepasujące do innych pakietów: współbieżno�
 | ID | Wymaganie | Stan | Brak |
 |---|---|---|---|
 | L6.11 | Brak lub nieaktualność zasobu i utrata dostępu są odróżniane od pustego wyniku; agent nie uzupełnia braków wymyślonymi danymi. | częściowe | Zachowanie agenta — ze nie uzupelnia brakow wymyslonymi danymi — nadal nie ma proby z prawdziwym modelem w szablonie. Platforma podaje juz rozroznialne stany i wprost zakazuje zmyslania, ale czy model sie do tego stosuje, moze wykazac tylko przebieg modelowy (Z5 mial grant zero tur). |
-| L9.7 | Powtórzenie tej samej operacji nie dubluje skutków biznesowych. | częściowe | Powtorzenie BEZ operationId dubluje skutek w TRZECH narzedziach: canvas_add_card (druga karta), agent_view_create (drugi widok) i files_publish_version (druga wersja pliku). Pozostale narzedzia zapisu, ktore przyjmuja klucz opcjonalnie, sa chronione czym innym i powtorzenie niczego w nich nie dubluje: canvas_update_card wymaga wersji (powtorzenie daje conflict), canvas_remove_card i agent_view_remove koncza sie not_found, agent_view_update scala i zwraca unchanged=true. Rozroznienie jest wykonywane, nie deklarowane — tests/domain-guarantees.test.ts „powtorzenie BEZ operationId: trzy narzedzia dubluja skutek, cztery sa chronione inaczej”. Domkniecie wymaga uczynienia operationId wymaganym w tych trzech narzedziach po obu stronach drzwi: w agent_view_create zmienia to kontrakt pol wymaganych bedacy dowodem innego pakietu (tests/agent-views.test.ts), a w canvas_add_card wymaga generowania klucza w interfejsie (POST /api/canvas/cards wola useAddCard) — oba naleza do osobnego pakietu. |
 
 ## BL-12 — Odbiór i jakość dowodów
 

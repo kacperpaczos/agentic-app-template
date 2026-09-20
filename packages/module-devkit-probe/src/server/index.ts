@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ReadResultDescriptor, ServerModule, ViewDefinition } from '@platform/contracts';
+import { operationFingerprint, type ReadResultDescriptor, type ServerModule, type ViewDefinition } from '@platform/contracts';
 import type { PlatformServices } from '@platform/server';
 import { newId, nowIso } from '@platform/server';
 import {
@@ -59,16 +59,31 @@ export function createProbeModule(platform: PlatformServices): ServerModule {
    * The MCP tool and the HTTP route both call this, so there is no second path
    * into the table that could validate differently — the same arrangement the
    * example module uses for its own operations.
+   *
+   * `operationId` is optional here on purpose: the HTTP route has no agent
+   * retry to guard against and passes none. The MCP tool below requires it
+   * (L9.7) — the same asymmetry as `services.canvas.addCard`, whose own
+   * `operationId` is optional at the service boundary and required only at
+   * the agent tool's schema.
    */
-  const addNote = (ownerId: string, text: string): { id: string } => {
-    const id = newId('nte');
-    db.prepare('INSERT INTO probe_notes (id, owner_id, text, created_at) VALUES (?, ?, ?, ?)').run(
-      id,
+  const addNote = async (ownerId: string, text: string, operationId?: string): Promise<{ id: string }> => {
+    const { result } = await platform.idempotency.once(
+      operationId,
       ownerId,
-      text,
-      nowIso(),
+      'probe.addNote',
+      async () => {
+        const id = newId('nte');
+        db.prepare('INSERT INTO probe_notes (id, owner_id, text, created_at) VALUES (?, ?, ?, ?)').run(
+          id,
+          ownerId,
+          text,
+          nowIso(),
+        );
+        return { id };
+      },
+      { fingerprint: operationFingerprint({ text }) },
     );
-    return { id };
+    return result;
   };
 
   const listNotes = (ownerId: string): ProbeNote[] =>
@@ -148,11 +163,21 @@ export function createProbeModule(platform: PlatformServices): ServerModule {
     tools: [
       {
         name: 'add_note',
-        description: 'Dodaje notatke testowa.',
+        description:
+          'Dodaje notatke testowa. operationId jest wymagane: nadaj wlasny identyfikator tego dodania. ' +
+          'Powtorzone wywolanie z tym samym operationId zwraca ta sama notatke zamiast dodawac druga.',
         effect: 'write',
-        inputSchema: z.object({ text: z.string().min(1).max(500) }),
+        inputSchema: z.object({
+          text: z.string().min(1).max(500),
+          operationId: z
+            .string()
+            .min(8)
+            .max(200)
+            .describe('Wlasny identyfikator tego dodania; powtorzenie z tym samym nie dodaje drugiej notatki'),
+        }),
         handler: async (input, ctx) => {
-          const created = addNote(ctx.ownerId, (input as { text: string }).text);
+          const { text, operationId } = input as { text: string; operationId: string };
+          const created = await addNote(ctx.ownerId, text, operationId);
           ctx.emit({ type: 'data_changed', resources: ['probe:notes'] });
           return created;
         },
@@ -170,7 +195,7 @@ export function createProbeModule(platform: PlatformServices): ServerModule {
       register.get('/notes', async (req) => ({ body: { notes: listNotes(req.ownerId) } }));
       register.post('/notes', async (req) => {
         const parsed = z.object({ text: z.string().min(1).max(500) }).parse(req.body);
-        return { status: 201, body: addNote(req.ownerId, parsed.text) };
+        return { status: 201, body: await addNote(req.ownerId, parsed.text) };
       });
       register.get('/notes/:noteId', async (req) => {
         const note = getNote(req.ownerId, req.params.noteId ?? '');

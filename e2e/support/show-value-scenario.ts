@@ -87,11 +87,18 @@ export function showValueScript(prompt: string): Step[] {
   /* A record shown in two places at once: the list view and an agent view. */
   if (prompt.includes('[niejednoznacznie]')) {
     const name = value(prompt, 'nazwa').replace(/_/g, ' ');
+    // Minted per invocation: the idempotency key does not carry the conversation,
+    // so a literal would collide across two conversations of one instance.
+    const operationId = `e2e-show-value-niejednoznacznie-${Date.now()}`;
     return [
       {
         kind: 'call',
         name: 'agent_view_create',
-        input: { title: 'Dostawcy w rozmowie', source: suppliersTable('Dostawcy w rozmowie', 5) },
+        input: {
+          title: 'Dostawcy w rozmowie',
+          source: suppliersTable('Dostawcy w rozmowie', 5),
+          operationId,
+        },
         maxChars: 300,
       },
       search(name),
@@ -130,6 +137,8 @@ export function showValueScript(prompt: string): Step[] {
   /* A record of another owner: the reads behind the only place that shows it are refused. */
   if (prompt.includes('[brak-dostepu]')) {
     const caseId = value(prompt, 'sprawa');
+    // Minted per invocation — see the note on [niejednoznacznie] above.
+    const operationId = `e2e-show-value-brak-dostepu-${Date.now()}`;
     return [
       {
         kind: 'call',
@@ -140,6 +149,7 @@ export function showValueScript(prompt: string): Step[] {
             'root = Stack([tabela])',
             `tabela = DataTable({operation: "procurement.comparison", input: {caseId: "${caseId}"}}, ["supplierName", "totalMinor"], "Oferty")`,
           ].join('\n'),
+          operationId,
         },
         maxChars: 300,
       },
@@ -173,6 +183,8 @@ export function showValueScript(prompt: string): Step[] {
    */
   if (prompt.includes('[karta-pozycji]')) {
     const caseId = value(prompt, 'sprawa');
+    // Minted per invocation — see the note on [niejednoznacznie] above.
+    const operationId = `e2e-show-value-karta-pozycji-${Date.now()}`;
     return [
       {
         kind: 'call',
@@ -184,6 +196,7 @@ export function showValueScript(prompt: string): Step[] {
             `tabela = DataTable({operation: "procurement.case_offer_items", input: {caseId: "${caseId}"}}, ` +
               '["supplierName", "name", "unitPriceMinor"], "Pozycje ofert", 2)',
           ].join('\n'),
+          operationId,
         },
         maxChars: 300,
       },

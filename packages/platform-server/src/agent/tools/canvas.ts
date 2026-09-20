@@ -13,6 +13,23 @@ import {
 } from '@platform/contracts';
 import { assertOwnConversationViews, type PlatformServices } from '../../services/index.ts';
 
+/*
+ * Required, not optional — the same contract as `artifact_create` /
+ * `artifact_publish_file` in `artifacts.ts`. A card is durable the moment it
+ * is added: nothing later collapses two `canvas_add_card` calls into one, the
+ * way `canvas_update_card` collapses a repeat via `expectedSpecVersion` or
+ * `canvas_remove_card` collapses one via "no such row". Without a required key
+ * here, `services.canvas.addCard`'s own `idempotency.once` guard (see
+ * `services/canvas.ts`) is never engaged, because a model that is never told
+ * the field exists never supplies it — which is exactly how a reconnect used
+ * to leave a second card on the space (L9.7).
+ */
+const OPERATION_ID = z
+  .string()
+  .min(8)
+  .max(200)
+  .describe('Wlasny identyfikator tego dodania; powtorzenie z tym samym nie dodaje drugiej karty');
+
 const requireSpace = (ctx: ToolCallContext, explicit?: string | null): string => {
   const spaceId = explicit ?? ctx.appContext.spaceId;
   if (!spaceId) throw new AppError('validation_failed', 'Brak aktywnej przestrzeni canvas.');
@@ -78,14 +95,16 @@ export function canvasTools(services: PlatformServices): Array<ModuleToolDefinit
     {
       name: 'canvas_add_card',
       description:
-        'Dodaje karte do przestrzeni canvas. Komponent musi pochodzic z katalogu (canvas_catalog). Nie przekazuj wartosci biznesowych w props - karta sama pobiera dane z backendu.',
+        'Dodaje karte do przestrzeni canvas. Komponent musi pochodzic z katalogu (canvas_catalog). Nie przekazuj wartosci biznesowych w props - karta sama pobiera dane z backendu. ' +
+        'operationId jest wymagane: nadaj wlasny identyfikator tego dodania. Powtorzone wywolanie z tym samym ' +
+        'operationId zwraca ta sama karte zamiast dodawac druga.',
       effect: 'write',
       inputSchema: z.object({
         spaceId: z.string().optional(),
         title: z.string().max(200),
         spec: cardSpecSchema,
         geometry: cardGeometrySchema.partial().optional(),
-        operationId: z.string().min(8).max(200).optional(),
+        operationId: OPERATION_ID,
       }),
       handler: async (input: any, ctx: ToolCallContext) => {
         const spaceId = spaceFor(ctx, requireSpace(ctx, input.spaceId)).id;

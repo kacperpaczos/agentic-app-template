@@ -23,6 +23,47 @@ sprzątanie i procesy prawdziwe) albo *test GUI bez modelu*.
 | `pnpm check:module-swap` | 0 | podmiana modułu na kontrolny; 163 s |
 | `pnpm evidence:z10` | 0 | `pomiary-stop-procesy.json` (commit `c1c9d7c`, `brudneDrzewo: false`) |
 
+## Domknięcie L9.7 — przebiegi i dowód z interfejsu (wrzesień, dowód na czystym drzewie `6a59a74`)
+
+Kontekst: `canvas_add_card`, `agent_view_create`, `files_publish_version` i — znalezione audytem —
+`probe_add_note` dostały wymagane `operationId`; reguła wyliczana z rejestru w
+`tests/domain-guarantees.test.ts`. Pełny zapis w `assessment.json` i w raporcie pakietu.
+
+| Polecenie | Kod wyjścia | Wynik |
+|---|---|---|
+| `pnpm verify` (po naprawie trzech narzędzi) | 0 | 64 pliki / 976 testów |
+| `pnpm exec playwright test e2e/idempotent-tools.spec.ts` | 0 | 1 test — za pierwszym razem |
+| `pnpm test:e2e` (cały domyślny przebieg, **przed** poprawką scenariuszy) | 1 | 216 zielonych, 1 oblany, 3 niewykonane — patrz „Znalezisko” niżej |
+| `pnpm test:e2e` (cały domyślny przebieg, **po** poprawce scenariuszy) | 0 | **220/220**, 17.4 min |
+| `pnpm exec playwright test e2e/agent-views.spec.ts` ×2 (po poprawce) | 0 | 7/7 i 7/7 — powtórzone zgodnie z protokołem rozstrzygania |
+| `APP_WRITE_EVIDENCE=1 pnpm exec playwright test e2e/idempotent-tools.spec.ts` (czyste drzewo `6a59a74`) | 0 | `dowod-l97-idempotencja-narzedzi.json` (`brudneDrzewo: false`, liczebniki 1/1/1/1) |
+
+### Dowód z rzeczywistego interfejsu L9.7 i czego dowód dotyczy
+
+`dowod-l97-idempotencja-narzedzi.json` (rodzaj: **test GUI bez modelu**): polecenie wysłane z
+przeglądarki, wykonanie przez prawdziwy runtime, narzędzia przez tę samą walidację i wykonanie co
+serwer MCP. Każde z trzech narzędzi tworzących wołane **dwa razy z tym samym `operationId`** dało
+**jeden** wiersz — liczony w bazie przez API odczytu (przestrzeń canvas: 1 karta; widoki agenta
+rozmowy: 1; opublikowane wersje pliku: 1; artefakty publikacji: 1), nie w odpowiedziach narzędzi.
+Wywołanie `canvas_add_card` **bez klucza** zakończyło się widocznym błędem narzędzia
+(`validation_failed`, issue `operationId`) i nie zapisało niczego.
+
+**Czego dowód nie pokazuje, powiedziane wprost:** czy żywy model podaje własne `operationId`
+(czyta opisy narzędzi) — to własność modelu, ćwiczona dopiero płatnym przebiegiem; tu model jest
+zastąpiony scenariuszem na granicy adaptera. Udowodnione jest zachowanie platformy: powtórzenie
+z jednym kluczem = jeden skutek, brak klucza = brak zapisu.
+
+### Znalezisko z pierwszego pełnego przebiegu (oblany test był defektem fixture'a, nie platformy)
+
+`e2e/agent-views.spec.ts` „przeładowanie i przełączanie rozmów…” padł, bo scenariusz `[zestawienie]`
+używał **literału** `operationId`, a klucz idempotencji to `(operationId, owner, scope)` — bez
+rozmowy. Rozmowa B tej samej instancji dostała `operation_id_reused` (odcisk różnił się spaceIdem
+przestrzeni B), czyli **strażnik zadziałał dokładnie tak, jak zaprojektowany** — i to między
+rozmowami, czego testy jednostkowe nie pokazywały. Scenariusze tego pakietu dostają klucze mintowane
+na wywołanie (`Date.now()`, jak pozostałe scenariusze); po poprawce 220/220 i dwukrotnie 7/7 solo.
+Wniosek na przyszłość: literał klucza w scenariuszu to bomba zegowa — druga rozmowa tej instancji
+nie utworzy niczego i dostanie conflict.
+
 Jedyne dwa oblane przebiegi na tym kodzie — pojedynczy test nawigacji wyżej oraz
 `tests/measurements.test.ts` („223 ≤ 221”, próg tolerancji przekroczony o 2 ms) — wystąpiły przy
 trzech równolegle działających zestawach przeglądarkowych i nie powtórzyły się na spokojnej maszynie.

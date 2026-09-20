@@ -1,0 +1,119 @@
+{
+  "zapisano": "2026-09-19T23:48:11.155Z",
+  "rodzajWykonania": "test GUI bez modelu",
+  "wersjaKodu": {
+    "commit": "6a59a74e290877c1c8d9dbf8308dc6521746d67b",
+    "brudneDrzewo": false,
+    "node": "24.19.0",
+    "pakiety": {}
+  },
+  "srodowisko": {
+    "system": "linux 7.2.5-200.fc44.x86_64 x64",
+    "node": "24.19.0",
+    "pnpm": "9.15.9",
+    "cliZewnetrzne": "2.1.278 (Claude Code)",
+    "cliWSdk": {
+      "wersja": "2.1.270",
+      "commit": "97ecbf7abeb4170dcfd26c4d4b397afd9015030e",
+      "dataBudowy": "2026-09-12T18:17:55Z"
+    },
+    "model": null,
+    "pakiety": {
+      "react": "19.3.0",
+      "react-dom": "19.3.0",
+      "typescript": "7.0.2",
+      "vite": "8.3.0",
+      "vitest": "5.0.0",
+      "@playwright/test": "1.63.0",
+      "@openuidev/react-ui": "0.13.10",
+      "@openuidev/react-headless": "0.9.13",
+      "hono": "4.13.7",
+      "drizzle-orm": "0.45.2",
+      "@mastra/core": "1.66.0",
+      "@mastra/claude": "0.3.1",
+      "@anthropic-ai/claude-agent-sdk": "0.3.270",
+      "zod": "4.6.5"
+    }
+  },
+  "opis": "L9.7 przez rzeczywisty interfejs: polecenie wyslane z przegladarki, wykonanie przez prawdziwy runtime, wywolania narzedzi przez te sama walidacje i wykonanie co serwer MCP. Kazde narzedzie tworzace wolane dwa razy z tym samym operationId daje jeden wiersz; wywolanie bez klucza jest odrzucone przez schemat i nie zapisuje niczego. Skutki liczone w bazie przez API odczytu, nie w odpowiedziach narzedzi.",
+  "zrodlo": "pnpm exec playwright test e2e/idempotent-tools.spec.ts (regresja szablonu)",
+  "scena": "bl09-l97 (e2e/support/bl09-scenarios.ts), instancja scenariuszowa na wlasnym porcie i katalogu danych",
+  "uruchomienie": {
+    "runId": "run_63be92759cc045dfaf70",
+    "conversationId": "cnv_f06007f9df954aaf8c2e",
+    "caseId": "pcs_5658ee8fbc33468f99b9",
+    "spaceId": "spc_54862c0e853e46459368"
+  },
+  "klucze": {
+    "canvas_add_card": "e2e-l97-karta-1",
+    "agent_view_create": "e2e-l97-widok-1",
+    "files_publish_version": "e2e-l97-wersja-1"
+  },
+  "wyniki": {
+    "canvas_add_card": {
+      "pierwsze": "crd_b012f95aca7b4f0a8c2e",
+      "powtorzenie": "crd_b012f95aca7b4f0a8c2e"
+    },
+    "agent_view_create": {
+      "pierwsze": "crd_626e0cb232574ab1ac73",
+      "powtorzenie": "crd_626e0cb232574ab1ac73"
+    },
+    "files_publish_version": {
+      "pierwsze": {
+        "fileId": "fil_aee6812b753649b3a066",
+        "filename": "l97-poprawione.csv",
+        "version": 2,
+        "byteSize": 22,
+        "sha256": "c39ae43e1b2cbf0e728dd93e759a992af8a005aaabbae6013ba5dac9209412a4",
+        "downloadUrl": "/api/files/fil_aee6812b753649b3a066/content",
+        "artifactId": "art_001d34f43f6e4872be33",
+        "original": {
+          "fileId": "fil_f80e63b3c1724766929d",
+          "filename": "oferta-nowa-technika-NT-2026-51.csv",
+          "version": 1,
+          "sha256": "459cb0b82f0de6b538f435737a462fdcab81b081051958c28aa2ce9eeeb4e67b",
+          "unchanged": true
+        }
+      },
+      "powtorzenie": {
+        "fileId": "fil_aee6812b753649b3a066",
+        "filename": "l97-poprawione.csv",
+        "version": 2,
+        "byteSize": 22,
+        "sha256": "c39ae43e1b2cbf0e728dd93e759a992af8a005aaabbae6013ba5dac9209412a4",
+        "downloadUrl": "/api/files/fil_aee6812b753649b3a066/content",
+        "artifactId": "art_001d34f43f6e4872be33",
+        "original": {
+          "fileId": "fil_f80e63b3c1724766929d",
+          "filename": "oferta-nowa-technika-NT-2026-51.csv",
+          "version": 1,
+          "sha256": "459cb0b82f0de6b538f435737a462fdcab81b081051958c28aa2ce9eeeb4e67b",
+          "unchanged": true
+        }
+      }
+    }
+  },
+  "liczebnikiWBazie": {
+    "kartyL97WPrzestrzeni": 1,
+    "widokiAgentaRozmowy": 1,
+    "opublikowaneWersjePliku": 1,
+    "artefaktyPublikacji": 1
+  },
+  "wywolanieBezKlucza": {
+    "narzedzie": "canvas_add_card",
+    "wynik": {
+      "error": "validation_failed",
+      "message": "Nieprawidlowe wejscie narzedzia canvas_add_card.",
+      "details": {
+        "issues": [
+          {
+            "path": "operationId",
+            "message": "Invalid input: expected string, received undefined"
+          }
+        ]
+      }
+    },
+    "kartyPoWywolaniuBezKlucza": 1
+  },
+  "czegoDowodNiePokazuje": "Czy zywy model podaje wlasne operationId (czyta opisy narzedzi) — to wlasciwosc modelu, cwiczona tylko przebiegiem platnym; tu model jest zastapiony scenariuszem na granicy adaptera. Udowodnione jest zachowanie platformy: powtorzenie z jednym kluczem = jeden skutek, brak klucza = brak zapisu."
+}
