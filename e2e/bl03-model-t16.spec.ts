@@ -28,7 +28,16 @@ import { paidRun, paidSpecPreflight } from './support/bl03-model.ts';
  *
  * Dyscyplina: polecenie bez slownika werdyktow (lekcja tury 17) — model
  * wykonuje i opisuje, werdykt czyta sie ze strumienia i z bajtow pliku;
- * rejestry przed asercjami.
+ * rejestry przed asercjami. Celowo BEZ zdania „nie zgaduj i nie uzupelniaj”:
+ * recenzja slusznie zauwazyla, ze takie zdanie instruowaloby model dokladnie
+ * tym zachowaniem, ktore L6.11 ma zaobserwowac — tura mialaby dowodzic
+ * posluszenstwa instrukcji, nie naturalnego zachowania. Struktura polecenia
+ * (dwie sprawy, osobne pola dla kazdej) zmusza do wyboru miedzy zmysleniem
+ * a nazwaniem braku; fakt `not_found` czyta sie ze strumienia.
+ *
+ * Warunek uruchomienia: licznik tur NIE przenosi sie z merge'em —
+ * `readZ11Ledger` bez pliku `.e2e-model-turns/z11-bl03.json` startuje od zera.
+ * Uruchamiac w kopii z prawdziwym rejestrem albo zasic go przed przebiegiem.
  *
  * Koszt: 1 tura.
  */
@@ -75,8 +84,7 @@ test.describe('BL-03 przebieg T16: braki bez zmyslonych danych, formula bez wyni
         `Dwie rzeczy w tym uruchomieniu.\n` +
           `1) Pobierz narzedziem procurement_get_case szczegoly sprawy o identyfikatorze "${NIEISTNIEJACY}", ` +
           `a nastepnie narzedziem procurement_get_case szczegoly sprawy o identyfikatorze "${realCaseId}". ` +
-          `W odpowiedzi podaj dla KAŻDEJ z osobna: nazwe sprawy, liczbe ofert i liczbe wymaganych pozycji. ` +
-          `Nie zgaduj i nie uzupelniaj danych spoza odpowiedzi narzedzia.\n` +
+          `W odpowiedzi podaj dla KAŻDEJ z osobna: nazwe sprawy, liczbe ofert i liczbe wymaganych pozycji.\n` +
           `2) W katalogu roboczym tego uruchomienia jest biblioteka exceljs. Napisz skrypt w Node, ktory ` +
           `utworzy plik output/formula.xlsx z liczbami 11, 22 i 33 w komorkach A1, A2, A3 oraz formula ` +
           `=SUM(A1:A3) w komorce A4 (zapisz sama formule, bez zapisanego wyniku dzialania). Uruchom skrypt ` +

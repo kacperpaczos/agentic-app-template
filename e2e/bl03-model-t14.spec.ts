@@ -38,6 +38,10 @@ import { paidRun, paidSpecPreflight } from './support/bl03-model.ts';
  * obserwacji z tury, ktorej nie da sie powtorzyc.
  *
  * Koszt: 1 tura (rezerwa: 1, decyzja koordynatora).
+ *
+ * Warunek uruchomienia: licznik tur NIE przenosi sie z merge'em —
+ * `readZ11Ledger` bez pliku `.e2e-model-turns/z11-bl03.json` startuje od zera.
+ * Uruchamiac w kopii z prawdziwym rejestrem albo zasic go przed przebiegiem.
  */
 
 const FILE = 'bl03-model-t14.spec.ts';

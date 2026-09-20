@@ -47,6 +47,10 @@ import { claudeConfigDir } from '@platform/server';
  *
  * Koszt: 4 tury (jedna rozmowa, cztery polecenia; Stop i sygnal to akcje
  * interfejsu/systemu, nie tury).
+ *
+ * Warunek uruchomienia: licznik tur NIE przenosi sie z merge'em —
+ * `readZ11Ledger` bez pliku `.e2e-model-turns/z11-bl03.json` startuje od zera.
+ * Uruchamiac w kopii z prawdziwym rejestrem albo zasic go przed przebiegiem.
  */
 
 const FILE = 'bl03-model-t15.spec.ts';

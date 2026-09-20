@@ -47,6 +47,10 @@ const pytaniaO = (events: Array<Record<string, any>>): Array<{ tool: string; inp
  * Dyscyplina: polecenie bez slownika werdyktow; rejestry przed asercjami.
  *
  * Koszt: 1 tura.
+ *
+ * Warunek uruchomienia: licznik tur NIE przenosi sie z merge'em —
+ * `readZ11Ledger` bez pliku `.e2e-model-turns/z11-bl03.json` startuje od zera.
+ * Uruchamiac w kopii z prawdziwym rejestrem albo zasic go przed przebiegiem.
  */
 
 const FILE = 'bl03-model-t17.spec.ts';
