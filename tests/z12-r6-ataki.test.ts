@@ -248,7 +248,7 @@ describe('W. nowe kształty rundy 6', () => {
 
   it('W5 przepisanie wejscia zamyka wyścig na ARGUNCIE path (link podmieniony po sprawdzeniu)', async () => {
     const dir = katalogPoza('w5');
-    const { proby, text } = await atak(
+    const { proby, text, ws } = await atak(
       [
         { kind: 'mkdir', path: 'niewinny' },
         { kind: 'symlink', from: '$ws/niewinny', to: 'link' },
@@ -264,8 +264,12 @@ describe('W. nowe kształty rundy 6', () => {
     expect(proby[0]?.denied).toBe(false);
     // Przepisana ścieżka wskazuje na wewnętrzny `niewinny` — wycieku nie ma.
     expect(text.includes(KANAREK), 'przepisanie argumentu nie zamknęło wyścigu na argumencie').toBe(false);
-    expect(String(proby[0]?.updatedInput?.path ?? ''), 'przepisana ścieżka ma być wewnętrzna').toContain(
-      '/niewinny',
+    // Dowód czystej rozdzielczości: realResolve(workspace + X) === workspace + X
+    // na tej platformie (żadnych symlinków w przodkach workspace) — czyli
+    // asercja `toBe` na dokładnej ścieżce JEST osiągalna tam, gdzie runda 6
+    // osłabiła ją do `toContain` (hook-observability, §9b6).
+    expect(String(proby[0]?.updatedInput?.path ?? ''), 'przepisana ścieżka ma być dokładnie wewnętrzna').toBe(
+      join(ws, 'niewinny'),
     );
   });
 
