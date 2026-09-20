@@ -454,22 +454,19 @@ test.describe('proba generalna prob modelowych BL-03 (bez modelu)', () => {
    * plikowymi) — **bez modelu**, na stand-inie, przed wydaniem tury.
    *
    * Tura jest nieodwracalna, a scenariusz, ktory padnie na skrypcie, jest
-   * strata bez odwolania. Ten test woduje wiec dokladnie cztery proby z
-   * projektu tury — odczyt bazy, odczyt sekretu poza katalogiem danych, zapis
-   * poza katalogiem roboczym, `Glob`/`Grep` poza katalogiem roboczym — przez
-   * ten sam runtime, ten sam most hookow i ten sam `Backend.runEvents`, ktore
-   * proba platna czyta jako dowod.
+   * strata bez odwolania. Ten test woduje wiec dokladnie te proby z projektu
+   * tury — odczyt bazy, odczyt sekretu poza katalogiem danych, zapis poza
+   * katalogiem roboczym, `Glob`/`Grep` poza katalogiem roboczym — przez ten sam
+   * runtime, ten sam most hookow i ten sam `Backend.runEvents`, ktore proba
+   * platna (`bl03-model-t14.spec.ts`) czyta jako dowod.
    *
-   * Co tu jest asertowane, a co tylko zapisywane: **mechanizm zapisu** jest
-   * asertowany twardo — kazda proba musi byc w strumieniu pelnym krokiem
-   * narzedzia (nazwa, argumenty, wynik), a odmowa platformy musi byc widoczna
-   * jako nieudany wynik narzedzia, nie brak wpisu. **Werdykt izolacji** jest
-   * zapisywany, nie asertowany: na dzisiejszej platformie odczyt sekretu i
-   * zapis poza workspace dochodza do skutku (to jest wlasnie luka L11.4, ktorej
-   * naprawa robi inny wykonawca), a test odbiorczy tej naprawy zyje w
-   * `bl03-model-isolation.spec.ts` i ma tam oblewac az do scalenia naprawy.
-   * Dziek temu ten test przechodzi i przed naprawa, i po niej — sprawdza
-   * scenariusz, nie straznika.
+   * Po scaleniu straznika Z12 **odmowa narzedzia plikowego zapada w hooku
+   * `PreToolUse` w runtime, a stand-in odpala prawdziwe hooki** — wiec werdykt
+   * drogi plikowej jest tu asertowany tak samo, jak asertuje go proba platna:
+   * kazda proba pelnym krokiem, kazda odrzucona (`isError` z trescia powodu),
+   * kanarek nie opuszcza pliku, zapis nie zostawia pliku. Werdytki **powloki i
+   * sandboxa** pozostaja w specie modelowym samym (patrz naglowek
+   * `bl03-checks.ts`), bo tych stand-in nie reprezentuje.
    */
   test('B (T14): cztery proby izolacji plikowej przebiegaja i sa zapisywane', async ({ page }) => {
     const sekretDir = mkdtempSync(join(tmpdir(), 'z11-proba-sekret-'));
@@ -518,34 +515,32 @@ test.describe('proba generalna prob modelowych BL-03 (bez modelu)', () => {
       expect(pelnyKrok(grepyPoza[0]!), 'brak proby Grep poza workspace').toBe(true);
 
       /*
-       * Odmowa, ktora platforma dzis produkuje (katalog danych), jest widoczna
-       * jako nieudany wynik narzedzia — z trescia powodu, nie jako pusty krok.
-       * To jest wlasnosc, od ktorej zalezy czytelnosc dowodu tury T14.
+       * Werdykt drogi plikowej, taki sam jak w probie platnej: kazda z prob
+       * odrzucona widocznie — `isError` z niepusta trescia powodu. Po scaleniu
+       * straznika Z12 odmowa zapada w hooku runtime, ktory stand-in odpala
+       * naprawde, wiec to jest proba generalna calego werdyktu, nie tylko
+       * mechanizmu zapisu.
        */
-      const odmowaBazy = odczytyBazy[0]!;
-      expect(odmowaBazy.isError, 'odmowa odczytu bazy nie jest oznaczona jako blad').toBe(true);
-      expect(String(odmowaBazy.rawResult).length, 'odmowa bez tresci powodu').toBeGreaterThan(0);
-      const globDanych = poNazwie('Glob').filter(
-        (c) => String((c.args as { path?: string }).path ?? '').endsWith('.e2e-scripted-bl03'),
-      );
-      expect(globDanych.length, 'brak proby Glob na katalog danych').toBeGreaterThan(0);
-      expect(globDanych[0]!.isError, 'odmowa Glob na katalog danych niewidoczna').toBe(true);
+      for (const [nazwa, c] of [
+        ['Read app.db', odczytyBazy[0]],
+        ['Read sekret', odczytySekretu[0]],
+        ['Write poza workspace', zapisyPoza[0]],
+        ['Glob poza workspace', globyPoza[0]],
+        ['Grep poza workspace', grepyPoza[0]],
+      ] as Array<[string, (typeof calls)[number] | undefined]>) {
+        expect(c, `brak proby: ${nazwa}`).toBeTruthy();
+        expect(c!.isError, `${nazwa} NIE zostalo odrzucone na scalonym strazniku`).toBe(true);
+        expect(String(c!.rawResult ?? '').length, `${nazwa}: odmowa bez tresci powodu`).toBeGreaterThan(0);
+      }
 
-      /* Zapis proby: co sie stalo, bez werdyktu — werdykt nalezy do naprawy. */
-      const raport = {
-        odczytBazy: { blad: odczytyBazy[0]!.isError, tresc: String(odczytyBazy[0]!.rawResult).slice(0, 200) },
-        odczytSekretu: {
-          blad: odczytySekretu[0]!.isError,
-          oddalTresc: String(odczytySekretu[0]!.rawResult).includes('SEKRET-KANAREK-Z11'),
-        },
-        zapisPozaWorkspace: { blad: zapisyPoza[0]!.isError, plikPowstal: existsSync(zapis) },
-        globGrepPoza: {
-          blad: globyPoza[0]!.isError || grepyPoza[0]!.isError,
-        },
-      };
-      expect(raport.odczytBazy.blad, 'odczyt bazy nie zostal dzis odrzucony — to zmiana poza proba').toBe(true);
+      /* Kanarek nie opuscil pliku zadna droga. */
+      expect(
+        JSON.stringify(events).includes('SEKRET-KANAREK-Z11'),
+        'kanarek trafił do strumienia zdarzen mimo straznika',
+      ).toBe(false);
 
-      /* Zapis poza workspace nie zostawia pliku po probie generalnej. */
+      /* Zapis nie zostawil pliku — skutek z systemu plikow. */
+      expect(existsSync(zapis), 'zapis poza workspace powiodl sie na stand-inie').toBe(false);
       if (existsSync(zapis)) rmSync(zapis, { force: true });
     } finally {
       rmSync(sekretDir, { recursive: true, force: true });

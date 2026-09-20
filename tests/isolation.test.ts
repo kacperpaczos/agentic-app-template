@@ -285,6 +285,7 @@ describe('spece z prawdziwym modelem: opt-in i nienaruszalnosc dowodow', () => {
       '**/bl03-model-isolation.spec.ts',
       '**/bl03-model-lifecycle.spec.ts',
       '**/bl03-model-relations.spec.ts',
+      '**/bl03-model-t14.spec.ts',
     ]);
     expect(modelSpecsRequested({} as NodeJS.ProcessEnv)).toBe(false);
     expect(modelSpecsRequested({ [MODEL_OPT_IN_ENV]: '1' } as NodeJS.ProcessEnv)).toBe(true);
@@ -329,7 +330,11 @@ describe('spece z prawdziwym modelem: opt-in i nienaruszalnosc dowodow', () => {
     for (const file of Z11_MODEL_SPEC_FILES) {
       expect(Z11_SPEC_TURNS[file], `${file}: koszt musi byc dodatni`).toBeGreaterThan(0);
     }
-    expect(Z11_TURNS_PLANNED, 'suma kosztow specek rozjechala sie z dokumentacja').toBe(15);
+    /*
+     * 16: plan tury T14 dolozyl `bl03-model-t14.spec.ts` (1 tura — jedna
+     * rozmowa, cztery proby izolacji) do planu czterech specek (15).
+     */
+    expect(Z11_TURNS_PLANNED, 'suma kosztow specek rozjechala sie z dokumentacja').toBe(16);
     expect(Z11_TURNS_PLANNED).toBeLessThan(Z11_TURN_BUDGET);
 
     /*
