@@ -237,6 +237,18 @@ test.describe('BL-03 przebieg T15: blad narzedzia, Stop, sygnal, wznowienie po u
       const messages = await backend.messages(convId);
       expect(messages.length, 'historia rozmowy zniknela po restarcie').toBeGreaterThan(0);
       record.poRestarcie = { status: interrupted.status, wiadomosci: messages.length };
+      /*
+       * Gwarancja probowania L7.13 (recenzja): tura 4 odpowiada na pytanie o
+       * reakcje na BRAK transkryptu tylko wtedy, gdy transkrypt naprawde zniknal.
+       * Gdyby pliku nie udalo sie znalezc (inny katalog konfiguracji CLI, porzadki
+       * po stronie CLI), tura 3 konczy sie tutaj jawnie — z pomiarami L1.6 juz
+       * wpisanymi w rekord — a tryb serial pomija ture 4, zamiast zaliczyc
+       * zwykle wznowienie z calym transkryptem jako odpowiedz o braku transkryptu.
+       */
+      expect(
+        stanTranskryptu['usuniety'],
+        `transkrypt sesji ${sesja} nie zostal znaleziony ani usuniety — czwarta tura probowalaby zwykle wznowienie, nie reakcje na brak transkryptu (L7.13)`,
+      ).toBe(true);
       record.wynik = 'zaliczona';
     } finally {
       run.save('t15-t3-sygnal.json', { ...record, wynik: record.wynik ?? 'niezaliczona' });

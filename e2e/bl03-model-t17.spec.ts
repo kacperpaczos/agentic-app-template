@@ -91,7 +91,12 @@ test.describe('BL-03 przebieg T17: kolejnosc allowedTools vs canUseTool na prawd
       const pytania = pytaniaO(events);
       const pytaniaOFile = pytania.filter((p) => /^(Write|Read|Edit|Glob|Grep)$/.test(p.tool));
       const pytaniaOBash = pytania.filter((p) => p.tool === 'Bash');
-      const rozstrzygniecia = events.filter((e) => e.name === 'platform.permission_resolved').length;
+      /* Zdarzenia wlasne stoja w kopercie `{name: 'CUSTOM', payload: {name, value}}` —
+       * `appendEvent` zapisuje typ AG-UI jako `name`, a nazwe platformy dopiero
+       * wewnatrz `payload` (recenzja: filtr po galej nazwie liczylby wiecznie zero). */
+      const rozstrzygniecia = events.filter(
+        (e) => e.name === 'CUSTOM' && e.payload?.name === 'platform.permission_resolved',
+      ).length;
 
       const obserwacjaZ7 = odczyty.map((c) => {
         const zadana = String((c.args as { file_path?: string } | null)?.file_path ?? '');

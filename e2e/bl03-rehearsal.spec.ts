@@ -721,6 +721,18 @@ test.describe('proba generalna prob modelowych BL-03 (bez modelu)', () => {
     expect(pytaniaOFile.length, 'bramka pytala o narzedzia plikowe').toBe(0);
     expect(pytaniaOBash.length, 'bramka nie pytala o powloke').toBeGreaterThan(0);
     expect(outcome.decisions.length, 'decyzje rozjechaly sie z pytaniami').toBe(pytania.length);
+    /*
+     * Ta sama koperta po stronie rozstrzygniec: `platform.permission_resolved`
+     * siedzi w `payload.name`, nie w galnym `name` zdarzenia. Probę generalną
+     * dodano po recenzji, która znalazła w bliźniaku płatnym licznik liczony
+     * po galej nazwie — na stand-inie zielony, na turze zawsze zerowy.
+     */
+    const rozstrzygniecia = events.filter(
+      (e) => e.name === 'CUSTOM' && e.payload?.name === 'platform.permission_resolved',
+    );
+    expect(rozstrzygniecia.length, 'decyzje rozjechaly sie ze zdarzeniami permissionResolved').toBe(
+      outcome.decisions.length,
+    );
   });
 
   test('D: niezapisany szkic trafia do kontekstu jako szkic, bez wartosci', async ({ page }) => {
