@@ -387,6 +387,7 @@ const KLASYFIKACJA: Record<string, Wpis> = {
     powod: 'to JEST bramka: jej jedyne żądanie to odczyt etykiety z /api/health, od którego zależy reszta',
   },
   'lib/matrix-core.mjs': { siec: false, powod: '' },
+  'lib/server-guard.mjs': { siec: false, powod: '' },
   'lib/state-tools.mjs': { siec: false, powod: '' },
   'matrix-summary.mjs': { siec: false, powod: '' },
   'migration-rehearsal.mjs': { siec: false, powod: '' },

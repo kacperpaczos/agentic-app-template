@@ -10,8 +10,15 @@ case "${1:-start}" in
     if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
       echo "already running pid=$(cat "$PIDFILE")"; exit 0
     fi
+    # Katalog danych instancji weryfikacyjnej: domyślnie jak dotąd, nadpisywalny.
+    DATA="${DEV_DATA:-$ROOT/data}"
     cd "$ROOT"
-    APP_DATA_DIR="$ROOT/data" APP_WEB_DIST="$ROOT/apps/web/dist" \
+    # ETAP 2, dziura 1 — odmowa, gdy katalog danych wygląda na żywe dane
+    # aplikacji. Ta instancja startuje bez etykiety, a straż w config.ts
+    # ogranicza wyłącznie instancje testowe, więc kontrolę sprawuje warstwa
+    # skryptowa — zanim cokolwiek zostanie uruchomione.
+    node scripts/lib/server-guard.mjs przed --katalog "$DATA" --repo "$ROOT" || exit $?
+    APP_DATA_DIR="$DATA" APP_WEB_DIST="$ROOT/apps/web/dist" \
       setsid node apps/server/dist/server.js > "$LOG" 2>&1 < /dev/null &
     echo $! > "$PIDFILE"
     for _ in $(seq 1 40); do

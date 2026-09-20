@@ -12,6 +12,10 @@ case "${1:-start}" in
   start)
     if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then echo "running $(cat "$PIDFILE")"; exit 0; fi
     cd "$ROOT"
+    # ETAP 2, dziura 1 — odmowa, gdy katalog danych wygląda na żywe dane
+    # aplikacji (instancja startuje bez etykiety, więc straż config.ts jej
+    # nie obejmuje). Odmowa zanim cokolwiek zostanie uruchomione.
+    node scripts/lib/server-guard.mjs przed --katalog "$DATA" --repo "$ROOT" || exit $?
     APP_DATA_DIR="$DATA" APP_WEB_DIST="$ROOT/apps/web/dist" PORT="$PORT" \
       APP_ALLOWED_ORIGINS="http://127.0.0.1:$PORT,http://localhost:$PORT" \
       setsid node apps/server/dist/server.js > "$LOG" 2>&1 < /dev/null &
