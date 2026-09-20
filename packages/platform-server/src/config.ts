@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, resolve } from 'node:path';
-import { isSymlink, realResolve } from './util/real-path.ts';
+import { isSymlink, isWithin, realResolve } from './util/real-path.ts';
 
 const int = (v: string | undefined, d: number) => {
   const n = v ? Number.parseInt(v, 10) : Number.NaN;
@@ -26,6 +26,18 @@ export const MODEL_PROVIDERS: readonly ModelProvider[] = ['subscription', 'glm']
 
 const isModelProvider = (v: string | undefined): v is ModelProvider =>
   v === 'subscription' || v === 'glm';
+
+/**
+ * Tolerant read of the provider from an environment.
+ *
+ * Anything but the exact `'glm'` reads as the default `subscription`; the
+ * *strict* decision — an unknown value refusing the start — lives only in
+ * {@link loadConfig}, so a helper that must not throw (status answers, probe
+ * dispatch) cannot accidentally become a second policy.
+ */
+export function modelProviderFromEnv(env: NodeJS.ProcessEnv = process.env): ModelProvider {
+  return env.APP_MODEL_PROVIDER === 'glm' ? 'glm' : 'subscription';
+}
 
 export interface PlatformConfig {
   dataDir: string;
@@ -201,14 +213,40 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PlatformConfig
 
     const defaultClaudeDir = resolve(homedir(), '.claude');
     if (env.CLAUDE_CONFIG_DIR?.trim()) {
-      const given = resolve(env.CLAUDE_CONFIG_DIR);
-      const real = realResolve(given);
-      if (given === defaultClaudeDir || real === defaultClaudeDir) {
+      const rawConfigDir = env.CLAUDE_CONFIG_DIR.trim();
+      /*
+       * Tylda nie jest rozwijana ani przez Node, ani przez ten plik: `~/.claude`
+       * trafiłoby tu jako katalog o **nazwie** „~" obok bieżącego katalogu, czyli
+       * zupełnie obok katalogu użytkownika — a miał być nim albo miał być
+       * odrzucony. Obie te możliwości są złe, więc każdy człon ścieżki zaczynający
+       * się od `~` odmawia startu zamiast go cicho utworzyć.
+       */
+      if (rawConfigDir.split(/[/\\]+/).some((segment) => segment.startsWith('~'))) {
         missing.push(
-          `CLAUDE_CONFIG_DIR wskazuje domyślny katalog poświadczeń OAuth (${defaultClaudeDir}` +
-            (real !== given ? `, rzeczywiście ${real}` : '') +
-            ') — w trybie GLM poświadczenia OAuth nie są używane ani czytane; wskaż pusty, izolowany katalog',
+          `CLAUDE_CONFIG_DIR="${rawConfigDir}" zawiera „~" — tylda nie jest rozwijana, więc ` +
+            'zamiast katalogu użytkownika powstałby katalog o nazwie „~"; podaj pełną ścieżkę bez tyldy',
         );
+      } else {
+        const given = resolve(rawConfigDir);
+        const real = realResolve(given);
+        if (given === defaultClaudeDir || real === defaultClaudeDir) {
+          missing.push(
+            `CLAUDE_CONFIG_DIR wskazuje domyślny katalog poświadczeń OAuth (${defaultClaudeDir}` +
+              (real !== given ? `, rzeczywiście ${real}` : '') +
+              ') — w trybie GLM poświadczenia OAuth nie są używane ani czytane; wskaż pusty, izolowany katalog',
+          );
+        } else if (isWithin(given, defaultClaudeDir) || isWithin(real, defaultClaudeDir)) {
+          /*
+           * Katalog WEWNĄTRZ `~/.claude` to wciąż drzewo poświadczeń OAuth: izolacja,
+           * która siedzi obok pliku `.credentials.json`, nie jest izolacją od niego.
+           * Porównanie po rozwiązaniu łapie też dowiązanie wchodzące do drzewa.
+           */
+          missing.push(
+            `CLAUDE_CONFIG_DIR wchodzi w drzewo domyślnego katalogu poświadczeń OAuth ` +
+              `(${defaultClaudeDir}${isWithin(real, defaultClaudeDir) && real !== given ? `; rzeczywiście ${real}` : ''}) ` +
+              '— wskaż pusty, izolowany katalog poza nim',
+          );
+        }
       }
     }
 

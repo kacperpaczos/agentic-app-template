@@ -314,3 +314,94 @@ describe('/api/status w trybie glm', () => {
     }
   });
 });
+
+describe('/api/sdk-session: sonda dostaje provider z zadanania (recenzja F1)', () => {
+  /** Stand-in that records what provider the endpoint dispatched. */
+  const captureProbe = (seen: Array<string | undefined>) => async (provider?: string) => {
+    seen.push(provider);
+    return {
+      state: 'other' as const,
+      apiKeySource: provider === 'glm' ? 'ANTHROPIC_AUTH_TOKEN' : null,
+      apiProvider: provider === 'glm' ? 'GLM/Z.AI (kompatybilny endpoint Anthropic)' : null,
+      subscriptionType: null,
+      planLimits: null,
+      checkedAt: new Date().toISOString(),
+      error: null,
+    };
+  };
+
+  const boot = async (env: NodeJS.ProcessEnv, seen: Array<string | undefined>) => {
+    const platform = createPlatform({ modules: [], env, sessionProbe: captureProbe(seen) });
+    const login = await platform.app.request('/api/auth/session', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ userId: 'local-user' }),
+    });
+    const cookie = (login.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
+    return { platform, cookie };
+  };
+
+  it('w trybie glm kontrolka „Sesja SDK" probuje polityke GLM, nie subskrypcji', async () => {
+    const seen: Array<string | undefined> = [];
+    const { platform, cookie } = await boot(glmEnv(), seen);
+    try {
+      const res = await platform.app.request('/api/sdk-session', {
+        method: 'POST',
+        headers: { cookie },
+      });
+      expect(res.status).toBe(200);
+      expect(seen, 'sonda ma dostac provider glm z zadania').toEqual(['glm']);
+      const body = (await res.json()) as { sdkSession: { apiKeySource: string | null } };
+      expect(body.sdkSession.apiKeySource).toBe('ANTHROPIC_AUTH_TOKEN');
+    } finally {
+      platform.close();
+    }
+  });
+
+  it('w trybie subskrypcji sonda dostaje wprost subscription (kontrola pozytywna)', async () => {
+    const seen: Array<string | undefined> = [];
+    const { platform, cookie } = await boot({ APP_DATA_DIR: isoDir() }, seen);
+    try {
+      const res = await platform.app.request('/api/sdk-session', {
+        method: 'POST',
+        headers: { cookie },
+      });
+      expect(res.status).toBe(200);
+      expect(seen).toEqual(['subscription']);
+      const body = (await res.json()) as { sdkSession: { apiKeySource: string | null } };
+      expect(body.sdkSession.apiKeySource).toBeNull();
+    } finally {
+      platform.close();
+    }
+  });
+});
+
+describe('CLAUDE_CONFIG_DIR: tylda i drzewo ~/.claude odmowione (recenzja F2/F3)', () => {
+  it('doslowne ~/.claude (tylda nierozwijana) jest odrzucone', () => {
+    expect(() => loadConfig(glmEnv({ CLAUDE_CONFIG_DIR: '~/.claude' }))).toThrow(/~"/);
+    expect(() => loadConfig(glmEnv({ CLAUDE_CONFIG_DIR: '~/glm-izolowany' }))).toThrow(/~"/);
+    // `~` as any path member, not only at the start.
+    expect(() => loadConfig(glmEnv({ CLAUDE_CONFIG_DIR: '/home/u/katalogi/~.claude' }))).toThrow(/~"/);
+  });
+
+  it('katalog WEWNATRZ drzewa ~/.claude jest odrzucony (tez po rozwiazaniu dowiazania)', () => {
+    const inside = resolve(homedir(), '.claude', 'glm-podkatalog');
+    expect(() => loadConfig(glmEnv({ CLAUDE_CONFIG_DIR: inside }))).toThrow(
+      /drzewo domyślnego katalogu poświadczeń OAuth/,
+    );
+
+    // A link placed OUTSIDE the home directory but resolving INTO ~/.claude
+    // is refused for the same reason.
+    const host = isoDir('glm-inside-link-');
+    const link = resolve(host, 'wskazujacy-w-drzewo');
+    symlinkSync(resolve(homedir(), '.claude'), link, 'dir');
+    expect(() => loadConfig(glmEnv({ CLAUDE_CONFIG_DIR: resolve(link, 'podkatalog') }))).toThrow(
+      /drzewo domyślnego katalogu poświadczeń OAuth/,
+    );
+  });
+
+  it('kontrola pozytywna: izolowany katalog poza ~/.claude nadal przechodzi', () => {
+    const cfg = loadConfig(glmEnv());
+    expect(cfg.modelProvider).toBe('glm');
+  });
+});

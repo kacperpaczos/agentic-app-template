@@ -120,8 +120,16 @@ export function classifySdkSession(
   };
 }
 
-/** Runs the probe, or reports why it could not. Never throws. */
-export type SessionProbe = () => Promise<SdkSession>;
+/**
+ * Runs the probe, or reports why it could not. Never throws.
+ *
+ * Receives the provider the request is about — the probe describes the
+ * environment a **run** would get, so a `glm` request must probe the glm
+ * policy, not the subscription one. Optional only so stand-ins written as
+ * zero-argument answers keep fitting; the dispatching endpoint passes the
+ * provider explicitly.
+ */
+export type SessionProbe = (provider?: ModelProvider) => Promise<SdkSession>;
 
 export interface ProbeOptions {
   env?: NodeJS.ProcessEnv;

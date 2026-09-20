@@ -9,7 +9,7 @@ import {
   type CredentialState,
   type SdkSession,
 } from '@platform/contracts';
-import type { ModelProvider } from '../config.ts';
+import { modelProviderFromEnv, type ModelProvider } from '../config.ts';
 
 /**
  * Reports how the Claude runtime is authenticated.
@@ -312,7 +312,7 @@ export function probeAuth(env: NodeJS.ProcessEnv = process.env, now = Date.now()
    * start by the configuration, so the guarantee does not depend on this
    * function's restraint alone.
    */
-  if (env.APP_MODEL_PROVIDER === 'glm') {
+  if (modelProviderFromEnv(env) === 'glm') {
     return {
       method: 'glm',
       credential: { present: false, subscriptionType: null, expiresAt: null, state: 'absent' },
