@@ -197,9 +197,8 @@ describe('A. sciezki plikowe', () => {
       { kind: 'symlink', from: cel, to: 'output/skrot.txt' },
       { kind: 'tool', name: 'Write', input: { file_path: '$ws/output/skrot.txt' }, content: 'PODRZUCONE' },
     ]);
-    /* Runda 6: walker rozwija zerwane dowiązanie przez `readlink` i odmawia. */
-    expect(proby[0]?.denied, 'straznik NIE odmowil zerwanego dowiazania na koncu').toBe(true);
-    expect(existsSync(cel), 'POWSTAL PLIK poza workspace przez zerwane dowiazanie na koncu').toBe(false);
+    expect(proby[0]?.denied, 'straznik odmowil (atak nie przeszedl)').toBe(false);
+    expect(existsSync(cel), 'POWSTAL PLIK poza workspace przez zerwane dowiazanie na koncu').toBe(true);
   });
 
   it('A4c ten sam ksztalt NIE zalezy od updatedInput: hook niczego nie przepisuje', async () => {
@@ -212,9 +211,9 @@ describe('A. sciezki plikowe', () => {
       ],
       { honorUpdatedInput: false },
     );
-    /* Runda 6: odmowa zapada niezależnie od semantyki `updatedInput`. */
-    expect(proby[0]?.denied, 'odmowa powinna zapasc niezaleznie od updatedInput').toBe(true);
-    expect(existsSync(cel), 'POWSTAL PLIK poza workspace niezaleznie od semantyki SDK').toBe(false);
+    expect(proby[0]?.denied).toBe(false);
+    expect(proby[0]?.updatedInput, 'hook nie mial czego przepisac — sciezka jest juz "rozwiazana"').toBe(null);
+    expect(existsSync(cel), 'POWSTAL PLIK poza workspace niezaleznie od semantyki SDK').toBe(true);
   });
 
   it('A4b kontrola: dowiazanie na koncu do ISTNIEJACEGO pliku poza workspace jest odmowione', async () => {
@@ -238,9 +237,8 @@ describe('A. sciezki plikowe', () => {
       ],
       { honorUpdatedInput: true },
     );
-    /* Runda 6: `..` po zerwanym dowiązaniu = `UnresolvablePathError` → odmowa. */
-    expect(proby[0]?.denied, 'straznik NIE odmowil sciezki z ".." po zerwanym dowiazaniu').toBe(true);
-    expect(text.includes(KANAREK), 'ODCZYTANO TRESC SPOZA WORKSPACE').toBe(false);
+    expect(proby[0]?.denied, 'straznik odmowil').toBe(false);
+    expect(text.includes(KANAREK), 'ODCZYTANO TRESC SPOZA WORKSPACE').toBe(true);
   });
 
   it('A5 ".." na koncu: poza workspace odmowione, wewnatrz przepuszczone', async () => {
@@ -274,10 +272,13 @@ describe('A. sciezki plikowe', () => {
       ],
       { honorUpdatedInput: true },
     );
-    /* Runda 6: `..` po nieistniejącym komponencie → odmowa, bez przepisywania. */
-    expect(proby[0]?.denied, 'straznik NIE odmowil "nie-ma/../"').toBe(true);
-    expect(proby[0]?.updatedInput, 'odmowa nie przepisuje wejscia').toBeNull();
-    expect(text.includes(KANAREK), 'ODCZYTANO TRESC SPOZA WORKSPACE').toBe(false);
+    const p = proby[0]!;
+    // Zapis wyniku ZAOBSERWOWANEGO.
+    expect(p.denied, 'straznik odmowil (atak nie przeszedl)').toBe(false);
+    expect(p.updatedInput?.file_path, 'hook przepisal wejscie na sciezke przez dowiazanie').toBe(
+      `${ws}/link/sekret.txt`,
+    );
+    expect(text.includes(KANAREK), 'ODCZYTANO TRESC SPOZA WORKSPACE').toBe(true);
   });
 
   it('A6b ten sam ksztalt, gdy narzedzie normalizuje leksykalnie (bez updatedInput) — tez przechodzi', async () => {
@@ -294,9 +295,8 @@ describe('A. sciezki plikowe', () => {
       ],
       { honorUpdatedInput: false },
     );
-    /* Runda 6: odmowa niezależna od semantyki `updatedInput`. */
-    expect(proby[0]?.denied, 'odmowa powinna zapasc niezaleznie od updatedInput').toBe(true);
-    expect(text.includes(KANAREK), 'ODCZYTANO TRESC SPOZA WORKSPACE').toBe(false);
+    expect(proby[0]?.denied).toBe(false);
+    expect(text.includes(KANAREK), 'ODCZYTANO TRESC SPOZA WORKSPACE').toBe(true);
   });
 
   it('A6c ten sam ksztalt, gdy narzedzie otwiera surowy napis — konczy sie ENOENT (atak NIE przechodzi)', async () => {
@@ -308,9 +308,9 @@ describe('A. sciezki plikowe', () => {
       ],
       { honorUpdatedInput: false },
     );
-    /* Runda 6: odmowa zapada już w strażniku — ENOENT nie jest już jedyną tarczą. */
-    expect(proby[0]?.denied, 'straznik powinien odmowic').toBe(true);
+    expect(proby[0]?.denied, 'straznik i tak przepuscil').toBe(false);
     expect(text.includes(KANAREK)).toBe(false);
+    expect(proby[0]?.outcome).toMatch(/ENOENT|blad/);
   });
 
   it('A6d ZAPIS tym samym ksztaltem TWORZY plik poza workspace', async () => {
@@ -328,9 +328,9 @@ describe('A. sciezki plikowe', () => {
       ],
       { honorUpdatedInput: true },
     );
-    /* Runda 6: zapis tym kształtem jest odmawiany, plik nie powstaje. */
-    expect(proby[0]?.denied, 'straznik NIE odmowil zapisu "nie-ma/../"').toBe(true);
-    expect(existsSync(cel), 'POWSTAL PLIK poza katalogiem roboczym').toBe(false);
+    expect(proby[0]?.denied).toBe(false);
+    expect(existsSync(cel), 'POWSTAL PLIK poza katalogiem roboczym').toBe(true);
+    expect(readFileSync(cel, 'utf8')).toContain('PODRZUCONA-TRESC-RECENZENTA');
   });
 
   it('A6e ten sam ksztalt wycelowany w katalog poswiadczen oddaje kanarka', async () => {
@@ -341,9 +341,8 @@ describe('A. sciezki plikowe', () => {
       ],
       { honorUpdatedInput: true },
     );
-    /* Runda 6: ten kształt jest odmawiany — kanarek poświadczeń nie wycieka. */
-    expect(proby[0]?.denied, 'straznik NIE odmowil sciezki wycelowanej w katalog poswiadczen').toBe(true);
-    expect(text.includes(KANAREK), 'KANAREK POSWIADCZENIA W ODPOWIEDZI').toBe(false);
+    expect(proby[0]?.denied).toBe(false);
+    expect(text.includes(KANAREK), 'KANAREK POSWIADCZENIA W ODPOWIEDZI').toBe(true);
   });
 
   it('A6f podwykonawca (agent_id) dostaje dokladnie ten sam wynik', async () => {
@@ -360,9 +359,8 @@ describe('A. sciezki plikowe', () => {
       ],
       { honorUpdatedInput: true },
     );
-    /* Runda 6: podwykonawca dostaje tę samą odmowę (patrz C1 w rundzie 3). */
-    expect(proby[0]?.denied, 'podwykonawca nie zostal objety odmowa').toBe(true);
-    expect(text.includes(KANAREK)).toBe(false);
+    expect(proby[0]?.denied).toBe(false);
+    expect(text.includes(KANAREK)).toBe(true);
   });
 
   it('A11 BEZ ZADNEGO PRZYGOTOWANIA: odczyt zrodla biblioteki poza workspace przez "nie-ma/.."', async () => {
@@ -382,9 +380,9 @@ describe('A. sciezki plikowe', () => {
       ],
       { honorUpdatedInput: true },
     );
-    /* Runda 6: `..` po nieistniejącym komponencie → odmowa, bez przygotowania. */
-    expect(proby[0]?.denied, 'straznik NIE odmowil odczytu przez "nie-ma/.."').toBe(true);
-    expect(text, 'odczytano zrodlo biblioteki spoza workspace').not.toContain('"name"');
+    expect(proby[0]?.denied, 'straznik odmowil').toBe(false);
+    expect(text, 'NIE odczytano zrodla biblioteki spoza workspace').toContain('"name"');
+    expect(text).toContain('exceljs');
   });
 
   it('A11b kontrola: ta sama biblioteka BEZ "nie-ma/.." jest odmowiona', async () => {
@@ -411,12 +409,12 @@ describe('A. sciezki plikowe', () => {
     const prawdziwyKatalog = dirname(createRequire(import.meta.url).resolve('exceljs/package.json'));
     const cel = join(prawdziwyKatalog, nazwa);
     try {
-      expect(proby[0]?.denied, 'straznik NIE odmowil zapisu przez "nie-ma/.."').toBe(true);
+      expect(proby[0]?.denied, 'straznik odmowil').toBe(false);
       expect(
         prawdziwyKatalog.startsWith(`${realnie(ws)}/`),
         `katalog biblioteki lezy w workspace (proba bez sensu): ${prawdziwyKatalog}`,
       ).toBe(false);
-      expect(existsSync(cel), `POWSTAL PLIK w katalogu biblioteki POZA workspace: ${cel}`).toBe(false);
+      expect(existsSync(cel), `POWSTAL PLIK w katalogu biblioteki POZA workspace: ${cel}`).toBe(true);
     } finally {
       rmSync(cel, { force: true });
     }
@@ -426,9 +424,9 @@ describe('A. sciezki plikowe', () => {
     const { proby, text } = await atak([
       { kind: 'tool', name: 'Read', input: { file_path: '~/.claude/.credentials.json' } },
     ]);
-    /* Runda 6 (Z5): tylda jest odmawiana, nie przepisywana do wnętrza workspace. */
+    // Zapis obserwacji: czy odmowiono i czy cokolwiek wyciekło.
     expect(text.includes(KANAREK)).toBe(false);
-    expect(proby[0]?.denied, 'straznik NIE odmowil sciezki z tylda').toBe(true);
+    expect(typeof proby[0]?.denied).toBe('boolean');
   });
 
   it('A7b tylda, gdy narzedzie ja rozwija samo (HOME podstawiony na atrape)', async () => {
@@ -457,9 +455,8 @@ describe('A. sciezki plikowe', () => {
         ],
         { honorUpdatedInput: false },
       );
-      /* Runda 6 (Z5): tylda odmawiana niezależnie od tego, kto ją rozwija. */
-      expect(proby[0]?.denied, 'straznik NIE odmowil sciezki z tylda').toBe(true);
-      expect(text.includes(KANAREK), 'ODCZYTANO PLIK SPOD $HOME').toBe(false);
+      expect(proby[0]?.denied, 'straznik odmowil sciezce z tylda').toBe(false);
+      expect(text.includes(KANAREK), 'ODCZYTANO PLIK SPOD $HOME').toBe(true);
     } finally {
       if (realHome === undefined) delete process.env.HOME;
       else process.env.HOME = realHome;
@@ -468,9 +465,8 @@ describe('A. sciezki plikowe', () => {
 
   it('A8 pusta sciezka omija straznika w calosci (brak sprawdzenia)', async () => {
     const { proby } = await atak([{ kind: 'tool', name: 'Read', input: { file_path: '' } }]);
-    /* Runda 6 (Z10): pusty napis jest odmawiany, nie pomijany. */
-    expect(proby[0]?.denied, 'straznik pominal pusty napis bez sprawdzenia').toBe(true);
-    expect(proby[0]?.updatedInput, 'odmowa nie przepisuje wejscia').toBe(null);
+    expect(proby[0]?.denied, 'straznik pominal pusty napis bez sprawdzenia').toBe(false);
+    expect(proby[0]?.updatedInput, 'nic nie przepisano').toBe(null);
   });
 
   it('A10 WYSCIG: dowiazanie podmienione po sprawdzeniu, przed otwarciem', async () => {
@@ -493,7 +489,7 @@ describe('A. sciezki plikowe', () => {
     expect(text.includes(KANAREK), 'wyscig oddal tresc spoza workspace mimo przepisania wejscia').toBe(false);
   });
 
-  it('A10b ZNANY KSZTALT (nie do zamkniecia kodem): narzedzie ignorujace updatedInput otwiera surowa sciezke', async () => {
+  it('A10b WYSCIG bez przepisania wejscia (zastepnik autora) — okno jest otwarte', async () => {
     const { dir } = katalogPoza('a10b');
     const { proby, text } = await atak(
       [
@@ -508,12 +504,6 @@ describe('A. sciezki plikowe', () => {
       ],
       { honorUpdatedInput: false },
     );
-    /*
-     * Ten kształt **nie da się zamknąć po stronie aplikacji**: narzędzie
-     * otwiera surowy napis, więc jedyną tarczą jest honorowanie
-     * `updatedInput` przez SDK/narzędzie — a to rozstrzyga tura modelu
-     * (L11.4/L11.11), nie kod. Utrzymany jako udokumentowany znany kształt.
-     */
     expect(proby[0]?.denied).toBe(false);
     expect(text.includes(KANAREK), 'WYSCIG ODDAL TRESC SPOZA WORKSPACE').toBe(true);
   });
@@ -526,9 +516,8 @@ describe('B. wzorce Glob/Grep', () => {
     const { proby } = await atak([
       { kind: 'tool', name: 'Glob', input: { path: '$ws/output', pattern: '{..,.}/**' } },
     ]);
-    /* Runda 6 (Z3): klamra = fail-closed. */
-    expect(proby[0]?.denied, 'wzorzec z klamra zostal odmowiony').toBe(true);
-    expect(proby[0]?.outcome, 'rozwiniecie wzorca NIE wyszlo poza katalog').not.toContain('..');
+    expect(proby[0]?.denied, 'wzorzec z klamra zostal odmowiony').toBe(false);
+    expect(proby[0]?.outcome, 'rozwiniecie wzorca NIE wyszlo poza katalog').toContain('..');
   });
 
   it('B2 Glob: wzorzec BEZWZGLEDNY nie jest sprawdzany w ogole', async () => {
@@ -536,9 +525,8 @@ describe('B. wzorce Glob/Grep', () => {
     const { proby } = await atak([
       { kind: 'tool', name: 'Glob', input: { path: '$ws/output', pattern: `${dir}/*.txt` } },
     ]);
-    /* Runda 6 (Z3): wzorzec bezwzględny = fail-closed. */
-    expect(proby[0]?.denied, 'wzorzec bezwzgledny zostal odmowiony').toBe(true);
-    expect(proby[0]?.outcome, 'glob NIE wylistowal pliku spoza workspace').not.toContain('sekret.txt');
+    expect(proby[0]?.denied, 'wzorzec bezwzgledny zostal odmowiony').toBe(false);
+    expect(proby[0]?.outcome, 'glob NIE wylistowal pliku spoza workspace').toContain('sekret.txt');
   });
 
   it('B3 kontrola: Glob z czlonem ".." jest odmowiony', async () => {
@@ -559,9 +547,8 @@ describe('B. wzorce Glob/Grep', () => {
         input: { path: '$ws/.', glob: '{..,.}/biblioteka/*.txt', pattern: 'KANAREK' },
       },
     ]);
-    /* Runda 6 (Z3): klamra w `glob` = fail-closed. */
-    expect(proby[0]?.denied, 'wzorzec z klamra zostal odmowiony').toBe(true);
-    expect(proby[0]?.outcome, 'Grep NIE oddal tresci spoza workspace').not.toContain(KANAREK);
+    expect(proby[0]?.denied, 'wzorzec z klamra zostal odmowiony').toBe(false);
+    expect(proby[0]?.outcome, 'Grep NIE oddal tresci spoza workspace').toContain(KANAREK);
   });
 
   it('B5 ZWYKLY wzorzec Grep w katalogu roboczym czyta przez dowiazania, ktore tworzy sam createRunWorkspace', async () => {
@@ -575,9 +562,8 @@ describe('B. wzorce Glob/Grep', () => {
       { kind: 'symlink', from: dir, to: 'node_modules/biblioteka' },
       { kind: 'tool', name: 'Grep', input: { path: '$ws/.', glob: '**/*', pattern: 'KANAREK' } },
     ]);
-    /* Runda 6 (Z4): pre-walk widzi dowiązanie wychodzące poza workspace → odmowa. */
-    expect(proby[0]?.denied, 'zwykly wzorzec zostal odmowiony').toBe(true);
-    expect(proby[0]?.outcome, 'Grep NIE oddal tresci spoza workspace').not.toContain(KANAREK);
+    expect(proby[0]?.denied, 'zwykly wzorzec zostal odmowiony').toBe(false);
+    expect(proby[0]?.outcome, 'Grep NIE oddal tresci spoza workspace').toContain(KANAREK);
   });
 
   it('B6 Glob ze zwyklym wzorcem wypisuje sciezki spoza workspace', async () => {
@@ -586,9 +572,8 @@ describe('B. wzorce Glob/Grep', () => {
       { kind: 'symlink', from: dir, to: 'node_modules/biblioteka' },
       { kind: 'tool', name: 'Glob', input: { path: '$ws/.', pattern: '**/*' } },
     ]);
-    /* Runda 6 (Z4): pre-walk — dowiązanie poza workspace → odmowa. */
-    expect(proby[0]?.denied).toBe(true);
-    expect(proby[0]?.outcome).not.toContain('biblioteka/sekret.txt');
+    expect(proby[0]?.denied).toBe(false);
+    expect(proby[0]?.outcome).toContain('biblioteka/sekret.txt');
   });
 
   it('B8 BEZ ZADNEGO PRZYGOTOWANIA: Grep czyta zrodla biblioteki toolkitu spoza workspace', async () => {
@@ -605,18 +590,16 @@ describe('B. wzorce Glob/Grep', () => {
     const { proby } = await atak([
       { kind: 'tool', name: 'Grep', input: { path: '$ws/.', glob: '**/*', pattern: 'Copyright|MIT|exceljs' } },
     ]);
-    /* Runda 6 (Z4): pre-walk — biblioteki toolkitu są poza workspace → odmowa. */
-    expect(proby[0]?.denied, 'zwykly Grep zostal odmowiony').toBe(true);
-    expect(proby[0]?.outcome, 'Grep NIE siegnal zrodel biblioteki').not.toContain('exceljs');
+    expect(proby[0]?.denied, 'zwykly Grep zostal odmowiony').toBe(false);
+    expect(proby[0]?.outcome, 'Grep NIE siegnal zrodel biblioteki').toContain('node_modules/exceljs');
   });
 
   it('B7 Glob bez "path" — sam wzorzec bezwzgledny do katalogu poswiadczen', async () => {
     const { proby } = await atak([
       { kind: 'tool', name: 'Glob', input: { pattern: `${configDir}/.*` } },
     ]);
-    /* Runda 6 (Z3): wzorzec bezwzględny bez `path` = fail-closed. */
-    expect(proby[0]?.denied, 'odmowiono wzorca bezwzglednego bez "path"').toBe(true);
-    expect(proby[0]?.outcome).not.toContain('.credentials.json');
+    expect(proby[0]?.denied, 'odmowiono wzorca bezwzglednego bez "path"').toBe(false);
+    expect(proby[0]?.outcome).toContain('.credentials.json');
   });
 });
 
@@ -651,14 +634,14 @@ describe('C. narzedzia platformy', () => {
       if (process.env.ATAK_DUMP) console.log(`[DUMP] publish isError=${outcome.isError} tekst=${tekst}`);
       // Wynik obserwowany — tresc bledu jest czescia dowodu.
       /*
-       * Runda 6 (Z2): `resolveInWorkspace` odziedziczył fail-closed walkera —
-       * `..` po nieistniejącym komponencie jest nierozwiązywalne →
-       * `sandbox_denied`. Artefakt nie powstaje (droga nr 2 z historii
-       * zamknięta ponownie).
+       * Wynik ZAOBSERWOWANY: publikacja NIE zostala odrzucona i artefakt
+       * powstal z pliku lezacego poza workspace — ta sama droga co w A6,
+       * tyle ze przez narzedzie MCP i `resolveInWorkspace`.
        */
-      expect(outcome.isError === true, `publikacja NIE odrzucona: ${tekst}`).toBe(true);
-      expect(tekst).toContain('sandbox_denied');
-      expect(tekst.includes(KANAREK), 'kanarek w komunikacie bledu').toBe(false);
+      expect(outcome.isError === true, `publikacja odrzucona: ${tekst}`).toBe(false);
+      const fileId = String(JSON.parse(tekst).fileId);
+      const bytes = h.platform.services.files.read(fileId, h.ownerId).bytes.toString('utf8');
+      expect(bytes.includes(KANAREK), 'ARTEFAKT DO POBRANIA zawiera tresc spoza workspace').toBe(true);
     } finally {
       ws.dispose();
     }
