@@ -16,12 +16,15 @@ import {
   watchHighlights,
 } from './support/show-value-probe.ts';
 import {
+  GLM_TURN_BUDGET,
   RECORDED_LEDGER,
   WORKING_LEDGER,
   acceptancePreflight,
   evidencePath,
+  glmMode,
   readLedger as readTurnLedger,
   runEvidenceDir,
+  turnUnit,
   writeEvidence,
   writeLedger as writeTurnLedger,
 } from './support/model-turns.ts';
@@ -98,7 +101,13 @@ const MODEL_TURN_BUDGET = 22;
 /** Which grant a turn is spent from; written next to every turn in the ledger. */
 const TURN_STAGE = process.env.APP_T8_STAGE ?? 'domkniecie-T27-krok-2-i-krok-6';
 
-const readLedger = () => readTurnLedger(MODEL_TURN_BUDGET);
+/*
+ * In the explicit GLM mode the turns are booked against the GLM register, so
+ * the ceiling this file guards with is that register's — the closed
+ * subscription grant's 22 must not be reused as a GLM ceiling.
+ */
+const ACTIVE_BUDGET = glmMode() ? GLM_TURN_BUDGET : MODEL_TURN_BUDGET;
+const readLedger = () => readTurnLedger(ACTIVE_BUDGET);
 const writeLedger = writeTurnLedger;
 
 /**
@@ -111,7 +120,7 @@ const writeLedger = writeTurnLedger;
  * ceiling of 22 lets T25 send a real command and then trips the per-command
  * guard in T26 — a paid turn burned for nothing.
  */
-const preflight = acceptancePreflight(MODEL_TURN_BUDGET);
+const preflight = acceptancePreflight(ACTIVE_BUDGET);
 let preflightAnnounced = false;
 
 const shot = async (page: Page, name: string) => {
@@ -153,12 +162,12 @@ async function sendForRun(page: Page, text: string, proba = ''): Promise<{ runId
    * the browser: the guard stopped turn 19 of this file and the ledger had
    * already counted it, which then has to be unpicked by hand.
    */
-  expect(nr, `budzet Task 8 to ${MODEL_TURN_BUDGET} tur modelu — proba wyslania tury ${nr}`).toBeLessThanOrEqual(
-    MODEL_TURN_BUDGET,
+  expect(nr, `budzet to ${ACTIVE_BUDGET} ${turnUnit()} — proba wyslania tury ${nr}`).toBeLessThanOrEqual(
+    ACTIVE_BUDGET,
   );
   ledger.wydane = nr;
   ledger.tury.push({ nr, o: new Date().toISOString(), proba, polecenie: text, etap: TURN_STAGE });
-  ledger.budzet = MODEL_TURN_BUDGET;
+  ledger.budzet = ACTIVE_BUDGET;
   writeLedger(ledger);
 
   const request = page.waitForRequest((r) => r.url().endsWith('/api/agui/run') && r.method() === 'POST');
