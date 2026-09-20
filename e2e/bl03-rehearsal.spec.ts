@@ -1,13 +1,15 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { expect, test } from './support/fixtures.ts';
 import { ScriptedInstance } from './support/scripted.ts';
 import {
   Backend,
   callsOf,
+  customEvents,
   descendants,
   expectCardPointsAtRecord,
+  findFormulaCellXml,
   openApp,
   settled,
   settledDeciding,
@@ -18,6 +20,7 @@ import {
   working,
   type CanvasCard,
 } from './support/bl03-checks.ts';
+import { readZipEntry, writeZipWith } from '../tests/support/zip.ts';
 import { type Page } from '@playwright/test';
 
 /**
@@ -545,6 +548,179 @@ test.describe('proba generalna prob modelowych BL-03 (bez modelu)', () => {
     } finally {
       rmSync(sekretDir, { recursive: true, force: true });
     }
+  });
+
+  /**
+   * Blizniak T15 (grupy D+E) — caly przeplyw jednej rozmowy na stand-inie:
+   * blad narzedzia → Stop → sygnal + restart → wznowienie. Krok z chirurgia
+   * transkryptu jest na stand-inie tylko notowany (skryptowany adapter nie
+   * pisze transkryptow CLI na dysk), wiec werdykt L7.13 nalezy do tury;
+   * reszta przeplywu jest asertowana.
+   */
+  test('T15 (D+E): blad, Stop, sygnal i wznowienie przebiegaja na stand-inie', async ({ page }) => {
+    await scripted.start('bl03-lifecycle');
+    await openApp(page, BASE);
+    const backend = new Backend(page, BASE);
+
+    /* --- tura 1: blad narzedzia --- */
+    const blad = await send(page, 'PROBA-BLAD-NARZEDZIA: wywolaj canvas_add_card z komponentem nie.istnieje.');
+    expect(await settled(page, blad.runId)).toBe('succeeded');
+    const bladCalls = callsOf(await backend.runEvents(blad.runId), 'canvas_add_card');
+    expect(bladCalls.length, 'brak proby canvas_add_card').toBeGreaterThan(0);
+    expect(bladCalls.some((c) => c.isError), 'blad narzedzia nie jest widoczny w strumieniu').toBe(true);
+
+    /* --- tura 2: Stop w trakcie pracy potomka --- */
+    const serverPid = scripted.pid!;
+    const before = descendants(serverPid);
+    const stopRun = await send(page, 'Uruchom cos dlugiego w powloce.');
+    const stan = await working(page, stopRun.runId);
+    expect(stan.inFlight, 'wykonanie nie zdazylo ruszyc — Stop niczego nie sprawdzi').toBe(true);
+    const during = descendants(serverPid);
+    const started = during.filter((d) => !before.some((b) => b.pid === d.pid));
+    expect(started.length, 'brak procesow w trakcie').toBeGreaterThan(0);
+    await page.getByTestId('run-stop').click();
+    await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', /cancelled|failed/, {
+      timeout: 120_000,
+    });
+    await expect.poll(() => stillRunning(started).length, { timeout: 120_000 }).toBe(0);
+
+    /* --- tura 3: sygnal w trakcie, restart, trwalosc --- */
+    const beforeSig = descendants(scripted.pid!);
+    const sigRun = await send(page, 'Uruchom cos dlugiego w powloce.');
+    const stanSig = await working(page, sigRun.runId);
+    expect(stanSig.inFlight).toBe(true);
+    const duringSig = descendants(scripted.pid!);
+    const startedSig = duringSig.filter((d) => !beforeSig.some((b) => b.pid === d.pid));
+    expect(startedSig.length).toBeGreaterThan(0);
+    const outcome = await scripted.stopWith('SIGTERM');
+    expect(outcome.exited).toBe(true);
+    await expect.poll(() => stillRunning(startedSig).length, { timeout: 120_000 }).toBe(0);
+
+    await scripted.start('bl03-lifecycle');
+    const convId = new URL(page.url()).searchParams.get('c')!;
+    await openApp(page, BASE);
+    await page.goto(`${BASE}/?c=${convId}`);
+    const runs = await backend.runs(convId);
+    const interrupted = runs.find((r) => r.id === sigRun.runId)!;
+    expect(interrupted, 'uruchomienie nie przezylo restartu').toBeTruthy();
+    expect(['cancelled', 'failed']).toContain(interrupted.status);
+
+    /* --- tura 4: wznowienie (na stand-inie bez chirurgii transkryptu) --- */
+    const sessionBefore = runs.find((r) => r.claudeSessionId)?.claudeSessionId ?? null;
+    const wiadomosciPrzed = (await backend.messages(convId)).map((m) => m.id);
+    const czwarta = await send(page, 'PROBA-DRUGA-TURA: jaki kod zapamietales?');
+    expect(await settled(page, czwarta.runId)).toBe('succeeded');
+    const events4 = await backend.runEvents(czwarta.runId);
+    const wiazanie = customEvents(events4).filter((n) => n.includes('session_bound'));
+    expect(wiazanie.length, 'brak zdarzenia wiazania sesji przy wznowieniu').toBeGreaterThan(0);
+    const wiadomosciPo = (await backend.messages(convId)).map((m) => m.id);
+    expect(wiadomosciPo.length).toBeGreaterThanOrEqual(wiadomosciPrzed.length);
+    expect(new Set(wiadomosciPo).size).toBe(wiadomosciPo.length);
+    void sessionBefore;
+  });
+
+  /**
+   * Blizniak T16 (F2) — nieistniejaca sprawa przez PRAWDZIWE narzedzie
+   * (prawdziwy handler, prawdziwy not_found) i arkusz z formula zbudowany
+   * PRAWDZIWYM kodem w PRAWDZIWYM workspace. Asertuje tez, ze helper komorki
+   * A4 potrafi oblac: skoroszyt z zapisana wartoscia musi zostac posmiaty.
+   */
+  test('T16 (F2): not_found przez narzedzie i arkusz bez wyniku przeliczenia', async ({ page }) => {
+    await scripted.start('bl03-t16');
+    await openApp(page, BASE);
+    const backend = new Backend(page, BASE);
+
+    const proba = await send(page, 'PROBA-T16: sprawy i arkusz.');
+    expect(await settled(page, proba.runId)).toBe('succeeded');
+
+    const events = await backend.runEvents(proba.runId);
+    const calls = toolCalls(events);
+    const getCase = calls.filter((c) => c.name.replace(/^mcp__app__/, '') === 'procurement_get_case');
+    expect(getCase.length, 'brak wywolan get_case').toBeGreaterThanOrEqual(2);
+    const fikcyjna = getCase.find((c) => JSON.stringify(c.args).includes('L611-nie-ma-takiej-sprawy'));
+    expect(fikcyjna, 'brak proby nieistniejacej sprawy').toBeTruthy();
+    expect(fikcyjna!.isError, 'nieistniejaca sprawa nie zostala odrzucona').toBe(true);
+    expect(String(fikcyjna!.rawResult)).toContain('nie istnieje');
+    const rzeczywista = getCase.find((c) => !c.isError);
+    expect(rzeczywista, 'brak udanego odczytu istniejacej sprawy').toBeTruthy();
+
+    /*
+     * Plik zbudowany przez workspaceScript i opublikowany narzedziem w trakcie
+     * wykonania — workspace znika z koncem wykonania, artefakt zostaje.
+     */
+    const lista = await backend.json<{ artifacts: Array<{ id: string; title: string }> }>('/api/artifacts');
+    const artykul = lista.artifacts.find((a) => a.title === 'Formula T16');
+    expect(artykul, `brak opublikowanego artefaktu: ${JSON.stringify(lista.artifacts.map((a) => a.title))}`).toBeTruthy();
+    const meta = await backend.json<{ fileId: string }>(`/api/artifacts/${artykul!.id}`);
+    expect(meta.fileId, 'artefakt nie niesie fileId wersji').toBeTruthy();
+    /*
+     * Bajty z magazynu plikow na dysku (`dataDir/files/<fileId><ext>`), bo
+     * endpoint /content doklada podwojny Content-Length, ktorego requester
+     * testowy nie przyjmuje. Serwer jest lokalny dla testu — to odczyt tego
+     * samego, co serwuje przegladarce.
+     */
+    const magazyn = resolve(scripted.config.dataDir, 'files');
+    const nazwa = readdirSync(magazyn).find((f: string) => f.startsWith(meta.fileId));
+    expect(nazwa, `pliku ${meta.fileId} nie ma w magazynie`).toBeTruthy();
+    const bajty = readFileSync(resolve(magazyn, nazwa!));
+    const komorka = findFormulaCellXml(bajty);
+    expect(komorka.formula, `komorka A4 bez formuly: ${JSON.stringify(komorka)}`).toBeTruthy();
+    expect(komorka.cachedValue, `komorka A4 z zapisana wartoscia: ${JSON.stringify(komorka)}`).toBeNull();
+
+    /*
+     * Kontrola przeciwna helpera, na PRAWDZIWYCH bajtach: ten sam arkusz
+     * z doklejona zapisana wartoscia musi zostac rozpoznany — helper, ktory
+     * widzi jedno i to samo w kazdym pliku, nie potrafi oblac.
+     */
+    const czesc = readZipEntry(bajty, 'xl/worksheets/sheet1.xml').toString('utf8');
+    const winnyXml = czesc.replace(
+      /(<c r="A4">)(.*?)(<\/c>)/s,
+      '$1$2<v>66</v>$3',
+    );
+    expect(winnyXml, 'wstrzykniecie wartosci nie zmienilo arkusza').not.toBe(czesc);
+    const zWinna = writeZipWith(bajty, { 'xl/worksheets/sheet1.xml': winnyXml });
+    const komorkaWinna = findFormulaCellXml(zWinna);
+    expect(komorkaWinna.cachedValue, 'helper nie widzi zapisanej wartosci — nie potrafi oblac').toBe('66');
+  });
+
+  /**
+   * Blizniak T17 (G2) — kolejnosc bramek na stand-inie: Write i Read
+   * (pre-zatwierdzone) bez zadnego pytania, Bash przez prawdziwa bramke,
+   * odpowiedz Odmowa i zero skutku.
+   */
+  test('T17 (G2): Write i Read bez pytania, Bash przez bramke i odmowiony', async ({ page }) => {
+    await scripted.start('bl03-t17');
+    await openApp(page, BASE);
+
+    const proba = await send(page, 'PROBA-T17: trzy operacje.');
+    const outcome = await settledDeciding(page, proba.runId, () => 'Odmowa');
+    expect(await page.getByTestId('run-state').getAttribute('data-phase')).toMatch(/succeeded|failed/);
+
+    const backend = new Backend(page, BASE);
+    const events = await backend.runEvents(proba.runId);
+    const calls = toolCalls(events);
+    const wpisy = calls.filter((c) => c.name.replace(/^mcp__app__/, '') === 'Write');
+    const odczyty = calls.filter((c) => c.name.replace(/^mcp__app__/, '') === 'Read');
+    expect(wpisy.length, 'brak Write').toBeGreaterThan(0);
+    expect(odczyty.length, 'brak Read').toBeGreaterThan(0);
+    for (const c of [...wpisy, ...odczyty]) {
+      expect(c.isError, `${c.name} zakonczyl sie bledem: ${String(c.rawResult).slice(0, 200)}`).toBe(false);
+    }
+    /*
+     * Ograniczenie stand-inu, zapisane wprost: odrzucone `ask` nie zostawia kroku
+     * narzedzia w strumieniu — realny SDK oglosza wywolanie zanim bramka odpowie
+     * (tura 16 pokazala odrzuconego Basha w narzedziach przebiegu). Asertowanie
+     * kroku Bash nalezy do tury platnej; stand-in asertuje pytanie bramki.
+     */
+
+    const pytania = events.filter((e) => e.name === 'CUSTOM' && e.payload?.name === 'platform.permission_request');
+    const narzedziePytania = (e: { payload?: unknown }) =>
+      String((e.payload as { value?: { toolName?: unknown } } | null)?.value?.toolName ?? '');
+    const pytaniaOFile = pytania.filter((e) => /^(Write|Read|Edit|Glob|Grep)$/.test(narzedziePytania(e)));
+    const pytaniaOBash = pytania.filter((e) => narzedziePytania(e) === 'Bash');
+    expect(pytaniaOFile.length, 'bramka pytala o narzedzia plikowe').toBe(0);
+    expect(pytaniaOBash.length, 'bramka nie pytala o powloke').toBeGreaterThan(0);
+    expect(outcome.decisions.length, 'decyzje rozjechaly sie z pytaniami').toBe(pytania.length);
   });
 
   test('D: niezapisany szkic trafia do kontekstu jako szkic, bez wartosci', async ({ page }) => {
