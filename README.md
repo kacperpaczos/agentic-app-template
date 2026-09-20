@@ -157,7 +157,7 @@ Pełny opis architektury i kontraktów: [`docs/ARCHITECTURE.md`](docs/ARCHITECTU
 | Czat i dynamiczne widoki | OpenUI Agent Interface, OpenUI Lang + Renderer | gotowy interfejs rozmów zamiast własnego; kompozycje tylko z zarejestrowanego katalogu komponentów |
 | Komunikacja z agentem | AG-UI | jeden strumień zdarzeń dla tekstu, narzędzi, błędów i zgód |
 | Backend | Node.js, Hono | jeden język z frontendem, długotrwały proces odpowiedni dla sesji agenta i strumieni |
-| Agent | Mastra + Claude Agent SDK | prawdziwa pętla agenta Claude z narzędziami, sesjami i sandboxem; wyłącznie na subskrypcji, bez klucza API |
+| Agent | Mastra + Claude Agent SDK | prawdziwa pętla agenta Claude z narzędziami, sesjami i sandboxem; domyślnie subskrypcja Claude, jawnie tryb GLM/Z.AI (`APP_MODEL_PROVIDER=glm`); bez cichego klucza API |
 | Narzędzia agenta | MCP, Zod | typowane operacje backendu ze sprawdzanymi schematami |
 | Dane | SQLite, Drizzle | lokalna baza bez osobnego serwera, z migracjami |
 | Testy | Vitest, Playwright | kontrakty i logika bez modelu; zachowanie w przeglądarce na buildzie produkcyjnym |
@@ -171,7 +171,8 @@ Pełny opis architektury i kontraktów: [`docs/ARCHITECTURE.md`](docs/ARCHITECTU
   od mechanizmów systemu, a inne systemy nie były testowane.
 - **Konto Claude z subskrypcją**, zalogowane lokalnie w CLI `claude` (polecenie `/login`). Aplikacja
   nie używa klucza API Anthropic. Bez logowania wszystko poza agentem działa — canvas, dane, pliki,
-  rozmowy — a polecenia do agenta kończą się czytelnym błędem.
+  rozmowy — a polecenia do agenta kończą się czytelnym błędem. Alternatywą jest **jawny tryb GLM**
+  (`APP_MODEL_PROVIDER=glm`, opis niżej), w którym subskrypcja Claude nie jest używana ani czytana.
 - Do testów przeglądarkowych: Chromium dla Playwright (`pnpm exec playwright install chromium`).
 
 ### Pierwszy start
@@ -215,7 +216,8 @@ Zanim to zrobisz, wykonaj kopię i próbę migracji na kopii:
 | `PORT` | `8791` | port backendu |
 | `APP_DATA_DIR` | `<repo>/data` | baza, pliki i katalogi robocze agenta |
 | `APP_ALLOWED_ORIGINS` | adresy `localhost` i `127.0.0.1` na portach 5173 i 8791 | dozwolone originy, po przecinku |
-| `APP_MODEL` | `claude-sonnet-4-5` | model agenta |
+| `APP_MODEL` | `claude-sonnet-4-5` | model agenta; w trybie `glm` **wymagany** |
+| `APP_MODEL_PROVIDER` | `subscription` | dostawca modelu: `subscription` (subskrypcja Claude, zachowanie domyślne) albo `glm` (jawny tryb GLM/Z.AI); inna wartość = odmowa startu |
 | `APP_RUN_TIMEOUT_MS` | `300000` | twardy limit czasu jednego uruchomienia agenta (patrz „Co kończy wykonanie bez Stop”) |
 | `APP_CONSENT_TIMEOUT_MS` | `120000` | ile prośba o zgodę czeka na decyzję, zanim zostanie **odrzucona** |
 | `APP_MAX_UPLOAD_BYTES` | `8388608` | maksymalny rozmiar pliku |
@@ -246,6 +248,39 @@ Co jest sprawdzalne i sprawdzane:
 - katalog poświadczeń jest niedostępny dla agenta: blokują go ustawienia sandboxa oraz odmowa w hooku
   `PreToolUse` i w bramce narzędzi, więc `Read`, `Glob` czy `Grep` wycelowane w ten katalog kończą się
   odmową widoczną w czacie.
+
+### Tryb GLM (jawny provider modelu)
+
+Decyzja właściciela 2026-09-20: **Claude Code / Claude Agent SDK pozostaje harnesssem** (sesja,
+pętla wykonania, narzędzia, zgody, sandbox), a providerem modelu może być GLM/Z.AI przez endpoint
+kompatybilny z Anthropic. Prawdziwa subskrypcja Claude i OAuth Anthropic są w tym trybie **nieużywane
+i nieczytane**.
+
+```bash
+APP_MODEL_PROVIDER=glm \
+APP_MODEL=<model GLM> \
+ANTHROPIC_BASE_URL=<endpoint GLM kompatybilny z Anthropic> \
+ANTHROPIC_AUTH_TOKEN=<token Z.AI, wyłącznie w środowisku procesu> \
+CLAUDE_CONFIG_DIR=<pusty, izolowany katalog> \
+pnpm start
+```
+
+Zasady trybu, których nie zmieniasz:
+
+- **Fail-closed.** Brak którejkolwiek z wymaganych zmiennych (`APP_MODEL`, `ANTHROPIC_BASE_URL`,
+  `ANTHROPIC_AUTH_TOKEN`, izolowanego `CLAUDE_CONFIG_DIR`) albo nieznana wartość
+  `APP_MODEL_PROVIDER` kończą się odmową startu z listą braków — nigdy cichym fallbackiem.
+- **Izolacja od OAuth użytkownika.** `CLAUDE_CONFIG_DIR` wskazujące domyślny `~/.claude` jest
+  odrzucane (także po rozwiązaniu dowiązań). Aplikacja w tym trybie w ogóle **nie otwiera** pliku
+  poświadczeń — ani na `stat`, ani na odczyt (`tests/provider-mode.test.ts` ma wartownika).
+- **Polityka środowiska procesu agenta.** Do procesu dziecka przechodzą wyłącznie
+  `ANTHROPIC_BASE_URL` i `ANTHROPIC_AUTH_TOKEN`. `ANTHROPIC_API_KEY`, zmienne Bedrock i Vertex oraz
+  `ANTHROPIC_MODEL` są usuwane **bezwarunkowo w obu trybach**; model przychodzi z konfiguracji
+  (`sdkOptions.model`), nie ze środowiska.
+- **Zero sekretów w zapisie.** Token nigdy nie trafia do kodu, testów, logów, dowodów ani commitów;
+  diagnostyka pokazuje endpoint wyłącznie jako ORIGIN.
+- **Domyślny tryb bez zmian.** Bez `APP_MODEL_PROVIDER` aplikacja działa na subskrypcji dokładnie
+  tak jak wcześniej — `e2e/auth-limits.spec.ts` i regresja uwierzytelnienia pilnują obu trybów.
 
 Testy negatywne dotyczące logowania **nie dotykają logowania użytkownika**: pracują na syntetycznym
 poświadczeniu w katalogu tymczasowym wskazanym przez `CLAUDE_CONFIG_DIR`.

@@ -9,6 +9,7 @@ import {
   type CredentialState,
   type SdkSession,
 } from '@platform/contracts';
+import { modelProviderFromEnv, type ModelProvider } from '../config.ts';
 
 /**
  * Reports how the Claude runtime is authenticated.
@@ -17,6 +18,12 @@ import {
  * separate questions (configured method, local credential metadata, last
  * verified access) and never collapses them, because a credential file that
  * exists is not evidence that signing in works.
+ *
+ * Two configured methods exist since decyzja właściciela 2026-09-20: the
+ * default `subscription` (described below) and the explicit `glm` mode, in
+ * which the OAuth credential is not used and — this module's own rule — not
+ * even opened. Everything below about reading and protecting the credential
+ * file describes the subscription path; the glm path answers from policy alone.
  *
  * **On reading the credential file.** This module does parse
  * `~/.claude/.credentials.json` — or `$CLAUDE_CONFIG_DIR/.credentials.json`,
@@ -291,10 +298,36 @@ export function credentialFilePath(env: NodeJS.ProcessEnv = process.env): string
 }
 
 export function probeAuth(env: NodeJS.ProcessEnv = process.env, now = Date.now()): AuthStatus {
+  /*
+   * The explicit GLM mode (decyzja właściciela 2026-09-20) answers without
+   * touching the OAuth credential at all — no `stat`, no `open`. The whole
+   * point of the mode is that the subscription login is neither used nor
+   * needed, so reporting its file would mean reading it, and reading it is the
+   * one thing this mode exists not to do. The credential dimension is
+   * therefore reported as absent-shaped and the interface labels it
+   * irrelevant for the mode; `apiKeyPolicy` names the rule that actually
+   * holds here (`glm_explicit`).
+   *
+   * `CLAUDE_CONFIG_DIR` pointing at the default `~/.claude` is refused at
+   * start by the configuration, so the guarantee does not depend on this
+   * function's restraint alone.
+   */
+  if (modelProviderFromEnv(env) === 'glm') {
+    return {
+      method: 'glm',
+      credential: { present: false, subscriptionType: null, expiresAt: null, state: 'absent' },
+      access: { ...access },
+      apiKeyDetected: Boolean(env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN),
+      apiKeyPolicy: 'glm_explicit',
+      cliVersion: cliVersion(),
+      sdkSession: { ...sdkSession },
+    };
+  }
+
   const credential = readCredentialMetadata(credentialFilePath(env), now);
 
   return {
-    // The configured method, not the outcome: this build has no API-key path.
+    // The configured method, not the outcome: this build has no silent API-key path.
     method: 'subscription',
     credential,
     access: { ...access },
@@ -310,9 +343,17 @@ export function probeAuth(env: NodeJS.ProcessEnv = process.env, now = Date.now()
  *
  * Two separate jobs:
  *
- * 1. **Subscription only.** Every variable that could route the run through a
- *    paid API, a gateway, Bedrock or Vertex is removed, so the policy is
- *    enforced rather than assumed.
+ * 1. **Provider policy, enforced rather than assumed.** In the default
+ *    subscription mode every variable that could route the run through a paid
+ *    API, a gateway, Bedrock or Vertex is removed. In the explicit `glm` mode
+ *    exactly two of them pass through — `ANTHROPIC_BASE_URL` and
+ *    `ANTHROPIC_AUTH_TOKEN`, the GLM/Z.AI endpoint and its credential — and
+ *    everything else keeps being removed **unconditionally**:
+ *    `ANTHROPIC_API_KEY`, both cloud base URLs, the Bedrock bearer token, the
+ *    Bedrock/Vertex switches and `ANTHROPIC_MODEL` (the model reaches the SDK
+ *    through `sdkOptions.model` from the configuration, not through the
+ *    environment). Passing two variables is not "less scrubbing"; it is a
+ *    different, named policy — and the scrubbed set is reported either way.
  *
  * 2. **Harness isolation.** If this backend is itself started from inside a
  *    Claude Code session, the child inherits that session's bridge variables
@@ -321,7 +362,8 @@ export function probeAuth(env: NodeJS.ProcessEnv = process.env, now = Date.now()
  *    symptom is that the application's own MCP server is missing while the
  *    outer harness's tools appear in its place. Everything matching
  *    `CLAUDE_CODE_*` is therefore dropped, except `CLAUDE_CONFIG_DIR`, which is
- *    how the SDK finds the subscription credential.
+ *    how the SDK finds its configuration — in the subscription mode the login,
+ *    in the glm mode the operator's isolated directory.
  */
 const PROVIDER_OVERRIDES = new Set([
   'ANTHROPIC_API_KEY',
@@ -335,15 +377,24 @@ const PROVIDER_OVERRIDES = new Set([
   'CLAUDE_CODE_USE_VERTEX',
 ]);
 
+/**
+ * The only provider variables the explicit glm mode lets through — never
+ * `ANTHROPIC_API_KEY`, never a cloud variable, never `ANTHROPIC_MODEL`.
+ */
+const GLM_PASSTHROUGH = new Set(['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN']);
+
 const HARNESS_KEEP = new Set(['CLAUDE_CONFIG_DIR']);
 
 const HARNESS_EXTRA = new Set(['CLAUDECODE', 'CLAUDE_PID', 'CLAUDE_EFFORT', 'AI_AGENT']);
 
-export function subscriptionOnlyEnv(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
+export function subscriptionOnlyEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  provider: ModelProvider = 'subscription',
+): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(env)) {
     if (v === undefined) continue;
-    if (PROVIDER_OVERRIDES.has(k)) continue;
+    if (PROVIDER_OVERRIDES.has(k) && !(provider === 'glm' && GLM_PASSTHROUGH.has(k))) continue;
     if (HARNESS_EXTRA.has(k)) continue;
     if (k.startsWith('CLAUDE_CODE_') && !HARNESS_KEEP.has(k)) continue;
     out[k] = v;
@@ -351,11 +402,20 @@ export function subscriptionOnlyEnv(env: NodeJS.ProcessEnv = process.env): Recor
   return out;
 }
 
-/** Names removed from the child environment; surfaced in diagnostics. */
-export function scrubbedEnvKeys(env: NodeJS.ProcessEnv = process.env): string[] {
+/**
+ * Names removed from the child environment; surfaced in diagnostics.
+ *
+ * Provider-aware for the same reason the scrubbing is: a key the glm mode
+ * deliberately passes is not "scrubbed", and saying so would misdescribe the
+ * policy in force.
+ */
+export function scrubbedEnvKeys(
+  env: NodeJS.ProcessEnv = process.env,
+  provider: ModelProvider = 'subscription',
+): string[] {
   return Object.keys(env).filter(
     (k) =>
-      PROVIDER_OVERRIDES.has(k) ||
+      (PROVIDER_OVERRIDES.has(k) && !(provider === 'glm' && GLM_PASSTHROUGH.has(k))) ||
       HARNESS_EXTRA.has(k) ||
       (k.startsWith('CLAUDE_CODE_') && !HARNESS_KEEP.has(k)),
   );

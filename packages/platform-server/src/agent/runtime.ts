@@ -132,6 +132,16 @@ export class AgentRuntime {
    * it are marked as simulations wherever their results are reported.
    */
   readonly #modelAgent: ModelAgentLike | null;
+  /**
+   * The environment of the process this runtime serves.
+   *
+   * The child environment is built from *this*, not from whatever
+   * `process.env` happens to be at call time: the platform is configured from
+   * one env (tests pass their own), and the provider policy applied to the
+   * child must be the policy of the configuration that was validated — not of
+   * a shell variable that changed afterwards.
+   */
+  readonly #env: NodeJS.ProcessEnv;
   readonly #pendingPermissions = new Map<string, PendingPermission>();
   /** UI commands emitted and not yet acknowledged by a browser. */
   readonly #pendingUiCommands = new Map<string, (result: UiCommandResult) => void>();
@@ -142,8 +152,10 @@ export class AgentRuntime {
   constructor(
     private readonly services: PlatformServices,
     modelAgent: ModelAgentLike | null = null,
+    env: NodeJS.ProcessEnv = process.env,
   ) {
     this.#modelAgent = modelAgent;
+    this.#env = env;
     // Built once with a throw-away context purely to enumerate the tool names
     // that go into `allowedTools`; the servers actually used are per-run.
     const probe = buildMcpServer({
@@ -160,11 +172,17 @@ export class AgentRuntime {
       name: 'Agent aplikacji',
       description: 'Agent pracujacy na danych aplikacji przez narzedzia MCP.',
       sdkOptions: {
+        // The model comes from the configuration: the subscription default, or
+        // APP_MODEL in the explicit glm mode. Never from ANTHROPIC_MODEL,
+        // which the environment policy removes in both modes.
         model: services.config.model,
         // SDK isolation: the developer's own ~/.claude settings, MCP servers and
         // CLAUDE.md files must not leak into the application's agent.
         settingSources: [],
-        env: subscriptionOnlyEnv(),
+        // Provider-aware scrubbing: in the glm mode exactly the two endpoint
+        // variables pass; every paid-API and cloud variable is removed in
+        // both modes. See `subscriptionOnlyEnv`.
+        env: subscriptionOnlyEnv(this.#env, services.config.modelProvider),
         // Required for incremental text. `@mastra/claude`'s `getTextDelta` reads
         // only `stream_event` messages; without this flag the SDK sends whole
         // assistant messages and the adapter emits the entire answer as a single

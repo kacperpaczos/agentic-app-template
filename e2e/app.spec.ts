@@ -31,7 +31,9 @@ test.describe('powloka aplikacji', () => {
     await expect(page.getByRole('navigation', { name: 'Nawigacja glowna' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Rozmowa z agentem' })).toBeVisible();
     await expect(page.getByTestId('statusbar')).toBeVisible();
-    await expect(page.getByTestId('statusbar')).toContainText('Claude:');
+    // Subscription mode names "Claude"; the explicit GLM mode names the agent
+    // and its harness instead. Both are the one line about auth.
+    await expect(page.getByTestId('statusbar')).toContainText(/Claude:|Agent \(Claude Code\):/);
   });
 
   test('hamburger zwija i rozwija menu', async ({ page }) => {
@@ -75,6 +77,38 @@ test.describe('powloka aplikacji', () => {
     expect(body).not.toContain('accesstoken');
     expect(body).not.toContain('refreshtoken');
     await expect(page.getByText('wylacznie subskrypcja', { exact: false })).toBeVisible();
+  });
+
+  /*
+   * Provider-aware by reading the mode the page itself reports, not by
+   * knowing the environment the run started with. The default run is the
+   * subscription mode and keeps every assertion it ever had; a GLM-mode run
+   * (when somebody starts one) gets its own honest labels asserted instead —
+   * and must NOT be shown the subscription-only policy line.
+   */
+  test('ustawienia i pasek stanu nazywaja skonfigurowany provider i nie ujawniaja sekretow', async ({
+    page,
+  }) => {
+    await page.goto('/settings');
+    const method = (await page.getByTestId('auth-method').getAttribute('data-method')) ?? 'subscription';
+    const policy = page.getByTestId('auth-policy');
+    await expect(policy).toBeVisible();
+
+    const body = (await page.locator('body').innerText()).toLowerCase();
+    expect(body).not.toContain('sk-ant');
+    expect(body).not.toContain('accesstoken');
+    expect(body).not.toContain('refreshtoken');
+
+    if (method === 'glm') {
+      await expect(page.getByTestId('auth-method')).toContainText(/GLM\/Z\.AI/);
+      await expect(policy).toContainText(/tryb GLM/i);
+      await expect(page.getByTestId('statusbar')).toContainText(/GLM\/Z\.AI/);
+      await expect(page.getByText('wylacznie subskrypcja', { exact: false })).toHaveCount(0);
+    } else {
+      await expect(page.getByTestId('auth-status')).toContainText(/subskrypcja|brak logowania/);
+      await expect(policy).toContainText(/wylacznie subskrypcja/i);
+      await expect(page.getByTestId('statusbar')).toContainText('Claude:');
+    }
   });
 });
 

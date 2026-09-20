@@ -115,13 +115,29 @@ const server = brokenSchemaTrial ? trialServer() : built.server;
 /* In the trial the declared list is the two probe tools, not the application's. */
 const declared = brokenSchemaTrial ? ['zdrowe', 'niekonwertowalne'] : built.tools.map((t) => t.localName);
 
-const auth = probeAuth();
-console.log(
-  `[diag] uwierzytelnienie: ${auth.method} | poswiadczenie=${auth.credential.state}` +
-    `${auth.credential.subscriptionType ? ` (${auth.credential.subscriptionType})` : ''}` +
-    ` | dostep=${auth.access.state}`,
-);
-console.log(`[diag] klucz API w srodowisku: ${auth.apiKeyDetected ? 'wykryty (odrzucany)' : 'brak'}`);
+const auth = probeAuth(process.env);
+if (auth.method === 'glm') {
+  /*
+   * Tryb GLM: endpoint tylko jako ORIGIN (pełny URL może nieść poświadczenie w
+   * query), token nigdy. Poświadczenie OAuth nie jest tu istotne i nie jest
+   * czytane — dlatego wiersz o nim milczy zamiast opisywać plik.
+   */
+  console.log(
+    `[diag] provider modelu: GLM/Z.AI | endpoint: ${platform.config.modelEndpointOrigin} | model: ${platform.config.model}`,
+  );
+  console.log('[diag] subskrypcja Claude: nieuzywana (tryb GLM); poswiadczenie OAuth nie jest czytane');
+  console.log(
+    `[diag] poswiadczenie endpointu w srodowisku: ${auth.apiKeyDetected ? 'wykryte' : 'brak'} | ` +
+      'ANTHROPIC_API_KEY, Bedrock, Vertex: usuwane ze srodowiska agenta',
+  );
+} else {
+  console.log(
+    `[diag] uwierzytelnienie: ${auth.method} | poswiadczenie=${auth.credential.state}` +
+      `${auth.credential.subscriptionType ? ` (${auth.credential.subscriptionType})` : ''}` +
+      ` | dostep=${auth.access.state}`,
+  );
+  console.log(`[diag] klucz API w srodowisku: ${auth.apiKeyDetected ? 'wykryty (odrzucany)' : 'brak'}`);
+}
 console.log(`[diag] zadeklarowanych narzedzi: ${declared.length}${brokenSchemaTrial ? ' (PROBA: serwer z niekonwertowalnym schematem)' : ''}`);
 
 /** An input stream that never yields: the model is never handed a message. */
@@ -140,6 +156,16 @@ const record: Record<string, unknown> = {
     : noMcpIsolationTrial
       ? 'bez strictMcpConfig'
       : 'konfiguracja aplikacji',
+  /* Provider i endpoint jako ORIGIN; wartość tokena nigdy nie trafia do zapisu. */
+  provider:
+    auth.method === 'glm'
+      ? {
+          nazwa: 'GLM/Z.AI',
+          endpoint: platform.config.modelEndpointOrigin,
+          model: platform.config.model,
+          subskrypcjaClaude: 'nieuzywana (tryb GLM)',
+        }
+      : 'subskrypcja Claude (domyslny tryb)',
   zadeklarowane: declared.length,
 };
 
@@ -148,7 +174,8 @@ const q = query({
   options: {
     model: platform.config.model,
     settingSources: [],
-    env: subscriptionOnlyEnv(),
+    /* Ta sama polityka co w runtime: glm przepuszcza wyłącznie BASE_URL + AUTH_TOKEN. */
+    env: subscriptionOnlyEnv(process.env, platform.config.modelProvider),
     mcpServers: { app: server },
     /* The same isolation the runtime applies; see the note in agent/runtime.ts. */
     ...(noMcpIsolationTrial ? {} : { strictMcpConfig: true }),

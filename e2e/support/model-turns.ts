@@ -70,15 +70,17 @@ export function modelSpecsNotice(env: NodeJS.ProcessEnv = process.env): string {
   if (!modelSpecsRequested(env)) {
     return (
       `[e2e] pominieto spece z prawdziwym modelem: ${listed}. ` +
-      `Kosztuja ${MODEL_TURNS_PER_RUN} tur subskrypcji na przebieg — uruchamia sie je swiadomie: pnpm test:e2e:model. ` +
+      `Kosztuja ${MODEL_TURNS_PER_RUN} ${turnUnit(env)} na przebieg — uruchamia sie je swiadomie: pnpm test:e2e:model. ` +
       `Pominieto takze spece pakietu BL-03: ${z11} — druga zgoda, ${Z11_OPT_IN_ENV}=1 (pnpm test:e2e:z11).`
     );
   }
   return z11SpecsRequested(env)
     ? `[e2e] ${MODEL_OPT_IN_ENV}=1 i ${Z11_OPT_IN_ENV}=1 — projekt „model-z11”: ${z11}. ` +
-        `Ten przebieg wyda do ${Z11_TURNS_PLANNED} tur z grantu BL-03 (${Z11_TURN_BUDGET}).`
+        `Ten przebieg wyda do ${Z11_TURNS_PLANNED} ${turnUnit(env)} z grantu ` +
+        (glmMode(env) ? `GLM (${GLM_TURN_BUDGET})` : `BL-03 (${Z11_TURN_BUDGET})`) +
+        '.'
     : `[e2e] ${MODEL_OPT_IN_ENV}=1 — projekt „model”: ${listed}. ` +
-        `Ten przebieg wyda do ${MODEL_TURNS_PER_RUN} tur subskrypcji. ` +
+        `Ten przebieg wyda do ${MODEL_TURNS_PER_RUN} ${turnUnit(env)}. ` +
         `Spece pakietu BL-03 (${z11}) wymagaja dodatkowo ${Z11_OPT_IN_ENV}=1.`;
 }
 
@@ -87,6 +89,41 @@ export function modelSpecsNotice(env: NodeJS.ProcessEnv = process.env): string {
 /* -------------------------------------------------------------------------- */
 
 const REPO_ROOT = resolve(import.meta.dirname, '../..');
+
+/* ----------------------------- provider mode ------------------------------ */
+
+/**
+ * Which provider the run's model turns go to.
+ *
+ * The default is and stays the subscription; `APP_MODEL_PROVIDER=glm` is the
+ * owner's explicit switch (2026-09-20). Every turn counter, budget message and
+ * evidence envelope below reads this **once per helper call**, so a GLM run
+ * books its turns against the GLM grant and describes its own source — the
+ * closed subscription grants are never written to and never quoted as GLM
+ * evidence, and the other way round.
+ */
+export type E2EModelProvider = 'subscription' | 'glm';
+
+export const modelProvider = (env: NodeJS.ProcessEnv = process.env): E2EModelProvider =>
+  env.APP_MODEL_PROVIDER === 'glm' ? 'glm' : 'subscription';
+
+export const glmMode = (env: NodeJS.ProcessEnv = process.env): boolean =>
+  modelProvider(env) === 'glm';
+
+/** How this run's paid units are named in budgets and evidence. */
+export const turnUnit = (env: NodeJS.ProcessEnv = process.env): string =>
+  glmMode(env) ? 'tur GLM' : 'tur subskrypcji';
+
+/** The evidence `zrodlo` sentence: names the provider, never a token value. */
+export const providerZrodlo = (env: NodeJS.ProcessEnv = process.env): string =>
+  glmMode(env)
+    ? 'model GLM/Z.AI przez kompatybilny endpoint Anthropic; Claude Agent SDK jako harness; ' +
+      'subskrypcja Claude nieuzywana; instancja testowa suity przegladarkowej'
+    : 'prawdziwy model (subskrypcja Claude), instancja testowa suity przegladarkowej';
+
+/** The model the run configured, or null when none was set. */
+export const configuredModel = (env: NodeJS.ProcessEnv = process.env): string | null =>
+  env.APP_MODEL ?? null;
 
 /** Where the acceptance evidence of BL-01/BL-02 lives. Its files are committed. */
 export const EVIDENCE_ROOT = resolve(REPO_ROOT, 'docs/evidence/bl01-bl02-2026-09-17');
@@ -142,9 +179,12 @@ export interface TurnLedger {
  *
  * Seeded once from the recorded ledger, because the budget is for the plan and
  * not for one checkout: the grant recorded there is closed, and a counter
- * starting at zero would hand out its turns a second time.
+ * starting at zero would hand out its turns a second time. A GLM-mode run
+ * never sees any of this — its turns live in their own register below, and
+ * the closed subscription grant stays exactly as it was closed.
  */
 export function readLedger(budget: number): TurnLedger {
+  if (glmMode()) return readGlmLedger();
   if (existsSync(WORKING_LEDGER)) return JSON.parse(readFileSync(WORKING_LEDGER, 'utf8')) as TurnLedger;
   if (existsSync(RECORDED_LEDGER)) {
     const recorded = JSON.parse(readFileSync(RECORDED_LEDGER, 'utf8')) as TurnLedger;
@@ -188,22 +228,29 @@ export function budgetPreflight(input: { budget: number; spent: number; needed: 
     ok: false,
     shortfall: needed - left,
     message:
-      `Budzet tur modelu nie pokrywa tego speca: rejestr ma ${spent} z ${budget} tur (zostaje ${left}), ` +
-      `a spec potrzebuje ${needed} — brakuje ${needed - left}. NIC nie zostalo wyslane do modelu i zaden ` +
-      `zapisany dowod nie zostal ruszony. Podniesienie sufitu MODEL_TURN_BUDGET wymaga grantu koordynatora; ` +
-      `licznik roboczy: ${WORKING_LEDGER}.`,
+      `Budzet ${turnUnit()} nie pokrywa tego speca: rejestr ma ${spent} z ${budget} ${turnUnit()} ` +
+      `(zostaje ${left}), a spec potrzebuje ${needed} — brakuje ${needed - left}. NIC nie zostalo ` +
+      'wyslane do modelu i zaden zapisany dowod nie zostal ruszony. Podniesienie sufitu wymaga ' +
+      `grantu koordynatora; licznik roboczy: ${glmMode() ? GLM_WORKING_LEDGER : WORKING_LEDGER}.`,
   };
 }
 
 /** The same question for `bl01-bl02-model.spec.ts`, against the tally on disk. */
 export function acceptancePreflight(budget: number): BudgetPreflight {
-  return budgetPreflight({ budget, spent: readLedger(budget).wydane, needed: ACCEPTANCE_TURNS_NEEDED });
+  const effectiveBudget = glmMode() ? GLM_TURN_BUDGET : budget;
+  return budgetPreflight({
+    budget: effectiveBudget,
+    spent: readLedger(effectiveBudget).wydane,
+    needed: ACCEPTANCE_TURNS_NEEDED,
+  });
 }
 
 /** Writes the tally — to the working copy, and nowhere else. */
 export function writeLedger(ledger: TurnLedger): void {
-  mkdirSync(resolve(WORKING_LEDGER, '..'), { recursive: true });
-  writeFileSync(WORKING_LEDGER, `${JSON.stringify(ledger, null, 2)}\n`);
+  /* W trybie GLM licznik tury trafia do rejestru GLM; rejestry subskrypcji sa nietkniete. */
+  const target = glmMode() ? GLM_WORKING_LEDGER : WORKING_LEDGER;
+  mkdirSync(resolve(target, '..'), { recursive: true });
+  writeFileSync(target, `${JSON.stringify(ledger, null, 2)}\n`);
 }
 
 /**
@@ -230,7 +277,9 @@ export function writeEvidence(name: string, body: Record<string, unknown>): void
          */
         rodzajWykonania: 'rzeczywisty model',
         srodowisko: environment(),
-        zrodlo: 'prawdziwy model (subskrypcja Claude), instancja testowa suity przegladarkowej',
+        /* Provider-aware: a GLM run must never be quotable as Claude evidence. */
+        zrodlo: providerZrodlo(),
+        model: configuredModel(),
         spec: 'e2e/bl01-bl02-model.spec.ts',
         przebieg: RUN_STAMP,
         ...body,
@@ -322,10 +371,28 @@ export const z11SpecsRequested = (env: NodeJS.ProcessEnv = process.env): boolean
 /** This grant's tally, in the working copy (gitignored), starting at zero. */
 export const Z11_WORKING_LEDGER = resolve(REPO_ROOT, '.e2e-model-turns/z11-bl03.json');
 
+/**
+ * The GLM grant: 25 turns, from the coordinator, for GLM-provider trials —
+ * and for nothing else. Same ceiling rule as the subscription grants: the
+ * register on disk carries every turn with the spec that spent it.
+ */
+export const GLM_TURN_BUDGET = 25;
+
+/** This grant's tally, in the working copy (gitignored), starting at zero. */
+export const GLM_WORKING_LEDGER = resolve(REPO_ROOT, '.e2e-model-turns/glm.json');
+
 /** Where this package's evidence lives. Run-stamped; nothing is overwritten. */
 export const Z11_EVIDENCE_ROOT = resolve(REPO_ROOT, 'docs/evidence/z11-bl03');
 
+/**
+ * The BL-03 grant's tally.
+ *
+ * A GLM-mode run reads the **GLM register** here and never the subscription
+ * one: the BL-03 grant describes closed subscription turns, and quoting or
+ * continuing it under GLM would make one ledger tell two stories.
+ */
 export function readZ11Ledger(): TurnLedger {
+  if (glmMode()) return readGlmLedger();
   if (existsSync(Z11_WORKING_LEDGER)) {
     return JSON.parse(readFileSync(Z11_WORKING_LEDGER, 'utf8')) as TurnLedger;
   }
@@ -338,13 +405,33 @@ export function readZ11Ledger(): TurnLedger {
 }
 
 export function writeZ11Ledger(ledger: TurnLedger): void {
-  mkdirSync(resolve(Z11_WORKING_LEDGER, '..'), { recursive: true });
-  writeFileSync(Z11_WORKING_LEDGER, `${JSON.stringify(ledger, null, 2)}\n`);
+  const target = glmMode() ? GLM_WORKING_LEDGER : Z11_WORKING_LEDGER;
+  mkdirSync(resolve(target, '..'), { recursive: true });
+  writeFileSync(target, `${JSON.stringify(ledger, null, 2)}\n`);
+}
+
+/** The GLM grant's own tally — never seeded from any subscription register. */
+export function readGlmLedger(): TurnLedger {
+  if (existsSync(GLM_WORKING_LEDGER)) {
+    return JSON.parse(readFileSync(GLM_WORKING_LEDGER, 'utf8')) as TurnLedger;
+  }
+  return {
+    budzet: GLM_TURN_BUDGET,
+    wydane: 0,
+    tury: [],
+    zrodlo: 'grant koordynatora dla prób GLM: 25 tur, licznik wlasny',
+  };
+}
+
+export function writeGlmLedger(ledger: TurnLedger): void {
+  mkdirSync(resolve(GLM_WORKING_LEDGER, '..'), { recursive: true });
+  writeFileSync(GLM_WORKING_LEDGER, `${JSON.stringify(ledger, null, 2)}\n`);
 }
 
 /** Can what is left of this grant pay for a whole spec? Asked before the first command. */
 export function z11Preflight(needed: number): BudgetPreflight {
-  return budgetPreflight({ budget: Z11_TURN_BUDGET, spent: readZ11Ledger().wydane, needed });
+  const budget = glmMode() ? GLM_TURN_BUDGET : Z11_TURN_BUDGET;
+  return budgetPreflight({ budget, spent: readZ11Ledger().wydane, needed });
 }
 
 /** This run's own evidence directory, beside every earlier run's. */
@@ -399,7 +486,12 @@ export function writeZ11Evidence(
         rodzajWykonania: 'rzeczywisty model',
         wersjaKodu: codeVersion(undefined, [relative(REPO_ROOT, Z11_EVIDENCE_ROOT)]),
         srodowisko: environment(),
-        zrodlo: 'prawdziwy model (subskrypcja Claude) przez @mastra/claude i proces Claude Agent SDK',
+        /* Provider-aware: „rzeczywisty model" zostaje, provider opisuje zrodlo i model. */
+        zrodlo: glmMode()
+          ? 'model GLM/Z.AI przez kompatybilny endpoint Anthropic (@mastra/claude i proces Claude Agent ' +
+            'SDK jako harness); subskrypcja Claude nieuzywana'
+          : 'prawdziwy model (subskrypcja Claude) przez @mastra/claude i proces Claude Agent SDK',
+        model: configuredModel(),
         pakiet: 'BL-03 (Z11)',
         przebieg: RUN_STAMP,
         kodCommit: codeCommit(),

@@ -27,6 +27,7 @@ import { probeAuth, recordSdkSession } from '../agent/auth.ts';
 import type { SessionProbe } from '../agent/session-probe.ts';
 import { AgentRuntime } from '../agent/runtime.ts';
 import { SESSION_COOKIE, SessionAuth, ensureUser, requireUser } from '../auth/session.ts';
+import { modelProviderFromEnv } from '../config.ts';
 import type { PlatformServices } from '../services/index.ts';
 import { deriveTitle } from '../services/conversations.ts';
 import { describeReadOperations, runRead } from '../registry/read-operations.ts';
@@ -105,6 +106,15 @@ export interface PlatformAppDeps {
   versions: Record<string, string>;
   /** Asks the SDK how it is authenticated. Replaceable for tests. */
   sessionProbe: SessionProbe;
+  /**
+   * The environment the platform was configured from.
+   *
+   * `probeAuth` reads the configured method from it — so a status answer
+   * describes *this* platform's configuration, and a test that booted the
+   * platform with its own env gets an answer about that env rather than about
+   * whatever the test runner's shell carries.
+   */
+  env: NodeJS.ProcessEnv;
 }
 
 type Env = { Variables: { ownerId: string } };
@@ -369,8 +379,13 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
   let sessionProbeInFlight: Promise<SdkSession> | null = null;
   app.post('/api/sdk-session', async (c) => {
     if (!sessionProbeInFlight) {
+      /*
+       * The probe is dispatched with the provider of *this* platform: in the
+       * glm mode it must apply the glm environment policy, or the "Sesja SDK"
+       * control would describe the subscription path the mode never takes.
+       */
       sessionProbeInFlight = deps
-        .sessionProbe()
+        .sessionProbe(modelProviderFromEnv(deps.env))
         .then((report) => {
           recordSdkSession(report);
           return report;
@@ -383,7 +398,7 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
   });
 
   app.get('/api/status', (c) => {
-    const authStatus = probeAuth();
+    const authStatus = probeAuth(deps.env);
     return json(c, {
       auth: authStatus,
       versions: deps.versions,

@@ -177,7 +177,7 @@ export function createPlatform(input: {
     );
   }
 
-  const runtime = new AgentRuntime(services, input.modelAgent ?? null);
+  const runtime = new AgentRuntime(services, input.modelAgent ?? null, input.env ?? process.env);
   const versions = readVersions();
   const auth = SessionAuth.load(config.dataDir);
   const app = createPlatformApp({
@@ -185,7 +185,15 @@ export function createPlatform(input: {
     runtime,
     auth,
     versions,
-    sessionProbe: input.sessionProbe ?? probeSdkSession,
+    /*
+     * The default probe receives the provider of the request: a glm status
+     * answer must describe the glm environment a run would get, not the
+     * subscription path. A stand-in installed by a test gets the provider too,
+     * so it can assert the dispatch.
+     */
+    sessionProbe:
+      input.sessionProbe ?? ((provider) => probeSdkSession({ provider: provider ?? 'subscription' })),
+    env: input.env ?? process.env,
   });
 
   return {

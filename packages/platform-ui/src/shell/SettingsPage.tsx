@@ -6,6 +6,12 @@ import { runSdkSessionProbe, switchAccessContext, useStatus } from '../api/queri
 
 /* Labels for the three authentication dimensions. Kept next to the view because
    they are presentation, not policy. */
+/* The configured method, per provider (decyzja właściciela 2026-09-20). */
+const METHOD_LABEL: Record<AuthStatus['method'], string> = {
+  subscription: 'subskrypcja',
+  glm: 'GLM/Z.AI (endpoint kompatybilny z Anthropic)',
+  none: 'brak',
+};
 const CREDENTIAL_LABEL: Record<AuthStatus['credential']['state'], string> = {
   absent: 'brak',
   valid: 'obecne, termin wazny',
@@ -59,6 +65,21 @@ const SDK_SESSION_BADGE: Record<AuthStatus['sdkSession']['state'], string> = {
   unavailable: 'pf-badge--warn',
 };
 
+/*
+ * In the explicit GLM mode an `api_key` session report is the **expected**
+ * answer — the endpoint token is the credential — so the default label ("klucz
+ * API — niezgodne z polityka") would read as a failure that is not there. The
+ * mode decides the wording; the subscription wording is unchanged.
+ */
+const sdkSessionLabel = (a: AuthStatus): string =>
+  a.method === 'glm' && a.sdkSession.state === 'api_key'
+    ? 'poswiadczenie endpointu — oczekiwane w trybie GLM'
+    : SDK_SESSION_LABEL[a.sdkSession.state];
+const sdkSessionBadge = (a: AuthStatus): string =>
+  a.method === 'glm' && a.sdkSession.state === 'api_key'
+    ? 'pf-badge--ok'
+    : SDK_SESSION_BADGE[a.sdkSession.state];
+
 const ACCESS_REMEDY: Record<AuthStatus['access']['state'], string> = {
   unverified: 'Wyslij dowolne polecenie do agenta, zeby sprawdzic dostep.',
   verified: 'Nic nie trzeba robic.',
@@ -67,6 +88,22 @@ const ACCESS_REMEDY: Record<AuthStatus['access']['state'], string> = {
   revoked: 'Logowanie odwolane. Uruchom `claude` i wykonaj /login.',
   failed: 'Sprawdz komunikat bledu powyzej i sprobuj ponownie.',
 };
+
+/*
+ * The remedy has to name the credential actually in use. In the explicit GLM
+ * mode there is no OAuth login to renew, so "run /login" would send the user
+ * looking for a fix in the wrong place; the endpoint token is what to check.
+ */
+const ACCESS_REMEDY_GLM: Record<AuthStatus['access']['state'], string> = {
+  unverified: 'Wyslij dowolne polecenie do agenta, zeby sprawdzic dostep.',
+  verified: 'Nic nie trzeba robic.',
+  rate_limited: 'Limit uzycia endpointu GLM wyczerpany. Poczekaj do odnowienia okna.',
+  refresh_refused: 'Dostep odrzucony przez endpoint GLM. Sprawdz ANTHROPIC_AUTH_TOKEN i ANTHROPIC_BASE_URL.',
+  revoked: 'Dostep odrzucony przez endpoint GLM. Sprawdz ANTHROPIC_AUTH_TOKEN i ANTHROPIC_BASE_URL.',
+  failed: 'Sprawdz komunikat bledu powyzej i sprobuj ponownie.',
+};
+const accessRemedy = (a: AuthStatus): string =>
+  a.method === 'glm' ? ACCESS_REMEDY_GLM[a.access.state] : ACCESS_REMEDY[a.access.state];
 
 /**
  * Settings.
@@ -119,20 +156,33 @@ export function SettingsPage() {
       <dl className="pf-kv" data-testid="auth-status">
         <dt>Sposob logowania</dt>
         <dd>
-          <span className="pf-badge pf-badge--ok" data-testid="auth-method">
-            {a.method === 'subscription' ? 'subskrypcja' : 'brak'}
+          <span className="pf-badge pf-badge--ok" data-testid="auth-method" data-method={a.method}>
+            {METHOD_LABEL[a.method]}
           </span>
         </dd>
-        <dt>Plan</dt>
-        <dd>{a.credential.subscriptionType ?? '—'}</dd>
-        <dt>Poswiadczenie lokalne</dt>
-        {/* The state as an attribute as well as a label: a test asserting the
-            wording would be asserting the wording. */}
-        <dd data-testid="auth-credential-state" data-state={a.credential.state}>
-          <span className={`pf-badge ${CREDENTIAL_BADGE[a.credential.state]}`}>
-            {CREDENTIAL_LABEL[a.credential.state]}
-          </span>
-        </dd>
+        {a.method === 'glm' ? (
+          <>
+            <dt>Plan</dt>
+            <dd>nieistotne w trybie GLM (poświadczenia OAuth nieużywane)</dd>
+            <dt>Poswiadczenie lokalne</dt>
+            <dd data-testid="auth-credential-state" data-state={a.credential.state}>
+              nieistotne dla trybu GLM — plik poświadczeń OAuth nie jest czytany
+            </dd>
+          </>
+        ) : (
+          <>
+            <dt>Plan</dt>
+            <dd>{a.credential.subscriptionType ?? '—'}</dd>
+            <dt>Poswiadczenie lokalne</dt>
+            {/* The state as an attribute as well as a label: a test asserting the
+                wording would be asserting the wording. */}
+            <dd data-testid="auth-credential-state" data-state={a.credential.state}>
+              <span className={`pf-badge ${CREDENTIAL_BADGE[a.credential.state]}`}>
+                {CREDENTIAL_LABEL[a.credential.state]}
+              </span>
+            </dd>
+          </>
+        )}
         <dt>Wazne do</dt>
         <dd>
           {a.credential.expiresAt ? new Date(a.credential.expiresAt).toLocaleString('pl-PL') : '—'}
@@ -171,19 +221,23 @@ export function SettingsPage() {
           sentence matched.
         */}
         <dd data-testid="auth-remedy" data-state={a.access.state}>
-          {ACCESS_REMEDY[a.access.state]}
+          {accessRemedy(a)}
         </dd>
         <dt>Klucz API Anthropic</dt>
         <dd>
-          {a.apiKeyDetected
-            ? 'wykryty w srodowisku — odrzucany przez polityke, usuwany z procesu agenta'
-            : 'nieobecny'}
+          {a.method === 'glm'
+            ? a.apiKeyDetected
+              ? 'wykryte poświadczenie w środowisku — w trybie GLM token endpointu (ANTHROPIC_AUTH_TOKEN) jest przekazywany procesowi agenta; ANTHROPIC_API_KEY nadal usuwany'
+              : 'nieobecny'
+            : a.apiKeyDetected
+              ? 'wykryty w srodowisku — odrzucany przez polityke, usuwany z procesu agenta'
+              : 'nieobecny'}
         </dd>
         <dt>Polityka</dt>
-        <dd>
+        <dd data-testid="auth-policy" data-policy={a.apiKeyPolicy}>
           {a.apiKeyPolicy === 'refused'
             ? 'wylacznie subskrypcja; platne API i gateway zablokowane'
-            : a.apiKeyPolicy}
+            : 'tryb GLM: ANTHROPIC_BASE_URL i ANTHROPIC_AUTH_TOKEN przekazywane procesowi agenta; ANTHROPIC_API_KEY, Bedrock i Vertex usuwane; subskrypcja Claude nieużywana'}
         </dd>
         <dt>Claude CLI</dt>
         <dd>{a.cliVersion ?? 'nie wykryto'}</dd>
@@ -202,11 +256,11 @@ export function SettingsPage() {
         <dt>Sposob uwierzytelnienia sesji</dt>
         <dd>
           <span
-            className={`pf-badge ${SDK_SESSION_BADGE[a.sdkSession.state]}`}
+            className={`pf-badge ${sdkSessionBadge(a)}`}
             data-testid="sdk-session-state"
             data-state={a.sdkSession.state}
           >
-            {SDK_SESSION_LABEL[a.sdkSession.state]}
+            {sdkSessionLabel(a)}
           </span>
         </dd>
         <dt>Zrodlo klucza wg SDK</dt>

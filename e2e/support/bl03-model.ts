@@ -1,8 +1,8 @@
 import { expect, type Page } from '@playwright/test';
 import {
   Z11_SPEC_TURNS,
-  Z11_TURN_BUDGET,
   readZ11Ledger,
+  turnUnit,
   writeZ11Ledger,
   writeZ11Evidence,
   z11Preflight,
@@ -86,12 +86,16 @@ export function paidRun(input: {
   const command = async (page: Page, text: string): Promise<SentCommand> => {
     const ledger = readZ11Ledger();
     const nr = ledger.wydane + 1;
-    expect(
-      nr,
-      `grant BL-03 to ${Z11_TURN_BUDGET} tur modelu — proba wyslania tury ${nr}`,
-    ).toBeLessThanOrEqual(Z11_TURN_BUDGET);
+    /*
+     * Sufit czytany z rejestru, nie z nazwy grantu: w trybie GLM tym rejestrem
+     * jest licznik tur GLM (wlasny sufit), a grant subskrypcji BL-03 zostaje
+     * nietkniety i jego liczb nie przywlaszcza zadna inna proba.
+     */
+    const unit = turnUnit();
+    const sufit = ledger.budzet;
+    expect(nr, `grant to ${sufit} ${unit} — proba wyslania tury ${nr}`).toBeLessThanOrEqual(sufit);
     ledger.wydane = nr;
-    ledger.budzet = Z11_TURN_BUDGET;
+    ledger.budzet = sufit;
     ledger.tury.push({
       nr,
       o: new Date().toISOString(),
@@ -122,7 +126,7 @@ export function paidRun(input: {
         przebiegPlanu: input.przebieg,
         turyWydaneWTymPliku: sentHere,
         turyWydaneLacznie: readZ11Ledger().wydane,
-        budzet: Z11_TURN_BUDGET,
+        budzet: readZ11Ledger().budzet,
         kroki: log,
         ...body,
       }),

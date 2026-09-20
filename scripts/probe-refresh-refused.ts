@@ -59,6 +59,29 @@ import { composeApp } from '../apps/server/src/compose.ts';
 
 const REHEARSAL = process.argv.includes('--rehearsal');
 
+/*
+ * Tryb GLM pomina próbę — i robi to ZANIM cokolwiek dotknie pliku poświadczeń.
+ *
+ * Ta sonda czyta prawdziwy plik poświadczeń (kształt, nie wartości) i kieruje
+ * SDK na jego kopię, licząc na próbę odnowienia OAuth. W jawnym trybie GLM
+ * poświadczenia OAuth nie są używane, więc i ta próba nie ma o czym mówić —
+ * a czytanie prawdziwego pliku byłoby sprzeczne z tą trybem wprost. Pominięcie
+ * jest zapisane, nie przemilczane.
+ */
+if (process.env.APP_MODEL_PROVIDER === 'glm') {
+  const record = {
+    zapisano: new Date().toISOString(),
+    pominieto: true,
+    powod:
+      'APP_MODEL_PROVIDER=glm: próba czyta plik poświadczeń OAuth i próbuje odnowienia — ' +
+      'w trybie GLM poświadczenia OAuth są nieużywane, a ich czytanie sprzeczne z trybem. ' +
+      'Żadna próba nie została wykonana, żaden plik nie został czytany.',
+  };
+  console.log(`[sonda] POMINIĘTO: ${record.powod}`);
+  console.log(JSON.stringify(record, null, 2));
+  process.exit(0);
+}
+
 /** Tekst zaobserwowany na rzeczywistej awarii SDK 0.3.270. */
 const REAL_SDK_AUTH_FAILURE =
   'Claude Code returned an error result: Failed to authenticate: OAuth session expired and could not be refreshed';

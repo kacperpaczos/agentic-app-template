@@ -859,12 +859,11 @@
       }
     },
     "L5.8": {
-      "status": "czesciowe",
+      "status": "informacyjne",
       "evidence": "model",
       "origin": "szablon",
       "proof": "Prawdziwy model przez @mastra/claude i most hookow w runtime.ts: e2e/bl03-model-lifecycle.spec.ts „blad narzedzia przechodzi przez adapter do rozmowy, z trescia argumentow\" (tura 12, dowod docs/evidence/z11-bl03/runs/2026-09-19T00-57-37-949Z/c-blad-narzedzia.json) — hook PostToolUseFailure rzeczywistego adaptera oznacza wywolanie jako blad, niesie prawdziwy komunikat walidacji (nie dosłowne „null\", co bylo zaobserwowana wada), a TOOL_CALL_ARGS niesie rzeczywiste argumenty wywolania. Pozostale mapowania sprawdzone wczesniej na prawdziwym modelu (e2e/agent-ui.spec.ts) i opisane w docs/NEW-APPLICATION.md §7 oraz w naglowku runtime.ts.",
-      "gap": "Trzecia sciezka z opisu braku — blad strumienia modelu (chunk error prowadzacy do RUN_ERROR z klasyfikacja) — pozostaje SYMULACJA (tests/run-lifecycle.test.ts). Nie da sie jej wywolac na zadanie bez prawdziwej awarii adaptera albo wyczerpania limitu subskrypcji, a limitu nie wolno udawac. Swiadoma decyzja koordynatora: zamykamy te polowe, ktora zaobserwowano, i nazywamy druga wprost.",
-      "backlog": "BL-03",
+      "gap": "Trzecia sciezka z opisu braku — blad strumienia modelu (chunk error prowadzacy do RUN_ERROR z klasyfikacja) — pozostaje SYMULACJA (tests/run-lifecycle.test.ts). Nie da sie jej wywolac na zadanie bez prawdziwej awarii adaptera albo wyczerpania limitu subskrypcji, a limitu nie wolno udawac. Swiadoma decyzja koordynatora: zamykamy te polowe, ktora zaobserwowano, i nazywamy druga wprost. KLASYFIKACJA WŁAŚCICIELA 2026-09-20: kryterium proceduralne/niewywoływalne w tej konfiguracji — przeniesione do statusu „informacyjne / poza bramką odbioru”. Uzasadnienie powyżej pozostaje zapisane; kryterium nie blokuje zamknięcia warstwy i nie należy do pakietu backlogu.",
       "scenarios": [
         "T05",
         "T06"
@@ -1449,23 +1448,21 @@
       ]
     },
     "L8.10": {
-      "status": "czesciowe",
+      "status": "informacyjne",
       "evidence": "symulacja",
       "origin": "szablon",
       "proof": "Miniony termin nie blokuje uruchomienia i nie jest werdyktem: e2e/auth-limits.spec.ts ustawia expiresAt w przeszlosci (kanarek w tymczasowym CLAUDE_CONFIG_DIR), przebieg konczy sie powodzeniem, a Ustawienia pokazuja JEDNOCZESNIE poswiadczenie \"stale\" i dostep \"verified\" — dwa fakty w dwoch wierszach. Odrzucone odnowienie jest teraz potwierdzone RZECZYWISTYM PRZEBIEGIEM, nie symulacja: scripts/probe-refresh-refused.ts kieruje prawdziwy Claude Agent SDK na kopie poswiadczenia z celowo zepsutymi oboma tokenami i zapisuje, co SDK naprawde odpowiada (docs/evidence/z12-bl04/refresh-refused-*.json): \"Claude Code returned an error result: Failed to authenticate: OAuth session expired and could not be refreshed\" — inaczej niz zakladany dotad \"OAuth token refresh failed: invalid_grant\". Aplikacja klasyfikuje to jako refresh_refused, konczy uruchomienie kodem unauthenticated i pokazuje stan oraz porade w Ustawieniach. Przebieg nie wydal tury subskrypcji (nie przechodzi uwierzytelnienia, wiec nie dociera do modelu) i nie tknal logowania uzytkownika — odciski obu tokenow przed i po sa w zapisie. tests/auth.test.ts trzyma potwierdzony komunikat jako korpus klasyfikatora, tests/sdk-session-evidence.test.ts wiaze zapis z wersja CLI.",
-      "gap": "SWIADOMIE POZA ZAKRESEM, nie brak dowodu. Skuteczne odswiezenie nie zostalo zaobserwowane i nie da sie go zaobserwowac BEZPIECZNIE w tej konfiguracji. Powod jest ustaleniem z tego pakietu: w bundlu CLI 2.1.277 zapis odswiezonego poswiadczenia jest compare-and-swap po refreshTokenie (odswiezenie WYMIENIA zestaw tokenow), a przy odmowie CLI KASUJE poswiadczenie na dysku — co obie proby graniczne potwierdzily obserwacyjnie. Proba \"skutecznego odswiezenia na kopii\" zostawilaby wiec w pliku uzytkownika refresh token poprzedniej generacji, a przy jego najblizszym uzyciu CLI wyczyscilo by mu logowanie — szkoda ujawniajaca sie kilka godzin pozniej, dlugo po tym, jak ktokolwiek powiazalby ja z ta praca. Proba byla autoryzowana i NIE zostala wykonana. Domkniecie wymaga konta testowego odrebnego od konta uzytkownika. Tansza droga posrednia: biernie porownac skrot refresh tokena przed i po rutynowym odswiezeniu sesji uzytkownika (zero tur, zero ryzyka) — jesli rotacji nie ma, proba na kopii staje sie bezpieczna; opis w docs/evidence/z12-bl04/przebiegi-i-proby.md.",
-      "backlog": "BL-04",
+      "gap": "SWIADOMIE POZA ZAKRESEM, nie brak dowodu. Skuteczne odswiezenie nie zostalo zaobserwowane i nie da sie go zaobserwowac BEZPIECZNIE w tej konfiguracji. Powod jest ustaleniem z tego pakietu: w bundlu CLI 2.1.277 zapis odswiezonego poswiadczenia jest compare-and-swap po refreshTokenie (odswiezenie WYMIENIA zestaw tokenow), a przy odmowie CLI KASUJE poswiadczenie na dysku — co obie proby graniczne potwierdzily obserwacyjnie. Proba \"skutecznego odswiezenia na kopii\" zostawilaby wiec w pliku uzytkownika refresh token poprzedniej generacji, a przy jego najblizszym uzyciu CLI wyczyscilo by mu logowanie — szkoda ujawniajaca sie kilka godzin pozniej, dlugo po tym, jak ktokolwiek powiazalby ja z ta praca. Proba byla autoryzowana i NIE zostala wykonana. Domkniecie wymaga konta testowego odrebnego od konta uzytkownika. Tansza droga posrednia: biernie porownac skrot refresh tokena przed i po rutynowym odswiezeniu sesji uzytkownika (zero tur, zero ryzyka) — jesli rotacji nie ma, proba na kopii staje sie bezpieczna; opis w docs/evidence/z12-bl04/przebiegi-i-proby.md. KLASYFIKACJA WŁAŚCICIELA 2026-09-20: kryterium proceduralne/niewywoływalne w tej konfiguracji — przeniesione do statusu „informacyjne / poza bramką odbioru”. Uzasadnienie powyżej pozostaje zapisane; kryterium nie blokuje zamknięcia warstwy i nie należy do pakietu backlogu.",
       "scenarios": [
         "T17"
       ]
     },
     "L8.11": {
-      "status": "czesciowe",
+      "status": "informacyjne",
       "evidence": "symulacja",
       "origin": "szablon",
       "proof": "Brak proby z mutacja przed limitem zostal uzupelniony: e2e/auth-limits.spec.ts \"limit po mutacji\" wykonuje procurement_save_comparison przez prawdziwy handler (operationId mintowany na przebieg, wiec powtorka daloby DRUGI artefakt, a nie replay), po czym scenariusz zglasza limit. Asercje: dokladnie jeden artefakt, wywolanie narzedzia i tekst sprzed awarii zostaja w rozmowie i po przeladowaniu, po odczekaniu 6 s nadal jeden artefakt i dokladnie jedno uruchomienie o statusie failed. Rozroznienie czterech przypadkow ma cztery rozne stany dostepu w UI, a blad narzedzia nadal konczy przebieg powodzeniem (e2e/tool-activity.spec.ts). CZESC klasyfikatora jest juz potwierdzona na rzeczywistych komunikatach SDK 0.3.270: dwie proby graniczne uwierzytelnienia (docs/evidence/z12-bl04/refresh-refused-*.json, revoked-*.json) daja tekst \"Failed to authenticate: OAuth session expired and could not be refreshed\", ktory aplikacja odroznia od limitu i od bledu sieci; korpus jest w tests/auth.test.ts. Zadna z prob nie wydala tury subskrypcji ani nie tknela logowania uzytkownika.",
-      "gap": "Dwa z czterech przypadkow opieraja sie na niepotwierdzonych podciagach: (1) komunikatu przy WYCZERPANYM limicie nikt nie widzial — takiego przebiegu nie da sie wywolac na zadanie, a symulowany limit nie jest limitem wyczerpanym (sonda sesji czyta rzeczywiste wykorzystanie okien planu, czyli ODCZYT, nie wyczerpanie); (2) \"socket hang up\" dla bledu sieci pozostaje zalozony. Ta polowa trzyma kryterium otwarte niezaleznie od wszystkiego innego. OSOBNO, i wezej niz w pierwszej wersji tego opisu: proby fazy 2 pokazaly, ze PRZY POSWIADCZENIU Z NIEPRAWIDLOWYM REFRESH TOKENEM SDK 0.3.270 podaje ten sam tekst niezaleznie od tego, czy access token wygasl. To NIE jest dowod, ze SDK myli odwolane logowanie z odmowa odnowienia: oba tryby proby zapisuja tak samo nieprawidlowy refresh token i roznia sie WYLACZNIE wartoscia expiresAt, wiec oba koncza tym samym zdarzeniem — odnowieniem, ktore nie moglo sie udac, a identyczny tekst jest spodziewanym skutkiem takiego ustawienia. Prawdziwe odwolanie (poprawny refresh token odrzucony po stronie serwera) nie zostalo wytworzone, bo wymagaloby konta testowego; czy da sie je odroznic — POZOSTAJE NIEZNANE.",
-      "backlog": "BL-04",
+      "gap": "Dwa z czterech przypadkow opieraja sie na niepotwierdzonych podciagach: (1) komunikatu przy WYCZERPANYM limicie nikt nie widzial — takiego przebiegu nie da sie wywolac na zadanie, a symulowany limit nie jest limitem wyczerpanym (sonda sesji czyta rzeczywiste wykorzystanie okien planu, czyli ODCZYT, nie wyczerpanie); (2) \"socket hang up\" dla bledu sieci pozostaje zalozony. Ta polowa trzyma kryterium otwarte niezaleznie od wszystkiego innego. OSOBNO, i wezej niz w pierwszej wersji tego opisu: proby fazy 2 pokazaly, ze PRZY POSWIADCZENIU Z NIEPRAWIDLOWYM REFRESH TOKENEM SDK 0.3.270 podaje ten sam tekst niezaleznie od tego, czy access token wygasl. To NIE jest dowod, ze SDK myli odwolane logowanie z odmowa odnowienia: oba tryby proby zapisuja tak samo nieprawidlowy refresh token i roznia sie WYLACZNIE wartoscia expiresAt, wiec oba koncza tym samym zdarzeniem — odnowieniem, ktore nie moglo sie udac, a identyczny tekst jest spodziewanym skutkiem takiego ustawienia. Prawdziwe odwolanie (poprawny refresh token odrzucony po stronie serwera) nie zostalo wytworzone, bo wymagaloby konta testowego; czy da sie je odroznic — POZOSTAJE NIEZNANE. KLASYFIKACJA WŁAŚCICIELA 2026-09-20: kryterium proceduralne/niewywoływalne w tej konfiguracji — przeniesione do statusu „informacyjne / poza bramką odbioru”. Uzasadnienie powyżej pozostaje zapisane; kryterium nie blokuje zamknięcia warstwy i nie należy do pakietu backlogu.",
       "scenarios": [
         "T17"
       ]
@@ -2087,7 +2084,7 @@
       "evidence": "model",
       "origin": "szablon",
       "proof": "Prawdziwy model, jak L11.4 (tury 17 i 18): obejscie jednej sciezki przez druga DZIALA dla plikow spoza listy chronionych katalogow — Read oddal sekret spoza katalogu roboczego (tura 17), Write zapisal plik tam, gdzie powloce odmowiono (tura 18). Dla samej BAZY obejscia nie ma: powloce odmawia sandbox (tura 16), a narzedziom plikowym straznik chronionych katalogow.",
-      "gap": "Sekrety spoza katalogu danych sa dostepne sciezka narzedzi plikowych, ktora dla powloki jest zamknieta — to jest dokladnie asymetria, o ktora pyta kryterium, i jest wykazana kontrprzykladem. Ramie katalogu POSWIADCZEN nie zostalo sprawdzone na prawdziwym modelu: celowanie w prawdziwy plik jest zabronione (G21 — zmierzono, ze CLI przepisuje plik poswiadczenia, 193 na 121 bajtow, accessToken znika, wiec proba na prawdziwym katalogu wylogowalaby uzytkownika), a odseparowany CLAUDE_CONFIG_DIR z wymyslonym poswiadczeniem nie uwierzytelnia sesji, wiec przebieg nie doszedlby do wywolania narzedzia. To ramie pokrywa symulacja tests/credential-guard.test.ts. Naprawa i ponowna proba zaplanowane po przebudowie straznika. Jawny ksztalt niekontrolowany (runda 7): wyscig TOCTOU na pre-walku Z4 — przeciwnik musi podmienic dowiazanie miedzy sprawdzeniem a otwarciem, co wymaga Bash, czyli ZGODY uzytkownika; zgoda jest pytaniem, nie ochrona (ta sama pozycja co A10b i D1).",
+      "gap": "Sekrety spoza katalogu danych sa dostepne sciezka narzedzi plikowych, ktora dla powloki jest zamknieta — to jest dokladnie asymetria, o ktora pyta kryterium, i jest wykazana kontrprzykladem. Ramie katalogu POSWIADCZEN nie zostalo sprawdzone na prawdziwym modelu: celowanie w prawdziwy plik jest zabronione (G21 — zmierzono, ze CLI przepisuje plik poswiadczenia, 193 na 121 bajtow, accessToken znika, wiec proba na prawdziwym katalogu wylogowalaby uzytkownika), a odseparowany CLAUDE_CONFIG_DIR z wymyslonym poswiadczeniem nie uwierzytelnia sesji, wiec przebieg nie doszedlby do wywolania narzedzia. To ramie pokrywa symulacja tests/credential-guard.test.ts. Naprawa i ponowna proba zaplanowane po przebudowie straznika. Jawny ksztalt niekontrolowany (runda 7): wyscig TOCTOU na pre-walku Z4 — przeciwnik musi podmienic dowiazanie miedzy sprawdzeniem a otwarciem, co wymaga Bash, czyli ZGODY uzytkownika; zgoda jest pytaniem, nie ochrona (ta sama pozycja co A10b i D1). KLASYFIKACJA WŁAŚCICIELA 2026-09-20 (dopisek, bez rozdzielania identyfikatora): ramię katalogu POŚWIADCZEŃ jest niewywoływalne bez wylogowania właściciela i ma status informacyjny — poza bramką odbioru; ramię plików i sekretów spoza katalogu danych pozostaje otwarte jako funkcja bezpieczeństwa i to ono trzyma niniejsze kryterium w statusie „niespełnione”.",
       "backlog": "BL-03",
       "scenarios": [
         "T14"
@@ -2343,12 +2340,11 @@
       "scenarios": []
     },
     "L12.10": {
-      "status": "czesciowe",
+      "status": "informacyjne",
       "evidence": "test",
       "origin": "szablon",
       "proof": "Kazdy dowod zapisywany przez regresje niesie koperte: commit i stan drzewa, srodowisko (system, Node, pnpm, rozwiazane wersje pakietow, CLI w SDK i CLI na PATH, model) oraz RODZAJ WYKONANIA wymagany przez typ (tests/support/measurement-evidence.ts, e2e/support/model-turns.ts). tests/evidence-provenance.test.ts skanuje wszystkie *.json w docs/evidence: plik przechodzi, gdy niesie wersje kodu ORAZ rodzaj wykonania, albo gdy ma wpis w docs/evidence/POCHODZENIE.json z commitem, w ktorym wszedl do repozytorium, wytworca i rodzajem wykonania. Rejestr jest zamkniety w obie strony: wpis wskazujacy nieistniejacy plik i wpis dla pliku, ktory juz niesie koperte, sa bledem — wiec lista moze tylko malec. Dawny wynik nie zalicza kryterium: scripts/acceptance-matrix.mjs nadal rozdziela ocene z szablonu od historycznej i odrzuca „potwierdzone” bez dowodu z szablonu. Do tego rozstrzygniecie, ktora wersja w ogole ma przypinac dowod: zapisy uwierzytelnienia byly przypiete do `claude --version` z PATH, a ten plik nie bral udzialu w zadnym z tych przebiegow — SDK uruchamia CLI wbudowane w swoj pakiet. Obserwacja, nie domysl: scripts/probe-which-cli.mjs wykonalo zadanie sterujace SDK przy PATH BEZ `claude` i z fabrykowanym poswiadczeniem w katalogu tymczasowym, a SDK odpowiedzialo (docs/evidence/z13-bl12/ktore-cli-uruchamia-sdk.json, zero tur, poswiadczenie uzytkownika nietkniete). tests/sdk-session-evidence.test.ts przypina teraz dowod do wersji CLI WBUDOWANEJ w SDK — funkcji wersji pakietu, ktorej pilnuje lockfile — a `claude` z PATH zapisuje jako srodowisko i wypisuje jego zmiane, nie oblewajac regresji. Proba zdolnosci wykrycia nowego przypiecia: przypiecie-cli-w-sdk. Dwie proby graniczne nagrano ponownie na dzisiejszym kodzie (poswiadczenie fabrykowane, katalog tymczasowy, zero tur); sondy sesji SDK nie powtorzono swiadomie, bo wymaga DZIALAJACEGO logowania, czyli katalogu poswiadczen uzytkownika, ktory CLI przy okazji przepisuje — G21 tego zabrania, a powod jest zapisany w samym dowodzie.",
-      "gap": "44 dowody zapisane przed koperta (docs/evidence/POCHODZENIE.json) maja commit, wytworce i rodzaj wykonania w rejestrze, ale nie maja zapisu SRODOWISKA przebiegu i nie da sie go odtworzyc — pole czegoBrakujeWPliku mowi to wprost przy kazdym z nich. Dopisanie im srodowiska byloby zmysleniem, a regeneracja nalezy do pakietow, ktore te dowody wytworzyly.",
-      "backlog": "BL-12",
+      "gap": "44 dowody zapisane przed koperta (docs/evidence/POCHODZENIE.json) maja commit, wytworce i rodzaj wykonania w rejestrze, ale nie maja zapisu SRODOWISKA przebiegu i nie da sie go odtworzyc — pole czegoBrakujeWPliku mowi to wprost przy kazdym z nich. Dopisanie im srodowiska byloby zmysleniem, a regeneracja nalezy do pakietow, ktore te dowody wytworzyly. KLASYFIKACJA WŁAŚCICIELA 2026-09-20: kryterium proceduralne/niewywoływalne w tej konfiguracji — przeniesione do statusu „informacyjne / poza bramką odbioru”. Uzasadnienie powyżej pozostaje zapisane; kryterium nie blokuje zamknięcia warstwy i nie należy do pakietu backlogu.",
       "scenarios": [
         "T19"
       ]
@@ -2821,12 +2817,6 @@
       "done": "każde kryterium pakietu ma dowód z przebiegu na commicie szablonu (test e2e z modelem lub skrypt odbiorowy z logiem), oznaczony jako rzeczywisty model, z kontrolą negatywną tam, gdzie wymaga jej treść kryterium."
     },
     {
-      "id": "BL-04",
-      "title": "Uwierzytelnienie subskrypcyjne i limity — próby graniczne",
-      "summary": "Zachowanie przy wygaśnięciu i odświeżeniu tokena, odrzuconym odświeżeniu, odwołanym logowaniu i limicie użycia, sprawdzone na granicy adaptera aż do widocznego UI, bez niszczenia poświadczeń użytkownika i bez przedstawiania symulacji jako rzeczywistego limitu.",
-      "done": "kontrolowane stand-iny na granicy adaptera SDK dają rozróżnialne stany w UI i zachowują historię bez powtórki mutacji; dowód oznaczony jako symulacja; opis odczytu poświadczeń zgodny z kodem."
-    },
-    {
       "id": "BL-07",
       "title": "Trwałość, kopia i migracje",
       "summary": "Pozostaje jedno pytanie, na które nie da się odpowiedzieć bez tury modelu: którą z dwóch reakcji daje prawdziwy SDK, gdy transkrypt wznawianej sesji nie istnieje. Obie ścieżki są obsłużone i sprawdzone stand-inem na granicy adaptera; kopia z WAL, próba migracji sprzed każdej migracji platformy i odtworzenie są przećwiczone w szablonie na danych syntetycznych (Z2, 2026-09-18).",
@@ -2843,12 +2833,6 @@
       "title": "Domena, backend i cache",
       "summary": "Braki w warstwach 6, 7, 9 i 10 niepasujące do innych pakietów: współbieżność, atomowość, konflikty, kontekst podczas długiego wykonania, cache.",
       "done": "kryteria pakietu mają test kontraktu lub test GUI w regresji szablonu, z próbami negatywnymi."
-    },
-    {
-      "id": "BL-12",
-      "title": "Odbiór i jakość dowodów",
-      "summary": "Macierz, wersje w dowodach, kontrola negatywna testów, raportowanie nieudanych przebiegów i rozdzielenie ocen — tam, gdzie obecny proces odbioru nie spełnia treści kryterium w pełni.",
-      "done": "kryteria pakietu są potwierdzone procesem odbioru wykonywanym w szablonie (pnpm verify, zapis dowodów z wersjami, raport z nieudanymi przebiegami)."
     }
   ]
 }

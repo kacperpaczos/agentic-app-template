@@ -36,16 +36,31 @@ if (existsSync(distDir)) {
 }
 
 const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
-  const auth = probeAuth();
+  const auth = probeAuth(process.env);
   console.log(`[server] http://localhost:${info.port}`);
   console.log(`[server] node=${versions.node} hono=${versions.hono} sdk=${versions.claudeAgentSdk} mastra=${versions.mastraCore}/${versions.mastraClaude}`);
   console.log(`[server] modules: ${platform.registry.modules.map((m) => m.meta.id).join(', ') || '(none)'}`);
-  console.log(
-    `[server] claude auth: ${auth.method} | credential=${auth.credential.state}` +
-      `${auth.credential.subscriptionType ? ` (${auth.credential.subscriptionType})` : ''}` +
-      ` | access=${auth.access.state}` +
-      `${auth.apiKeyDetected ? ' | ANTHROPIC_API_KEY present and refused by policy' : ''}`,
-  );
+  if (auth.method === 'glm') {
+    /*
+     * Explicit GLM mode. The endpoint is printed as an origin only — the full
+     * URL can carry a query, and a query can carry a credential; the token
+     * itself is never printed anywhere.
+     */
+    console.log(
+      `[server] provider modelu: GLM/Z.AI | endpoint: ${config.modelEndpointOrigin} | model: ${config.model}`,
+    );
+    console.log(
+      '[server] subskrypcja Claude: nieuzywana (tryb GLM); plik poswiadczen OAuth nie jest czytany | ' +
+        'ANTHROPIC_API_KEY, Bedrock i Vertex: usuwane ze srodowiska agenta',
+    );
+  } else {
+    console.log(
+      `[server] claude auth: ${auth.method} | credential=${auth.credential.state}` +
+        `${auth.credential.subscriptionType ? ` (${auth.credential.subscriptionType})` : ''}` +
+        ` | access=${auth.access.state}` +
+        `${auth.apiKeyDetected ? ' | ANTHROPIC_API_KEY present and refused by policy' : ''}`,
+    );
+  }
   console.log(`[server] static: ${existsSync(distDir) ? distDir : '(dev mode, served by Vite)'}`);
 });
 

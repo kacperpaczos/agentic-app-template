@@ -746,6 +746,23 @@ const SDK_SESSION_ANSWERS: Record<string, SdkSession> = {
     checkedAt: new Date().toISOString(),
     error: 'sesja SDK nie odpowiedziala na zadanie sterujace w wyznaczonym czasie',
   },
+  /*
+   * The answer a session reports in the explicit GLM mode: the endpoint token
+   * is the credential, so `api_key` with an `ANTHROPIC_AUTH_TOKEN` source is
+   * the **expected** result there — not the policy violation it is under the
+   * subscription-only policy. A stand-in, like the other answers here: the
+   * real accountInfo() answer in this mode is a recorded-run question, not a
+   * browser-suite one.
+   */
+  glm: {
+    state: 'api_key',
+    apiKeySource: 'ANTHROPIC_AUTH_TOKEN',
+    apiProvider: 'GLM/Z.AI (kompatybilny endpoint Anthropic)',
+    subscriptionType: null,
+    planLimits: { available: false, fiveHourPercent: null, sevenDayPercent: null },
+    checkedAt: new Date().toISOString(),
+    error: null,
+  },
 };
 
 const scenario = process.env.SCRIPT ?? 'tool-then-text';

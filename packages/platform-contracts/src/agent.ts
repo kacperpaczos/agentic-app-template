@@ -156,11 +156,16 @@ export type AgentRun = z.infer<typeof agentRunSchema>;
  * Three questions that used to be collapsed into one, and must not be:
  *
  *  1. **How is this installation configured to sign in?** (`method`) — the
- *     policy, not the outcome. It is `subscription`, always; there is no API-key
- *     path to fall back to.
+ *     policy, not the outcome. `subscription` (default) means the local OAuth
+ *     login; `glm` means the explicit GLM/Z.AI mode (decyzja właściciela
+ *     2026-09-20): the harness is still the Claude Agent SDK, the model calls
+ *     go to an Anthropic-compatible GLM endpoint, and the OAuth credential is
+ *     neither used nor read. There is no silent API-key path in either mode.
  *  2. **What do the local credential metadata say?** (`credential`) — whether a
  *     credential file is readable and whether its recorded expiry is in the
- *     past. A past expiry is *not* a verdict: the runtime may refresh the token.
+ *     past. A past expiry is *not* a verdict: the runtime may refresh the
+ *     token. In `glm` mode this dimension is irrelevant and is reported as
+ *     absent without the file being opened at all.
  *  3. **What happened the last time access was actually exercised?** (`access`)
  *     — the only dimension that can say the login works, because the only proof
  *     that it works is a call that succeeded.
@@ -170,7 +175,7 @@ export type AgentRun = z.infer<typeof agentRunSchema>;
  *
  * None of these fields ever carries a token value.
  */
-export const authMethodSchema = z.enum(['subscription', 'none']);
+export const authMethodSchema = z.enum(['subscription', 'glm', 'none']);
 export type AuthMethod = z.infer<typeof authMethodSchema>;
 
 export const credentialStateSchema = z.enum([
@@ -284,9 +289,17 @@ export const authStatusSchema = z.object({
     lastError: z.string().nullable(),
     lastErrorAt: z.string().nullable(),
   }),
-  /** True when an ANTHROPIC_API_KEY is visible; the app refuses to use it. */
+  /** True when an Anthropic credential variable is visible in the environment. */
   apiKeyDetected: z.boolean(),
-  apiKeyPolicy: z.literal('refused'),
+  /**
+   * What the configuration does with what it detected: `refused` scrubs every
+   * provider variable (the default subscription mode); `glm_explicit` passes
+   * only the two GLM endpoint variables (`ANTHROPIC_BASE_URL`,
+   * `ANTHROPIC_AUTH_TOKEN`) to the agent process and still scrubs
+   * `ANTHROPIC_API_KEY`, Bedrock and Vertex. The field is a policy name —
+   * never a credential value.
+   */
+  apiKeyPolicy: z.enum(['refused', 'glm_explicit']),
   cliVersion: z.string().nullable(),
   /** What the SDK session reports about itself; `unknown` until probed. */
   sdkSession: sdkSessionSchema,
@@ -298,9 +311,18 @@ export type AuthStatus = z.infer<typeof authStatusSchema>;
  *
  * Deliberately permissive about a stale credential and deliberately strict
  * about a revoked one: the first may refresh on the next call, the second
- * cannot.
+ * cannot. The two configured methods differ in what counts as *their*
+ * credential: the subscription requires the local OAuth file and treats an
+ * API-key session as a policy violation, while the explicit GLM mode runs on
+ * the endpoint token — an `api_key` session report is the **expected** answer
+ * there, and the (unread, irrelevant) local file disqualifies nothing.
+ * A revoked or refresh-refused access fails both: whatever provides the
+ * credential, the last call said it was refused.
  */
 export function authIsUsable(status: AuthStatus): boolean {
+  if (status.method === 'glm') {
+    return status.access.state !== 'revoked' && status.access.state !== 'refresh_refused';
+  }
   if (status.method !== 'subscription') return false;
   if (!status.credential.present) return false;
   // A session the SDK itself says is running on an API key is outside the
