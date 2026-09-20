@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
@@ -49,12 +49,16 @@ interface AcceptanceTargetModule {
     base: string;
     port: number;
     allowedLabels: string[];
+    expectedRunId?: string;
   };
   checkAcceptanceInstance: (
-    target: { base: string; allowedLabels: string[] },
+    target: { base: string; allowedLabels: string[]; expectedRunId?: string },
     fetchImpl?: typeof fetch,
     timeoutMs?: number,
   ) => Promise<string | null>;
+  problemSrodowiskaOdbiorczego: (
+    env?: Record<string, string | undefined>,
+  ) => string | null;
   requireAcceptanceInstance: (env?: Record<string, string | undefined>) => Promise<{ base: string }>;
 }
 
@@ -66,19 +70,20 @@ let running: Server | null = null;
 let seen: string[] = [];
 
 /**
- * A stand-in instance answering `/api/health` with the given label.
+ * A stand-in instance answering `/api/health` with the given label and run id.
  *
  * `null` is the interesting one: that is exactly what an installed instance
  * answers, because `APP_INSTANCE_LABEL` is set only by this repository's own
- * commands.
+ * commands. The same holds for `instanceRunId` on an instance started without
+ * the identifier.
  */
-async function instanceAnswering(label: string | null): Promise<string> {
+async function instanceAnswering(label: string | null, runId: string | null = null): Promise<string> {
   seen = [];
   const server = createServer((req, res) => {
     seen.push(`${req.method} ${req.url}`);
     if (req.url === '/api/health') {
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ ok: true, instanceLabel: label }));
+      res.end(JSON.stringify({ ok: true, instanceLabel: label, instanceRunId: runId }));
       return;
     }
     if (req.url === '/api/auth/session') {
@@ -150,9 +155,12 @@ afterEach(async () => {
  * not reply", which is the wrong refusal for the right reason. That mistake
  * made the first version of this file pass its main assertion by accident.
  */
-async function runScript(base: string): Promise<{ status: number | null; stdout: string; stderr: string }> {
+async function runScript(
+  base: string,
+  srodowisko: Record<string, string> = {},
+): Promise<{ status: number | null; stdout: string; stderr: string }> {
   const child = spawn(process.execPath, [RUN_AGENT, 'cokolwiek', '--space', 's1'], {
-    env: { ...process.env, APP_BASE: base },
+    env: { ...process.env, ...srodowisko, APP_BASE: base },
   });
   let stdout = '';
   let stderr = '';
@@ -509,20 +517,149 @@ describe('run-agent.mjs wobec instancji uzytkownika', () => {
     expect(seen.filter((r) => r.startsWith('POST'))).toEqual([]);
   });
 
-  it('kontrola przeciwna: przy dozwolonej etykiecie skrypt naprawde pisze', async () => {
+  it('kontrola przeciwna: przy dozwolonej etykiecie i srodowisku proba naprawde pisze', async () => {
     /*
      * Without this, the test above could pass for the wrong reason — a script
      * that crashes on startup also sends no POST. Here the same stand-in says
-     * `agenticapp-dev`, and the POST has to arrive.
+     * `agenticapp-dev`, and the POST has to arrive. The gate now also requires
+     * the run to declare its identifier and the instance's test data
+     * directory, so the control carries them — the same values the stand-in
+     * echoes.
      */
-    const base = await instanceAnswering('agenticapp-dev');
-    const out = await runScript(base);
+    const base = await instanceAnswering('agenticapp-dev', 'przebieg-odbiorczy');
+    const out = await runScript(base, {
+      APP_INSTANCE_RUN_ID: 'przebieg-odbiorczy',
+      APP_DATA_DIR: katalogTestowy(),
+    });
 
+    expect(out.stderr, `stderr: ${out.stderr}`).toContain('HTTP 503');
     expect(out.stdout).toContain(`# instancja: ${base}`);
     expect(seen).toContain('GET /api/health');
     expect(seen).toContain('POST /api/auth/session');
     expect(seen).toContain('POST /api/agui/run');
     // The stand-in refuses the run itself, so the script reports the HTTP error.
     expect(out.status).toBe(1);
+  });
+});
+
+/* ---------------- identyfikator przebiegu i katalog testowy (ETAP 2) ------ */
+
+/** Katalog testowy zgodny z bramką: w systemowym tmp, jak dla instancji odbiorczej. */
+const katalogTestowy = (): string => tmpKatalog('.e2e-odbiorcza-');
+
+describe('identyfikator przebiegu i katalog testowy (ETAP 2, dziura 4)', () => {
+  it('srodowisko bez identyfikatora przebiegu jest problemem z instrukcja', () => {
+    expect(mod.problemSrodowiskaOdbiorczego({})).toMatch(/brak APP_INSTANCE_RUN_ID/);
+    expect(mod.problemSrodowiskaOdbiorczego({ APP_INSTANCE_RUN_ID: '   ' })).toMatch(
+      /brak APP_INSTANCE_RUN_ID/,
+    );
+    // Instrukcja musi prowadzić do działającej konfiguracji.
+    expect(mod.problemSrodowiskaOdbiorczego({})).toContain('mktemp');
+    expect(mod.problemSrodowiskaOdbiorczego({})).toContain('APP_INSTANCE_LABEL');
+  });
+
+  it('srodowisko bez katalogu danych jest problemem', () => {
+    const problem = mod.problemSrodowiskaOdbiorczego({ APP_INSTANCE_RUN_ID: 'p1' });
+    expect(problem).toMatch(/brak APP_DATA_DIR/);
+    expect(mod.problemSrodowiskaOdbiorczego({ APP_INSTANCE_RUN_ID: 'p1', APP_DATA_DIR: '' })).toMatch(
+      /brak APP_DATA_DIR/,
+    );
+  });
+
+  it('katalog spoza testowych jest problemem; .e2e i tmp przechodza', () => {
+    // Realistyczny katalog nie-testowy: pod katalogiem domowym, bez prefiksu.
+    const cudzyKatalog = resolve(homedir(), 'agentic-dane-nie-testowe');
+    const zly = mod.problemSrodowiskaOdbiorczego({
+      APP_INSTANCE_RUN_ID: 'p1',
+      APP_DATA_DIR: cudzyKatalog,
+    });
+    expect(zly).toMatch(/nie jest katalogiem testowym/);
+    expect(zly).toContain(cudzyKatalog);
+
+    // Prefiks .e2e wystarcza, także w tmp…
+    expect(
+      mod.problemSrodowiskaOdbiorczego({ APP_INSTANCE_RUN_ID: 'p1', APP_DATA_DIR: katalogTestowy() }),
+    ).toBeNull();
+    // …i katalog w tmp bez prefiksu też: oba są z gatunku katalogów testowych.
+    expect(
+      mod.problemSrodowiskaOdbiorczego({
+        APP_INSTANCE_RUN_ID: 'p1',
+        APP_DATA_DIR: tmpKatalog('agentic-odbiorcza-'),
+      }),
+    ).toBeNull();
+  });
+
+  it('kontrola: poprawne srodowisko w ogole nie jest problemem', () => {
+    expect(
+      mod.problemSrodowiskaOdbiorczego({
+        APP_INSTANCE_RUN_ID: 'p1',
+        APP_DATA_DIR: katalogTestowy(),
+      }),
+    ).toBeNull();
+  });
+
+  it('brak identyfikatora przebiegu: odmowa PRZED pierwszym zapisem', async () => {
+    const base = await instanceAnswering('agenticapp-acceptance');
+    const out = await runScript(base);
+
+    expect(out.status, `stderr: ${out.stderr}`).toBe(3);
+    expect(out.stderr).toContain('brak APP_INSTANCE_RUN_ID');
+    // Zdrowie odpytane, zero zapisu — odmowa poprzedza operacje zapisujące.
+    expect(seen).toEqual(['GET /api/health']);
+    expect(seen.filter((r) => r.startsWith('POST'))).toEqual([]);
+  });
+
+  it('instancja z innego przebiegu jest odrzucona mimo dobrej etykiety', async () => {
+    const base = await instanceAnswering('agenticapp-acceptance', 'przebieg-sprzed-godziny');
+    const out = await runScript(base, {
+      APP_INSTANCE_RUN_ID: 'przebieg-terazniejszy',
+      APP_DATA_DIR: katalogTestowy(),
+    });
+
+    expect(out.status, `stderr: ${out.stderr}`).toBe(3);
+    expect(out.stderr).toContain('Z INNEGO PRZEBIEGU');
+    expect(out.stderr).toContain('"przebieg-sprzed-godziny"');
+    expect(seen).toEqual(['GET /api/health']);
+  });
+
+  it('instancja bez pola instanceRunId tez jest odrzucona', async () => {
+    // Serwer sprzed wprowadzenia pola odpowiada null — to nie jest ten przebieg.
+    const base = await instanceAnswering('agenticapp-test', null);
+    const out = await runScript(base, {
+      APP_INSTANCE_RUN_ID: 'przebieg-terazniejszy',
+      APP_DATA_DIR: katalogTestowy(),
+    });
+
+    expect(out.status).toBe(3);
+    expect(out.stderr).toContain('Z INNEGO PRZEBIEGU');
+    expect(out.stderr).toContain('null');
+  });
+
+  it('wlasciwy przebieg, ale katalog spoza testowych: odmowa przed zapisem', async () => {
+    const base = await instanceAnswering('agenticapp-acceptance', 'przebieg-terazniejszy');
+    const out = await runScript(base, {
+      APP_INSTANCE_RUN_ID: 'przebieg-terazniejszy',
+      APP_DATA_DIR: resolve(homedir(), 'agentic-dane-nie-testowe'),
+    });
+
+    expect(out.status, `stderr: ${out.stderr}`).toBe(3);
+    expect(out.stderr).toContain('nie jest katalogiem testowym');
+    expect(seen).toEqual(['GET /api/health']);
+    expect(seen.filter((r) => r.startsWith('POST'))).toEqual([]);
+  });
+
+  it('resolveAcceptanceTarget niesie identyfikator przebiegu z srodowiska', () => {
+    expect(mod.resolveAcceptanceTarget({ APP_INSTANCE_RUN_ID: 'p9' }).expectedRunId).toBe('p9');
+    expect(mod.resolveAcceptanceTarget({}).expectedRunId).toBeUndefined();
+  });
+
+  it('ten sam przebieg i katalog testowy: bramka przepuszcza przed pierwszym zapisem', async () => {
+    const base = await instanceAnswering('agenticapp-acceptance', 'przebieg-terazniejszy');
+    const target = await mod.requireAcceptanceInstance({
+      APP_BASE: base,
+      APP_INSTANCE_RUN_ID: 'przebieg-terazniejszy',
+      APP_DATA_DIR: katalogTestowy(),
+    });
+    expect(target.base).toBe(base);
   });
 });

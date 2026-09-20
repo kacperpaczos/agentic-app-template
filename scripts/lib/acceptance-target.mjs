@@ -25,9 +25,26 @@
  * development proxy answers 502 and keeps retrying because its backend may
  * still be starting; an acceptance run has nothing to wait for and stops.
  *
+ * **The hole this closure adds on top.** The label answers "is this *a* test
+ * instance"; it is the same string for every instance ever started, so it
+ * cannot answer "is this the instance *this run* was pointed at". The browser
+ * suites solved that with `APP_INSTANCE_RUN_ID` (`e2e/support/isolation.ts`):
+ * a value the starter generates, the server echoes on `/api/health`, and the
+ * harness compares. An acceptance run used to compare nothing, so a labelled
+ * instance orphaned by an interrupted run passed the whole gate on a database
+ * the operator had since turned into something else. Now the run requires its
+ * environment to carry `APP_INSTANCE_RUN_ID`, compares it with what answered,
+ * and requires the instance's data directory to be declared and to *look*
+ * test-like (an `.e2e` name or a directory under the system temp) — before the
+ * first request that writes.
+ *
  * Kryteria: L1.8 (konfiguracja kierująca próbę na instancję użytkownika jest
  * odrzucana przed operacją zapisu).
  */
+
+import { realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, resolve, sep } from 'node:path';
 
 /** Port an installed instance listens on when nobody configures one. */
 export const USER_APP_PORT = 8791;
@@ -96,7 +113,16 @@ export function resolveAcceptanceTarget(env = {}) {
         `Uruchom osobna instancje z osobnym katalogiem danych (domyslnie ${DEFAULT_ACCEPTANCE_BASE}).`,
     );
   }
-  return { base: url.origin, port, allowedLabels: [...ACCEPTANCE_LABELS] };
+  /*
+   * The run identifier the caller declares, if any. Read here so every caller
+   * of `resolveAcceptanceTarget` sees the same expectation; the comparison
+   * itself happens when somebody actually answers.
+   */
+  const expectedRunId =
+    typeof env.APP_INSTANCE_RUN_ID === 'string' && env.APP_INSTANCE_RUN_ID.trim() !== ''
+      ? env.APP_INSTANCE_RUN_ID
+      : undefined;
+  return { base: url.origin, port, allowedLabels: [...ACCEPTANCE_LABELS], expectedRunId };
 }
 
 /**
@@ -111,6 +137,7 @@ export const HEALTH_TIMEOUT_MS = 10_000;
 
 export async function checkAcceptanceInstance(target, fetchImpl = fetch, timeoutMs = HEALTH_TIMEOUT_MS) {
   let label;
+  let runId;
   try {
     const res = await fetchImpl(`${target.base}/api/health`, {
       /*
@@ -134,6 +161,7 @@ export async function checkAcceptanceInstance(target, fetchImpl = fetch, timeout
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = await res.json();
     label = body?.instanceLabel ?? null;
+    runId = body?.instanceRunId ?? null;
   } catch (e) {
     return (
       `Instancja pod ${target.base} nie odpowiada na /api/health poprawnie ` +
@@ -151,6 +179,76 @@ export async function checkAcceptanceInstance(target, fetchImpl = fetch, timeout
       'nic nie zostalo zapisane. Ustaw APP_INSTANCE_LABEL na wlasnej instancji albo wskaz APP_BASE.'
     );
   }
+  if (target.expectedRunId !== undefined && runId !== target.expectedRunId) {
+    return (
+      `Pod ${target.base} odpowiada instancja Z INNEGO PRZEBIEGU ` +
+      `(instanceRunId=${JSON.stringify(runId)}, oczekiwano ${JSON.stringify(target.expectedRunId)}). ` +
+      'Etykieta jest wspolna dla wszystkich instancji testowych i odbiorczych, wiec sama nie ' +
+      'odroznia serwera osieroconego po przerwanym starcie od tego, ktory ta proba wskazala. ' +
+      'Uruchom instancje z APP_INSTANCE_RUN_ID o tej samej wartosci, ktora podajesz tutaj, ' +
+      'albo zatrzymaj tamten proces po jego pid. Nic nie zostalo zapisane.'
+    );
+  }
+  return null;
+}
+
+/**
+ * Refuses an acceptance run whose environment does not *declare* what it is
+ * talking to.
+ *
+ * The label gate checks what answers; this checks what the run itself claims.
+ * `APP_INSTANCE_RUN_ID` must be carried by the run so it can be compared with
+ * the answering instance, and `APP_DATA_DIR` must be carried so the run can
+ * refuse a data directory that does not look like a test one (an `.e2e` name,
+ * or a directory under the system temp). Both are the same values the instance
+ * was started with, so the honest invocation is one `export` away — and the
+ * refusal message is that invocation.
+ */
+export function problemSrodowiskaOdbiorczego(env = {}) {
+  const runId = env.APP_INSTANCE_RUN_ID;
+  if (typeof runId !== 'string' || runId.trim() === '') {
+    return (
+      'brak APP_INSTANCE_RUN_ID — ta proba musi wiedziec, z ktora instancja mowi. ' +
+      'Uruchom instancje odbiorcza i probe z ta sama wartoscia, np.:\n' +
+      '  export APP_INSTANCE_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"\n' +
+      '  export APP_DATA_DIR="$(mktemp -d /tmp/.e2e-odbiorcza-XXXXXX)"\n' +
+      '  APP_INSTANCE_LABEL=agenticapp-acceptance APP_INSTANCE_RUN_ID="$APP_INSTANCE_RUN_ID" ' +
+      `APP_DATA_DIR="$APP_DATA_DIR" PORT=${DEFAULT_ACCEPTANCE_PORT} pnpm start\n` +
+      'Bramka porownuje ten identyfikator z instanceRunId na /api/health i odmawia instancji ' +
+      'z innego przebiegu, zanim cokolwiek zapisze.'
+    );
+  }
+  const katalog = env.APP_DATA_DIR;
+  if (typeof katalog !== 'string' || katalog.trim() === '') {
+    return (
+      'brak APP_DATA_DIR — proba nie moze sprawdzic, w jakim katalogu danych stoi instancja, ' +
+      'ktorej zamierza pisac. Ustaw APP_DATA_DIR na ta sama wartosc, z jaka wystartowala ' +
+      'instancja odbiorcza (katalog o nazwie z prefiksem ".e2e" albo katalog w systemowym tmp).'
+    );
+  }
+  const realna = (() => {
+    try {
+      return realpathSync(resolve(katalog));
+    } catch {
+      return resolve(katalog);
+    }
+  })();
+  const tmp = (() => {
+    try {
+      return realpathSync(tmpdir());
+    } catch {
+      return resolve(tmpdir());
+    }
+  })();
+  const wTmp = realna === tmp || realna.startsWith(tmp + sep);
+  const prefiksTestowy = basename(realna).startsWith('.e2e');
+  if (!wTmp && !prefiksTestowy) {
+    return (
+      `APP_DATA_DIR (${katalog}) nie jest katalogiem testowym — proba wykonuje zapisy ` +
+      '(zmiana ilosci pozycji, dodanie kart) i wymaga katalogu o nazwie z prefiksem ".e2e" ' +
+      'albo katalogu w systemowym tmp, nie miejsca, w ktorym stoia komus dane.'
+    );
+  }
   return null;
 }
 
@@ -165,5 +263,7 @@ export async function requireAcceptanceInstance(env = {}, fetchImpl = fetch, tim
   const target = resolveAcceptanceTarget(env);
   const problem = await checkAcceptanceInstance(target, fetchImpl, timeoutMs);
   if (problem) throw new AcceptanceTargetError(problem);
+  const srodowisko = problemSrodowiskaOdbiorczego(env);
+  if (srodowisko) throw new AcceptanceTargetError(srodowisko);
   return target;
 }

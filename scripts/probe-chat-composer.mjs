@@ -27,7 +27,13 @@ import { requireAcceptanceInstance } from './lib/acceptance-target.mjs';
 
 let BASE;
 try {
-  BASE = (await requireAcceptanceInstance({ APP_BASE: process.env.PROBE_BASE ?? 'http://127.0.0.1:8788' })).base;
+  BASE = (
+    await requireAcceptanceInstance({
+      // Środowisko w całości: bramka czyta APP_INSTANCE_RUN_ID i APP_DATA_DIR.
+      ...process.env,
+      APP_BASE: process.env.PROBE_BASE ?? 'http://127.0.0.1:8788',
+    })
+  ).base;
 } catch (e) {
   console.error(e.message);
   process.exit(3);
