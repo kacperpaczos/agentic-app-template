@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { expect, type Page } from '@playwright/test';
+import { readZipEntry } from '../../tests/support/zip.ts';
 import { parseToolContent } from './show-value-probe.ts';
 
 /**
@@ -513,4 +514,41 @@ export function containsAny(haystack: string, needles: string[]): string | null 
     if (n.length >= 8 && haystack.includes(n)) return `${n.slice(0, 4)}…(${n.length} znakow)`;
   }
   return null;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Spreadsheet formula cells (L11.23)                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Czy komorka arkusza ma formule **bez zapisanego wyniku przeliczenia**.
+ *
+ * The `.xlsx` is a ZIP of XML parts; the cell we care about lives in
+ * `xl/worksheets/sheet1.xml`. A formula cell the library wrote is
+ * `<c r="A4"><f>SUM(A1:A3)</f></c>`; if a cached `<v>` rides along, the file
+ * carries a value the library never computed — the only place it could have
+ * come from is whoever wrote the file by hand. That is exactly what L11.23
+ * forbids presenting as a computed result, and exactly what this reads from
+ * the bytes rather than from anybody's prose.
+ *
+ * `readZipEntry` is the same minimal ZIP reader the platform's own file tests
+ * use; nothing here is used by the application.
+ */
+export function findFormulaCellXml(
+  xlsx: Buffer,
+  sheet = 'xl/worksheets/sheet1.xml',
+  ref = 'A4',
+): { formula: string | null; cachedValue: string | null } {
+  /* readZipEntry dekoduje rowniez czesci skompresowane (exceljs pisze deflacja). */
+  let xml: string;
+  try {
+    xml = readZipEntry(xlsx, sheet).toString('utf8');
+  } catch {
+    throw new Error(`brak czesci ${sheet} w arkuszu`);
+  }
+  const cell = xml.match(new RegExp(`<c r="${ref}"[^>]*>(.*?)</c>`, 's'));
+  if (!cell) return { formula: null, cachedValue: null };
+  const formula = cell[1]!.match(/<f[^>]*>(.*?)<\/f>/s)?.[1] ?? null;
+  const cachedValue = cell[1]!.match(/<v>(.*?)<\/v>/s)?.[1] ?? null;
+  return { formula, cachedValue };
 }

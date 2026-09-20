@@ -366,3 +366,90 @@ export function bl03IsolationScript(prompt: string): Step[] {
     { kind: 'text', text: 'Zakonczylem probe izolacji.' },
   ];
 }
+
+/**
+ * The F2 rehearsal (paid twin: `bl03-model-t16.spec.ts`).
+ *
+ * Two probes of one command: a detail lookup of a record that does **not**
+ * exist (the real handler answers `not_found` through the real validation, so
+ * the error is a fact of the platform, not of the script), and a spreadsheet
+ * built **by real code in the real workspace** — `workspaceScript` runs Node
+ * with the run workspace as its working directory, resolving `exceljs` exactly
+ * as model-authored code would.
+ */
+export function bl03T16Script(prompt: string): Step[] {
+  if (!prompt.includes('PROBA-T16')) {
+    return [{ kind: 'text', text: 'Nie rozumiem polecenia proby.' }];
+  }
+  return [
+    {
+      kind: 'call',
+      name: 'procurement_get_case',
+      input: { caseId: 'L611-nie-ma-takiej-sprawy' },
+      maxChars: 400,
+    },
+    { kind: 'call', name: 'procurement_list_cases', maxChars: 800 },
+    {
+      kind: 'call',
+      name: 'procurement_get_case',
+      input: (calls: CallRecord[]) => {
+        const listed = calls.find((c) => c.name === 'procurement_list_cases');
+        const first = (listed?.result as { cases?: Array<{ id: string }> } | undefined)?.cases?.[0];
+        if (!first) throw new Error('scenariusz bl03-t16: list_cases nie zwrocil zadnej sprawy');
+        return { caseId: first.id };
+      },
+      maxChars: 1200,
+    },
+    {
+      kind: 'workspaceScript',
+      script: [
+        "import ExcelJS from 'exceljs';",
+        'const wb = new ExcelJS.Workbook();',
+        "const ws = wb.addWorksheet('Arkusz1');",
+        'ws.getCell("A1").value = 11;',
+        'ws.getCell("A2").value = 22;',
+        'ws.getCell("A3").value = 33;',
+        "ws.getCell('A4').value = { formula: 'SUM(A1:A3)' };",
+        "await wb.xlsx.writeFile('output/formula.xlsx');",
+        "console.log('zapisano');",
+      ].join('\n'),
+      maxChars: 200,
+    },
+    {
+      kind: 'call',
+      name: 'artifact_publish_file',
+      input: {
+        path: 'formula.xlsx',
+        title: 'Formula T16',
+        operationId: `e2e-t16-formula-${Date.now()}`,
+      },
+      maxChars: 400,
+    },
+    { kind: 'text', text: 'Sprawa nieistniejaca: narzedzie odpowiedzialo brakiem. Plik zapisano i opublikowano.' },
+  ];
+}
+
+/**
+ * The G2 rehearsal (paid twin: `bl03-model-t17.spec.ts`).
+ *
+ * One command, three calls: `Write` and `Read` (pre-approved, in
+ * `allowedTools` — the gate must never be consulted) and one `Bash` (not in
+ * `allowedTools` — the gate must be asked). The `ask` step drives the real
+ * consent gate, so the rehearsal can assert the very ordering L11.12 is about.
+ */
+export function bl03T17Script(prompt: string): Step[] {
+  if (!prompt.includes('PROBA-T17')) {
+    return [{ kind: 'text', text: 'Nie rozumiem polecenia proby.' }];
+  }
+  return [
+    { kind: 'fileTool', name: 'Write', input: { file_path: 'output/notatka-g2.txt', content: 'PROBA-G2' } },
+    { kind: 'fileTool', name: 'Read', input: { file_path: 'output/notatka-g2.txt' } },
+    {
+      kind: 'ask',
+      toolName: 'Bash',
+      input: { command: 'echo PROBA-G2' },
+      then: [{ kind: 'writeOutput', path: 'nie-powinno-powstac.txt', content: 'NIE-POWINNO-POWSTAC' }],
+    },
+    { kind: 'text', text: 'Zakonczylem trzy operacje.' },
+  ];
+}

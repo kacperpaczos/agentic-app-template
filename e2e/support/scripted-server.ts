@@ -45,6 +45,8 @@ import {
   bl03IsolationScript,
   bl03LifecycleScript,
   bl03RelationsScript,
+  bl03T16Script,
+  bl03T17Script,
 } from './bl03-scenarios.ts';
 import { interactionsScript } from './interactions-scenario.ts';
 import { showValueScript } from './show-value-scenario.ts';
@@ -703,6 +705,8 @@ const CONVERSATION_SCENARIOS: Record<string, (prompt: string) => Step[]> = {
   'bl03-consent': bl03ConsentScript,
   'bl03-isolation': bl03IsolationScript,
   'bl03-lifecycle': bl03LifecycleScript,
+  'bl03-t16': bl03T16Script,
+  'bl03-t17': bl03T17Script,
 };
 
 /**

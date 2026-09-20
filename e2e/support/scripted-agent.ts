@@ -11,7 +11,7 @@
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import {
   invokeTool,
   mcpToolName,
@@ -411,7 +411,15 @@ export function scriptedAgent(
               yield { type: 'text-delta', payload: { text: `[plik:${step.name}] odmowa ` } };
               continue;
             }
-            const target = String(step.input.file_path ?? step.input.path ?? '');
+            /*
+             * Realny SDK uruchamia narzedzia plikowe z cwd = katalog roboczy
+             * uruchomienia, wiec sciezka wzgledna z modelu wskazuje workspace.
+             * Stand-in rozwiazuje tak samo — bez tego krok wzgledny w probie
+             * generalnej czytalby wzgledem katalogu repozytorium.
+             */
+            const workspaceDir = options?.toolContext?.workspaceDir;
+            const raw = String(step.input.file_path ?? step.input.path ?? '');
+            const target = isAbsolute(raw) ? raw : resolve(workspaceDir ?? process.cwd(), raw);
             let contents: string;
             let failed = false;
             /*
