@@ -42,8 +42,8 @@
  * odrzucana przed operacją zapisu).
  */
 
-import { realpathSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { realpathSync, statSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { basename, resolve, sep } from 'node:path';
 
 /** Port an installed instance listens on when nobody configures one. */
@@ -253,11 +253,77 @@ export function problemSrodowiskaOdbiorczego(env = {}) {
 }
 
 /**
+ * The credentials file of the login this machine is running under — the same
+ * path the browser harness guards (`e2e/credential-guard.ts`).
+ *
+ * **Never read for content.** The only thing this module does with the file is
+ * `stat` it: the fingerprint below is size and mtime, neither of which is a
+ * secret. Reading the contents — even to hash them — would copy the user's
+ * tokens into this process's memory for no gain, and the rule this whole
+ * mechanism serves (G21) is that nothing in this repository touches that file.
+ */
+export function plikPoswiadczen() {
+  return resolve(process.env.CLAUDE_CONFIG_DIR ?? resolve(homedir(), '.claude'), '.credentials.json');
+}
+
+/** Rozmiar i czas modyfikacji; `brak`, gdy pliku nie ma. Ani jedno nie jest sekretem. */
+export function odciskPoswiadczen() {
+  try {
+    const st = statSync(plikPoswiadczen());
+    return `${st.size}:${st.mtimeMs}`;
+  } catch {
+    return 'brak';
+  }
+}
+
+/**
+ * Saves the fingerprint at gate time and says so when there is nothing to
+ * guard: a machine without the credentials file must not pass silently — the
+ * absence is stated, and what is guarded is then the file's *appearance*.
+ */
+export function zapiszOdciskPoswiadczen() {
+  const odcisk = odciskPoswiadczen();
+  if (odcisk === 'brak') {
+    console.error(
+      `[proba odbiorowa] plik poswiadczen (${plikPoswiadczen()}) nie istnieje — odcisk "brak". ` +
+        'Proba pilnuje teraz, zeby plik w jej trakcie nie powstal; to stwierdzenie jest jawne, ' +
+        'nie milczaca zgoda.',
+    );
+  }
+  return odcisk;
+}
+
+/** Porównuje odcisk z gate time i głośno kończy probe błędem przy zmianie. */
+export function sprawdzOdciskPoswiadczen(odcisk) {
+  if (typeof odcisk !== 'string') {
+    throw new Error(
+      '[proba odbiorowa][odcisk] brak zapisanego odcisku poswiadczen — bramka instancji nie ' +
+        'przeszla przez zapis odcisku? Konca proby nie wolno przyjac bez tego porownania.',
+    );
+  }
+  const po = odciskPoswiadczen();
+  if (po !== odcisk) {
+    throw new Error(
+      `[proba odbiorowa][odcisk] plik poswiadczen uzytkownika (${plikPoswiadczen()}) ZMIENIL SIE ` +
+        `w trakcie tej proby (odcisk przed: ${odcisk}, po: ${po}). Zadna proba odbiorcza nie ` +
+        'zapisuje tego pliku w zadnym celu — takze identyczna trescia, bo zapis i tak obcina ' +
+        'i przepisuje plik. To jest wykrycie naruszenia; proba konczy sie bledem.',
+    );
+  }
+}
+
+/**
  * The whole gate: resolve, ask, and stop before the first write.
  *
  * Both scripts call this as their first statement, before the session cookie is
  * fetched — `/api/auth/session` is itself a POST, and a POST to the user's
  * instance is already the thing this prevents.
+ *
+ * Passing the gate also takes the credentials fingerprint: the returned target
+ * carries `odciskPoswiadczen`, and the calling scripts compare it at the end
+ * (`sprawdzOdciskPoswiadczen`) and refuse success when it changed. The probe
+ * itself spawns a real agent; the fingerprint is how the *run* proves it did
+ * not write through the user's login while doing it.
  */
 export async function requireAcceptanceInstance(env = {}, fetchImpl = fetch, timeoutMs = HEALTH_TIMEOUT_MS) {
   const target = resolveAcceptanceTarget(env);
@@ -265,5 +331,6 @@ export async function requireAcceptanceInstance(env = {}, fetchImpl = fetch, tim
   if (problem) throw new AcceptanceTargetError(problem);
   const srodowisko = problemSrodowiskaOdbiorczego(env);
   if (srodowisko) throw new AcceptanceTargetError(srodowisko);
+  target.odciskPoswiadczen = zapiszOdciskPoswiadczen();
   return target;
 }

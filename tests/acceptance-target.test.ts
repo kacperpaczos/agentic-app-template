@@ -1,6 +1,15 @@
 import { spawn } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
@@ -38,6 +47,9 @@ const tmpKatalog = (prefiks = 'agentic-skrypty-'): string => {
 const RUN_AGENT = resolve(REPO, 'scripts/run-agent.mjs');
 const MODULE = resolve(REPO, 'scripts/lib/acceptance-target.mjs');
 
+/** Procesy potomne uruchomione przez ten plik; sprzątane po pid w afterAll. */
+const dzieciProc: import('node:child_process').ChildProcess[] = [];
+
 interface AcceptanceTargetModule {
   DEFAULT_ACCEPTANCE_BASE: string;
   TEST_PORT_RANGE: { from: number; to: number };
@@ -59,7 +71,14 @@ interface AcceptanceTargetModule {
   problemSrodowiskaOdbiorczego: (
     env?: Record<string, string | undefined>,
   ) => string | null;
-  requireAcceptanceInstance: (env?: Record<string, string | undefined>) => Promise<{ base: string }>;
+  plikPoswiadczen: () => string;
+  odciskPoswiadczen: () => string;
+  zapiszOdciskPoswiadczen: () => string;
+  sprawdzOdciskPoswiadczen: (odcisk: string | undefined) => void;
+  requireAcceptanceInstance: (env?: Record<string, string | undefined>) => Promise<{
+    base: string;
+    odciskPoswiadczen?: string;
+  }>;
 }
 
 const mod = (await import(MODULE)) as AcceptanceTargetModule;
@@ -135,6 +154,10 @@ async function instanceThatNeverAnswers(): Promise<string> {
 
 afterAll(() => {
   for (const d of katalogi.splice(0)) rmSync(d, { recursive: true, force: true });
+  // Wyłącznie procesy, które ten plik sam uruchomił, i wyłącznie po pid.
+  for (const dziecko of dzieciProc.splice(0)) {
+    if (dziecko.exitCode === null && !dziecko.killed) dziecko.kill('SIGKILL');
+  }
 });
 
 afterEach(async () => {
@@ -662,4 +685,146 @@ describe('identyfikator przebiegu i katalog testowy (ETAP 2, dziura 4)', () => {
     });
     expect(target.base).toBe(base);
   });
+});
+
+/* --------------------- odcisk poświadczeń (ETAP 2, dziura 2) -------------- */
+
+describe('odcisk poswiadczen w probie odbiorczej (ETAP 2, dziura 2)', () => {
+  const atrapaConfig = (): { dir: string; plik: string } => {
+    const dir = mkdtempSync(resolve(tmpdir(), 'atrapa-config-odbiorcza-'));
+    katalogi.push(dir);
+    const plik = resolve(dir, '.credentials.json');
+    writeFileSync(plik, 'ATRAPA-zadne-poswiadczenie-nie-bierze-udzialu');
+    return { dir, plik };
+  };
+
+  it('odcisk to rozmiar i czas modyfikacji, honoruje CLAUDE_CONFIG_DIR', () => {
+    const { dir, plik } = atrapaConfig();
+    const realDir = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = dir;
+    try {
+      expect(mod.plikPoswiadczen()).toBe(plik);
+      const odcisk = mod.odciskPoswiadczen();
+      expect(odcisk).toMatch(/^\d+:\d+(\.\d+)?$/);
+      const st = statSync(plik);
+      expect(odcisk).toBe(`${st.size}:${st.mtimeMs}`);
+    } finally {
+      if (realDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = realDir;
+    }
+  });
+
+  it('zmiana pliku (nawet samego mtime, ta sama tresc) jest wykrywana i rzuca', () => {
+    const { dir, plik } = atrapaConfig();
+    const realDir = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = dir;
+    try {
+      const przed = mod.zapiszOdciskPoswiadczen();
+      // Ta sama treść, nowy mtime: zapis identycznej treści to nadal zapis.
+      const st = statSync(plik);
+      utimesSync(plik, st.atime, new Date(st.mtimeMs + 5000));
+      expect(mod.odciskPoswiadczen()).not.toBe(przed);
+      expect(() => mod.sprawdzOdciskPoswiadczen(przed)).toThrow(/ZMIENIL SIE/);
+    } finally {
+      if (realDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = realDir;
+    }
+  });
+
+  it('brak pliku jest jawny: odcisk "brak", a POJAWIENIE sie pliku jest wykryte', () => {
+    const dir = mkdtempSync(resolve(tmpdir(), 'atrapa-config-brak-'));
+    katalogi.push(dir);
+    const realDir = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = dir;
+    try {
+      // Bez pliku: odcisk "brak", porównanie przechodzi — ale nic nie jest milczone.
+      expect(mod.odciskPoswiadczen()).toBe('brak');
+      expect(mod.zapiszOdciskPoswiadczen()).toBe('brak');
+      expect(() => mod.sprawdzOdciskPoswiadczen('brak')).not.toThrow();
+
+      // Plik powstał w trakcie próby: naruszenie, głośny błąd.
+      writeFileSync(resolve(dir, '.credentials.json'), 'powstal-w-trakcie');
+      expect(() => mod.sprawdzOdciskPoswiadczen('brak')).toThrow(/ZMIENIL SIE/);
+    } finally {
+      if (realDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = realDir;
+    }
+  });
+
+  it('brak zapisanego odcisku jest głośnym błędem, nie cichym przejściem', () => {
+    expect(() => mod.sprawdzOdciskPoswiadczen(undefined)).toThrow(/brak zapisanego odcisku/);
+  });
+
+  it('bramka zwraca odcisk przy przepuszczeniu proby', async () => {
+    const base = await instanceAnswering('agenticapp-acceptance', 'przebieg-terazniejszy');
+    const target = await mod.requireAcceptanceInstance({
+      APP_BASE: base,
+      APP_INSTANCE_RUN_ID: 'przebieg-terazniejszy',
+      APP_DATA_DIR: katalogTestowy(),
+    });
+    expect(typeof target.odciskPoswiadczen).toBe('string');
+  });
+
+  it('PROBA NA PRAWDZIWYM SKRYPCIE: zmiana pliku w trakcie konczy probe kodem 5', async () => {
+    const { dir, plik } = atrapaConfig();
+    const base = await instanceAnswering('agenticapp-acceptance', 'przebieg-odbiorczy');
+
+    const dziecko = spawn(process.execPath, [RUN_AGENT, 'cokolwiek', '--space', 's1'], {
+      env: {
+        ...process.env,
+        APP_BASE: base,
+        APP_INSTANCE_RUN_ID: 'przebieg-odbiorczy',
+        APP_DATA_DIR: katalogTestowy(),
+        CLAUDE_CONFIG_DIR: dir,
+      },
+    });
+    dzieciProc.push(dziecko);
+
+    let stdout = '';
+    let stderr = '';
+    let dotkniety = false;
+    dziecko.stdout.on('data', (b: Buffer) => {
+      stdout += b.toString();
+      // Bramka przeszła (odcisk zapisany) — dopiero teraz dotykamy pliku.
+      if (!dotkniety && stdout.includes('# instancja:')) {
+        dotkniety = true;
+        const st = statSync(plik);
+        utimesSync(plik, st.atime, new Date(st.mtimeMs + 5000));
+      }
+    });
+    dziecko.stderr.on('data', (b: Buffer) => (stderr += b.toString()));
+    const status = await new Promise<number | null>((done) => dziecko.on('close', done));
+
+    expect(dotkniety, 'proba nie dotarla do komunikatu instancji').toBe(true);
+    expect(status, `stderr: ${stderr}`).toBe(5);
+    expect(stderr).toContain('ZMIENIL SIE');
+    expect(stderr).toContain('poswiadczen');
+  }, 20_000);
+
+  it('kontrola przeciwna: bez zmiany pliku proba konczy sie jak dotad (1), nie 5', async () => {
+    const { dir } = atrapaConfig();
+    const base = await instanceAnswering('agenticapp-acceptance', 'przebieg-odbiorczy');
+
+    const dziecko = spawn(process.execPath, [RUN_AGENT, 'cokolwiek', '--space', 's1'], {
+      env: {
+        ...process.env,
+        APP_BASE: base,
+        APP_INSTANCE_RUN_ID: 'przebieg-odbiorczy',
+        APP_DATA_DIR: katalogTestowy(),
+        CLAUDE_CONFIG_DIR: dir,
+      },
+    });
+    dzieciProc.push(dziecko);
+
+    let stdout = '';
+    let stderr = '';
+    dziecko.stdout.on('data', (b: Buffer) => (stdout += b.toString()));
+    dziecko.stderr.on('data', (b: Buffer) => (stderr += b.toString()));
+    const status = await new Promise<number | null>((done) => dziecko.on('close', done));
+
+    // Stand-in odmawia zapisu (503) — to znany koniec kodem 1, nie naruszenie.
+    expect(stdout).toContain('# instancja:');
+    expect(status, `stderr: ${stderr}`).toBe(1);
+    expect(stderr).not.toContain('ZMIENIL SIE');
+  }, 20_000);
 });

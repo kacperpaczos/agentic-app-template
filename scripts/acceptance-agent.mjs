@@ -19,13 +19,16 @@
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { requireAcceptanceInstance } from './lib/acceptance-target.mjs';
+import { requireAcceptanceInstance, sprawdzOdciskPoswiadczen } from './lib/acceptance-target.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
 let BASE;
+let odciskPoswiadczen;
 try {
-  BASE = (await requireAcceptanceInstance(process.env)).base;
+  const cel = await requireAcceptanceInstance(process.env);
+  BASE = cel.base;
+  odciskPoswiadczen = cel.odciskPoswiadczen;
 } catch (e) {
   console.error(e.message);
   process.exit(3);
@@ -223,4 +226,17 @@ console.log('\n================ PODSUMOWANIE ================');
 for (const r of results) console.log(`${r.ok ? 'PASS' : 'FAIL'}  ${r.id.padEnd(16)} ${r.detail}`);
 const failed = results.filter((r) => !r.ok).length;
 console.log(`\n${results.length - failed}/${results.length} scenariuszy zaliczonych`);
+
+/*
+ * ETAP 2, dziura 2: przebieg odbiorczy kończy się błędem (kod 5), jeśli plik
+ * poświadczeń użytkownika zmienił się od bramki — sukces scenariuszy nie
+ * przykrywa naruszenia logowania. Każdy potomek run-agent.mjs sprawdza swój
+ * odcisk osobno; to jest ostatnie słowo procesu nadrzędnego.
+ */
+try {
+  sprawdzOdciskPoswiadczen(odciskPoswiadczen);
+} catch (e) {
+  console.error(e.message);
+  process.exit(5);
+}
 process.exit(failed ? 1 : 0);

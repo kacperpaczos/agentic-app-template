@@ -12,7 +12,7 @@
  * before the first request rather than documented: see
  * `lib/acceptance-target.mjs` (L1.8).
  */
-import { requireAcceptanceInstance } from './lib/acceptance-target.mjs';
+import { requireAcceptanceInstance, sprawdzOdciskPoswiadczen } from './lib/acceptance-target.mjs';
 
 const args = process.argv.slice(2);
 const prompt = args[0];
@@ -33,13 +33,33 @@ if (!prompt) {
  * instance is already what this prevents.
  */
 let BASE;
+let odciskPoswiadczen;
 try {
-  BASE = (await requireAcceptanceInstance(process.env)).base;
+  const cel = await requireAcceptanceInstance(process.env);
+  BASE = cel.base;
+  odciskPoswiadczen = cel.odciskPoswiadczen;
 } catch (e) {
   console.error(e.message);
   process.exit(3);
 }
 console.log(`# instancja: ${BASE}`);
+
+/*
+ * ETAP 2, dziura 2: odcisk pliku poświadczeń brany przy bramce i porównywany
+ * przy KAŻDYM kończeniu, także błędnym. Przebieg uruchamia prawdziwego agenta;
+ * jeśli w tym czasie zmienił się plik logowania użytkownika, skrypt kończy się
+ * kodem 5 z nazwaniem przebiegu sprawcą — sukces nie może być przyjęty bez
+ * tego porównania.
+ */
+const zakoncz = (kod) => {
+  try {
+    sprawdzOdciskPoswiadczen(odciskPoswiadczen);
+  } catch (e) {
+    console.error(e.message);
+    process.exit(5);
+  }
+  process.exit(kod);
+};
 
 const jar = [];
 const fetchWithCookies = async (url, init = {}) => {
@@ -87,7 +107,7 @@ console.log(`# run=${runId} conversation=${conversationId}`);
 
 if (!res.ok || !res.body) {
   console.error('HTTP', res.status, await res.text());
-  process.exit(1);
+  zakoncz(1);
 }
 
 const decoder = new TextDecoder();
@@ -149,3 +169,4 @@ for await (const chunk of res.body) {
 console.log(`\n# events: ${JSON.stringify(counts)}`);
 console.log(`# first token: ${firstTokenAt ?? '-'} ms, total: ${Date.now() - started} ms`);
 console.log(`# conversation: ${conversationId}`);
+zakoncz(0);
