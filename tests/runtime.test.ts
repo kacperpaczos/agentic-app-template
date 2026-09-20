@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   AgentRuntime,
   createRunWorkspace,
@@ -623,6 +623,46 @@ describe('sesja SDK widzi tylko serwer MCP tej aplikacji', () => {
       expect(Object.keys(options.mcpServers)).toEqual(['app']);
     } finally {
       h.dispose();
+    }
+  });
+});
+
+describe('storage Mastry — straznik ostrzezenia o braku storage', () => {
+  /**
+   * Pierwsze zdanie ostrzezenia, ktore @mastra/core 1.66.0 wysyla przez
+   * `logger.warn`, gdy instancja Mastry powstaje bez `config.storage`
+   * (kolejka: `queueMicrotask`; domyslny logger: `console.warn`). Cytowane w
+   * calosci celowo — straznik ma oblac DOKLADNIE ten komunikat, nie
+   * jakiekolwiek ostrzezenie.
+   */
+  const OSTRZEZENIE_O_BRAKU_STORAGE =
+    'No `storage` configured on Mastra — falling back to an in-memory store';
+
+  /**
+   * Koniec słowny „ostrzeżenie o storage nie może wrócić”.
+   *
+   * Runtime ustawia `storage` jawnie (InMemoryStore), bo magazyn Mastry jest w
+   * tej aplikacji martwy — trwałość realizuje własna baza (`app.db`). Gdyby
+   * ktoś usunął jawną konfigurację, Mastra wróciłaby do fallbacku i
+   * ostrzegania przy każdym boocie — w produkcji, w każdym teście i w logach
+   * e2e. Ten test tworzy platformę (`createPlatform`, przez harness),
+   * przechwytuje `console.warn` i patrzy, czy tam nie padło.
+   */
+  it('tworzenie platformy nie ostrzega o braku storage', async () => {
+    const warnings: string[] = [];
+    const spy = vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+      warnings.push(args.map((part) => String(part)).join(' '));
+    });
+    let h: Harness | null = null;
+    try {
+      h = await createHarness({ withModule: false });
+      // Ostrzeżenie idzie z `queueMicrotask` — domykamy kolejkę zanim
+      // cokolwiek asertujemy.
+      await new Promise<void>((rozstrzygnij) => setImmediate(rozstrzygnij));
+      expect(warnings.join('\n')).not.toContain(OSTRZEZENIE_O_BRAKU_STORAGE);
+    } finally {
+      spy.mockRestore();
+      h?.dispose();
     }
   });
 });

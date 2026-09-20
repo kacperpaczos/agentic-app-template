@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { Mastra } from '@mastra/core';
+import { InMemoryStore } from '@mastra/core/storage';
 import { ClaudeSDKAgent } from '@mastra/claude';
 import {
   AppError,
@@ -174,6 +175,18 @@ export class AgentRuntime {
 
     this.#mastra = new Mastra({
       agents: { appAgent: this.#agent },
+      // Storage Mastry jest ustawiony jawnie (InMemoryStore z publicznego eksportu
+      // `@mastra/core/storage`), żeby @mastra/core 1.66.0 nie ostrzegał przy każdym
+      // boocie: „No `storage` configured on Mastra — falling back to an in-memory
+      // store". To świadome ograniczenie, nie zaniedbanie: magazyn Mastry jest w tej
+      // aplikacji martwy — korzysta z niego wyłącznie rejestracja agenta
+      // (`getAgent('appAgent')` poniżej), a trwałość rozmów, przebiegów i artefaktów
+      // realizuje własna baza SQLite (`app.db`, warstwa `services`). Żadne kryterium
+      // restartu nie opiera się o pamięć Mastry. Prawdziwy adapter (@mastra/libsql
+      // itd.) byłby nową zależnością — decyzja właściciela; decyzja opisana w
+      // `docs/observability.md` (sekcja o storage Mastry) i `FEEDBACK.md` (T10).
+      // Test strażnika: `tests/runtime.test.ts` (ostrzeżenie nie może wrócić).
+      storage: new InMemoryStore(),
     });
   }
 

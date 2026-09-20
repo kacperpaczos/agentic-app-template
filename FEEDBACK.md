@@ -975,3 +975,62 @@ przy normalnym końcu; nagły crash nadrzędnego omija porównanie — każde dz
 sprawdza swoje osobno, więc ścieżki ryzyka (rzeczywiste uruchomienia agenta) są pokryte.
 (c) `stop` w `audit-server.sh` wypisuje błąd `cat /tmp/audit_data_dir`, gdy pliku nie ma —
 zachowanie sprzed pakietu, nie ruszałem poza zakresem.
+
+## T10 — 2026-09-20 — ETAP 3: jawny storage Mastry (świadome InMemoryStore) i strażnik ostrzeżenia o braku storage
+
+**Problem.** Przy każdym uruchomieniu platformy — produkcyjny boot, każdy proces testowy tworzący
+platformę (14 plików przez `createPlatform`/`AgentRuntime`) i każdy proces e2e
+(`e2e/support/scripted-server.ts` → `compose.ts`) — @mastra/core 1.66.0 wypisywał: „No `storage`
+configured on Mastra — falling back to an in-memory store…". Bez `config.storage` Mastra sama
+buduje sobie zapasowy magazyn w pamięci i ostrzega, że jest nietrwały. Ostrzeżenie trafiało też do
+logów dowodowych (wyciek widoczny m.in. w
+`docs/evidence/z13-bl12/proby-wykrycia-D-1-szuflada-nad-canvasem.json`), więc szum wyglądał jak
+treść próby.
+
+**Co wykazała faktografia** (`etap3-mapa.md`, przegląd read-only kodu i testów): ostrzeżenie było
+prawdziwe, ale dotyczyło magazynu **martwego**. Mastra jest tu wyłącznie rejestrem agenta
+(`getAgent('appAgent')` to jedyna referencja; `@mastra/claude` 0.3.1 nie odwołuje się do storage w
+ogóle). Cała trwałość jest we własnej bazie (`app.db`, better-sqlite3+Drizzle, WAL): rozmowy i
+wiadomości (`conversations`/`messages`), przebiegi (`agent_runs`/`run_events`), artefakty,
+wznowienie sesji po `claude_session_id` z tej bazy. Przegląd wszystkich prób o restarcie i
+trwałości (11 plików testowych + e2e) pokazał, że każda asercja idzie po własnej bazie albo po
+procesie — żadna nie czyta z pamięci Mastry, żadna nie asertuje treści ostrzeżenia. Adaptery
+storage (@mastra/libsql/pg/cloudflare) nie występują w package.json ani lockfile (tranzytywnie
+tylko @mastra/schema-compat).
+
+**Decyzja.** Wariant A (prawdziwy adapter) odrzucony: wymagałby **nowej zależności**, a o nowych
+zależnościach decyduje właściciel (AGENTS.md), i nie dałby nic — nie ma czego w Mastrze
+przechowywać. Wykonany wariant B: **jawne ograniczenie**. `AgentRuntime` przekazuje
+`storage: new InMemoryStore()` z publicznego eksportu `@mastra/core/storage`
+(`node_modules/@mastra/core/dist/storage/mock.d.ts` — klasa testowo-deweloperska tego samego
+pakietu, który sam ją podstawia przy fallbacku), z komentarzem na miejscu wyjaśniającym decyzję.
+Kryteria restartu nietknięte — żadne nie wisi na pamięci Mastry;
+`docs/acceptance/assessment.json` bez zmian. Zero nowych zależności, lockfile nietknięty,
+e2e nietknięte (ostrzeżenie znika tam samo, bo e2e składa platformę tą samą ścieżką).
+
+**Zmiana** (trzy commity): (1) `packages/platform-server/src/agent/runtime.ts` — jawny storage +
+komentarz; (2) strażnik w `tests/runtime.test.ts`: tworzy platformę przez `createPlatform`,
+przechwytuje `console.warn` (Mastra bez własnego loggera pisze przez `ConsoleLogger` →
+`console.warn`; ostrzeżenie idzie z `queueMicrotask`, więc test domyka kolejkę przed asercją) i
+asertuje, że dokładnie to zdanie nie padło; (3) `tests/observability.test.ts` — obie instancje
+Mastry (celowo gołe pod kątem telemetrii) dostały ten sam jawny storage: bez tego ostrzeżenie
+zanieczyszczało wyjście regresji i przeciekało do moka loggera w teście kontraktu obserwowalności
+(asertuje on `Expected an Observability instance` i nie kolidował, ale przeciek był przypadkiem).
+Decyzja dokumentowana w `docs/observability.md` (nowa sekcja „Storage Mastry — świadome
+ograniczenie").
+
+**Kontrola negatywna.** Po usunięciu jawnej konfiguracji (mutacja robocza, niecommitowana) strażnik
+pada z pełną treścią komunikatu: „No `storage` configured on Mastra — falling back to an in-memory
+store. In-memory storage is not durable…". Strażnik celuje w pierwsze zdanie ostrzeżenia, nie w
+jakiekolwiek ostrzeżenie.
+
+**Weryfikacja.** Baseline przed zmianą: `pnpm install --frozen-lockfile`, `pnpm verify` = 0
+(71 plików, 1130 testów). Po pakiecie: `pnpm verify` = 0 (**71 plików, 1131 testów** — nowy jest
+tylko strażnik storage; instancje testowe z jawnym storage przechowują swoje asercje bez zmian).
+Brak ostrzeżenia potwierdzony także wyjściem pełnej regresji.
+
+**Otwarte.** Jeśli kiedyś zechciano by realnie korzystać z magazynu Mastry (memory, workflows),
+decyzję trzeba otworzyć: wtedy adapter storage staje się nową zależnością wymagającą decyzji
+właściciela i regresji trwałości po nim — dzisiejsze kryteria tego nie wymagają i po własnej bazie
+są spełnione.
+
