@@ -3,12 +3,12 @@
 > Plik generowany przez `node scripts/acceptance-matrix.mjs` z `docs/acceptance/assessment.json`.
 > Każde otwarte kryterium macierzy (`docs/ACCEPTANCE.md`) należy do dokładnie jednego pakietu.
 
-Otwartych kryteriów: **14** z 200, w 6 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.
+Otwartych kryteriów: **13** z 200, w 6 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.
 
 | Pakiet | Tytuł | Kryteria | Liczba |
 |---|---|---|---|
 | BL-03 | Powtarzalne próby na prawdziwym modelu w szablonie | L1.6, L5.8, L11.4, L11.5, L11.11 | 5 |
-| BL-04 | Uwierzytelnienie subskrypcyjne i limity — próby graniczne | L8.7, L8.10, L8.11 | 3 |
+| BL-04 | Uwierzytelnienie subskrypcyjne i limity — próby graniczne | L8.10, L8.11 | 2 |
 | BL-07 | Trwałość, kopia i migracje | L7.13 | 1 |
 | BL-09 | Pliki, sandbox i zadania w tle | L11.7, L11.12, L11.23 | 3 |
 | BL-11 | Domena, backend i cache | L6.11 | 1 |
@@ -36,7 +36,6 @@ Zachowanie przy wygaśnięciu i odświeżeniu tokena, odrzuconym odświeżeniu, 
 
 | ID | Wymaganie | Stan | Brak |
 |---|---|---|---|
-| L8.7 | Poświadczenia pozostają poza frontendem, artefaktami i logami. | częściowe | Piata droga (niezalezny przeglad, rundy 4 i 6): polaczenie nieistniejacego komponentu, znaku ".." i dowiazania omijalo straznika sciezek (proby A6/A6e) i publikowalo plik spoza workspace jako artefakt do pobrania (C1); odczyt zrodel bibliotek toolkitu przez zwykly wzorzec Grep/Glob przechodzil, bo createRunWorkspace sam dowiazuje biblioteki poza workspace (A11/A12/B8); tylda i pusty napis omijaly sprawdzenie w calosci (A7/A7b/A8). Naprawa rundy 6 (fail-closed walker, fail-closed wzorce, budzetowany pre-walk, odmowa tyldy i pustego napisu) jest zweryfikowana pakietem 33 prob recenzji, ale dowod na PRAWDZIWYM modelu (L11.4/L11.11 — czy SDK honoruje updatedInput, blockReadsOutsideWorkingDirectories i semantyke wzorcow) pozostaje niewykonany. Do czasu tego przebiegu kryterium jest czesciowe. |
 | L8.10 | Przeterminowany access token nie blokuje automatycznie możliwości odświeżenia przez SDK; skuteczne i odrzucone odświeżenie mają sprawdzone zachowanie. | częściowe | SWIADOMIE POZA ZAKRESEM, nie brak dowodu. Skuteczne odswiezenie nie zostalo zaobserwowane i nie da sie go zaobserwowac BEZPIECZNIE w tej konfiguracji. Powod jest ustaleniem z tego pakietu: w bundlu CLI 2.1.277 zapis odswiezonego poswiadczenia jest compare-and-swap po refreshTokenie (odswiezenie WYMIENIA zestaw tokenow), a przy odmowie CLI KASUJE poswiadczenie na dysku — co obie proby graniczne potwierdzily obserwacyjnie. Proba "skutecznego odswiezenia na kopii" zostawilaby wiec w pliku uzytkownika refresh token poprzedniej generacji, a przy jego najblizszym uzyciu CLI wyczyscilo by mu logowanie — szkoda ujawniajaca sie kilka godzin pozniej, dlugo po tym, jak ktokolwiek powiazalby ja z ta praca. Proba byla autoryzowana i NIE zostala wykonana. Domkniecie wymaga konta testowego odrebnego od konta uzytkownika. Tansza droga posrednia: biernie porownac skrot refresh tokena przed i po rutynowym odswiezeniu sesji uzytkownika (zero tur, zero ryzyka) — jesli rotacji nie ma, proba na kopii staje sie bezpieczna; opis w docs/evidence/z12-bl04/przebiegi-i-proby.md. |
 | L8.11 | Limit użycia jest odróżniany od odwołanego logowania, błędu sieci i błędu narzędzia; zachowuje historię i nie powoduje automatycznej powtórki mutacji. | częściowe | Dwa z czterech przypadkow opieraja sie na niepotwierdzonych podciagach: (1) komunikatu przy WYCZERPANYM limicie nikt nie widzial — takiego przebiegu nie da sie wywolac na zadanie, a symulowany limit nie jest limitem wyczerpanym (sonda sesji czyta rzeczywiste wykorzystanie okien planu, czyli ODCZYT, nie wyczerpanie); (2) "socket hang up" dla bledu sieci pozostaje zalozony. Ta polowa trzyma kryterium otwarte niezaleznie od wszystkiego innego. OSOBNO, i wezej niz w pierwszej wersji tego opisu: proby fazy 2 pokazaly, ze PRZY POSWIADCZENIU Z NIEPRAWIDLOWYM REFRESH TOKENEM SDK 0.3.270 podaje ten sam tekst niezaleznie od tego, czy access token wygasl. To NIE jest dowod, ze SDK myli odwolane logowanie z odmowa odnowienia: oba tryby proby zapisuja tak samo nieprawidlowy refresh token i roznia sie WYLACZNIE wartoscia expiresAt, wiec oba koncza tym samym zdarzeniem — odnowieniem, ktore nie moglo sie udac, a identyczny tekst jest spodziewanym skutkiem takiego ustawienia. Prawdziwe odwolanie (poprawny refresh token odrzucony po stronie serwera) nie zostalo wytworzone, bo wymagaloby konta testowego; czy da sie je odroznic — POZOSTAJE NIEZNANE. |
 

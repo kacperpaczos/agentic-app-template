@@ -22,12 +22,19 @@ import {
 } from './support/attack-standin.ts';
 
 /**
- * PRÓBY ATAKU RECENZENTA — pakiet BL-04, runda 4 (gałąź `przeglad/z12-r4`).
+ * REGRESJA 21 ZNANYCH KSZTAŁTÓW ATAKU + 11 KONTROLI — pakiet BL-04.
  *
- * Każdy test jest **próbą ataku**, nie asercją poprawności. Nazwa mówi, czego
- * próbowano; asercja zapisuje **wynik zaobserwowany**, a nie wynik pożądany.
- * Tam, gdzie atak przeszedł, asercja to utrwala — bo raport ma pokazywać, co
- * się stało, a nie co powinno.
+ * Pochodzenie: 33 próby niezależnego przeglądu (gałąź `przeglad/z12-r4`,
+ * recenzja rundy 4), które wykazały 21 ucieczek strażnika. Po rundzie 6
+ * **asercje odwrócone**: tam, gdzie przegląd utrwalał ucieczkę, ten plik
+ * wymaga **odmowy**; 12 kontroli (m.in. A1–A3, A4b, A5, A11b, B3, D2, A6c,
+ * A10) zostało z oryginalnymi asercjami. Dwa kształty świadomie niezamknięte
+ * kodem — **A10b** (narzędzie ignorujące `updatedInput`; rozstrzyga tura,
+ * L11.4/L11.11, patrz gap W4) i **D1** (zgoda użytkownika = pytanie, nie
+ * ochrona) — utrzymują asercję ucieczki z komentarzem.
+ *
+ * Każdy test jest **próbą ataku**, nie asercją poprawności: nazwa mówi, czego
+ * próbowano, a asercja pilnuje właściwości, którą ochrona ma dowieźć.
  *
  * Wszystko przez granicę adaptera: zastępnik dostaje prawdziwe `sdkOptions`
  * z prawdziwego `AgentRuntime`, odpala jego hook `PreToolUse` i dopiero potem
@@ -513,6 +520,11 @@ describe('A. sciezki plikowe', () => {
      * otwiera surowy napis, więc jedyną tarczą jest honorowanie
      * `updatedInput` przez SDK/narzędzie — a to rozstrzyga tura modelu
      * (L11.4/L11.11), nie kod. Utrzymany jako udokumentowany znany kształt.
+     *
+     * **GAP W4 (L11.4/L11.11):** zamknięcie tego wyścigu wymaga od narzędzia
+     * honorowania `updatedInput` albo odmowy przy wymianie dowiązania — do
+     * czasu takiego przebiegu asercja poniżej utrwala wyciek i jej
+     * przeskoczenie na odmowę NIE jest regresją, tylko domknięciem.
      */
     expect(proby[0]?.denied).toBe(false);
     expect(text.includes(KANAREK), 'WYSCIG ODDAL TRESC SPOZA WORKSPACE').toBe(true);
