@@ -35,6 +35,7 @@ export default defineConfig({
   retries: 0,
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'docs/evidence/playwright-report' }]],
   globalSetup: './e2e/global-setup.ts',
+  globalTeardown: './e2e/global-teardown.ts',
   use: {
     baseURL: instance.baseUrl,
     trace: 'retain-on-failure',

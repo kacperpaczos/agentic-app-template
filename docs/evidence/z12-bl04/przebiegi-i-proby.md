@@ -88,6 +88,25 @@ skopiowane 1:1), z asercjami odwróconymi na odmowy.
 | **X** | wycofana reguła wzorców Z3 | B1/B2/B7: klamra i wzorzec bezwzględny przechodzą |
 | **Y** | wycofane odmowy tyldy i pustego napisu | A7/A7b/A8 |
 
+### Runda 7 — bezpiecznik odcisku dla przebiegów e2e (luka pokrycia z przeglądu)
+
+Vitestowy bezpiecznik (`tests/setup-credential-guard.ts`) przez cały pakiet był jedynym — Playwright
+nie miał odpowiednika, więc reguła G21 dla e2e była zależna od pamięci wykonawcy. Runda 7 dokłada
+`e2e/credential-guard.ts` + `globalTeardown`: `globalSetup` zapisuje odcisk (rozmiar:mtimeMs) pliku
+poświadczenia, `globalTeardown` porównuje go po wszystkich testach i **głośno przewala przebieg**,
+nazywając przebieg e2e sprawcą.
+
+Odcisk przenoszony jest **plikiem** w gitignorowanym `test-results/` — rozstrzygnięcie (plik vs
+`process.env`) zamrożone testami czystymi w `tests/e2e-credential-guard.test.ts` (round-trip,
+honorowanie `CLAUDE_CONFIG_DIR`, wykrycie zmiany mtime przy identycznej treści, głośny błąd przy
+braku zapisanego odcisku).
+
+**Próba procesowa (wykrywanie, na ATRAPIE):** `CLAUDE_CONFIG_DIR` całego przebiegu skierowany na
+katalog tymczasowy z fałszywym poświadczeniem + tymczasowy spec piszący do tej atrapy →
+`globalTeardown` podnosi błąd `[bezpiecznik e2e] plik poswiadczen uzytkownika … ZMIENIL SIE w trakcie
+tego przebiegu e2e`, kod wyjścia 1. Prawdziwy plik nietknięty. Spec próby usunięty po próbie;
+mechanizm zostaje w konfiguracji na stałe.
+
 **Znane kształty świadomie niezamknięte (udokumentowane w pakiecie ataków):**
 
 - **A10b** — wyścig TOCTOU, gdy narzędzie **ignoruje `updatedInput`**. Nie da się zamknąć po stronie
