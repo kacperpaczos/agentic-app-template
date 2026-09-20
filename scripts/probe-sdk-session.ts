@@ -42,7 +42,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import { probeSdkSession } from '@platform/server';
 
 const EVIDENCE_DIR = 'docs/evidence/z12-bl04';
-const FILE = 'sesja-sdk.json';
+/*
+ * Plik dowodowy zalezy od trybu: probe w trybie glm pisze do WLASNEGO pliku,
+ * nigdy do `sesja-sdk.json` z BL-04 — nadpisanie istniejacego dowodu proba
+ * glm wydarzylo sie 2026-09-20 i zostalo odkrecone (dowod oryginalny przywrocony
+ * z gita, wynik glm zachowany jako `sesja-sdk-glm.json`).
+ */
+const FILE = process.env.APP_MODEL_PROVIDER === 'glm' ? 'sesja-sdk-glm.json' : 'sesja-sdk.json';
 
 /** A key that is syntactically a key and cannot buy anything. */
 const FAKE_KEY = 'sk-ant-api03-PROBA-NIEPRAWDZIWY-KLUCZ-BEZ-WARTOSCI';

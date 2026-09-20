@@ -1,0 +1,77 @@
+{
+  "opis": "Sposob uwierzytelnienia sesji Claude Agent SDK w JAWNYM TRYBIE GLM, odczytany zadaniem sterujacym accountInfo() oraz odczytem limitow planu. Zadanie sterujace nie wydaje tury modelu: sesja nie dostaje zadnego polecenia, a strumien wejsciowy nie emituje wiadomosci. Subskrypcja Claude jest w tym trybie nieuzywana.",
+  "zrodlo": "node --experimental-transform-types --no-warnings=ExperimentalWarning scripts/probe-sdk-session.ts",
+  "rodzajDowodu": "rzeczywiste wywolanie SDK (zadanie sterujace, bez tury modelu)",
+  "zapisano": "2026-09-20T20:14:06.517Z",
+  "provider": {
+    "nazwa": "GLM/Z.AI",
+    "endpoint": "https://api.z.ai",
+    "model": "glm-5.3-flash[1m]",
+    "subskrypcjaClaude": "nieuzywana (tryb GLM)"
+  },
+  "wersje": {
+    "node": "24.19.0",
+    "claudeCli": "2.1.278 (Claude Code)",
+    "claudeCliWSdk": "2.1.270",
+    "claudeCliWSdkCommit": "97ecbf7abeb4170dcfd26c4d4b397afd9015030e",
+    "claudeAgentSdk": "0.3.270",
+    "mastraClaude": "0.3.1",
+    "mastraCore": "1.66.0",
+    "commit": "23c28026a0e487680a3c4bb88040b54ca502b002"
+  },
+  "przebiegi": {
+    "srodowiskoAplikacji": {
+      "warunki": "env = subscriptionOnlyEnv(process.env, \"glm\"): przepuszczone wylacznie ANTHROPIC_BASE_URL i ANTHROPIC_AUTH_TOKEN (endpoint GLM); usuniete ANTHROPIC_API_KEY, Bedrock, Vertex, ANTHROPIC_MODEL i zmienne mostka CLAUDE_CODE_* poza CLAUDE_CONFIG_DIR. Spodziewany wynik: sesja NIE jest subskrypcja OAuth — poświadczeniem jest token endpointu.",
+      "wynik": {
+        "state": "other",
+        "apiKeySource": null,
+        "apiProvider": "firstParty",
+        "subscriptionType": null,
+        "planLimits": {
+          "available": false,
+          "fiveHourPercent": null,
+          "sevenDayPercent": null
+        },
+        "checkedAt": "2026-09-20T20:14:05.518Z",
+        "error": null
+      }
+    },
+    "kluczApiWProcesieNadrzednym": {
+      "warunki": "ANTHROPIC_API_KEY ustawiony w srodowisku procesu nadrzednego, polityka wlaczona. Klucz jest nieprawdziwy — apiKeySource opisuje pochodzenie poswiadczenia, nie jego waznosc, wiec do obserwacji sciezki wystarczy, a kupic nic nie moze. W trybie GLM token endpointu (AUTH_TOKEN) i tak przechodzi polityki; ten przebieg pokazuje, co widzi sonda, gdy w procesie nadrzednym jest DRUGIE poswiadczenie.",
+      "wynik": {
+        "state": "other",
+        "apiKeySource": null,
+        "apiProvider": "firstParty",
+        "subscriptionType": null,
+        "planLimits": {
+          "available": false,
+          "fiveHourPercent": null,
+          "sevenDayPercent": null
+        },
+        "checkedAt": "2026-09-20T20:14:05.975Z",
+        "error": null
+      }
+    },
+    "kluczApiPrzyWylaczonejPolityce": {
+      "warunki": "ten sam klucz, applyPolicy: false — srodowisko przekazane bez czyszczenia. Przebieg istnieje wylacznie po to, zeby pokazac, ze sonda widzi roznice; aplikacja nigdy tak nie uruchamia agenta.",
+      "wynik": {
+        "state": "api_key",
+        "apiKeySource": "ANTHROPIC_API_KEY",
+        "apiProvider": "firstParty",
+        "subscriptionType": null,
+        "planLimits": {
+          "available": false,
+          "fiveHourPercent": null,
+          "sevenDayPercent": null
+        },
+        "checkedAt": "2026-09-20T20:14:06.507Z",
+        "error": null
+      }
+    }
+  },
+  "wniosek": "Tryb GLM potwierdzony: sesja w srodowisku aplikacji NIE jest subskrypcja OAuth — korzysta z poswiadczenia endpointu (stan \"other\"), a kontrola przy wylaczonej polityce pokazuje, ze sonda rozroznia stany. Subskrypcja Claude pozostaje nieuzywana.",
+  "czegoToNieDowodzi": [
+    "To nie jest dowod wyczerpania limitu. Pole planLimits to ODCZYT rzeczywistego wykorzystania okien planu, nie jego wyczerpanie; kryteria L8.11 i L8.12 pozostaja otwarte w tej czesci.",
+    "Zadanie sterujace potwierdza sposob logowania sesji, nie przebieg pelnej tury modelu z narzedziami."
+  ]
+}
