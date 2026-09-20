@@ -274,6 +274,149 @@
       ]
     },
     {
+      "plik": "docs/evidence/z11-bl03/runs/2026-09-19T00-26-37-453Z/e-relacje.json",
+      "commitDodania": "9b0d48429f98521c9a8969f7e1ea1d233bffbe4a",
+      "rodzajWykonania": "rzeczywisty model",
+      "wytworca": "e2e/bl03-model-relations.spec.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu BL-03 (Z11), przebieg 2026-09-19T00-26-37-453Z",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania (plik mowi o nim proza w polu \"zrodlo\", nie slownikiem)",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)",
+        "stan drzewa w chwili zapisu (brudneDrzewo)"
+      ],
+      "uwaga": "Kryteria: L9.4. Plik niesie commit kodu (49fe1b22), stempel przebiegu, identyfikatory uruchomien i wywolane narzedzia. Srodowiska nie zapisal — koperta powstala pozniej — i nie dopisuje go z wyliczenia. Jedna rzecz jest sprawdzalna bez zgadywania: @anthropic-ai/claude-agent-sdk jest przypiety na 0.3.270 w apps/server/package.json zarowno w commicie tego przebiegu, jak i dzisiaj, wiec CLI wbudowane w SDK (2.1.270, commit 97ecbf7a) to ten sam plik, ktory ten przebieg wykonal."
+    },
+    {
+      "plik": "docs/evidence/z11-bl03/runs/2026-09-19T00-29-50-327Z/e-relacje.json",
+      "commitDodania": "1b34e75fa1a7bda5a10d1ff5712c124591eb8a8f",
+      "rodzajWykonania": "rzeczywisty model",
+      "wytworca": "e2e/bl03-model-relations.spec.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu BL-03 (Z11), przebieg 2026-09-19T00-29-50-327Z",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania (plik mowi o nim proza w polu \"zrodlo\", nie slownikiem)",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)",
+        "stan drzewa w chwili zapisu (brudneDrzewo)"
+      ],
+      "uwaga": "Kryteria: L9.4. Plik niesie commit kodu (9b0d4842), stempel przebiegu, identyfikatory uruchomien i wywolane narzedzia. Srodowiska nie zapisal — koperta powstala pozniej — i nie dopisuje go z wyliczenia. Jedna rzecz jest sprawdzalna bez zgadywania: @anthropic-ai/claude-agent-sdk jest przypiety na 0.3.270 w apps/server/package.json zarowno w commicie tego przebiegu, jak i dzisiaj, wiec CLI wbudowane w SDK (2.1.270, commit 97ecbf7a) to ten sam plik, ktory ten przebieg wykonal."
+    },
+    {
+      "plik": "docs/evidence/z11-bl03/runs/2026-09-19T00-33-31-539Z/a-kanwa-rekord-nawigacja.json",
+      "commitDodania": "cffb2f78e12b3e4b7fbcf297bb21fd8f8f9decd2",
+      "rodzajWykonania": "rzeczywisty model",
+      "wytworca": "e2e/bl03-model-canvas.spec.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu BL-03 (Z11), przebieg 2026-09-19T00-33-31-539Z",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania (plik mowi o nim proza w polu \"zrodlo\", nie slownikiem)",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)",
+        "stan drzewa w chwili zapisu (brudneDrzewo)"
+      ],
+      "uwaga": "Kryteria: L3.2, L3.10, L3.13, L6.6. Plik niesie commit kodu (a481893b), stempel przebiegu, identyfikatory uruchomien i wywolane narzedzia. Srodowiska nie zapisal — koperta powstala pozniej — i nie dopisuje go z wyliczenia. Jedna rzecz jest sprawdzalna bez zgadywania: @anthropic-ai/claude-agent-sdk jest przypiety na 0.3.270 w apps/server/package.json zarowno w commicie tego przebiegu, jak i dzisiaj, wiec CLI wbudowane w SDK (2.1.270, commit 97ecbf7a) to ten sam plik, ktory ten przebieg wykonal."
+    },
+    {
+      "plik": "docs/evidence/z11-bl03/runs/2026-09-19T00-39-44-229Z/b-granice-izolacji.json",
+      "commitDodania": "477586599f32451a6ce84f7a51f9613d3c1fbd29",
+      "rodzajWykonania": "rzeczywisty model",
+      "wytworca": "e2e/bl03-model-isolation.spec.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu BL-03 (Z11), przebieg 2026-09-19T00-39-44-229Z",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania (plik mowi o nim proza w polu \"zrodlo\", nie slownikiem)",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)",
+        "stan drzewa w chwili zapisu (brudneDrzewo)"
+      ],
+      "uwaga": "Kryteria: L11.3, L11.4, L11.5, L11.11, L9.16, L11.9. Plik niesie commit kodu (902ffce7), stempel przebiegu, identyfikatory uruchomien i wywolane narzedzia. Srodowiska nie zapisal — koperta powstala pozniej — i nie dopisuje go z wyliczenia. Jedna rzecz jest sprawdzalna bez zgadywania: @anthropic-ai/claude-agent-sdk jest przypiety na 0.3.270 w apps/server/package.json zarowno w commicie tego przebiegu, jak i dzisiaj, wiec CLI wbudowane w SDK (2.1.270, commit 97ecbf7a) to ten sam plik, ktory ten przebieg wykonal."
+    },
+    {
+      "plik": "docs/evidence/z11-bl03/runs/2026-09-19T00-42-36-200Z/b-granice-izolacji.json",
+      "commitDodania": "d8d7040eb4e37c2ca078cc1fba23e2f6a5d12675",
+      "rodzajWykonania": "rzeczywisty model",
+      "wytworca": "e2e/bl03-model-isolation.spec.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu BL-03 (Z11), przebieg 2026-09-19T00-42-36-200Z",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania (plik mowi o nim proza w polu \"zrodlo\", nie slownikiem)",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)",
+        "stan drzewa w chwili zapisu (brudneDrzewo)"
+      ],
+      "uwaga": "Kryteria: L11.3, L11.4, L11.5, L11.11, L9.16, L11.9. Plik niesie commit kodu (47758659), stempel przebiegu, identyfikatory uruchomien i wywolane narzedzia. Srodowiska nie zapisal — koperta powstala pozniej — i nie dopisuje go z wyliczenia. Jedna rzecz jest sprawdzalna bez zgadywania: @anthropic-ai/claude-agent-sdk jest przypiety na 0.3.270 w apps/server/package.json zarowno w commicie tego przebiegu, jak i dzisiaj, wiec CLI wbudowane w SDK (2.1.270, commit 97ecbf7a) to ten sam plik, ktory ten przebieg wykonal."
+    },
+    {
+      "plik": "docs/evidence/z11-bl03/runs/2026-09-19T00-53-58-916Z/d-szkic-a-dane.json",
+      "commitDodania": "0495f2e9c0d67e2f8aefb3e574500a355c57a968",
+      "rodzajWykonania": "rzeczywisty model",
+      "wytworca": "e2e/bl03-model-lifecycle.spec.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu BL-03 (Z11), przebieg 2026-09-19T00-53-58-916Z",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania (plik mowi o nim proza w polu \"zrodlo\", nie slownikiem)",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)",
+        "stan drzewa w chwili zapisu (brudneDrzewo)"
+      ],
+      "uwaga": "Kryteria: L6.5. Plik niesie commit kodu (9a6846a5), stempel przebiegu, identyfikatory uruchomien i wywolane narzedzia. Srodowiska nie zapisal — koperta powstala pozniej — i nie dopisuje go z wyliczenia. Jedna rzecz jest sprawdzalna bez zgadywania: @anthropic-ai/claude-agent-sdk jest przypiety na 0.3.270 w apps/server/package.json zarowno w commicie tego przebiegu, jak i dzisiaj, wiec CLI wbudowane w SDK (2.1.270, commit 97ecbf7a) to ten sam plik, ktory ten przebieg wykonal."
+    },
+    {
+      "plik": "docs/evidence/z11-bl03/runs/2026-09-19T00-53-58-916Z/d-wznowienie-sesji.json",
+      "commitDodania": "0495f2e9c0d67e2f8aefb3e574500a355c57a968",
+      "rodzajWykonania": "rzeczywisty model",
+      "wytworca": "e2e/bl03-model-lifecycle.spec.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu BL-03 (Z11), przebieg 2026-09-19T00-53-58-916Z",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania (plik mowi o nim proza w polu \"zrodlo\", nie slownikiem)",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)",
+        "stan drzewa w chwili zapisu (brudneDrzewo)"
+      ],
+      "uwaga": "Kryteria: L8.5. Plik niesie commit kodu (9a6846a5), stempel przebiegu, identyfikatory uruchomien i wywolane narzedzia. Srodowiska nie zapisal — koperta powstala pozniej — i nie dopisuje go z wyliczenia. Jedna rzecz jest sprawdzalna bez zgadywania: @anthropic-ai/claude-agent-sdk jest przypiety na 0.3.270 w apps/server/package.json zarowno w commicie tego przebiegu, jak i dzisiaj, wiec CLI wbudowane w SDK (2.1.270, commit 97ecbf7a) to ten sam plik, ktory ten przebieg wykonal."
+    },
+    {
+      "plik": "docs/evidence/z11-bl03/runs/2026-09-19T00-57-37-949Z/c-blad-narzedzia.json",
+      "commitDodania": "1b9a1809d6b997b81d4fc17df03e19feae982c07",
+      "rodzajWykonania": "rzeczywisty model",
+      "wytworca": "e2e/bl03-model-lifecycle.spec.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu BL-03 (Z11), przebieg 2026-09-19T00-57-37-949Z",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania (plik mowi o nim proza w polu \"zrodlo\", nie slownikiem)",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)",
+        "stan drzewa w chwili zapisu (brudneDrzewo)"
+      ],
+      "uwaga": "Kryteria: L5.8, L7.3. Plik niesie commit kodu (0495f2e9), stempel przebiegu, identyfikatory uruchomien i wywolane narzedzia. Srodowiska nie zapisal — koperta powstala pozniej — i nie dopisuje go z wyliczenia. Jedna rzecz jest sprawdzalna bez zgadywania: @anthropic-ai/claude-agent-sdk jest przypiety na 0.3.270 w apps/server/package.json zarowno w commicie tego przebiegu, jak i dzisiaj, wiec CLI wbudowane w SDK (2.1.270, commit 97ecbf7a) to ten sam plik, ktory ten przebieg wykonal."
+    },
+    {
+      "plik": "docs/evidence/z11-bl03/runs/2026-09-19T00-57-37-949Z/c-stop.json",
+      "commitDodania": "1b9a1809d6b997b81d4fc17df03e19feae982c07",
+      "rodzajWykonania": "rzeczywisty model",
+      "wytworca": "e2e/bl03-model-lifecycle.spec.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu BL-03 (Z11), przebieg 2026-09-19T00-57-37-949Z",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania (plik mowi o nim proza w polu \"zrodlo\", nie slownikiem)",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)",
+        "stan drzewa w chwili zapisu (brudneDrzewo)"
+      ],
+      "uwaga": "Kryteria: L7.3, L1.6. Plik niesie commit kodu (0495f2e9), stempel przebiegu, identyfikatory uruchomien i wywolane narzedzia. Srodowiska nie zapisal — koperta powstala pozniej — i nie dopisuje go z wyliczenia. Jedna rzecz jest sprawdzalna bez zgadywania: @anthropic-ai/claude-agent-sdk jest przypiety na 0.3.270 w apps/server/package.json zarowno w commicie tego przebiegu, jak i dzisiaj, wiec CLI wbudowane w SDK (2.1.270, commit 97ecbf7a) to ten sam plik, ktory ten przebieg wykonal."
+    },
+    {
+      "plik": "docs/evidence/z11-bl03/runs/2026-09-19T01-06-49-066Z/a-ustawienie-i-przestrzen.json",
+      "commitDodania": "237b17f5214b309c187e41ec99846ec8e3062ac6",
+      "rodzajWykonania": "rzeczywisty model",
+      "wytworca": "e2e/bl03-model-canvas.spec.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu BL-03 (Z11), przebieg 2026-09-19T01-06-49-066Z",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania (plik mowi o nim proza w polu \"zrodlo\", nie slownikiem)",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)",
+        "stan drzewa w chwili zapisu (brudneDrzewo)"
+      ],
+      "uwaga": "Kryteria: L2.13. Plik niesie commit kodu (1b9a1809), stempel przebiegu, identyfikatory uruchomien i wywolane narzedzia. Srodowiska nie zapisal — koperta powstala pozniej — i nie dopisuje go z wyliczenia. Jedna rzecz jest sprawdzalna bez zgadywania: @anthropic-ai/claude-agent-sdk jest przypiety na 0.3.270 w apps/server/package.json zarowno w commicie tego przebiegu, jak i dzisiaj, wiec CLI wbudowane w SDK (2.1.270, commit 97ecbf7a) to ten sam plik, ktory ten przebieg wykonal."
+    },
+    {
+      "plik": "docs/evidence/z11-bl03/runs/2026-09-19T01-07-31-714Z/c-sygnal.json",
+      "commitDodania": "237b17f5214b309c187e41ec99846ec8e3062ac6",
+      "rodzajWykonania": "rzeczywisty model",
+      "wytworca": "e2e/bl03-model-lifecycle.spec.ts",
+      "pochodzenie": "regresja szablonu w worktree pakietu BL-03 (Z11), przebieg 2026-09-19T01-07-31-714Z",
+      "czegoBrakujeWPliku": [
+        "rodzaj wykonania (plik mowi o nim proza w polu \"zrodlo\", nie slownikiem)",
+        "srodowisko przebiegu (system, Node, wersje pakietow, CLI w SDK)",
+        "stan drzewa w chwili zapisu (brudneDrzewo)"
+      ],
+      "uwaga": "Kryteria: L1.6. Plik niesie commit kodu (1b9a1809), stempel przebiegu, identyfikatory uruchomien i wywolane narzedzia. Srodowiska nie zapisal — koperta powstala pozniej — i nie dopisuje go z wyliczenia. Jedna rzecz jest sprawdzalna bez zgadywania: @anthropic-ai/claude-agent-sdk jest przypiety na 0.3.270 w apps/server/package.json zarowno w commicie tego przebiegu, jak i dzisiaj, wiec CLI wbudowane w SDK (2.1.270, commit 97ecbf7a) to ten sam plik, ktory ten przebieg wykonal."
+    },
+    {
       "plik": "docs/evidence/z2-bl07/04-raport-proby.json",
       "commitDodania": "68e8564c8a054c7ad6f2de77a074a2fd44c97b41",
       "rodzajWykonania": "test kontraktu lub logiki",

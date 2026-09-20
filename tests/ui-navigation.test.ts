@@ -249,6 +249,58 @@ describe('ui_navigate zwraca to, co potwierdzil klient', () => {
     expect(out.emitted, 'zapytano przegladarke o nieistniejacy cel').toHaveLength(0);
   });
 
+  /**
+   * The wrong guess a real turn actually made, and the answer that lets the
+   * agent fix it without a second command.
+   *
+   * Observed (BL-03, przebieg A, tura 4): told to switch the workspace, the
+   * agent read `ui_catalog`, took `spaces[].spaceId` and passed it as
+   * `targetId`. The refusal was correct and useless — `unknown_target` plus a
+   * list of targets, none of which is a workspace — so the switch never
+   * happened and nothing said why. The identifier was right; only the field was
+   * wrong, and that is the one mistake this tool's two lists invite.
+   */
+  it('identyfikator przestrzeni podany jako cel dostaje odmowe, ktora mowi, co zrobic', async () => {
+    const space = h.platform.services.canvas.createSpace({ ownerId: h.ownerId, title: 'Moja druga' });
+
+    const out = await callNavigate(h, { targetId: space.id }, () => {
+      /* should never be reached */
+    });
+
+    expect(out.result).toMatchObject({
+      executed: false,
+      reason: UI_COMMAND_FAILURES.unknownTarget,
+      requested: space.id,
+    });
+    // The fix, in the answer: the right target and the right field, by name.
+    expect(out.result.hint, 'odmowa nie mowi, jak przelaczyc przestrzen').toContain('platform.canvas');
+    expect(out.result.hint).toContain('spaceId');
+    expect(out.result.hint).toContain(space.id);
+    expect(out.emitted, 'zapytano przegladarke o nieistniejacy cel').toHaveLength(0);
+  });
+
+  it('podpowiedz nie zdradza przestrzeni innego wlasciciela', async () => {
+    const other = h.platform.services.canvas.createSpace({
+      ownerId: h.otherOwnerId,
+      title: 'Nie moja',
+    });
+    const out = await callNavigate(h, { targetId: other.id }, () => {
+      /* should never be reached */
+    });
+    expect(out.result.reason).toBe(UI_COMMAND_FAILURES.unknownTarget);
+    /*
+     * A helpful message must not become a way to ask "does this id exist?".
+     * The hint is only produced for a space the caller owns.
+     */
+    expect(out.result.hint, 'podpowiedz potwierdzila istnienie cudzej przestrzeni').toBeUndefined();
+  });
+
+  it('cel, ktory tylko wyglada jak przestrzen, dostaje zwykla odmowe', async () => {
+    const out = await callNavigate(h, { targetId: 'spc_nie_ma_takiej' }, () => {});
+    expect(out.result.reason).toBe(UI_COMMAND_FAILURES.unknownTarget);
+    expect(out.result.hint).toBeUndefined();
+  });
+
   it('cudza przestrzen pracy jest odrzucona przed dotknieciem interfejsu', async () => {
     const other = h.platform.services.canvas.createSpace({
       ownerId: h.otherOwnerId,

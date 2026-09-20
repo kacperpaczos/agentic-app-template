@@ -1,6 +1,7 @@
-import { resolve } from 'node:path';
+import { lstatSync, readdirSync, readlinkSync, realpathSync } from 'node:fs';
+import { dirname, isAbsolute, join, parse, resolve } from 'node:path';
 import { claudeConfigDir } from './auth.ts';
-import { realResolve as sharedRealResolve } from '../util/real-path.ts';
+import { isWithin, realResolveFrom, UnresolvablePathError } from '../util/real-path.ts';
 
 /**
  * The permission matrix for the Claude Agent SDK's **built-in** tools.
@@ -96,7 +97,19 @@ export const TOOL_PERMISSION_MATRIX = {
 export function decideTool(toolName: string, mcpToolNames: readonly string[]): ToolDecision {
   if ((FORBIDDEN_TOOLS as readonly string[]).includes(toolName)) return 'forbidden';
   if (mcpToolNames.includes(toolName)) return 'auto';
-  if ((AUTO_APPROVED_FILE_TOOLS as readonly string[]).includes(toolName)) return 'auto';
+  /*
+   * Wstępne zatwierdzenie **wymaga zadeklarowania, jak narzędzie podaje ścieżkę**.
+   *
+   * Odwrócenie tej samej komplementarności, o którą chodzi w regule pozytywnej:
+   * lista narzędzi też jest zbiorem do wyliczenia, więc nie opieramy się na tym,
+   * że ktoś pamiętał o obu listach naraz. Narzędzie dopisane do
+   * `AUTO_APPROVED_FILE_TOOLS` bez wpisu w `PATH_ARGUMENTS` nie dostaje `auto`,
+   * tylko trafia do zgody użytkownika — bo strażnik ścieżek nie umiałby go
+   * sprawdzić, a cicha luka jest gorsza od pytania.
+   */
+  if ((AUTO_APPROVED_FILE_TOOLS as readonly string[]).includes(toolName)) {
+    return PATH_ARGUMENTS[toolName] ? 'auto' : 'consent';
+  }
   return 'consent';
 }
 
@@ -141,6 +154,181 @@ export const forbiddenToolMessage = (toolName: string): string =>
  * guarded by the confinement, at the chokepoint, not by a second list that would
  * have to be kept in step with the first.
  */
+/**
+ * Argumenty, które są **wzorcem**, a nie ścieżką — i dlatego wymagają własnej reguły.
+ *
+ * `Glob{pattern:'../../**'}` nie jest ścieżką, więc `PATH_ARGUMENTS` go nie
+ * obejmuje, a mimo to wychodzi poza katalog roboczy. Pełnego rozwinięcia wzorca
+ * nie da się tu uczciwie odtworzyć (rozwija go narzędzie, nie my), więc reguła
+ * jest węższa i mówi dokładnie tyle, ile umie sprawdzić: **wzorzec zawierający
+ * człon `..` jest odrzucany**. Wzorzec bez `..` nie może wyjść w górę, a `path`
+ * tych narzędzi jest osobno ograniczony do katalogu roboczego.
+ *
+ * `Grep.pattern` jest wyrażeniem nad **treścią**, nie nad ścieżką, więc go tu nie
+ * ma; ograniczany jest jego `glob` i `path`.
+ */
+const PATTERN_ARGUMENTS: Record<string, readonly string[]> = {
+  Glob: ['pattern'],
+  Grep: ['glob'],
+};
+
+/**
+ * Z3 — wzorce: fail-closed.
+ *
+ * Runda 4 rozpoznawała wyłącznie dosłowny człon `..`, więc przepuszczała klamrę
+ * (`{..,.}` + `/gwiazdki` — żaden człon nie jest równy `..`, a rozwinięcie wychodzi w górę)
+ * i wzorzec bezwzględny (`/tmp/…` — nie zawiera `..` wcale). Próby B1, B2, B4
+ * i B7 przeszły przez tę dziurę.
+ *
+ * Zasada po rundzie 6: **odmawiam wszystkiego, czego nie umiem rozwinąć** —
+ * klamra, wzorzec bezwzględny, `..` gdziekolwiek. Zwykłe wzorce robocze
+ * (podwójna gwiazdka, ukośnik, kropka, txt) przechodzi; to, co przez nie wychodzi dowiązaniem katalogowym,
+ * łapie osobna reguła (`directoryWalkRefusal`, Z4).
+ */
+/** Czy wzorzec zawiera człon "..", czyli próbuje wyjść w górę. */
+function patternClimbsUp(pattern: string): boolean {
+  return pattern.split(/[/\\]+/).some((part) => part === '..');
+}
+function patternEscapeRefusal(toolName: string, pattern: string): string | null {
+  if (pattern === '') return `Wzorzec narzedzia ${toolName} jest pusty.`;
+  /* W1 (runda 7): tylda we wzorcu — ta sama zasada co dla ścieżek (A7/A7b). */
+  const tilde = tildeRefusal(pattern);
+  if (tilde) return `Wzorzec narzedzia ${toolName} zawiera tyldę — ${tilde.charAt(0).toLowerCase()}${tilde.slice(1)}`;
+  if (pattern.startsWith('/')) {
+    return `Wzorzec narzedzia ${toolName} jest sciezka bezwzgledna — wzorce moga wskazywac wylacznie katalog roboczy.`;
+  }
+  if (/[{}]/.test(pattern)) {
+    return `Wzorzec narzedzia ${toolName} zawiera klamre rozwijania — nie umiem jej rozwinac, wiec odmawiam.`;
+  }
+  if (patternClimbsUp(pattern)) {
+    return `Wzorzec narzedzia ${toolName} wychodzi poza katalog roboczy (czlon "..").`;
+  }
+  return null;
+}
+
+/**
+ * Z4 — pre-walk drzewa pod `path` narzędzia `Glob`/`Grep`, budżetowany.
+ *
+ * `path` jest rozwiązywany fizycznie i musi leżeć w katalogu roboczym, ale
+ * rozwinięcie wzorca robi narzędzie — i zwykły wzorzec podwójnej gwiazdki
+ * przechodzi przez dowiązania katalogowe, które leżą w workspace od jego
+ * powstania (`createRunWorkspace` linkuje biblioteki toolkitu do
+ * `node_modules/`, a ich cele są na zewnątrz). Próba B8 czytała źródła
+ * biblioteki bez żadnego przygotowania; B5 i B6 — po podstawieniu dowiązania.
+ *
+ * Reguła: przechodząc drzewo pod ścieżką, każde dowiązanie, którego
+ * rozwiązanie wypada poza katalog roboczy, jest odmową — grepanie bibliotek ma
+ * być odmawiane (L11.4: wszystko poza katalogiem roboczym odmawiane).
+ *
+ * Budżet, uczciwie: głębokość do 16 poziomów, do 20000 obejrzanych wpisów.
+ * Przekroczenie czegokolwiek = odmowa (fail-closed), z liczbą w komunikacie.
+ * To jest prawdziwe ograniczenie: gigantyczne drzewo w workspace będzie
+ * odmawiane zamiast przeszukane częściowo. Drzewa, które ten produkt tworzy,
+ * są płytkie.
+ */
+export function directoryWalkRefusal(
+  toolName: string,
+  toolInput: unknown,
+  workspaceDir: string,
+): string | null {
+  if (!PATTERN_ARGUMENTS[toolName]) return null;
+  const input = (toolInput ?? {}) as Record<string, unknown>;
+  const rawPath = input.path;
+  if (rawPath !== undefined && typeof rawPath !== 'string') return null;
+  if (typeof rawPath === 'string' && rawPath.length === 0) return emptyPathRefusal(toolName);
+  if (typeof rawPath === 'string') {
+    const tilde = tildeRefusal(rawPath);
+    if (tilde) return tilde;
+  }
+
+  const root = realResolve(workspaceDir, '.');
+  let start: string;
+  try {
+    start = realResolve(workspaceDir, typeof rawPath === 'string' && rawPath !== '' ? rawPath : '.');
+  } catch (err) {
+    if (err instanceof UnresolvablePathError) {
+      return `Narzedzie ${toolName} wskazuje sciezke, ktorej nie da sie jednoznacznie rozwiazac wewnatrz katalogu roboczego. Odmowa.`;
+    }
+    throw err;
+  }
+  if (!isInside(start, root)) {
+    return `Narzedzie ${toolName} moze przeszukiwac wylacznie katalog roboczy tego uruchomienia.`;
+  }
+
+  const MAX_DEPTH = 16;
+  const MAX_ENTRIES = 20000;
+  let seen = 0;
+  const queue: Array<{ dir: string; depth: number }> = [{ dir: start, depth: 0 }];
+  const visited = new Set<string>();
+  while (queue.length > 0) {
+    const item = queue.shift() as { dir: string; depth: number };
+    if (visited.has(item.dir)) continue;
+    visited.add(item.dir);
+    let entries: string[];
+    try {
+      entries = readdirSync(item.dir);
+    } catch {
+      continue;
+    }
+    for (const name of entries) {
+      seen += 1;
+      if (seen > MAX_ENTRIES) {
+        return (
+          `Drzewo pod ${item.dir} przekroczylo budzet przeszukiwania (${MAX_ENTRIES} wpisow). ` +
+          'Odmowa zamiast przeszukiwania czesciowego.'
+        );
+      }
+      const abs = join(item.dir, name);
+      const st = lstatSync(abs, { throwIfNoEntry: false });
+      if (st === undefined) continue;
+      if (st.isSymbolicLink()) {
+        let target: string;
+        try {
+          target = realResolveFrom(root, abs);
+        } catch (err) {
+          if (err instanceof UnresolvablePathError) {
+            return `Narzedzie ${toolName} wskazuje sciezke, ktorej nie da sie jednoznacznie rozwiazac wewnatrz katalogu roboczego. Odmowa.`;
+          }
+          throw err;
+        }
+        if (!isWithin(target, root)) {
+          return (
+            `Drzewo przeszukiwane przez ${toolName} zawiera dowiazanie wychodzace poza katalog roboczy ` +
+            `(${abs} wskazuje ${target}). Odmowa.`
+          );
+        }
+        continue;
+      }
+      if (st.isDirectory()) {
+        if (item.depth >= MAX_DEPTH) {
+          return (
+            `Drzewo pod ${start} jest glebsze niz ${MAX_DEPTH} poziomow. ` +
+            'Odmowa zamiast przeszukiwania czesciowego.'
+          );
+        }
+        queue.push({ dir: abs, depth: item.depth + 1 });
+      }
+    }
+  }
+  return null;
+}
+/** Z5 — tylda: „sprawdzono A, otwarto B" w czystej postaci (próby A7/A7b). */
+function tildeRefusal(candidate: string): string | null {
+  if (candidate === '~' || candidate.startsWith('~/')) {
+    return 'Sciezki z tylda (~) sa odrzucane: straznik nie rozwija skrotow domowych.';
+  }
+  const component = candidate.split(/[/\\]+/).some((part) => part === '~' || part.startsWith('~'));
+  if (component) {
+    return 'Sciezki z komponentem zaczynajacym sie od tyldy (~) sa odrzucane.';
+  }
+  return null;
+}
+
+/** Z10 — pusty napis jako ścieżka: odmowa, nie `continue` (próba A8). */
+function emptyPathRefusal(toolName: string): string | null {
+  return `Narzedzie ${toolName} dostalo pusta sciezke — odmowa.`;
+}
+
 const PATH_ARGUMENTS: Record<string, readonly string[]> = {
   Read: ['file_path', 'path'],
   Write: ['file_path', 'path'],
@@ -192,12 +380,66 @@ export function protectedDirsFor(
  */
 export function realResolve(base: string, candidate: string): string {
   /*
-   * One implementation of this walk, in `util/real-path.ts`. It used to live
-   * here, and the same walk was written again in the maintenance scripts and
-   * missing altogether from the test-isolation guards — the third absence was
-   * found by a reviewer, not by a test. Same behaviour, one place to fix.
+   * ## Dlaczego to NIE jest `sharedRealResolve(resolve(base, candidate))`
+   *
+   * Bo `path.resolve()` zwija `..` **leksykalnie**, zanim ktokolwiek dotknie
+   * dowiązań — a jądro robi to w odwrotnej kolejności: najpierw podąża za
+   * dowiązaniem, potem cofa się o `..`. Te dwie kolejności wskazują różne pliki,
+   * i różnica nie jest teoretyczna:
+   *
+   *     <ws>/node_modules/exceljs/../podrzucony.txt
+   *
+   * leksykalnie zwija się do `<ws>/node_modules/podrzucony.txt` — wewnątrz
+   * katalogu roboczego, więc strażnik przepuszczał. Jądro najpierw rozwijało
+   * `node_modules/exceljs`, które jest **dowiązaniem do biblioteki poza
+   * workspace** — tworzy je `createRunWorkspace`, więc materiał leży tam od
+   * powstania katalogu — i dopiero potem cofało się o `..`. Plik powstawał poza
+   * katalogiem roboczym. Bez powłoki i bez zgody użytkownika.
+   *
+   * Dlatego ścieżka jest przechodzona **komponent po komponencie**, w kolejności
+   * jądra: każdy człon jest rozwijany fizycznie, zanim zostanie zinterpretowany
+   * następny, a `..` cofa się od ścieżki **już rozwiniętej**.
+   *
+   * `util/real-path.ts` zostaje tam, gdzie był — jego wywołujący porównują
+   * katalogi, nie ścieżki budowane przez model. Ta sama wada dotyczy jednak i
+   * jego; zgłoszone w raporcie jako znalezisko poza zakresem tego pakietu.
    */
-  return sharedRealResolve(resolve(base, candidate));
+  return resolvePhysically(base, candidate);
+}
+
+/**
+ * Rozwiązuje ścieżkę tak, jak zrobi to jądro: dowiązania przed `..`.
+ *
+ * Idzie komponent po komponencie od katalogu bazowego (albo od korzenia, gdy
+ * ścieżka jest bezwzględna). Każdy istniejący człon jest rozwijany przez
+ * `realpathSync`, więc dowiązanie jest rozwinięte **zanim** kolejny `..` je
+ * przeskoczy. Człon, którego jeszcze nie ma, kończy rozwijanie fizyczne —
+ * poniżej nieistniejącej ścieżki nie ma czego rozwijać, więc reszta jest
+ * doklejana, a `..` traktowane leksykalnie, co jest wtedy równoważne.
+ */
+export function resolvePhysically(base: string, candidate: string): string {
+  /*
+   * Jedno przejście, w jednym miejscu (`util/real-path.ts`).
+   *
+   * Przez jedną rundę stało tutaj drugie, bo naprawiałem wadę tam, gdzie
+   * patrzyłem. Dwie podobne funkcje rozwiązujące ścieżki to dokładnie ten układ,
+   * w którym wadę naprawia się w jednej i zostawia w drugiej — co w tym
+   * repozytorium właśnie się zdarzyło i kosztowało osobną rundę.
+   */
+  return realResolveFrom(base, candidate);
+}
+
+/**
+ * Czy narzędzie zadeklarowało, **jak podaje ścieżkę**.
+ *
+ * Wystawione, bo to jest niezmiennik, którego pilnuje regresja: narzędzie na
+ * liście wstępnie zatwierdzonych bez wpisu w `PATH_ARGUMENTS` jest luką —
+ * strażnik ścieżek nie umie go sprawdzić, a `decideTool` odmawia mu wtedy
+ * `auto`. Asercja nad tą funkcją oblewa **w chwili dopisania** takiego
+ * narzędzia, czyli tam, gdzie popełnia się błąd.
+ */
+export function declaresPathArguments(toolName: string): boolean {
+  return PATH_ARGUMENTS[toolName] !== undefined;
 }
 
 /** True when `candidate` is `dir` itself or sits inside it. */
@@ -208,6 +450,139 @@ function isInside(candidate: string, dir: string): boolean {
 }
 
 const normalizeSlashes = (p: string): string => p.replace(/\\/g, '/');
+
+/**
+ * Zwraca wejście narzędzia z **rozwiązanymi** ścieżkami, albo `null`.
+ *
+ * Powód jest ten sam, dla którego dwie rundy temu odrzuciłem dopisanie narzędzi
+ * publikacji do `PATH_ARGUMENTS`: *sprawdzana byłaby inna ścieżka niż ta, którą
+ * narzędzie otwiera*. Znałem tę zasadę i nie zastosowałem jej tutaj — strażnik
+ * rozwiązywał ścieżkę u siebie, a narzędzie dostawało **surowy napis** i
+ * rozwiązywało go po swojemu. Przepisanie wejścia likwiduje rozjazd u źródła:
+ * narzędzie otwiera dokładnie ten plik, który został sprawdzony.
+ *
+ * SDK na to pozwala — `PreToolUseHookSpecificOutput.updatedInput` oraz
+ * `canUseTool → { behavior: 'allow', updatedInput }` są w typach 0.3.270.
+ */
+export function resolvedPathInput(
+  toolName: string,
+  toolInput: unknown,
+  resolvePath: (p: string) => string,
+): Record<string, unknown> | null {
+  const args = PATH_ARGUMENTS[toolName];
+  if (!args) return null;
+  const input = { ...((toolInput ?? {}) as Record<string, unknown>) };
+  let changed = false;
+  for (const key of args) {
+    const raw = input[key];
+    if (typeof raw !== 'string' || raw.length === 0) continue;
+    let abs: string;
+    try {
+      abs = resolvePath(raw);
+    } catch (err) {
+      if (err instanceof UnresolvablePathError) return null; // odmowa zapadnie u straznika
+      throw err;
+    }
+    if (abs !== raw) {
+      input[key] = abs;
+      changed = true;
+    }
+  }
+  return changed ? input : null;
+}
+
+/**
+ * Refuses a file tool that reaches **outside the run workspace** — in either
+ * direction, read or write.
+ *
+ * ## Why this exists beside `protectedPathRefusal`, and why it is not a longer list
+ *
+ * The other rule names directories that must be unreachable. It closed four real
+ * routes to the credential file, and it could not have closed the fifth: a real
+ * model was given `Read` and handed back a canary from a directory nobody had
+ * thought to list, then used `Write` to create a file on a path the shell had
+ * been refused a second earlier. Twelve packages of tests never saw it.
+ *
+ * The shell is in a sandbox. **The SDK's own file tools are not** — the only
+ * thing bounding them was a list of three directories, and a list of forbidden
+ * places can never be complete. The set of places that must be unreachable has
+ * to be enumerated; the set of places that may be reached is *one directory*,
+ * and its complement needs no enumeration at all. So this rule is stated
+ * positively: everything outside the run workspace is refused, and the question
+ * "did we remember this directory?" stops being askable.
+ *
+ * This is the fourth time this repository has reached the same conclusion — the
+ * path flags of the state scripts, the destructive operations, the script
+ * directory scan, and now the file tools. Each time a guard counting from the
+ * *argument* had a way around it, and each time what closed the class was a
+ * guard counting from the *operation*, or a positive rule.
+ *
+ * ## What it deliberately does not allow
+ *
+ * The toolkit libraries are symlinked into the workspace's own `node_modules`,
+ * and their real paths lie outside it — so reading a library's source through
+ * `Read` is refused by this rule. That is a real behaviour change and it is the
+ * intended one: it is exactly what the SDK's own
+ * `permissions.blockReadsOutsideWorkingDirectories` does, model-authored code
+ * imports those libraries rather than reading them, and an exception would put
+ * a second list next to the one this rule exists to abolish.
+ */
+export function workspaceConfinementRefusal(
+  toolName: string,
+  toolInput: unknown,
+  workspaceDir: string,
+  resolvePath: (p: string) => string = (p) => realResolve(workspaceDir, p),
+): string | null {
+  const input = (toolInput ?? {}) as Record<string, unknown>;
+
+  /* Z3 — wzorce: fail-closed, patrz `patternEscapeRefusal`. */
+  for (const key of PATTERN_ARGUMENTS[toolName] ?? []) {
+    const raw = input[key];
+    if (typeof raw !== 'string') continue;
+    const refusal = patternEscapeRefusal(toolName, raw);
+    if (refusal) return refusal;
+  }
+
+  const args = PATH_ARGUMENTS[toolName];
+  if (!args) return null;
+  const root = realResolve(workspaceDir, '.');
+  for (const key of args) {
+    const raw = input[key];
+    if (typeof raw !== 'string') continue;
+    /* Z10 — pusty napis: odmowa, nie `continue` (próba A8). */
+    if (raw.length === 0) return emptyPathRefusal(toolName);
+    /* Z5 — tylda: „sprawdzono A, otwarto B" w czystej postaci (próby A7/A7b). */
+    const tilde = tildeRefusal(raw);
+    if (tilde) return tilde;
+    /* Z1 — `..` po członie nieistniejącym albo zerwanym dowiązaniem: odmowa. */
+    let abs: string;
+    try {
+      abs = resolvePath(raw);
+    } catch (err) {
+      if (err instanceof UnresolvablePathError) {
+        /*
+         * W7: **napis** odmowy jednolity — bez wyroczni o nazwach i typach
+         * komponentów. Uczciwie: klasa odmowy (`UnresolvablePathError` kontra
+         * „poza katalogiem roboczym") nadal rozróżnia **powód** — tego tu nie
+         * zmieniamy, bo dla strażnika agenta to dwie różne podpowiedzi dla
+         * modelu; brak wyroczni dotyczy wyłącznie treści komunikatu.
+         */
+        return (
+          `Narzedzie ${toolName} wskazuje sciezke, ktorej nie da sie jednoznacznie rozwiazac ` +
+          'wewnatrz katalogu roboczego. Odmowa bez probowania.'
+        );
+      }
+      throw err;
+    }
+    if (!isInside(abs, root)) {
+      return (
+        `Narzedzie ${toolName} moze siegac wylacznie katalogu roboczego tego uruchomienia. ` +
+        'Sciezka wskazuje poza niego i zostala odrzucona, niezaleznie od zgody uzytkownika.'
+      );
+    }
+  }
+  return null;
+}
 
 /**
  * Refuses a file tool aimed at a directory the application protects.
@@ -235,14 +610,35 @@ export function protectedPathRefusal(
   toolInput: unknown,
   protectedDirs: ReadonlyArray<{ dir: string; what: string }>,
   resolvePath: (p: string) => string = (p) => p,
+  /**
+   * Subtrees carved **out** of the guards above.
+   *
+   * There is exactly one, and leaving it out was a shipped regression: the run
+   * workspace is `<dataDir>/workspaces/<runId>`, so it sits *inside* the
+   * protected data directory. Without this exemption the data-directory guard
+   * refused every legitimate file-tool call the agent made in its own
+   * workspace — reading its own input, writing its own output — and no test
+   * noticed, because until the reverse control demanded it, no test had the
+   * agent touch a file inside the workspace at all.
+   *
+   * The exemption is safe precisely because paths are resolved for real before
+   * this comparison: a symlink inside the workspace pointing at the credential
+   * directory resolves *out* of the workspace, so it is not exempt and the
+   * guards still fire.
+   */
+  exempt: readonly string[] = [],
 ): string | null {
   const args = PATH_ARGUMENTS[toolName];
   if (!args) return null;
   const input = (toolInput ?? {}) as Record<string, unknown>;
   for (const key of args) {
     const raw = input[key];
-    if (typeof raw !== 'string' || raw.length === 0) continue;
+    if (typeof raw !== 'string') continue;
+    if (raw.length === 0) return emptyPathRefusal(toolName);
+    const tilde = tildeRefusal(raw);
+    if (tilde) return tilde;
     const abs = resolvePath(raw);
+    if (exempt.some((dir) => dir && isInside(abs, dir))) continue;
     for (const guard of protectedDirs) {
       if (!guard.dir) continue;
       if (isInside(abs, guard.dir)) {

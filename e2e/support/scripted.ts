@@ -29,9 +29,26 @@ export class ScriptedInstance {
   readonly #logFile: string | null;
   #log: WriteStream | null = null;
 
+  /**
+   * Which server this instance starts.
+   *
+   * `scripted` (the default) is the stand-in host used by every suite that
+   * drives a run without spending a turn. `production` is the built bundle —
+   * the very one `pnpm start` runs, with the **real** model behind it — started
+   * here rather than by Playwright's `webServer` for one reason: a test about
+   * what a stop signal leaves behind has to own the process it signals, and
+   * Playwright's is not the test's to kill or to start again on the same data.
+   *
+   * Everything else is identical, isolation checks included: the same port
+   * guard, the same `.e2e*` data directory, the same instance label, and the
+   * same rule that only the child this object started is ever signalled.
+   */
+  readonly #entry: 'scripted' | 'production';
+
   constructor(opts: {
     port: number;
     dataDirName: string;
+    entry?: 'scripted' | 'production';
     /** Added to the server process's environment. Never used to redirect it. */
     env?: Record<string, string>;
     /**
@@ -51,6 +68,7 @@ export class ScriptedInstance {
       // scripted instance that runs on its own port.
       env: {},
     });
+    this.#entry = opts.entry ?? 'scripted';
     this.#extraEnv = opts.env ?? {};
     this.#logFile = opts.logFile ? resolve(this.config.repoRoot, opts.logFile) : null;
   }
@@ -97,7 +115,10 @@ export class ScriptedInstance {
   }
 
   /**
-   * Starts the instance on one scenario.
+   * Starts the server.
+   *
+   * `scenario` names the stand-in script; a `production` instance has no script
+   * and ignores it (pass `'-'` to say so at the call site).
    *
    * `extraEnv` is for settings that belong to a single test rather than to the
    * instance — the scripted answer of the SDK session probe, say. It is applied
@@ -109,23 +130,23 @@ export class ScriptedInstance {
     if (this.#logFile) {
       mkdirSync(dirname(this.#logFile), { recursive: true });
       this.#log = createWriteStream(this.#logFile, { flags: 'a' });
-      this.#log.write(`--- start scenariusza ${scenario} ---\n`);
+      this.#log.write(`--- start ${this.#entry === 'production' ? 'buildu produkcyjnego' : `scenariusza ${scenario}`} ---\n`);
     }
-    this.#process = spawn(
-      'node',
-      [
-        '--experimental-transform-types',
-        '--no-warnings=ExperimentalWarning',
-        'e2e/support/scripted-server.ts',
-      ],
-      {
-        cwd: this.config.repoRoot,
-        // `config.env` last: a canary must never be able to redirect the
-        // instance's port or data directory.
-        env: { ...process.env, ...this.#extraEnv, ...extraEnv, ...this.config.env, SCRIPT: scenario },
-        stdio: this.#log ? ['ignore', 'pipe', 'pipe'] : 'ignore',
-      },
-    );
+    const args =
+      this.#entry === 'production'
+        ? ['apps/server/dist/server.js']
+        : [
+            '--experimental-transform-types',
+            '--no-warnings=ExperimentalWarning',
+            'e2e/support/scripted-server.ts',
+          ];
+    this.#process = spawn('node', args, {
+      cwd: this.config.repoRoot,
+      // `config.env` last: a canary must never be able to redirect the
+      // instance's port or data directory.
+      env: { ...process.env, ...this.#extraEnv, ...extraEnv, ...this.config.env, SCRIPT: scenario },
+      stdio: this.#log ? ['ignore', 'pipe', 'pipe'] : 'ignore',
+    });
     if (this.#log) {
       this.#process.stdout?.pipe(this.#log, { end: false });
       this.#process.stderr?.pipe(this.#log, { end: false });
@@ -173,6 +194,46 @@ export class ScriptedInstance {
       if (!log) return done();
       log.end(() => done());
     });
+  }
+
+  /**
+   * Sends one signal and waits for the process to leave on its own.
+   *
+   * Separate from {@link stop}, which escalates to `SIGKILL` after five seconds
+   * because a test that only wants the port back does not care how it got there.
+   * Here the *how* is the measurement: "SIGTERM leaves no unmanaged worker
+   * process" is a claim about an orderly shutdown, and a `SIGKILL` behind it
+   * would both hide a shutdown that hung and orphan the very children the test
+   * is about to count. So nothing is escalated; a process that does not leave
+   * within `graceMs` is reported as still running, which is a finding.
+   */
+  async stopWith(
+    signal: 'SIGTERM' | 'SIGINT',
+    graceMs = 20_000,
+  ): Promise<{ exited: boolean; code: number | null; signal: NodeJS.Signals | null; ms: number }> {
+    const proc = this.#process;
+    if (!proc) return { exited: true, code: null, signal: null, ms: 0 };
+    this.#process = null;
+    const started = Date.now();
+    const outcome = await new Promise<{ exited: boolean; code: number | null; signal: NodeJS.Signals | null }>(
+      (done) => {
+        const timer = setTimeout(() => done({ exited: false, code: null, signal: null }), graceMs);
+        proc.once('exit', (code, sig) => {
+          clearTimeout(timer);
+          done({ exited: true, code, signal: sig });
+        });
+        proc.kill(signal);
+      },
+    );
+    await new Promise<void>((done) => {
+      const log = this.#log;
+      this.#log = null;
+      if (!log) return done();
+      log.end(() => done());
+    });
+    // A process that ignored the signal is still this object's to clean up.
+    if (!outcome.exited) this.#process = proc;
+    return { ...outcome, ms: Date.now() - started };
   }
 
   /** Everything the server printed since it started. Empty when not captured. */

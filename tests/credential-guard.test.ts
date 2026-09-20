@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -9,6 +9,10 @@ import {
   platformTools,
   createRunWorkspace,
   invokeTool,
+  AUTO_APPROVED_FILE_TOOLS,
+  TOOL_PERMISSION_MATRIX,
+  declaresPathArguments,
+  decideTool,
   protectedDirsFor,
   protectedPathRefusal,
   realResolve,
@@ -48,6 +52,11 @@ let realConfigDir: string | undefined;
 const realConfigDirAtImport = process.env.CLAUDE_CONFIG_DIR;
 const pending: Array<Promise<unknown>> = [];
 let promptSeq = 0;
+/** Katalogi tymczasowe rundy 7 sprzątane po pliku (G21: atrapy, nie logowanie). */
+const pozaDirsW7: string[] = [];
+afterAll(() => {
+  for (const d of pozaDirsW7.splice(0)) rmSync(d, { recursive: true, force: true });
+});
 
 /** A value that exists nowhere else, so finding it anywhere is proof of a leak. */
 const CANARY = 'KANAREK-POSWIADCZENIA-7f3a91c4';
@@ -63,10 +72,11 @@ const EMPTY_CONTEXT = {
   ui: null,
 };
 
-async function startRun(script: Step[]) {
+async function startRun(script: Step[], opts: { honorUpdatedInput?: boolean } = {}) {
   promptSeq += 1;
   const prompt = `polecenie poswiadczenia ${promptSeq}`;
   const handle: StandInHandle = newStandInHandle();
+  handle.honorUpdatedInput = opts.honorUpdatedInput ?? true;
   plans.set(prompt, { script, handle });
   const conversationId = h.platform.services.conversations.create({
     ownerId: h.ownerId,
@@ -286,7 +296,13 @@ describe('uruchomienie nie moze odczytac poswiadczenia (symulacja na granicy ada
     expect(stand.fileTools).toEqual([
       expect.objectContaining({ name: 'Read', denied: true }),
     ]);
-    expect(stand.fileTools[0]?.reason).toContain('poswiadczen Claude');
+    /*
+     * Powód odmowy jest teraz regułą POZYTYWNĄ („poza katalogiem roboczym"), bo
+     * ona sprawdzana jest pierwsza i obejmuje ten przypadek. To, że lista
+     * chronionych katalogów też by go złapała, sprawdza osobno test jednostkowy
+     * `protectedPathRefusal` — warstwa nie zniknęła, zmieniła się kolejność.
+     */
+    expect(stand.fileTools[0]?.reason).toMatch(/katalogu roboczego|poswiadczen Claude/);
   });
 
   it('odmowa jest widoczna w historii jako nieudany krok narzedzia', async () => {
@@ -336,7 +352,7 @@ describe('uruchomienie nie moze odczytac poswiadczenia (symulacja na granicy ada
     const text = answerText(events);
     expect(text.includes(CANARY), 'podwykonawca odczytal poswiadczenie').toBe(false);
     expect(stand.fileTools[0]).toMatchObject({ denied: true });
-    expect(stand.fileTools[0]?.reason).toContain('poswiadczen Claude');
+    expect(stand.fileTools[0]?.reason).toMatch(/katalogu roboczego|poswiadczen Claude/);
     // Odmowa jest widoczna, mimo że zwykła aktywność podwykonawcy jest wyciszona.
     expect(text).toContain('odmowa');
   });
@@ -474,6 +490,327 @@ describe('uruchomienie nie moze odczytac poswiadczenia (symulacja na granicy ada
     }
   });
 
+  /* ---------- kolejność rozwiązywania: dowiązanie przed `..` ---------- */
+
+  /**
+   * Trzy kształty z rerecenzji, każdy odtworzony dokładnie tak, jak je odtworzył
+   * recenzent. Wspólny mechanizm: `path.resolve` zwijał `..` **leksykalnie**,
+   * zanim ktokolwiek dotknął dowiązań, a jądro robi to odwrotnie. Materiału nie
+   * trzeba nawet przygotowywać — `node_modules/<biblioteka>` jest dowiązaniem
+   * wyprowadzającym poza workspace i tworzy je `createRunWorkspace`.
+   */
+  it('dowiazanie + ".." NIE omija reguly: zapis nie tworzy pliku poza workspace', async () => {
+    const outside = mkdtempSync(join(tmpdir(), 'biblioteka-poza-ws-'));
+    mkdirSync(join(outside, 'exceljs'), { recursive: true });
+    const podrzucony = join(outside, 'podrzucony.txt');
+    try {
+      const { stand } = await startRun([
+        { kind: 'linkIntoWorkspace', from: join(outside, 'exceljs'), to: 'node_modules/exceljs' },
+        {
+          kind: 'fileTool',
+          name: 'Write',
+          input: { file_path: '$workspace/node_modules/exceljs/../podrzucony.txt' },
+          content: 'PODRZUCONA-TRESC',
+        },
+        { kind: 'text', text: 'Koniec.' },
+      ]);
+      expect(existsSync(podrzucony), 'POWSTAL PLIK poza workspace przez dowiazanie i ".."').toBe(false);
+      expect(stand.fileTools[0]).toMatchObject({ denied: true });
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('dowiazanie + ".." NIE omija reguly: odczyt nie oddaje tresci spoza workspace', async () => {
+    const outside = mkdtempSync(join(tmpdir(), 'biblioteka-poza-ws-'));
+    mkdirSync(join(outside, 'exceljs'), { recursive: true });
+    writeFileSync(join(outside, 'sekret.txt'), `POZA-WS-${CANARY}`);
+    try {
+      const { stand, events } = await startRun([
+        { kind: 'linkIntoWorkspace', from: join(outside, 'exceljs'), to: 'node_modules/exceljs' },
+        {
+          kind: 'fileTool',
+          name: 'Read',
+          input: { file_path: '$workspace/node_modules/exceljs/../sekret.txt' },
+        },
+        { kind: 'text', text: 'Koniec.' },
+      ]);
+      expect(answerText(events).includes(CANARY), 'odczytano tresc spoza workspace').toBe(false);
+      expect(stand.fileTools[0]).toMatchObject({ denied: true });
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('dowiazanie do katalogu poswiadczen + ".." NIE omija obu straznikow', async () => {
+    /* Kształt, w którym oba strażniki zwracały `null`, a kanarek był odczytany. */
+    const { stand, events } = await startRun([
+      { kind: 'linkIntoWorkspace', from: configDir, to: 'link' },
+      { kind: 'fileTool', name: 'Read', input: { file_path: '$workspace/link/../.credentials.json' } },
+      { kind: 'text', text: 'Koniec.' },
+    ]);
+    expect(answerText(events).includes(CANARY), 'kanarek odczytany przez dowiazanie i ".."').toBe(false);
+    expect(stand.fileTools[0]).toMatchObject({ denied: true });
+  });
+
+  it('wzorzec Glob wychodzacy w gore jest odrzucony, zwykly przechodzi', async () => {
+    const { stand } = await startRun([
+      { kind: 'fileTool', name: 'Glob', input: { path: '$workspace/output', pattern: '../../**' } },
+      { kind: 'fileTool', name: 'Glob', input: { path: '$workspace/output', pattern: '**/*.txt' } },
+      { kind: 'text', text: 'Koniec.' },
+    ]);
+    expect(stand.fileTools.map((f) => f.denied)).toEqual([true, false]);
+  });
+
+  it('kazde wstepnie zatwierdzone narzedzie plikowe zadeklarowalo, jak podaje sciezke', () => {
+    /*
+     * Odwrócenie komplementarności: lista narzędzi też jest zbiorem do
+     * wyliczenia, więc nie opieramy się na tym, że ktoś pamiętał o obu listach
+     * naraz.
+     *
+     * **Pierwsza wersja tej asercji nie mogła oblać.** Sprawdzała, że każde
+     * narzędzie z listy `auto` daje `decideTool → 'auto'` — co pod zepsutą
+     * wersją (`return 'auto'` bezwarunkowo) jest tym bardziej prawdziwe. Próba
+     * R wyszła zielona i to było znalezisko, nie zaliczenie. Niezmiennik brzmi
+     * inaczej: narzędzie wstępnie zatwierdzone **musi mieć zadeklarowany
+     * argument ścieżki** — i to oblewa w chwili dopisania takiego narzędzia.
+     */
+    for (const tool of TOOL_PERMISSION_MATRIX.auto) {
+      expect(
+        declaresPathArguments(tool),
+        `${tool} jest wstepnie zatwierdzone, ale nie zadeklarowalo argumentu sciezki`,
+      ).toBe(true);
+    }
+    // A narzędzie nieznane nadal trafia do zgody, nie do auto.
+    expect(decideTool('NarzedzieBezDeklaracji', [])).toBe('consent');
+  });
+
+  /* ------------------ W1 / W7: wzorce z tyldą, jednolite odmowy ------------ */
+
+  it('W1 wzorzec Glob z tyldą jest odmawiany, zwykły przechodzi', async () => {
+    const { stand } = await startRun([
+      { kind: 'fileTool', name: 'Glob', input: { path: '$workspace/output', pattern: '~/**' } },
+      { kind: 'fileTool', name: 'Glob', input: { path: '$workspace/output', pattern: '**/*.txt' } },
+      { kind: 'text', text: 'Koniec.' },
+    ]);
+    expect(stand.fileTools.map((f) => f.denied)).toEqual([true, false]);
+  });
+
+  /**
+   * W7 — **napis** odmowy jest jednolity: bez wyroczni o nazwach i typach
+   * komponentów. Uczciwie: klasa odmowy (`UnresolvablePathError` kontra „poza
+   * katalogiem roboczym") nadal rozróżnia powód — tego tu nie zmieniamy.
+   * Przed tą rundą napis rozróżniał:
+   *   A. `<ws>/nie-ma/../link/sekret.txt` → „".." po komponencie, który nie
+   *      istnieje" (czyli: „link" istnieje poza workspace),
+   *   B. `<ws>/plik-txt/x` → „"plik-txt" nie jest katalogiem…"
+   *      (czyli: taki plik istnieje w workspace).
+   * Treść odmowy nie może być mapą tego, co leży na dysku.
+   */
+  it('W7 odmowa nierozwiązywalnej ścieżki jest jednym napisem dla obu kształtów', async () => {
+    const poza = mkdtempSync(join(tmpdir(), 'w7-poza-'));
+    pozaDirsW7.push(poza);
+
+    /* Kształt A: `..` po nieistniejącym komponencie, dowiązanie poza workspace. */
+    const { stand: standA, events: eventsA } = await startRun([
+      { kind: 'linkIntoWorkspace', from: poza, to: 'w7-link' },
+      { kind: 'fileTool', name: 'Read', input: { file_path: '$workspace/nie-ma/../w7-link/sekret.txt' } },
+      { kind: 'text', text: 'Koniec.' },
+    ]);
+
+    /* Kształt B: plik w miejscu katalogu (ENOTDIR jądra). */
+    const { stand: standB, events: eventsB } = await startRun([
+      { kind: 'writeOutput', path: 'plik-txt', content: 'zwykly plik' },
+      { kind: 'fileTool', name: 'Read', input: { file_path: '$workspace/output/plik-txt/x' } },
+      { kind: 'text', text: 'Koniec.' },
+    ]);
+
+    try {
+      const odmowaA = standA.fileTools[0]?.reason ?? '';
+      const odmowaB = standB.fileTools[0]?.reason ?? '';
+      expect(standA.fileTools[0]?.denied, 'kształt A nie został odmówiony').toBe(true);
+      expect(standB.fileTools[0]?.denied, 'kształt B nie został odmówiony').toBe(true);
+      /* Jedno źródło odmowy: identyczny napis, zero treści o dysku. */
+      expect(odmowaA).toBe(odmowaB);
+      expect(odmowaA).toContain('nie da sie jednoznacznie');
+      expect(odmowaA.includes('nie istnieje'), 'napis odmowy zdradza: komponent nie istnieje').toBe(false);
+      expect(odmowaA.includes('nie jest katalogiem'), 'napis odmowy zdradza typ komponentu').toBe(false);
+      expect(answerText(eventsA).includes('nie istnieje')).toBe(false);
+      expect(answerText(eventsB).includes('nie jest katalogiem')).toBe(false);
+    } finally {
+      rmSync(poza, { recursive: true, force: true });
+    }
+  });
+
+  /* ------------- Z7: dowód, że narzędzie otwiera PRZEPISANĄ ścieżkę -------- */
+  /* ------------- Z7: dowod, ze narzedzie otwiera PRZEPISANA sciezke -------- */
+
+  /**
+   * Centralna teza rundy 4 — „narzędzie otwiera dokładnie ten plik, który
+   * sprawdzono" — ma mieć pokrycie dowodowe. Ustawiamy wyścig TOCTOU dokładnie
+   * jak recenzent (A10 kontra A10b):
+   *
+   *   `<ws>/link` → `<ws>/prawy` (wewnątrz workspace), plik po prawej stronie
+   *   NIE istnieje. Hook przepisuje `<ws>/link/sekret.txt` na
+   *   `<ws>/prawy/sekret.txt` — i to musi otworzyć narzędzie. Po powrocie z
+   *   hooka test podmienia `<ws>/link` na katalog POZA workspace z kanarkiem.
+   *
+   * Przy honorowaniu przepisania narzędzie otwiera `<ws>/prawy/…` (ENOENT —
+   * kanarek nie wycieka). Przy wyłączonym — otwiera `<ws>/link/…` po podmianie
+   * i kanarek wycieka, więc test oblewa. Zweryfikowane próbą (Z7-neg).
+   */
+  it('Z7 narzedzie otwiera PRZEPISANA sciezke — wyścig TOCTOU zostaje zamkniety', async () => {
+    /*
+     * Scenariusz (A10 recenzji): w chwili sprawdzenia `<ws>/link` wskazuje
+     * WEWNĄTRZ workspace — więc odmowa nie zapada, a hook przepisuje wejście na
+     * `<ws>/prawy/sekret.txt`. Między powrotem z hooka a otwarciem test podmienia
+     * `<ws>/link` na katalog POZA workspace z kanarkiem.
+     *
+     * Przy honorowaniu przepisania narzędzie otwiera `<ws>/prawy/sekret.txt`
+     * (ścieżkę sprawdzoną) — kanarek nie wycieka.
+     */
+    const outside = mkdtempSync(join(tmpdir(), 'wyscig-poza-'));
+    const podmieniony = join(outside, 'podmieniony');
+    mkdirSync(podmieniony, { recursive: true });
+    writeFileSync(join(podmieniony, 'sekret.txt'), `WYSCIG-${CANARY}`);
+
+    const { stand, events } = await startRun(
+      [
+        { kind: 'mkdir', path: 'prawy' },
+        { kind: 'linkIntoWorkspace', from: '$workspace/prawy', to: 'link' },
+        {
+          kind: 'fileTool',
+          name: 'Read',
+          input: { file_path: '$workspace/link/sekret.txt' },
+          swapBeforeOpen: { link: 'link', to: podmieniony },
+        },
+        { kind: 'text', text: 'Koniec.' },
+      ],
+      { honorUpdatedInput: true },
+    );
+    try {
+      const text = answerText(events);
+      expect(text.includes(CANARY), 'wyścig oddał treść spoza workspace mimo przepisania').toBe(false);
+      // Narzędzie otworzyło DOKŁADNIE ścieżkę, którą sprawdził strażnik.
+      expect(stand.opened[0]).toContain('/prawy/sekret.txt');
+      expect(stand.opened[0]).not.toContain('/link/');
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('Z7-neg ta sama próba z wylaczonym przepisywaniem OBLEWA sie (wiazanie dziala)', async () => {
+    const outside = mkdtempSync(join(tmpdir(), 'wyscig-poza-'));
+    const podmieniony = join(outside, 'podmieniony');
+    mkdirSync(podmieniony, { recursive: true });
+    writeFileSync(join(podmieniony, 'sekret.txt'), `WYSCIG-${CANARY}`);
+
+    try {
+      const { stand, events } = await startRun(
+        [
+          { kind: 'mkdir', path: 'prawy' },
+          { kind: 'linkIntoWorkspace', from: '$workspace/prawy', to: 'link' },
+          {
+            kind: 'fileTool',
+            name: 'Read',
+            input: { file_path: '$workspace/link/sekret.txt' },
+            swapBeforeOpen: { link: 'link', to: podmieniony },
+          },
+          { kind: 'text', text: 'Koniec.' },
+        ],
+        { honorUpdatedInput: false },
+      );
+      const text = answerText(events);
+      // Dowód wiązania: narzędzie otworzyło surową ścieżkę (już podmienioną) i
+      // kanarek wycieka. Ten test MUSI oblewać przy wyłączonym przepisywaniu.
+      expect(text.includes(CANARY), 'bez przepisywania wyścig powinien wyciec').toBe(true);
+      // Narzędzie otworzyło SUROWĄ ścieżkę (przez link, już podmieniony) — dowód,
+      // że różnica między Z7 a Z7-neg leży dokładnie w honorowaniu przepisania.
+      expect(stand.opened[0]).toContain('/link/sekret.txt');
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  /* ------------- Z8 / Z9: wiazania na poziomie sdkOptions ---------------- */
+
+  /**
+   * Z8 — `allowedTools` wyprowadzone z tej samej reguły, która decyduje o
+   * auto/zgoda. Próba M4 recenzji: dopisanie narzędzia do listy wstępnie
+   * zatwierdzonych bez deklaracji ścieżki stawiało je w `allowedTools`, gdzie
+   * bramka nigdy go nie widzi (auto-zatwierdzenie na starszeństwie listy).
+   * Filtr w runtime czyni rozjazd niemożliwym; ten test oblewa, gdy ktoś filtr
+   * usunie (próba T).
+   */
+  it('Z8 allowedTools nie zawiera narzedzi plikowych bez zadeklarowanej sciezki', async () => {
+    let captured: Record<string, any> | null = null;
+    const capturing = new AgentRuntime(h.platform.services, {
+      stream: async (_p: unknown, o: any) => {
+        captured = o.sdkOptions as Record<string, any>;
+        return { fullStream: (async function* () { yield { type: 'text-delta', payload: { text: 'ok' } }; })() };
+      },
+      resumeStream: async (_i: unknown, o: any) => {
+        captured = o.sdkOptions as Record<string, any>;
+        return { fullStream: (async function* () { yield { type: 'text-delta', payload: { text: 'ok' } }; })() };
+      },
+    });
+    const conversationId = h.platform.services.conversations.create({
+      ownerId: h.ownerId,
+      title: 'Z8',
+    }).id;
+    const started = await capturing.start({
+      ownerId: h.ownerId,
+      conversationId,
+      prompt: 'sprawdz z8',
+      appContext: { ...EMPTY_CONTEXT, conversationId },
+    });
+    await started.done;
+
+    const options = captured as unknown as { allowedTools: string[] };
+    expect(options.allowedTools, 'stand-in nie dostal allowedTools').toBeTruthy();
+    for (const tool of options.allowedTools) {
+      expect(
+        declaresPathArguments(tool) || !AUTO_APPROVED_FILE_TOOLS.includes(tool as never),
+        `${tool} jest w allowedTools, ale nie zadeklarowalo argumentu sciezki`,
+      ).toBe(true);
+    }
+  });
+
+  /**
+   * Z9 — opcja `settings.permissions.blockReadsOutsideWorkingDirectories`
+   * (odczyty po stronie SDK) musi mieć wiązanie w regresji. Próba M3 recenzji:
+   * usunięcie całego bloku `settings` → 64/64 zielonych. Ten test oblewa.
+   */
+  it('Z9 uruchomienie przekazuje SDK blokade odczytow poza katalogiem roboczym', async () => {
+    let captured: Record<string, any> | null = null;
+    const capturing = new AgentRuntime(h.platform.services, {
+      stream: async (_p: unknown, o: any) => {
+        captured = o.sdkOptions as Record<string, any>;
+        return { fullStream: (async function* () { yield { type: 'text-delta', payload: { text: 'ok' } }; })() };
+      },
+      resumeStream: async (_i: unknown, o: any) => {
+        captured = o.sdkOptions as Record<string, any>;
+        return { fullStream: (async function* () { yield { type: 'text-delta', payload: { text: 'ok' } }; })() };
+      },
+    });
+    const conversationId = h.platform.services.conversations.create({
+      ownerId: h.ownerId,
+      title: 'Z9',
+    }).id;
+    const started = await capturing.start({
+      ownerId: h.ownerId,
+      conversationId,
+      prompt: 'sprawdz z9',
+      appContext: { ...EMPTY_CONTEXT, conversationId },
+    });
+    await started.done;
+
+    expect(
+      (captured as any)?.settings?.permissions?.blockReadsOutsideWorkingDirectories,
+      'brak blockReadsOutsideWorkingDirectories w sdkOptions.settings',
+    ).toBe(true);
+  });
+
   it('uruchomienie NAPRAWDE przekazuje SDK liste chronionych katalogow', async () => {
     /*
      * Wiązanie, nie sama reguła. `protectedDirsFor` jest sprawdzone wyżej na
@@ -515,28 +852,67 @@ describe('uruchomienie nie moze odczytac poswiadczenia (symulacja na granicy ada
     expect(fs.denyRead).toContain(h.platform.config.dataDir);
   });
 
-  it('plik w workspace uruchomienia pozostaje dostepny', async () => {
+  it('KONTROLA ODWROTNA: zwykly odczyt i zapis W katalogu roboczym dzialaja', async () => {
     /*
-     * The control that keeps the rule honest in the other direction: a
-     * protection that refused every file would pass every assertion above and
-     * break the product.
+     * Obowiązkowa druga strona reguły pozytywnej. Ochrona, która psuje produkt,
+     * nie jest ochroną — a reguła „wszystko poza katalogiem roboczym odmawiane"
+     * ma ten dokładnie kształt, w którym łatwo odmówić też tego, co wolno.
      */
+    const { stand, events } = await startRun([
+      { kind: 'fileTool', name: 'Write', input: { file_path: '$workspace/output/notatka.txt' }, content: 'TRESC-ROBOCZA' },
+      { kind: 'fileTool', name: 'Read', input: { file_path: '$workspace/output/notatka.txt' } },
+      { kind: 'text', text: 'Koniec.' },
+    ]);
+    expect(stand.fileTools.map((f) => f.denied), 'praca we wlasnym katalogu zostala zablokowana').toEqual([
+      false,
+      false,
+    ]);
+    // I odczyt naprawdę zwrócił to, co zapis naprawdę zapisał.
+    expect(answerText(events)).toContain('TRESC-ROBOCZA');
+  });
+
+  it('plik poza workspace jest nieczytelny, nawet gdy nie jest poswiadczeniem', async () => {
     /*
-     * We własnym katalogu tymczasowym, nie w gołym `/tmp`: stała nazwa w `/tmp`
-     * zderzyłaby się z równoległym przebiegiem i jest dokładnie tą niechlujnością,
-     * którą ten pakiet tropi gdzie indziej.
+     * Piąta droga w swojej właściwej postaci. Prawdziwy model dostał kanarka z
+     * katalogu, którego nikt nie wymienił na liście zakazów — bo lista zakazów
+     * nie może być kompletna. Kanarek jest WYMYŚLONY i leży w katalogu
+     * tymczasowym; nie jest ani poświadczeniem użytkownika, ani jego kopią.
      */
-    const plainDir = mkdtempSync(join(tmpdir(), 'kanarek-zwykly-'));
-    const readable = join(plainDir, 'nie-poswiadczenie.txt');
-    writeFileSync(readable, 'zwykla tresc robocza');
+    const outside = mkdtempSync(join(tmpdir(), 'kanarek-poza-ws-'));
+    const file = join(outside, 'zwykly-sekret.txt');
+    writeFileSync(file, `NIEZWIAZANY-KANAREK-${CANARY}`);
     try {
-      const { stand } = await startRun([
-        { kind: 'fileTool', name: 'Read', input: { file_path: readable } },
+      const { stand, events } = await startRun([
+        { kind: 'fileTool', name: 'Read', input: { file_path: file } },
         { kind: 'text', text: 'Koniec.' },
       ]);
-      expect(stand.fileTools[0]).toMatchObject({ denied: false });
+      expect(answerText(events).includes(CANARY), 'odczytano plik spoza katalogu roboczego').toBe(false);
+      expect(stand.fileTools[0]).toMatchObject({ denied: true });
+      expect(stand.fileTools[0]?.reason).toContain('katalogu roboczego');
     } finally {
-      rmSync(plainDir, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
     }
   });
+
+  it('zapis poza workspace jest odrzucony, a plik NIE powstaje', async () => {
+    /*
+     * Druga operacja z raportu prób modelowych: `Write` utworzył plik na
+     * ścieżce, której powłoce odmówiono sekundę wcześniej. Asercja jest o
+     * SYSTEMIE PLIKÓW, nie o zwróconym obiekcie — stand-in naprawdę zapisuje,
+     * gdy hook nie odmówi.
+     */
+    const outside = mkdtempSync(join(tmpdir(), 'zapis-poza-ws-'));
+    const target = join(outside, 'podrzucony.txt');
+    try {
+      const { stand } = await startRun([
+        { kind: 'fileTool', name: 'Write', input: { file_path: target }, content: 'PODRZUCONA-TRESC' },
+        { kind: 'text', text: 'Koniec.' },
+      ]);
+      expect(existsSync(target), 'POWSTAL PLIK poza katalogiem roboczym').toBe(false);
+      expect(stand.fileTools[0]).toMatchObject({ denied: true });
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
 });

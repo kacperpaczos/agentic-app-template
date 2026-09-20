@@ -3,7 +3,7 @@ commit: 9eab278+
 data: 2026-09-18T14:05:54+02:00
 
 $ pnpm exec vitest run tests/backup-migration.test.ts tests/session-transcript.test.ts tests/script-path-flags.test.ts
- RUN  v5.0.0 /home/paczos/Documents/agentic-app-template-wt/z2-bl07
+ RUN  v5.0.0 ~/Documents/agentic-app-template-wt/z2-bl07
  ✓ tests/session-transcript.test.ts (19 tests) 354ms
  ✓ tests/script-path-flags.test.ts (21 tests) 19240ms
    ✓ kazda flaga skryptow stanu ma rozstrzygniecie sprawdzone zachowaniem (21)

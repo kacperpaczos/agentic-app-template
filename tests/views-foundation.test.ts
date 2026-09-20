@@ -1085,7 +1085,12 @@ describe('krok skryptowany call wywoluje prawdziwy handler', () => {
       {
         kind: 'call',
         name: 'mcp__app__canvas_add_card',
-        input: { title: 'Z kroku call', spec: { kind: 'component', component: 'platform.markdown', props: { markdown: 'x' } } },
+        input: {
+          title: 'Z kroku call',
+          spec: { kind: 'component', component: 'platform.markdown', props: { markdown: 'x' } },
+          // Required since L9.7's closure — see `canvas.ts`.
+          operationId: 'views-foundation-add-card-1',
+        },
       },
     ]);
     const start = events.find((e) => e.type === AGUI_EVENTS.TOOL_CALL_START);

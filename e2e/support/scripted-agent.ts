@@ -10,7 +10,7 @@
  * Results obtained with it are simulations and are reported as such.
  */
 import { execFileSync, spawn } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   invokeTool,
@@ -112,7 +112,15 @@ export type Step =
    * measurement can count the server's descendant processes before, during and
    * after, instead of stopping at a status in the database.
    */
-  | { kind: 'spawnChild' }
+  /**
+   * Starts a real OS child process bound to the run's abort signal.
+   *
+   * `leak: true` deliberately **breaks** that binding and makes the child
+   * ignore `SIGTERM` as well — the shape of a worker process that outlives the
+   * run. It exists so a detection trial can show that the leak check is able to
+   * fail; nothing else may use it.
+   */
+  | { kind: 'spawnChild'; leak?: boolean }
   /**
    * Asks the browser to move the interface, through the real runtime gate, and
    * records what the client reported back.
@@ -390,22 +398,51 @@ export function scriptedAgent(
           if (e.type === 'fileTool') {
             const step = e.step as Extract<Step, { kind: 'fileTool' }>;
             seq += 1;
+            const fileId = `tu_file_${seq}`;
             const refusal = await firePreToolUse({
-              tool_use_id: `tu_file_${seq}`,
+              tool_use_id: fileId,
               tool_name: step.name,
               tool_input: step.input,
             });
             if (refusal !== null) {
+              // Odrzucone narzedzie sie nie wykonuje, wiec zaden hook `Post*` po
+              // nim nie pada — ta sama asymetria, co w SDK, i powod, dla ktorego
+              // odmowa musi byc ogloszona z `PreToolUse` albo wcale.
               yield { type: 'text-delta', payload: { text: `[plik:${step.name}] odmowa ` } };
               continue;
             }
             const target = String(step.input.file_path ?? step.input.path ?? '');
             let contents: string;
+            let failed = false;
+            /*
+             * Kazde z tych narzedzi robi to, co robi naprawde — i to jest cala
+             * wartosc kroku. `Write`, ktore niczego nie zapisuje, pozwolilby
+             * probie generalnej zameldowac „zapis poza workspace sie nie udal"
+             * na stand-inie, ktory nigdy nie probowal zapisac; `Glob`, ktore
+             * niczego nie wylistowalo, to samo. Bez skutku nie ma kontroli
+             * negatywnej, a bez niej odmowa niczego nie dowodzi.
+             */
             try {
-              contents = readFileSync(target, 'utf8');
+              if (step.name === 'Write' || step.name === 'Edit') {
+                writeFileSync(target, String(step.input.content ?? ''), 'utf8');
+                contents = `zapisano ${target}`;
+              } else if (step.name === 'Glob' || step.name === 'Grep') {
+                contents = readdirSync(target).join('\n');
+              } else {
+                contents = readFileSync(target, 'utf8');
+              }
             } catch (err) {
-              contents = `blad odczytu: ${(err as Error).message}`;
+              contents = `blad narzedzia ${step.name}: ${(err as Error).message}`;
+              failed = true;
             }
+            /*
+             * Wynik przez te same hooki `Post*`, ktorymi SDK zglasza wynik
+             * narzedzia wbudowanego. Bez nich strumien nie ma dla tego kroku
+             * `TOOL_CALL_RESULT`, a `toolCalls()` — czyli czytelnik dowodu —
+             * nie odrozni wywolania, ktore sie udalo, od odrzuconego.
+             */
+            if (failed) await fire('PostToolUseFailure', { tool_use_id: fileId, error: contents });
+            else await fire('PostToolUse', { tool_use_id: fileId, tool_response: contents });
             yield { type: 'text-delta', payload: { text: `[plik:${step.name}] ${shorten(contents, 800)} ` } };
             continue;
           }
@@ -460,12 +497,22 @@ export function scriptedAgent(
              * Five minutes is far longer than any assertion here waits, so it
              * weakens nothing and bounds the damage of a failing trial.
              */
+            const step = e.step as Extract<Step, { kind: 'spawnChild' }> | undefined;
+            const leaks = step?.leak === true;
             const child = spawn(
               process.execPath,
-              ['-e', 'setTimeout(() => process.exit(0), 300000)'],
-              { stdio: 'ignore' },
+              [
+                '-e',
+                leaks
+                  ? // Ignores SIGTERM and is not bound to the run: a leak.
+                    "process.on('SIGTERM', () => {}); setTimeout(() => process.exit(0), 300000)"
+                  : 'setTimeout(() => process.exit(0), 300000)',
+              ],
+              { stdio: 'ignore', ...(leaks ? { detached: true } : {}) },
             );
+            if (leaks) child.unref();
             const kill = () => {
+              if (leaks) return;
               if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
             };
             if (signal?.aborted) kill();

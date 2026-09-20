@@ -32,10 +32,14 @@ import {
   AUTO_APPROVED_FILE_TOOLS,
   FORBIDDEN_TOOLS,
   decideTool,
+  declaresPathArguments,
+  directoryWalkRefusal,
   forbiddenToolMessage,
   protectedDirsFor,
   protectedPathRefusal,
   realResolve,
+  resolvedPathInput,
+  workspaceConfinementRefusal,
 } from './permissions.ts';
 
 export interface StartRunInput {
@@ -710,12 +714,32 @@ export class AgentRuntime {
          * told the agent reached for the credential file and was refused, which
          * is the visible half of L8.7.
          */
-        const refusal = protectedPathRefusal(
-          String(input.tool_name ?? ''),
-          input.tool_input,
-          protectedDirs,
-          (p) => realResolve(args.workspace.dir, p),
-        );
+        /*
+         * Dwie reguły, w tej kolejności, i kolejność jest celowa.
+         *
+         * Najpierw **pozytywna**: czy to w ogóle mieści się w katalogu roboczym
+         * uruchomienia. Ona domyka dopełnienie — wszystko, czego nikt nie
+         * wymienił. Potem **lista zakazów**, która pilnuje katalogów
+         * nietykalnych nawet wewnątrz dozwolonego obszaru (gdyby kiedyś któryś
+         * z nich znalazł się w zasięgu, np. przez dowiązanie rozwiązane do
+         * wnętrza workspace).
+         *
+         * Pozytywna jest pierwsza, bo daje uczciwszy komunikat: „to jest poza
+         * twoim katalogiem roboczym" mówi modelowi, co ma zrobić inaczej,
+         * a „to jest katalog poświadczeń" zdradza, czego szukać.
+         */
+        const toolName = String(input.tool_name ?? '');
+        const refusal =
+          workspaceConfinementRefusal(toolName, input.tool_input, args.workspace.dir) ??
+          directoryWalkRefusal(toolName, input.tool_input, args.workspace.dir) ??
+          protectedPathRefusal(
+            toolName,
+            input.tool_input,
+            protectedDirs,
+            (p) => realResolve(args.workspace.dir, p),
+            /* Workspace uruchomienia lezy w katalogu danych — i ma byc uzywalne. */
+            [realResolve(args.workspace.dir, '.')],
+          );
         if (refusal) {
           /*
            * Announced even when it came from a subagent. The silence above
@@ -735,6 +759,34 @@ export class AgentRuntime {
               permissionDecision: 'deny',
               permissionDecisionReason: refusal,
             },
+          };
+        }
+        /*
+         * Nic nie odmówiono — więc narzędzie dostaje ścieżkę **rozwiązaną**,
+         * tę samą, którą przed chwilą sprawdzono. Bez tego strażnik i narzędzie
+         * rozwiązują napis niezależnie, a dwa rozwiązania tego samego napisu
+         * potrafią wskazać różne pliki (patrz `resolvePhysically`).
+         */
+        const rewritten = resolvedPathInput(toolName, input.tool_input, (p) =>
+          realResolve(args.workspace.dir, p),
+        );
+        /*
+         * Granica wyciszenia podwykonawcy (próba `most-granica-podwykonawcy`):
+         * zwykła aktywność podwykonawcy milczy, ale z przepisanym wejściem —
+         * narzędzie ma otworzyć ścieżkę sprawdzoną także tutaj.
+         */
+        if (fromSubagent) {
+          return rewritten
+            ? { continue: true, hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: rewritten } }
+            : { continue: true };
+        }
+        if (rewritten) {
+          stream.toolStart(id, String(input.tool_name ?? 'tool'), messageId);
+          stream.toolArgs(id, JSON.stringify(rewritten));
+          stream.toolEnd(id);
+          return {
+            continue: true,
+            hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: rewritten },
           };
         }
         // Nothing was refused: ordinary subagent activity stays out of the chat.
@@ -778,10 +830,45 @@ export class AgentRuntime {
     const sdkOptions: Record<string, unknown> = {
       cwd: args.workspace.dir,
       mcpServers: { app: server },
+      /*
+       * Only the server on the line above, and nothing the machine happens to
+       * have configured.
+       *
+       * `settingSources: []` was believed to cover this and does not: it keeps
+       * out project `.mcp.json`, user settings and plugins, but an MCP server
+       * attached to the *account* on claude.ai is registered by the CLI anyway.
+       * Observed on this codebase with SDK 0.3.270 — a session built with
+       * `settingSources: []` reported two servers, `app` and a connector from
+       * the account, the second of which reaches the network from inside the
+       * SDK process where the shell sandbox does not apply. Its tools are not in
+       * `#toolNames`, so `decideTool` sends them to the consent prompt rather
+       * than running them unannounced — but a platform whose isolation story is
+       * "the run has the application's tools and no others" must not leave that
+       * to the user's answer, for the same reason `WebFetch` is forbidden rather
+       * than asked about (`permissions.ts`).
+       *
+       * Checked without spending a model turn: `mcpServerStatus()` is a control
+       * request, so `pnpm diag` can list the servers a real session actually has.
+       */
+      strictMcpConfig: true,
       systemPrompt: { type: 'preset', preset: 'claude_code', append: systemPrompt },
       // Only the application's own tools and the workspace file tools are
       // pre-approved; Bash is deliberately absent (see `permissions.ts`).
-      allowedTools: [...this.#toolNames, ...AUTO_APPROVED_FILE_TOOLS],
+      /*
+       * Z8 — wyprowadzone z TEJ SAMEJ reguły, która decyduje o auto/zgoda.
+       *
+       * Poprzednio była to osobna, ręcznie trzymana lista: narzędzie dopisane do
+       * `AUTO_APPROVED_FILE_TOOLS` bez wpisu w `PATH_ARGUMENTS` dostawało
+       * `decideTool → 'consent'`, a jednocześnie trafiało tutaj — czyli
+       * auto-zatwierdzało się na starszeństwie listy dozwolonych i bramka
+       * nigdy go nie widziała (próba M4 recenzji). Filtr czyni rozjazd
+       * niemożliwym: strażnik ścieżek sprawdzi tylko narzędzia, które
+       * zadeklarowały, jak podają ścieżkę.
+       */
+      allowedTools: [
+        ...this.#toolNames,
+        ...AUTO_APPROVED_FILE_TOOLS.filter(declaresPathArguments),
+      ],
       /*
        * The forbidden category. These reach the network from inside the SDK
        * process, where the shell sandbox's empty domain allowlist does not
@@ -790,6 +877,37 @@ export class AgentRuntime {
        */
       disallowedTools: [...FORBIDDEN_TOOLS],
       permissionMode: 'default',
+      /*
+       * Reguła pozytywna po stronie SDK — **wyłącznie dla odczytów**.
+       *
+       * `blockReadsOutsideWorkingDirectories` istnieje w zainstalowanej wersji
+       * 0.3.270 (sprawdzone w `sdk.d.ts`, nie przyjęte na słowo) i jej własny
+       * opis wyznacza jej zasięg: „Refuse **file-tool reads** (Read, Grep, Glob,
+       * LSP) outside the working directories in every permission mode".
+       *
+       * **Zapisów ta opcja NIE obejmuje.** `Write`, `Edit` i `NotebookEdit`
+       * zamyka `workspaceConfinementRefusal` w hooku `PreToolUse` i w bramce —
+       * to one są regułą dla zapisu, nie ta linia. Ktokolwiek uzna kiedyś tę
+       * opcję za komplet, zostawi otwartą nogę, którą prawdziwy model już raz
+       * przeszedł: `Write` utworzył plik na ścieżce odmówionej powłoce sekundę
+       * wcześniej.
+       *
+       * Że to nie jest deklaracja: dowód dla zapisu stoi na teście, który biegnie
+       * przeciwko **zastępnikowi modelu**. Zastępnik nie czyta `sdkOptions.settings`
+       * w ogóle, więc test „zapis poza workspace nie tworzy pliku" nie ma jak
+       * przejść dzięki tej opcji — przechodzi wyłącznie dzięki regule powyżej.
+       *
+       * Katalogiem roboczym jest `cwd`, czyli workspace uruchomienia, i celowo
+       * **nie** podajemy `additionalDirectories`: każdy dopisany katalog
+       * poszerza obszar, w którym odczyt jest dozwolony.
+       *
+       * Czy SDK naprawdę honoruje tę opcję, jest wypowiedzią o cudzym kodzie i
+       * należy do prób modelowych (L11.4, L11.11) — dlatego odczyt też ma
+       * odmowę po naszej stronie i nie zależy od niej wyłącznie.
+       */
+      settings: {
+        permissions: { blockReadsOutsideWorkingDirectories: true },
+      },
       sandbox: sandboxSettings({
         workspaceDir: args.workspace.dir,
         dataDir: this.services.config.dataDir,
@@ -1061,7 +1179,10 @@ export class AgentRuntime {
        * `FORBIDDEN_TOOLS` is refused here as well as removed from the model's
        * context.
        */
-      const guarded = protectedPathRefusal(
+      const guarded =
+        workspaceConfinementRefusal(toolName, input, run.workspaceDir) ??
+        directoryWalkRefusal(toolName, input, run.workspaceDir) ??
+        protectedPathRefusal(
         toolName,
         input,
         protectedDirsFor(this.services.config.dataDir),
@@ -1072,11 +1193,16 @@ export class AgentRuntime {
          * one layer, not two, for exactly the input an attacker controls.
          */
         (p) => realResolve(run.workspaceDir, p),
+        [realResolve(run.workspaceDir, '.')],
       );
       if (guarded) return { behavior: 'deny', message: guarded };
 
+      /* Ta sama zasada co w hooku: narzędzie dostaje ścieżkę sprawdzoną. */
+      const resolvedInput =
+        resolvedPathInput(toolName, input, (p) => realResolve(run.workspaceDir, p)) ?? input;
+
       const decision = decideTool(toolName, this.#toolNames);
-      if (decision === 'auto') return { behavior: 'allow', updatedInput: input };
+      if (decision === 'auto') return { behavior: 'allow', updatedInput: resolvedInput };
       if (decision === 'forbidden') {
         return { behavior: 'deny', message: forbiddenToolMessage(toolName) };
       }

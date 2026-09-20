@@ -1,3 +1,4 @@
+import { saveCredentialFingerprint } from './credential-guard.ts';
 import { assertIsolatedInstance, resolveTestInstance } from './support/isolation.ts';
 import { modelSpecsNotice } from './support/model-turns.ts';
 
@@ -23,6 +24,12 @@ export default async function globalSetup(): Promise<void> {
   });
   await assertIsolatedInstance(instance.baseUrl);
   console.log(`[e2e] potwierdzono instancje testowa pod ${instance.baseUrl}`);
+  /*
+   * G21 — bezpiecznik odcisku poświadczenia dla przebiegu e2e. Odcisk zapisany
+   * tutaj porównuje `globalTeardown`; zmiana = naruszenie z głośnym wskazaniem
+   * przebiegu jako sprawcy. Patrz `e2e/credential-guard.ts`.
+   */
+  saveCredentialFingerprint();
   // What this run is not running, and what running it would cost. A skip that
   // nobody is told about is the same as a suite that quietly lost coverage.
   console.log(modelSpecsNotice());

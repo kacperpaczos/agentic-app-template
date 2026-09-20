@@ -19,7 +19,7 @@ przywrocono: git checkout -- scripts/backup-state.mjs; drzewo czyste
 wycofany wpis: scripts/migration-rehearsal.mjs, EXPECTED_TO_CHANGE.files
      × kopia sprzed platform-0003-file-versions: migracja zachowuje dane i nie dubluje ich 6013ms
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
-AssertionError: [proba] kopia zrodlowa: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-okNzZG/etap-platform-0003-file-versions-kopia
+AssertionError: [proba] kopia zrodlowa: ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-okNzZG/etap-platform-0003-file-versions-kopia
   - tabela files zmieniona nieoczekiwanie (2 → 2 wierszy)
       Tests  1 failed | 23 skipped (24)
 przywrocono: git checkout -- scripts/migration-rehearsal.mjs; drzewo czyste
@@ -29,7 +29,7 @@ przywrocono: git checkout -- scripts/migration-rehearsal.mjs; drzewo czyste
 wstawiona linia: platform-0003-file-versions dodatkowo UPDATE files SET filename = filename || '.bak'
      × kopia sprzed platform-0003-file-versions: migracja zachowuje dane i nie dubluje ich 4404ms
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
-AssertionError: [proba] kopia zrodlowa: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-toMJjw/etap-platform-0003-file-versions-kopia
+AssertionError: [proba] kopia zrodlowa: ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-toMJjw/etap-platform-0003-file-versions-kopia
   - tabela files: zmieniona tresc w kolumnach sprzed migracji
       Tests  1 failed | 23 skipped (24)
 przywrocono: git checkout -- packages/platform-server/src/db/migrations.ts; drzewo czyste
@@ -50,7 +50,7 @@ przywrocono: git checkout -- packages/platform-server/src/agent/runtime.ts; drze
 === PROBA 5 — odmowa proby na katalogu z APP_DATA_DIR (L10.19)
 wycofana linia: migration-rehearsal.mjs, APP_DATA_DIR usuniete z liveDirs
      × proba migracji na katalogu wskazanym przez APP_DATA_DIR jest odrzucona 97ms
-AssertionError: expected '[proba] /home/paczos/Documents/agenti…' to match /odmawiam proby na katalogu danych apl…/
+AssertionError: expected '[proba] ~/Documents/agenti…' to match /odmawiam proby na katalogu danych apl…/
       Tests  1 failed | 1 passed | 22 skipped (24)
 przywrocono: git checkout -- scripts/migration-rehearsal.mjs; drzewo czyste
 (bez tej linii odmowa opiera sie tylko na session.secret — komunikat inny, test oblewa)
@@ -59,7 +59,7 @@ przywrocono: git checkout -- scripts/migration-rehearsal.mjs; drzewo czyste
 wycofana linia: packages/platform-server/src/db/backfill.ts, 'if (projected) continue;'
      × kopia sprzed platform-0003-file-versions: migracja zachowuje dane i nie dubluje ich 14004ms
      × kopia sprzed platform-0003 z niepustymi plikami: zmiana jest nazwana, dane nietkniete 1ms
-AssertionError: [proba] kopia zrodlowa: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-IIDfJu/etap-platform-0003-file-versions-kopia
+AssertionError: [proba] kopia zrodlowa: ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/regresja-IIDfJu/etap-platform-0003-file-versions-kopia
       Tests  2 failed | 22 skipped (24)
 (powod: 'powtorna migracja zmienila liczbe wierszy w messages' — backfill przestal byc idempotentny)
 przywrocono: git checkout -- packages/platform-server/src/db/backfill.ts; drzewo czyste

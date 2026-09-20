@@ -77,10 +77,10 @@
     },
     "L1.6": {
       "status": "czesciowe",
-      "evidence": "gui",
+      "evidence": "model",
       "origin": "szablon",
-      "proof": "Trwałość po restarcie: e2e/tool-activity.spec.ts „aktywnosc przezywa przeladowanie, przelaczenie rozmowy i restart backendu” (zatrzymanie i ponowny start procesu serwera skryptowanego, identyczne identyfikatory wiadomości), tests/contracts.test.ts „plik przetrwa restart procesu backendu”, tests/run-lifecycle.test.ts „historia przezywa restart backendu”, tests/runtime.test.ts „restart oznacza przerwane zadania zamiast udawac kontynuacje”. Zatrzymanie: tests/runtime.test.ts „zatrzymanie serwera przerywa wszystkie uruchomienia” sprawdza wyłącznie AbortSignal; apps/server/src/main.ts shutdown wywołuje abortAll i server.close (kod). Nie obejmuje: procesów potomnych SDK i CLI Claude oraz sandboxu po zatrzymaniu aplikacji.",
-      "gap": "Brak dowodu w szablonie, że SIGTERM lub SIGINT w trakcie rzeczywistego wykonania nie zostawia procesów claude ani procesów sandboxu (zero osieroconych procesów potwierdzono tylko w audycie AgenticApp); regresja nie wykryje wycieku procesów roboczych.",
+      "proof": "Trwalosc: prawdziwy model, e2e/bl03-model-lifecycle.spec.ts „SIGTERM w trakcie wykonania\" (tura 20, dowod docs/evidence/z11-bl03/runs/2026-09-19T11-19-18-655Z/c-sygnal.json) — sygnal wyslany przy fazie running, serwer konczy sie sam w 5,0 s z kodem 0 (bez SIGKILL za nim), a po ponownym starcie na tym samym katalogu danych rozmowa i uruchomienie sa na miejscu, uruchomienie przerwane ma status przerwanego. Procesy robocze prawdziwej tury zaobserwowane: claude (CLI w SDK) i socat (proxy sieciowe sandboxu). Restart bez modelu: e2e/tool-activity.spec.ts, tests/contracts.test.ts, tests/run-lifecycle.test.ts.",
+      "gap": "Polowa o procesach NIE jest jeszcze dowiedziona. Kontrola uzyta w turze 20 szukala procesow jako POTOMKOW pid serwera juz po jego wyjsciu — osierocony proces jest wtedy przepiety do init i z definicji przestaje byc potomkiem, wiec lista wracala pusta niezaleznie od tego, czy wyciek nastapil; dowod zapisal same nazwy, wiec nie da sie tego zinterpretowac po fakcie. Kontrola zostala wymieniona na odpytywanie po tozsamosci (pid plus czas startu) zapamietanej PRZED sygnalem, z proba zdolnosci wykrycia na zastepniku: scenariusz z potomkiem ignorujacym SIGTERM jest przez nowa kontrole ZNAJDOWANY, a stara zwraca pusto (e2e/bl03-rehearsal.spec.ts „kontrola wycieku procesow POTRAFI oblac\"). Brakuje jednego przebiegu z prawdziwym modelem na poprawionej kontroli.",
       "backlog": "BL-03",
       "scenarios": [
         "T01",
@@ -311,12 +311,11 @@
       ]
     },
     "L2.13": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "Prawdziwy model otwiera widok i wskazuje element: proba T25 (docs/evidence/bl01-bl02-2026-09-17/t25-wskazanie-wartosci.json) konczy sie podswietlona komorka rekordu, a proba T26 zawezeniem i sortowaniem widocznym w kontrolkach.",
-      "gap": "Pokazanie ustawienia (platform.settings.auth) i przelaczenie przestrzeni pracy przez prawdziwy model nadal bez proby — obie sciezki pokrywa tylko scenariusz skryptowany (e2e/ui-navigation.spec.ts).",
-      "backlog": "BL-03",
+      "proof": "Prawdziwy model, e2e/bl03-model-canvas.spec.ts „polecenie pokazuje ustawienie i przelacza przestrzen pracy\" (tura 14 grantu BL-03, dowod docs/evidence/z11-bl03/runs/2026-09-19T01-06-49-066Z/a-ustawienie-i-przestrzen.json): ui_navigate z targetId=platform.settings.auth konczy sie executed=true, sekcja jest widoczna i ma data-ui-highlight=\"true\", a drugie ui_navigate ze spaceId przelacza przestrzen — potwierdza to parametr s w adresie, nie proza modelu. Wczesniejsza proba (tura 6) oblala: agent podal identyfikator przestrzeni jako targetId. Poprawka w agent/tools/ui.ts (mechanizm w opisie, .describe() na polach, hint w odmowie dla wlasnej przestrzeni) plus trzy testy kontraktu w tests/ui-navigation.test.ts; proba zdolnosci wykrycia T8: wycofanie hint oblewa na ui-navigation.test.ts:276.",
+      "gap": "—",
       "scenarios": [
         "T23"
       ]
@@ -376,12 +375,11 @@
       }
     },
     "L3.2": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "Kod: narzędzia canvas_add_card, canvas_update_card, canvas_move_card, canvas_remove_card (packages/platform-server/src/agent/platform-tools.ts). e2e/agent-ui.spec.ts (prawdziwy model): dodanie karty procurement.costChart. tests/contracts.test.ts na poziomie serwisu: „konflikt kompozycji karty nie niszczy ostatniego poprawnego ukladu”, „zapis pozycji karty nie konkuruje z zapisem jej tresci”, „dodanie karty z tym samym operationId nie tworzy dwoch kart”. Nie obejmuje: zmiany, przesunięcia i usunięcia wykonanych przez agenta.",
-      "gap": "Handlery canvas_update_card, canvas_move_card i canvas_remove_card nie są wywoływane przez żaden test ani przez model w szablonie; serwis removeCard nie ma testu kontraktu (DELETE tylko jako przygotowanie w agent-ui.spec.ts); dowód czterech operacji agenta istnieje tylko historycznie (audyt 2026-09-15).",
-      "backlog": "BL-03",
+      "proof": "Prawdziwy model, e2e/bl03-model-canvas.spec.ts „trzy operacje kompozycji wywolane przez agenta\" (tury 3-5, dowod docs/evidence/z11-bl03/runs/2026-09-19T00-33-31-539Z/a-kanwa-rekord-nawigacja.json): canvas_add_card, canvas_update_card, canvas_move_card i canvas_remove_card wywolane przez agenta w jednej rozmowie; tytul i specVersion zmienione, geometria przesunieta, komponent zachowany, karta usunieta z backendu i z ekranu. Serwis: tests/contracts.test.ts „usuniecie karty zabiera wskazana karte, nie rusza pozostalych i nie powtarza sie\" (proba T3: wycofanie klucza idempotencji oblewa na contracts.test.ts:282).",
+      "gap": "—",
       "scenarios": [
         "T07"
       ],
@@ -482,12 +480,11 @@
       ]
     },
     "L3.10": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "e2e/agent-ui.spec.ts „polecenie → narzedzie → mutacja → canvas → strumien → trwalosc” (prawdziwy model): wyłącznie dodanie — nowa karta procurement.costChart spoza idsBefore, zdarzenia TOOL_CALL_START z prefiksem mcp__app__. Scenariusz tool-then-text w e2e/support/scripted-server.ts tylko emituje hooki dla mcp__app__canvas_add_card, bez wywołania narzędzia. Raport §6 wymienia cztery operacje canvasu wyłącznie z audytu AgenticApp. Nie obejmuje: aktualizacji, przesunięcia i usunięcia.",
-      "gap": "Aktualizacja, przesunięcie i usunięcie karty nie mają w szablonie dowodu wywołania przez prawdziwy model; dowód historyczny (raw-probe-canvas.log, audyt 2026-09-15) nie jest częścią repozytorium ani regresji.",
-      "backlog": "BL-03",
+      "proof": "Prawdziwy model, e2e/bl03-model-canvas.spec.ts (tury 3-5, dowod j.w.): cztery operacje kompozycji wywolane przez agenta, kazda potwierdzona zdarzeniem TOOL_CALL_START/TOOL_CALL_RESULT tego wykonania i stanem backendu — nie testem endpointu.",
+      "gap": "—",
       "scenarios": [
         "T07"
       ]
@@ -514,12 +511,11 @@
       ]
     },
     "L3.13": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "e2e/agent-ui.spec.ts: clearChartCards usuwa karty costChart z poprzednich przebiegów, test zapamiętuje idsBefore, sprawdza brak karty wykresu przed poleceniem i wymaga nowej karty procurement.costChart spoza idsBefore oraz zachowania wcześniejszych kart; bieżące wykonanie ma TOOL_CALL_START mcp__app__. Nie obejmuje: jawnego powiązania karty z badanym wykonaniem i operacji innych niż dodanie.",
-      "gap": "Test nie porównuje cardId z TOOL_CALL_RESULT tego wykonania z nową kartą, a canvas_cards nie przechowuje runId; korelacja wynika tylko z kolejności w jednym workerze; próba obejmuje wyłącznie dodanie, nie zmianę, przesunięcie i usunięcie.",
-      "backlog": "BL-03",
+      "proof": "Prawdziwy model, e2e/bl03-model-canvas.spec.ts (tury 3-5, dowod j.w.): cardId brany z TOOL_CALL_RESULT tego wykonania i wyszukiwany w przestrzeni; test sprawdza, ze karty o tym identyfikatorze NIE bylo przed poleceniem, a zmiana i przesuniecie wracaja z tym samym cardId. Zastany element nie zalicza proby.",
+      "gap": "—",
       "scenarios": [
         "T07",
         "T27"
@@ -866,8 +862,8 @@
       "status": "czesciowe",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "e2e/agent-ui.spec.ts (prawdziwy model przez @mastra/claude 0.3.1 i most hooków w packages/platform-server/src/agent/runtime.ts): w /api/runs/:id/events są TOOL_CALL_START, TOOL_CALL_RESULT, RUN_FINISHED, ponad 3 TEXT_MESSAGE_CONTENT, narzędzia mcp__app__* i powiązana sesja Claude; e2e/files-agent.spec.ts (model): prośba o zgodę z canUseTool. Brakujące mapowania opisane w docs/NEW-APPLICATION.md §7 (adapter przekazuje tylko tekst, gotowy czat ignoruje CUSTOM) i w nagłówku runtime.ts.",
-      "gap": "Z rzeczywistym adapterem nie sprawdzono błędu narzędzia (hook PostToolUseFailure), błędu strumienia modelu (chunk error → RUN_ERROR z klasyfikacją) ani treści TOOL_CALL_ARGS; te ścieżki są tylko symulowane (run-lifecycle, tool-activity). Skutek: zmiana nazwy hooka lub formatu błędu w SDK nie zostanie wykryta.",
+      "proof": "Prawdziwy model przez @mastra/claude i most hookow w runtime.ts: e2e/bl03-model-lifecycle.spec.ts „blad narzedzia przechodzi przez adapter do rozmowy, z trescia argumentow\" (tura 12, dowod docs/evidence/z11-bl03/runs/2026-09-19T00-57-37-949Z/c-blad-narzedzia.json) — hook PostToolUseFailure rzeczywistego adaptera oznacza wywolanie jako blad, niesie prawdziwy komunikat walidacji (nie dosłowne „null\", co bylo zaobserwowana wada), a TOOL_CALL_ARGS niesie rzeczywiste argumenty wywolania. Pozostale mapowania sprawdzone wczesniej na prawdziwym modelu (e2e/agent-ui.spec.ts) i opisane w docs/NEW-APPLICATION.md §7 oraz w naglowku runtime.ts.",
+      "gap": "Trzecia sciezka z opisu braku — blad strumienia modelu (chunk error prowadzacy do RUN_ERROR z klasyfikacja) — pozostaje SYMULACJA (tests/run-lifecycle.test.ts). Nie da sie jej wywolac na zadanie bez prawdziwej awarii adaptera albo wyczerpania limitu subskrypcji, a limitu nie wolno udawac. Swiadoma decyzja koordynatora: zamykamy te polowe, ktora zaobserwowano, i nazywamy druga wprost.",
       "backlog": "BL-03",
       "scenarios": [
         "T05",
@@ -1031,12 +1027,11 @@
       }
     },
     "L6.5": {
-      "status": "niesprawdzone",
-      "evidence": "brak",
-      "origin": "brak",
-      "proof": "Implementacja istnieje: state/appState.ts toAppContext wysyła szkice bez wartości (formId, entity, entityId, dirtyFields), agent/prompt.ts oznacza je jako niezapisane, get_context dodaje notę unsavedDrafts, module-procurement/src/ui/cards.tsx ustawia szkic przy edycji. W szablonie brak testu (z modelem lub bez), który sprawdza, że szkic trafia do kontekstu i że agent podaje wartość zapisaną.",
-      "gap": "Jedynym dowodem jest historyczna sonda raw-probe-draft.log w AgenticApp (wcześniej FEEDBACK P11: nierozwiązane). Skutek: regresja oznaczenia szkicu lub zachowania modelu wobec szkicu nie zostanie wykryta.",
-      "backlog": "BL-03",
+      "status": "potwierdzone",
+      "evidence": "model",
+      "origin": "szablon",
+      "proof": "Prawdziwy model, e2e/bl03-model-lifecycle.spec.ts „agent podaje wartosc zapisana i odnotowuje niezapisany szkic\" (tura 11, dowod docs/evidence/z11-bl03/runs/2026-09-19T00-53-58-916Z/d-szkic-a-dane.json): ilosc zapisana ustawiona na 37, w formularzu wpisane 999 bez zapisu. Kontekst polecenia niesie szkic (formId, entity, dirtyFields) BEZ wpisanej wartosci, agent podaje 37 szt jako zapisane i nazywa pole niezapisanym, a rekord w backendzie zostaje bez zmian.",
+      "gap": "—",
       "scenarios": [
         "T08"
       ],
@@ -1046,12 +1041,11 @@
       }
     },
     "L6.6": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "e2e/agent-ui.spec.ts (prawdziwy model): polecenie dodania wykresu kosztów „dla tej sprawy” wysłane w przestrzeni sprawy; backend potwierdza nową kartę procurement.costChart w tej przestrzeni (scoped.id) i nienaruszone poprzednie karty.",
-      "gap": "Test nie sprawdza, że karta wskazuje właściwą sprawę (props caseId), a po przeładowaniu w kontekście jest tylko spaceId (resource ustawia wyłącznie strona sprawy), więc aktualnym elementem jest przestrzeń, nie rekord. Brak próby z zaznaczonym rekordem i mutacją domeny potwierdzoną wynikiem backendu (FEEDBACK #21 tylko historycznie).",
-      "backlog": "BL-03",
+      "proof": "Prawdziwy model, e2e/bl03-model-canvas.spec.ts tura 1 (dowod j.w.): polecenie wyslane z ekranu sprawy niesie resource={kind:\"case\",id} w ciele zadania /api/agui/run, a karta utworzona przez agenta ma props.caseId rowne temu rekordowi. Identyfikator nie zostal podany w poleceniu.",
+      "gap": "—",
       "scenarios": [
         "T09"
       ],
@@ -1207,12 +1201,11 @@
       }
     },
     "L7.3": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "Wynik: e2e/agent-ui.spec.ts — faza succeeded w GUI przez Mastrę i SDK. Błąd: e2e/tool-activity.spec.ts „blad wykonania jest widoczny w aplikacji wraz z kodem, a praca nie znika” (run-error z kodem rate_limited). Anulowanie: e2e/measurements.spec.ts „zatrzymanie z interfejsu konczy wykonanie i nie zostawia zapisow”, e2e/background-tasks.spec.ts „jawne Stop konczy wskazane wykonanie”, tests/background-runs.test.ts „konczy wskazane wykonanie i nie rusza pozostalych”. Błąd i anulowanie sprawdzone wyłącznie ze stand-inem ModelAgentLike, który zastępuje mastra.getAgent — nie przechodzą przez Mastrę, adapter ani proces SDK.",
-      "gap": "Brak powtarzalnej próby błędu i Stop przez rzeczywisty adapter @mastra/claude i proces SDK (historycznie tylko raw-probe-stop.log w AgenticApp); w szablonie nie wiadomo, czy sygnał przerwania kończy proces SDK i daje cancelled w GUI.",
-      "backlog": "BL-03",
+      "proof": "Prawdziwy model przez @mastra/claude i proces Claude Agent SDK. Wynik i blad: e2e/bl03-model-lifecycle.spec.ts „blad narzedzia przechodzi przez adapter do rozmowy\" (tura 12, dowod docs/evidence/z11-bl03/runs/2026-09-19T00-57-37-949Z/c-blad-narzedzia.json) — hook PostToolUseFailure oznacza wywolanie jako blad z prawdziwym komunikatem walidacji, TOOL_CALL_ARGS niesie rzeczywiste argumenty, powod widoczny w rozmowie. Anulowanie: e2e/bl03-model-lifecycle.spec.ts „Stop konczy wykonanie modelu\" (tura 19, dowod docs/evidence/z11-bl03/runs/2026-09-19T11-16-41-405Z/c-stop.json) — Stop klikniety przy fazie running, wykonanie konczy sie statusem cancelled z kodem cancelled, a procesy robocze uruchomione przez wykonanie (claude, socat) przestaja dzialac.",
+      "gap": "—",
       "scenarios": [
         "T16",
         "T22"
@@ -1305,12 +1298,11 @@
       ]
     },
     "L7.11": {
-      "status": "czesciowe",
-      "evidence": "model",
+      "status": "potwierdzone",
+      "evidence": "przebieg",
       "origin": "szablon",
-      "proof": "e2e/agent-ui.spec.ts: w prawdziwej sesji wywołane narzędzie mcp__app__* (TOOL_CALL_START, TOOL_CALL_RESULT) i powstała karta; e2e/files-agent.spec.ts „agent zmienia skoroszyt w sandboxie, a oryginal zostaje nietkniety” — files_publish_version utworzył wersję 2. tests/mcp-schema.test.ts „odrzuca z.record() w schemacie narzedzia”, „odrzuca .default() na polu najwyzszego poziomu”, „wszystkie realne narzedzia aplikacji przechodza kontrole”; agent/mcp.ts assertMcpCompatibleShape rzuca błąd już przy budowie serwera w konstruktorze AgentRuntime. Nie sprawdzono pełnej listy narzędzi widocznych w sesji.",
-      "gap": "Strażnik obejmuje tylko znane przypadki (z.record, z.map, .default); inny niekonwertowalny schemat nadal usunąłby serwer po cichu, bo runtime nie porównuje zadeklarowanych narzędzi z listą w sesji SDK. Porównanie wykonuje tylko pnpm diag (apps/server/src/cli/diag-agent.ts), ręcznie i poza regresją.",
-      "backlog": "BL-03",
+      "proof": "Prawdziwa sesja Claude Agent SDK, odpytana wylacznie zadaniami sterujacymi — zero tur modelu (apps/server/src/cli/diag-agent.ts, log docs/evidence/z11-bl03/sesja-sdk/diag-*.txt): serwer MCP „app\" laczy sie i oglasza wszystkie 33 zadeklarowane narzedzia, zero brakujacych i zero nadmiarowych, brak obcych serwerow MCP. Diagnostyka konczy sie kodem != 0 przy rozjezdzie. Proba zdolnosci wykrycia T4 (--proba-niezgodnego-schematu): serwer z jednym narzedziem na z.record() melduje sie jako connected z ZEREM narzedzi i BEZ bledu, diag konczy sie kodem 1 — cicha utrata jest realna i wykrywalna tylko tym porownaniem. Reprodukcja w procesie: tests/mcp-published-schema.test.ts.",
+      "gap": "—",
       "scenarios": []
     },
     "L7.12": {
@@ -1391,12 +1383,11 @@
       }
     },
     "L8.5": {
-      "status": "czesciowe",
-      "evidence": "gui",
+      "status": "potwierdzone",
+      "evidence": "model",
       "origin": "szablon",
-      "proof": "e2e/session-restore.spec.ts „dalsze polecenie po przeladowaniu kontynuuje te sama sesje”: po przeładowaniu drugie polecenie trafia do tej samej rozmowy (1 wątek, 2 uruchomienia, claudeSessionId bez zmian, więcej wiadomości). Serwer skryptowy zawsze zwraca sess_scripted, a stand-in traktuje resumeStream jak stream, więc test nie odróżnia wznowienia od nowej sesji. Kod: runtime.ts resumeStream({ message, sessionId: conversation.claudeSessionId }). e2e/agent-ui.spec.ts sprawdza brak duplikacji historii po przeładowaniu, ale dla jednej tury.",
-      "gap": "Brak próby na prawdziwym modelu z drugą turą w tej samej rozmowie (także po restarcie backendu), potwierdzającej wznowienie właściwego session_id, pamięć poprzedniej tury i brak powielenia historii; historycznie FEEDBACK #19 i raw-probe-stop.log w AgenticApp.",
-      "backlog": "BL-03",
+      "proof": "Prawdziwy model, e2e/bl03-model-lifecycle.spec.ts „druga tura po restarcie backendu wznawia te sama sesje\" (tury 9-10, dowod docs/evidence/z11-bl03/runs/2026-09-19T00-53-58-916Z/d-wznowienie-sesji.json): miedzy turami backend zatrzymany SIGTERM i uruchomiony ponownie na tym samym katalogu danych. claudeSessionId drugiego uruchomienia jest identyczny z pierwszym, model odtwarza wartosc z pierwszej tury, wszystkie wczesniejsze wiadomosci sa obecne dokladnie raz (identyfikatory bez duplikatow), przybywa dokladnie jedno uruchomienie.",
+      "gap": "—",
       "scenarios": [
         "T03"
       ],
@@ -1420,11 +1411,12 @@
       }
     },
     "L8.7": {
-      "status": "potwierdzone",
-      "evidence": "gui",
+      "status": "czesciowe",
+      "evidence": "test",
       "origin": "szablon",
       "proof": "Dwie strony problemu. (1) Co aplikacja wypisuje: tests/durability.test.ts skanuje zbudowany frontend, bundle serwera, baze, diagnostyke startowa, raporty i slady Playwright, katalogi robocze uruchomien i magazyn plikow — prawdziwa wartoscia tokena, czytana przez credentialFilePath (czyli takze z CLAUDE_CONFIG_DIR), a brak poswiadczenia trzeba zadeklarowac zamiast przejsc pusto. (2) Czego agent nie moze siegnac — brak wykryty w tym pakiecie: Read byl wstepnie zatwierdzony, wiec bramka zgody nigdy go nie widziala, a sandbox blokowal tylko katalog danych. Teraz katalog poswiadczen jest w denyRead/denyWrite sandboxa oraz odrzucany przez protectedPathRefusal w hooku PreToolUse i w bramce. tests/credential-guard.test.ts (13 testow, kanarek w tymczasowym CLAUDE_CONFIG_DIR) i e2e/auth-limits.spec.ts: proba odczytu konczy sie odmowa widoczna w czacie, a kanarek nie pojawia sie w odpowiedzi, historii ani zdarzeniach. Proba wykrycia: wylaczenie odmowy w hooku => testy oblewaja na asercji o kanarku w odpowiedzi i w historii.",
-      "gap": "—",
+      "gap": "Piata droga (niezalezny przeglad, rundy 4 i 6): polaczenie nieistniejacego komponentu, znaku \"..\" i dowiazania omijalo straznika sciezek (proby A6/A6e) i publikowalo plik spoza workspace jako artefakt do pobrania (C1); odczyt zrodel bibliotek toolkitu przez zwykly wzorzec Grep/Glob przechodzil, bo createRunWorkspace sam dowiazuje biblioteki poza workspace (A11/A12/B8); tylda i pusty napis omijaly sprawdzenie w calosci (A7/A7b/A8). Naprawa rundy 6 (fail-closed walker, fail-closed wzorce, budzetowany pre-walk, odmowa tyldy i pustego napisu) jest zweryfikowana pakietem 33 prob recenzji, ale dowod na PRAWDZIWYM modelu (L11.4/L11.11 — czy SDK honoruje updatedInput, blockReadsOutsideWorkingDirectories i semantyke wzorcow) pozostaje niewykonany. Do czasu tego przebiegu kryterium jest czesciowe.",
+      "backlog": "BL-04",
       "scenarios": [
         "T17"
       ],
@@ -1552,12 +1544,11 @@
       }
     },
     "L9.4": {
-      "status": "czesciowe",
-      "evidence": "test",
+      "status": "potwierdzone",
+      "evidence": "model",
       "origin": "szablon",
-      "proof": "tests/contracts.test.ts „agent przechodzi po relacjach do zrodla ceny” (procurement_find_price_provenance: pozycja → oferta → dostawca → plik CSV z ceną 13100.00 i lokalizatorem wiersza) i „wyszukiwanie znajduje rekordy po fragmencie nazwy” — handlery narzędzi wywołane przez registry.callTool, bez modelu.",
-      "gap": "Brak próby na prawdziwym modelu, w której agent sam wyszukuje rekord, przechodzi po relacjach i pobiera szczegóły; zdolność agenta potwierdzał tylko historyczny przebieg FEEDBACK #21 w AgenticApp.",
-      "backlog": "BL-03",
+      "proof": "Prawdziwy model, e2e/bl03-model-relations.spec.ts (tura 2, dowod docs/evidence/z11-bl03/runs/2026-09-19T00-29-50-327Z/e-relacje.json): agent dostaje wylacznie fragment nazwy, sam wywoluje procurement_search, a dopiero potem procurement_find_price_provenance — kolejnosc jest asercja, bo identyfikator nieznalezony samodzielnie nie dowodzilby zdolnosci. Wynik zgodny z backendem (MediaPro, MP-2026-0442, „wiersz 2, kolumna cena_jednostkowa_netto_pln\", plik CSV), a pobrany plik zrodlowy zawiera 13100.00.",
+      "gap": "—",
       "scenarios": [
         "T09",
         "T25"
@@ -1597,12 +1588,11 @@
       }
     },
     "L9.7": {
-      "status": "czesciowe",
-      "evidence": "test",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "Naprawiony konkretny defekt: procurement_save_comparison przyjmowal operationId i go nie uzywal, wiec powtorzenie tworzylo drugi artefakt tego samego zestawienia. Teraz przechodzi przez idempotency.once z odciskiem zadania, a operationId jest w tym narzedziu WYMAGANY — podobnie jak w artifact_create i artifact_publish_file, czyli tam, gdzie powtorzenie tworzy trwaly rekord i gdzie nie ma drugich drzwi HTTP, wiec wymagalnosc nie rozjezdza sie z L9.2. tests/domain-guarantees.test.ts: „osiem jednoczesnych zapisow zestawienia tworzy jeden artefakt”, „powtorzony zapis zestawienia po zakonczeniu pierwszego tez nie tworzy drugiego artefaktu”, „osiem jednoczesnych ponowien zmiany pozycji: jeden przyrost wersji, jeden wynik”. Zachowane wczesniejsze testy powtorzen sekwencyjnych w contracts.test.ts. Proby zdolnosci wykrycia: docs/evidence/z6-bl11b/proby-wykrycia.txt (P9 — klucz ignorowany: osiem artefaktow; P10c — bez rezerwacji klucza: osiem artefaktow). Runda poprawek 1: kolumna braku wymienia teraz trzy narzedzia, ktore faktycznie dubluja, a nie siedem przyjmujacych klucz opcjonalnie — cztery z tamtych siedmiu sa chronione inaczej, co sprawdza osobny test.",
-      "gap": "Powtorzenie BEZ operationId dubluje skutek w TRZECH narzedziach: canvas_add_card (druga karta), agent_view_create (drugi widok) i files_publish_version (druga wersja pliku). Pozostale narzedzia zapisu, ktore przyjmuja klucz opcjonalnie, sa chronione czym innym i powtorzenie niczego w nich nie dubluje: canvas_update_card wymaga wersji (powtorzenie daje conflict), canvas_remove_card i agent_view_remove koncza sie not_found, agent_view_update scala i zwraca unchanged=true. Rozroznienie jest wykonywane, nie deklarowane — tests/domain-guarantees.test.ts „powtorzenie BEZ operationId: trzy narzedzia dubluja skutek, cztery sa chronione inaczej”. Domkniecie wymaga uczynienia operationId wymaganym w tych trzech narzedziach po obu stronach drzwi: w agent_view_create zmienia to kontrakt pol wymaganych bedacy dowodem innego pakietu (tests/agent-views.test.ts), a w canvas_add_card wymaga generowania klucza w interfejsie (POST /api/canvas/cards wola useAddCard) — oba naleza do osobnego pakietu.",
-      "backlog": "BL-11",
+      "proof": "Naprawiony konkretny defekt: procurement_save_comparison przyjmowal operationId i go nie uzywal, wiec powtorzenie tworzylo drugi artefakt tego samego zestawienia. Teraz przechodzi przez idempotency.once z odciskiem zadania. Runda poprawek 1: kolumna braku wymieniala trzy narzedzia, ktore dubluj bez klucza — canvas_add_card, agent_view_create i files_publish_version; cztery pozostale narzedzia z kluczem opcjonalnym sa chronione innym mechanizmem (wersja, not_found, merge bez zmiany), co sprawdza osobny test. Z10/BL-09: te trzy narzedzia maja operationId WYMAGANE w schemacie (z opisem dla modelu i wzmianka w opisie narzedzia), jak artifact_create i artifact_publish_file; wywolanie bez klucza odrzuca walidacja przed handlerem. Audit wszystkich narzedzi effect: write wykazal czwarte: probe_add_note (modul kontrolny devkit-probe) takze tworzyl wiersz bez klucza — naprawione tym samym srodkiem (klucz wymagany w narzedziu MCP, zapis przez wspoldzielony IdempotencyStore z odciskiem; trasa HTTP modulu zostaje bez klucza, z komentarzem uzasadniajacym asymetrie). Regula jest wyprowadzana z rejestru, nie z listy pisanej recznie: tests/domain-guarantees.test.ts „kazde effect: write ma operationId wymagane albo udokumentowany powod, ze nie musi” wylicza narzedzia zapisu i wymaga od kazdego deklaracji idempotencji — nowe narzedzie bez klucza psuje test. Powtorzenia z kluczem daja jeden wiersz, liczone w bazie. Proba negatywna: po cofnieciu poprawki trzy testy padaja na starej wersji (kluczowe wywolanie przechodzi i zapisuje; wyliczenie wymienia trzy narzedzia po nazwach). Dowod z rzeczywistego interfejsu (test GUI bez modelu): docs/evidence/z10-bl09/dowod-l97-idempotencja-narzedzi.json (e2e/idempotent-tools.spec.ts, scena bl09-l97) — polecenie wyslane z przegladarki, wykonanie przez prawdziwy runtime, narzedzia przez ta sama walidacje i wykonanie co serwer MCP: canvas_add_card, agent_view_create i files_publish_version wolane dwa razy z tym samym operationId daja po jednym wierszu (przestrzen canvas, widoki agenta, magazyn plikow, biblioteka artefaktow — czytane z API odczytu), a wywolanie canvas_add_card bez klucza jest widocznym bledem narzedzia (validation_failed, issue operationId) i nie zapisuje niczego. Czego ten dowod nie pokazuje: czy zywy model podaje wlasne operationId — to wlasciwosc modelu, cwiczona dopiero przebiegiem platnym; opisy narzedzi mowia mu o tym wprost. Pozostaje swiadome i skomentowane w kodzie: drzwi HTTP POST /api/canvas/cards oraz przycisk interfejsu (useAddCard) nie generuja klucza — klik uzytkownika nie jest ponawianym zadaniem agenta, a uscislenie po stronie interfejsu nalezy do BL-11.",
+      "gap": "—",
       "scenarios": [
         "T10"
       ],
@@ -1670,12 +1660,11 @@
       ]
     },
     "L9.13": {
-      "status": "czesciowe",
-      "evidence": "model",
+      "status": "potwierdzone",
+      "evidence": "przebieg",
       "origin": "szablon",
-      "proof": "tests/mcp-schema.test.ts „wszystkie realne narzedzia aplikacji przechodza kontrole” (≥20 narzędzi, nazwy mcp__app__*) oraz odrzucenie z.record i .default; e2e/agent-ui.spec.ts i e2e/files-agent.spec.ts: wykrycie i wywołanie wybranych narzędzi w prawdziwej sesji SDK; tests/platform-boundary.test.ts „domyslna kompozycja modulu testowego jest walidowana tym samym katalogiem” (domyślny limit 20 nadany walidacją katalogu).",
-      "gap": "Brak w regresji próby wykrycia wszystkich narzędzi w sesji SDK (pnpm diag poza nią); semantyka pól opcjonalnych i domyślnych jest sprawdzana tylko statycznie strażnikiem, który dopuszcza .default() zagnieżdżone pod .optional() bez sprawdzenia, jak SDK ogłasza takie pole, gdy obiekt nadrzędny jest podany.",
-      "backlog": "BL-03",
+      "proof": "Wykrycie: jak L7.11 — wszystkie 33 narzedzia zarejestrowane w prawdziwej sesji SDK, zero tur. Semantyka: tests/mcp-published-schema.test.ts czyta JSON Schema, ktore SDK naprawde wyprowadza z kazdego realnego narzedzia, i wola narzedzia przez wlasna walidacje serwera — pole z .default() pod .optional() jest ogloszone jako NIEwymagane i uzupelniane przy wywolaniu, gdy obiekt nadrzedny jest podany (kontrola: obiekt bez .optional() jest wymagany i wywolanie bez niego oblewa). Wywolanie narzedzi przez prawdziwy model: tury 2-5, 12, 16-18 grantu BL-03. Proba T2: wycofanie doklejanego opisu skutku oblewa na mcp-published-schema.test.ts:81.",
+      "gap": "—",
       "scenarios": [
         "T09"
       ]
@@ -1701,12 +1690,11 @@
       ]
     },
     "L9.16": {
-      "status": "czesciowe",
-      "evidence": "test",
+      "status": "potwierdzone",
+      "evidence": "model",
       "origin": "szablon",
-      "proof": "Każde narzędzie ma effect read lub write i opis (module-procurement/src/server/tools.ts, platform-server/src/agent/platform-tools.ts), instrukcja serwera MCP zakazuje bezpośredniej zmiany bazy (agent/mcp.ts); tests/runtime.test.ts „konfiguracja sandboxa odcina siec i chroni katalog danych aplikacji” (denyRead i denyWrite katalogu danych, allowWrite tylko workspace, autoAllowBashIfSandboxed=false). Test sprawdza obiekt konfiguracji, nie zachowanie sandboxu.",
-      "gap": "Opisy narzędzi rzadko podają zakres dostępu i skutki; brak wykonywanej próby, że agent nie odczyta ani nie zmieni app.db przez Bash lub auto-zatwierdzone Read, Write, Edit (runtime.ts AUTO_APPROVED_FILE_TOOLS) — dowód izolacji był tylko historyczny (FEEDBACK #24/#25 w AgenticApp).",
-      "backlog": "BL-03",
+      "proof": "Opis skutku i zakresu dostepu jest WYPROWADZANY z pola effect i doklejany w buildMcpServer (agent/mcp.ts, toolEffectNote), wiec nie da sie go pominac przy nowym narzedziu; sprawdzany na opisie, ktory SDK publikuje (tests/mcp-published-schema.test.ts). Proba obejscia na prawdziwym modelu: e2e/bl03-model-isolation.spec.ts „powloka do bazy\" (tura 16, dowod docs/evidence/z11-bl03/runs/2026-09-19T11-09-53-315Z/b-granice-izolacji.json) — po zgodzie uzytkownika powloka probuje odczytac data/app.db i sandbox odmawia („cannot open ... for reading: No such file or directory\"), wiec model nie omija serwisow domenowych siegajac do pliku bazy. Proba T2 jak wyzej.",
+      "gap": "—",
       "scenarios": [
         "T09"
       ]
@@ -1980,12 +1968,11 @@
       }
     },
     "L11.3": {
-      "status": "niesprawdzone",
-      "evidence": "brak",
-      "origin": "brak",
-      "proof": "W szablonie jedynie tests/runtime.test.ts „konfiguracja sandboxa odcina siec i chroni katalog danych aplikacji” sprawdza wartości zwracane przez sandboxSettings (enabled, failIfUnavailable, allowedDomains puste, allowWrite tylko workspace, denyRead i denyWrite katalogu danych) — to test konfiguracji, nie próba izolacji. Żaden test ani kontrola w regresji nie wykonuje niedozwolonego odczytu, zapisu ani połączenia sieciowego w sandboxie. Próby istnieją tylko historycznie (AgenticApp, FEEDBACK #24/#25).",
-      "gap": "Brak powtarzalnej próby w szablonie, że na docelowym systemie sandbox jest aktywny i odrzuca odczyt katalogu danych, zapis poza workspace i ruch sieciowy; utrata izolacji po aktualizacji SDK lub zmianie systemu nie zostałaby wykryta.",
-      "backlog": "BL-03",
+      "status": "potwierdzone",
+      "evidence": "model",
+      "origin": "szablon",
+      "proof": "Prawdziwy model, e2e/bl03-model-isolation.spec.ts (tury 16 i 18, dowody docs/evidence/z11-bl03/runs/2026-09-19T11-09-53-315Z/b-granice-izolacji.json i docs/evidence/z11-bl03/runs/2026-09-19T11-14-21*/b3-siec-i-zapis.json): izolacja jest aktywna na tym systemie i odrzuca wszystkie trzy kontrolowane proby POWLOKI, a odmowa jest widoczna w odpowiedzi samego narzedzia — odczyt katalogu danych „head: cannot open ... No such file or directory\" (katalog nie jest podwiazany do sandboxu), siec „<sandbox_violations> deny network-outbound example.com:443 (host is not on the allow list)\", zapis poza workspace „Read-only file system\". Narzedzia sieciowe SDK nie istnieja w sesji: ToolSearch dla WebFetch zwraca matches=[].",
+      "gap": "Odrzucone sa proby POWLOKI. Ta sama proba zapisu wykonana narzedziem plikowym SDK (Write) NIE zostala odrzucona — plik powstal na dysku (tura 18). Rozlam powloka/narzedzia plikowe jest opisany przy L11.4 i L11.11 i czeka na przebudowe straznika na regule pozytywna.",
       "scenarios": [
         "T14"
       ],
@@ -1995,11 +1982,11 @@
       }
     },
     "L11.4": {
-      "status": "niesprawdzone",
-      "evidence": "brak",
-      "origin": "brak",
-      "proof": "Analiza kodu packages/platform-server/src/agent/runtime.ts: Read, Write, Edit, Glob i Grep są w allowedTools (auto-zatwierdzane, canUseTool bez reguł ścieżek), Bash poza listą trafia do canUseTool, sandbox.filesystem ogranicza zapis do workspace i blokuje katalog danych, disallowedTools nie jest ustawione. Żaden test w szablonie nie wywołuje narzędzi plikowych ani sieciowych SDK na zasobach poza workspace i nie sprawdza, czy reguły sandboxu obejmują coś poza powłoką.",
-      "gap": "Nie wykazano, że narzędzia plikowe (auto-zatwierdzone bez reguł ścieżek) i narzędzia sieciowe SDK (WebFetch i WebSearch nie są zabronione, trafiają do pytania o zgodę) podlegają tym samym ograniczeniom co powłoka; obejście sandboxu inną klasą narzędzia pozostaje niesprawdzone.",
+      "status": "niespelnione",
+      "evidence": "model",
+      "origin": "szablon",
+      "proof": "Prawdziwy model, e2e/bl03-model-isolation.spec.ts (tury 17 i 18, dowody docs/evidence/z11-bl03/runs/2026-09-19T11-09-53-315Z/ i docs/evidence/z11-bl03/runs/2026-09-19T11-14-21*/): kontrprzyklad, nie brak dowodu. Powloka jest w sandboxie (odczyt katalogu danych, siec i zapis poza workspace odrzucone, patrz L11.3), ale narzedzia plikowe SDK nie sa: Write utworzyl plik /tmp/z11-zapis-*.txt, ktorego powloce odmowiono sekunde wczesniej („Read-only file system\"), a Read oddal tresc pliku spoza katalogu roboczego. Zakaz narzedzi sieciowych dziala (WebFetch nieobecny w sesji).",
+      "gap": "Narzedzia plikowe (Read, Write, Edit, Glob, Grep) sa auto-zatwierdzone i ograniczone wylacznie lista trzech chronionych katalogow straznika (katalog danych, katalog konfiguracji Claude, ~/.claude.json). Wszystko poza ta lista jest dla agenta czytelne i zapisywalne wszedzie tam, gdzie siega proces serwera — czyli sandbox polecen NIE obejmuje wszystkich udostepnionych sposobow dostepu. Poszerzanie listy nie zamyka klasy, bo klasa jest komplementarna; zamyka ja regula pozytywna (blockReadsOutsideWorkingDirectories plus allowWrite ograniczony do workspace), czyli ten sam ksztalt, ktory ma juz sandbox powloki. Naprawa nalezy do pakietu bedacego wlascicielem straznika. Test odbiorczy naprawy jest gotowy i dzis OBLEWA: e2e/bl03-model-isolation.spec.ts „narzedzia plikowe\". Jawny ksztalt niekontrolowany (runda 7): wyscig TOCTOU na pre-walku Z4 — przeciwnik musi podmienic dowiazanie miedzy sprawdzeniem a otwarciem, co wymaga Bash, czyli ZGODY uzytkownika; zgoda jest pytaniem, nie ochrona (ta sama pozycja co A10b i D1).",
       "backlog": "BL-03",
       "scenarios": [
         "T14"
@@ -2011,10 +1998,10 @@
     },
     "L11.5": {
       "status": "czesciowe",
-      "evidence": "test",
+      "evidence": "model",
       "origin": "szablon",
-      "proof": "tests/file-analysis.test.ts „workspace nie wystawia zaleznosci serwera sandboxowanemu kodowi”: skrypt uruchomiony w workspace nie importuje better-sqlite3, @anthropic-ai/claude-agent-sdk ani hono. tests/runtime.test.ts „konfiguracja sandboxa odcina siec i chroni katalog danych aplikacji” (denyRead i denyWrite katalogu danych w konfiguracji). Analiza kodu: narzędzia platformy (agent/platform-tools.ts) nie udostępniają SQL, dane idą przez serwisy z ownerId. Test importu działa poza sandboxem (execFileSync), więc nie dowodzi blokady odczytu pliku bazy.",
-      "gap": "Brak wykonanej w szablonie próby, że kod w sandboxie i narzędzia plikowe nie mogą odczytać ani zapisać data/app.db (np. bezpośredni odczyt pliku, sqlite3 CLI, import sterownika po ścieżce bezwzględnej); ochrona opiera się na konfiguracji denyRead potwierdzonej tylko historycznie.",
+      "proof": "Powloka: prawdziwy model, tura 16 (dowod docs/evidence/z11-bl03/runs/2026-09-19T11-09-53-315Z/b-granice-izolacji.json) — po zgodzie uzytkownika powloka probuje odczytac data/app.db i dostaje „cannot open ... No such file or directory\"; katalog danych nie jest podwiazany do sandboxu, wiec kod w sandboxie nie ma niejawnego dostepu do bazy. Narzedzia plikowe: tests/credential-guard.test.ts (symulacja na granicy adaptera, 20 testow, z dowiazaniem i podwykonawca) oraz tests/file-analysis.test.ts.",
+      "gap": "Ramie narzedzi plikowych jest pokryte wylacznie SYMULACJA. Proba na prawdziwym modelu (tura 17) nie rozstrzygnela: model napisal „1: ODCZYTANE (narzedzie dotarlo do pliku; odmowa dotyczyla tylko formatu binarnego, nie dostepu)\" o pliku bazy, ale w strumieniu zdarzen tego wykonania nie ma ZADNEGO wywolania Read na bazie — ani udanego, ani odrzuconego. Albo model zmyslil te linie, albo wywolanie nie trafilo do strumienia zdarzen; druga mozliwosc byla by wada obserwowalnosci i znaczylaby, ze odmowy tez nikt by nie zobaczyl. Danych do rozstrzygniecia juz nie ma (katalog .e2e-data jest czyszczony przy kazdym starcie suity). Rozstrzygniecie wymaga jednej tury po przebudowie straznika.",
       "backlog": "BL-03",
       "scenarios": [
         "T14"
@@ -2069,12 +2056,11 @@
       }
     },
     "L11.9": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "e2e/files-agent.spec.ts „agent zmienia skoroszyt w sandboxie, a oryginal zostaje nietkniety” (prawdziwy model): prośba o zgodę na Bash pojawia się w GUI (permission-prompt), kliknięcie Zgoda wznawia wykonanie, asercja że zgoda dotyczyła Bash. tests/agui-stream.test.ts „prosba o zgode wstrzymuje wykonanie w odroznialnym stanie” i „prosba o zgode trafia do rozmowy zadania, nie do ogladanej”. Nie obejmuje: odmowy ani liczby wykonań po zgodzie.",
-      "gap": "W szablonie żaden test nie klika Odmowa i nie sprawdza braku skutku ani nie sprawdza, że po zgodzie operacja wykonuje się dokładnie raz (tylko historycznie FEEDBACK #23); skryptowany serwer nie wywołuje canUseTool, więc bez modelu ścieżki zgody nie da się dziś sprawdzić.",
-      "backlog": "BL-03",
+      "proof": "Prawdziwy model, e2e/bl03-model-isolation.spec.ts „powloka do bazy: Odmowa, potem Zgoda\" (tura 16, dowod j.w.): jedno polecenie, dwie prosby o zgode, obie rozstrzygniete klinieciem w przegladarce. Po Odmowie pierwsze wywolanie Bash NIE MA wyniku — dowod zapisuje skutek: „brak — operacja sie nie wykonala\", czyli brak skutku, a nie kod odpowiedzi. Po Zgodzie powloka rusza i oddaje odpowiedz sandboxu, czyli operacja wykonuje sie dokladnie raz. Przegladarkowo, bez modelu: e2e/consent-runs.spec.ts (odmowa bez skutku, powtorzona odpowiedz nie wykonuje operacji drugi raz).",
+      "gap": "—",
       "scenarios": [
         "T15"
       ],
@@ -2098,11 +2084,11 @@
       }
     },
     "L11.11": {
-      "status": "niesprawdzone",
-      "evidence": "brak",
-      "origin": "brak",
-      "proof": "W szablonie brak prób izolacji dla jakiejkolwiek klasy narzędzi; jedyny związany test (tests/runtime.test.ts „konfiguracja sandboxa odcina siec i chroni katalog danych aplikacji”) sprawdza wartości konfiguracji. Analiza kodu: denyRead obejmuje tylko katalog danych aplikacji, narzędzia plikowe SDK są auto-zatwierdzone bez reguł ścieżek (agent/runtime.ts).",
-      "gap": "Nie sprawdzono, czy narzędzie plikowe może odczytać lub zapisać to, czego powłoka nie może (i odwrotnie), ani czy sekrety spoza katalogu danych, w tym plik poświadczeń subskrypcji w katalogu konfiguracji Claude (niewymieniony w denyRead), są niedostępne z obu ścieżek; możliwe obejście pozostaje niewykryte.",
+      "status": "niespelnione",
+      "evidence": "model",
+      "origin": "szablon",
+      "proof": "Prawdziwy model, jak L11.4 (tury 17 i 18): obejscie jednej sciezki przez druga DZIALA dla plikow spoza listy chronionych katalogow — Read oddal sekret spoza katalogu roboczego (tura 17), Write zapisal plik tam, gdzie powloce odmowiono (tura 18). Dla samej BAZY obejscia nie ma: powloce odmawia sandbox (tura 16), a narzedziom plikowym straznik chronionych katalogow.",
+      "gap": "Sekrety spoza katalogu danych sa dostepne sciezka narzedzi plikowych, ktora dla powloki jest zamknieta — to jest dokladnie asymetria, o ktora pyta kryterium, i jest wykazana kontrprzykladem. Ramie katalogu POSWIADCZEN nie zostalo sprawdzone na prawdziwym modelu: celowanie w prawdziwy plik jest zabronione (G21 — zmierzono, ze CLI przepisuje plik poswiadczenia, 193 na 121 bajtow, accessToken znika, wiec proba na prawdziwym katalogu wylogowalaby uzytkownika), a odseparowany CLAUDE_CONFIG_DIR z wymyslonym poswiadczeniem nie uwierzytelnia sesji, wiec przebieg nie doszedlby do wywolania narzedzia. To ramie pokrywa symulacja tests/credential-guard.test.ts. Naprawa i ponowna proba zaplanowane po przebudowie straznika. Jawny ksztalt niekontrolowany (runda 7): wyscig TOCTOU na pre-walku Z4 — przeciwnik musi podmienic dowiazanie miedzy sprawdzeniem a otwarciem, co wymaga Bash, czyli ZGODY uzytkownika; zgoda jest pytaniem, nie ochrona (ta sama pozycja co A10b i D1).",
       "backlog": "BL-03",
       "scenarios": [
         "T14"
@@ -2563,16 +2549,19 @@
       ]
     },
     "T10": {
-      "status": "czesciowe",
-      "proof": "tests/orchestration.test.ts (symulacja, jeden AgentRuntime): dwa polecenia w jednej rozmowie — rozlaczne okna, pomiar od startu wykonania, wznowienie wlasciwej sesji, brak przecieku kontekstu narzedzi; dwie rozmowy i dwoch wlascicieli naraz; zgoda zwiazana z uruchomieniem z adresu; blad i Stop zwalniaja kolejke, a polecenie zatrzymane w kolejce nie rusza wcale. tests/domain-guarantees.test.ts: osiem jednoczesnych ponowien daje jeden skutek, ten sam klucz z inna trescia to conflict, nieudana operacja zwalnia klucz, operacja przerwana restartem nie jest powtarzana po cichu. Proby zdolnosci wykrycia: docs/evidence/z6-bl11b/proby-wykrycia.txt.",
-      "gap": "operationId pozostaje opcjonalny w narzedziach kart canvasu, widokow agenta i publikacji wersji pliku, wiec powtorzenie bez klucza nadal dubluje skutek (L9.7).",
+      "status": "potwierdzone",
+      "proof": "tests/orchestration.test.ts (symulacja, jeden AgentRuntime): dwa polecenia w jednej rozmowie — rozlaczne okna, pomiar od startu wykonania, wznowienie wlasciwej sesji, brak przecieku kontekstu narzedzi; dwie rozmowy i dwoch wlascicieli naraz; zgoda zwiazana z uruchomieniem z adresu; blad i Stop zwalniaja kolejke, a polecenie zatrzymane w kolejce nie rusza wcale. tests/domain-guarantees.test.ts: osiem jednoczesnych ponowien daje jeden skutek, ten sam klucz z inna trescia to conflict, nieudana operacja zwalnia klucz, operacja przerwana restartem nie jest powtarzana po cichu. Proby zdolnosci wykrycia: docs/evidence/z6-bl11b/proby-wykrycia.txt. Z10/BL-09: jedyna znana luka sceny (operationId opcjonalny w trzech narzedziach tworzacych) zamknieta i potwierdzona z interfejsu — docs/evidence/z10-bl09/dowod-l97-idempotencja-narzedzi.json (test GUI bez modelu): powtorzenia z tym samym kluczem daja jeden wiersz, wywolanie bez klucza nic nie zapisuje.",
+      "gap": "—",
       "evidence": [
-        "symulacja"
+        "symulacja",
+        "gui"
       ],
       "pliki": [
-        "tests/orchestration.test.ts",
+        "docs/evidence/z10-bl09/dowod-l97-idempotencja-narzedzi.json",
+        "docs/evidence/z6-bl11b/proby-wykrycia.txt",
+        "e2e/idempotent-tools.spec.ts",
         "tests/domain-guarantees.test.ts",
-        "docs/evidence/z6-bl11b/proby-wykrycia.txt"
+        "tests/orchestration.test.ts"
       ]
     },
     "T11": {

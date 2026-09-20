@@ -25,6 +25,19 @@ export interface McpHostTool {
  */
 export { MCP_SERVER_NAME, mcpToolName };
 
+/**
+ * The SDK's own server factory and tool builder, passed through.
+ *
+ * Not for application code — `buildMcpServer` above is the way this platform
+ * makes a server. It exists for the regression that reads what the SDK
+ * *publishes* (`tests/mcp-published-schema.test.ts`): the agent SDK is a
+ * dependency of this package and not of the repository root, so a test living
+ * outside it cannot build a probe server of its own to compare against. Without
+ * the comparison, everything `assertMcpCompatibleShape` believes about the
+ * converter stays a belief.
+ */
+export { createSdkMcpServer, tool as sdkTool } from '@anthropic-ai/claude-agent-sdk';
+
 interface BuildInput {
   registry: ServerModuleRegistry;
   platformTools: ModuleToolDefinition<never>[];
@@ -103,6 +116,37 @@ export async function invokeTool(
 }
 
 /**
+ * The effect and the access scope, in the tool's own description.
+ *
+ * L9.16 asks for two things of every read and every mutation: that its
+ * *effect* and its *access scope* are stated. They were not — a handful of
+ * descriptions said "zapisuje" and most said nothing, so what a tool changed and
+ * what it could reach were things the model had to infer from the name.
+ *
+ * Derived from the declared `effect` rather than written out per tool, and
+ * appended here rather than in each definition, for the reason that keeps such
+ * statements true: a sentence somebody has to remember to write is a sentence
+ * the next tool will not have. The `effect` field is already required, already
+ * used to decide idempotency, and already shown in Settings — so the sentence
+ * cannot drift from the behaviour without the field being wrong first.
+ *
+ * The scope half is the same statement the server's `instructions` make, said
+ * where the model reads it: a tool is a door into the domain services, and there
+ * is no other door. Nothing here *enforces* that — the enforcement is the
+ * service layer and the sandbox (`agent/sandbox.ts`) — but a model told which
+ * doors exist is a model that does not go looking for the window.
+ */
+export function toolEffectNote(effect: 'read' | 'write'): string {
+  return effect === 'read'
+    ? 'Skutek: wylacznie odczyt, niczego nie zmienia. ' +
+        'Zakres dostepu: dane wlasciciela tej rozmowy, przez serwis domenowy — ' +
+        'narzedzie nie siega do tabel ani do pliku bazy.'
+    : 'Skutek: ZAPIS przez serwis domenowy (walidacja, sprawdzenie wlasciciela, wersja, idempotencja). ' +
+        'Zakres dostepu: dane wlasciciela tej rozmowy — narzedzie nie siega do tabel ani do pliku bazy. ' +
+        'Innej drogi do zmiany danych nie masz; nie probuj powloki ani plikow aplikacji.';
+}
+
+/**
  * Builds the in-process MCP server exposed to the Claude Agent SDK.
  *
  * Every tool is a thin wrapper over a service method — the *same* method the
@@ -121,7 +165,7 @@ export function buildMcpServer(input: BuildInput): {
     assertMcpCompatibleShape(localName, def.inputSchema.shape as Record<string, unknown>);
     return tool(
       localName,
-      def.description,
+      `${def.description} ${toolEffectNote(def.effect)}`,
       def.inputSchema.shape,
       async (args: unknown) => invokeTool(entry, args, input.contextFor()),
       /*

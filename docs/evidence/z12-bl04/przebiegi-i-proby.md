@@ -68,7 +68,97 @@ Nie uruchamiano: `pnpm test:e2e:model`, `e2e/bl01-bl02-model.spec.ts`, `e2e/agen
 ## Próby zdolności wykrycia (G16)
 
 Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** linii, przebieg,
-`git checkout -- <plik>`, kontrola czystości. Wszystkie **trzynaście** oblało na spodziewanej asercji;
+Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** linii, przebieg, `git checkout -- <plik>`, kontrola czystości. Prób jest **dwadzieścia dziewięć**; dwadzieścia osiem oblało na spodziewanej asercji, **jedna wyszła nieoczekiwanie zielona i to było znalezisko** (próba R) — a dwie kolejne (T2 i pierwsze podejście do Y) wyszły zielone, bo były **no-op albo celowały za płytko**; oba znaleziska zapisane niżej.
+
+### Runda 6 — czwarta iteracja tego samego strażnika
+
+Niezależny przegląd (odrzucenie rundy 4) dał 33 ataki: 21 ucieczek, 12 kontroli. Runda 6
+**odwróciła 19 z 21** — pozostałe 2 (A10b, D1) przeniesione jawnie do „znanych kształtów" z
+oświadczeniem, dlaczego nie da się ich zamknąć kodem (poniżej). Liczby rund 4 i 6 **nie są
+porównywalne 1:1** właśnie przez to przeniesienie. Kontroli zostało zielonymi: 12 + 2 udokumentowane
+kształty. Runda 7 dokłada bezpiecznik odcisku dla e2e (niżej). (A1–A3, A4b, A5, A11b, B3, D2; A6c i A10 —
+„atak nie przechodzi"; A10b i D1 — udokumentowane znane kształty, niżej). Wszystkie próby tej rundy
+biegły **na pakiecie ataków recenzenta** (`tests/z12-r4-ataki.test.ts` + `tests/support/attack-standin.ts`
+skopiowane 1:1), z asercjami odwróconymi na odmowy.
+
+| Próba | Co wycofano | Jak oblała |
+|---|---|---|
+| **S** | (runda 5) leksykalne `resolve()` we wspólnym walkerze | 7 testów, w tym 3 z pakietu ataków |
+| **T** | M4: narzędzie dopisane do `AUTO_APPROVED_FILE_TOOLS` bez deklaracji ścieżki | niezmiennik na liście **i** na `allowedTools` — 2 asercje |
+| **U** | usunięty blok `settings.permissions.blockReads…` | „brak blockReadsOutsideWorkingDirectories w sdkOptions.settings" |
+| **V** | odmowa `..` po nieistniejącym komponencie w walkerze | 7 testów: 6 z pakietu ataków (A6/A6b/A6c/A6d/A6e/A11) + 1 z credential-guard |
+| **W** | wycofany pre-walk Z4 | B5/B6/B8: „zwykly wzorzec zostal odmowiony" |
+| **X** | wycofana reguła wzorców Z3 | B1/B2/B7: klamra i wzorzec bezwzględny przechodzą |
+| **Y** | wycofane odmowy tyldy i pustego napisu | A7/A7b/A8 |
+
+### Runda 7 — bezpiecznik odcisku dla przebiegów e2e (luka pokrycia z przeglądu)
+
+Vitestowy bezpiecznik (`tests/setup-credential-guard.ts`) przez cały pakiet był jedynym — Playwright
+nie miał odpowiednika, więc reguła G21 dla e2e była zależna od pamięci wykonawcy. Runda 7 dokłada
+`e2e/credential-guard.ts` + `globalTeardown`: `globalSetup` zapisuje odcisk (rozmiar:mtimeMs) pliku
+poświadczenia, `globalTeardown` porównuje go po wszystkich testach i **głośno przewala przebieg**,
+nazywając przebieg e2e sprawcą.
+
+Odcisk przenoszony jest **plikiem** w gitignorowanym `test-results/` — rozstrzygnięcie (plik vs
+`process.env`) zamrożone testami czystymi w `tests/e2e-credential-guard.test.ts` (round-trip,
+honorowanie `CLAUDE_CONFIG_DIR`, wykrycie zmiany mtime przy identycznej treści, głośny błąd przy
+braku zapisanego odcisku).
+
+**Trzecia obserwowana rotacja, poza oknem pracy (odczyt):** `mtime` 2026-09-20 02:36:16, nowy
+refresh token — ~8 h od poprzedniej (10:40 → 18:40 → 02:36), zawsze tuż po wygaśnięciu tokenu
+dostępu. Kadencja potwierdzona trzema pomiarami. Strażnik e2e przeszedł z odciskiem zgodnym w swoim
+oknie, więc rotacja zaszła poza pomiarem żadnego przebiegu.
+
+**Runda 8 (mikro, po rerecenzji rundy 6):**
+
+- **Z-DRIFT** — walker `.mjs` portowany do algorytmu rundy 6: `..` po komponencie nieistniejącym
+  **rzuca `NierozwiazywalnaSciezka`**, zerwane dowiązania rozwijane przez `readlink` (bo `O_CREAT`
+  utworzy cel). Kontrakt skryptowy nazwany: **rzut klasyfikowany jako AWARIA (exit 4), nie odmowa
+  (exit 2)** — skrypt nie potrafi ustalić, gdzie taka ścieżka leży, więc nie może uczciwie
+  „odmówić"; klasa celowo nie dziedziczy po `Refusal`. Testy równoważności rozszerzone o kształty
+  rozbieżne (`nie-ma/../x`, zerwane + `..`, łańcuch readlink — obie wersje zgodnie wskazują poza
+  katalog). Próba negatywna: stary `.mjs` → 2 oblewania.
+  **Ograniczenie pokrycia:** `backup-state.mjs` normalizuje `--out` leksykalnie zanim trafi do
+  walkera — kształt Z1 nie dociera do niego z tego wejścia; pełne pokrycie na `synthetic-state`.
+- **W1** — tylda we wzorcu Glob/Grep odmawiana (sama zasada co dla ścieżek, A7/A7b). Próba:
+  wycofana → `expected [false, false] to deeply equal [true, false]`.
+- **W7** — napis odmowy jednolity; uczciwie: **klasa** odmowy nadal rozróżnia powód
+  (`UnresolvablePathError` kontra „poza katalogiem roboczym"), brak wyroczni dotyczy nazw i typów.
+  Próba: powrót powodu w komunikacie → `expected '…' to be '…'`.
+
+**Próba procesowa (wykrywanie, na ATRAPIE):** `CLAUDE_CONFIG_DIR` całego przebiegu skierowany na
+katalog tymczasowy z fałszywym poświadczeniem + tymczasowy spec piszący do tej atrapy →
+`globalTeardown` podnosi błąd `[bezpiecznik e2e] plik poswiadczen uzytkownika … ZMIENIL SIE w trakcie
+tego przebiegu e2e`, kod wyjścia 1. Prawdziwy plik nietknięty. Spec próby usunięty po próbie;
+mechanizm zostaje w konfiguracji na stałe.
+
+**Znane kształty świadomie niezamknięte (udokumentowane w pakiecie ataków):**
+
+- **A10b** — wyścig TOCTOU, gdy narzędzie **ignoruje `updatedInput`**. Nie da się zamknąć po stronie
+  aplikacji: tarczą jest honorowanie przepisania przez SDK/narzędzie, co rozstrzyga tura modelu
+  (L11.4/L11.11).
+- **D1** — narzędzie z odmiennie nazwanym polem ścieżki idzie do zgody użytkownika; zgoda otwiera.
+  „Pytanie, nie ochrona" — świadomie.
+
+**Czego runda 6 nie rozstrzyga bez tury:** czy SDK honoruje `updatedInput`
+(`PreToolUseHookSpecificOutput.updatedInput` istnieje w typach 0.3.270; identyfikator występuje w
+binarce CLI), czy `blockReadsOutsideWorkingDirectories` odmawia czy pyta (łańcuchy w binarce
+sugerują pytanie), czy prawdziwy `Glob` rozwija klamry. Wszystko to L11.4/L11.11.
+
+**Znaleziska metodyczne rundy 6** (patrz też §9e raportu):
+
+1. Próba T w pierwszym podejściu była **zielona pod mutacją** — asercja mierzyła stan, którego
+   mutacja nie dotykała. Niezmiennik przepisany na punkt wejścia mutacji (deklaracja ścieżki przy
+   dopisaniu narzędzia); próba powtórzona, oblewa.
+2. Pierwsze podejście do próby Y było **no-op**: `String.replace` zamienia tylko pierwsze
+   wystąpienie, a druga warstwa (obrona w głąb w `protectedPathRefusal`) dalej odmawiała — pakiet
+   zielony mimo wyłączonej reguły. Wyłączenie **obu** kopii daje 3 oblewania. Trzecie wystąpienie
+   tej samej pułapki w tym pakiecie; `replace` bez `replaceAll` i bez asercji licznika to nie jest
+   narzędzie mutacji.
+3. Runda 6 istnieje dlatego, że runda 4 naprawiła **wystąpienie** (`agent/permissions.ts`), a ten
+   sam algorytm w `util/real-path.ts` i w `scripts/lib/state-tools.mjs` został z wadą. Runda 5
+   scaliła walkera, runda 6 wpina pakiet ataków recenzenta na stałe w regresję. Czwarta iteracja
+   strażnika różni się od trzeciej jednym: **obrona ma teraz własnego adwersarza w repo**.
 żadna nie wyszła nieoczekiwanie zielona.
 
 | # | Wycofana linia | Test | Jak oblał |
@@ -86,6 +176,14 @@ Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** lini
 | J | filtr w `runtime.ts` gubi `<configDir>.json` przy budowaniu `credentialDirs` | `tests/credential-guard.test.ts` | „plik konfiguracji obok katalogu nie trafil do sandboxa” — asercja nad `sdkOptions` faktycznie podanymi SDK |
 | K | zapis do pliku poświadczeń z testu (próba na **ścieżce tymczasowej**, `CLAUDE_CONFIG_DIR` → atrapa) | `tests/setup-credential-guard.ts` | „plik poswiadczen uzytkownika … zmienil sie w trakcie tego pliku testowego”, kod wyjścia 1 |
 | **L** | cofnięte rozwiązywanie rzeczywistych ścieżek w `resolveInWorkspace` | `tests/credential-guard.test.ts` | „POWSTAL ARTEFAKT DO POBRANIA mimo dowiazania poza workspace”: `expected 1 to be +0` |
+| **M** | wycofana reguła pozytywna (obie strony naraz) | `tests/credential-guard.test.ts` | „odczytano plik spoza katalogu roboczego” **oraz** „POWSTAL PLIK poza katalogiem roboczym” — dokładnie te dwie operacje, które wykonał prawdziwy model |
+| M-odczyt | reguła pozytywna wyłączona **tylko** dla `Read` | `tests/credential-guard.test.ts` | „odczytano plik spoza katalogu roboczego”; zapis nadal blokowany |
+| M-zapis | reguła pozytywna wyłączona **tylko** dla `Write` | `tests/credential-guard.test.ts` | „POWSTAL PLIK poza katalogiem roboczym”; odczyt nadal blokowany |
+| N | cofnięte wyłączenie workspace z listy zakazów | `tests/credential-guard.test.ts` | „praca we wlasnym katalogu zostala zablokowana”: `[true, true]` zamiast `[false, false]` — kontrola odwrotna |
+| **O** | powrót do rozwiązywania leksykalnego (`resolve()` przed `realpath`) | `tests/credential-guard.test.ts` | 3 testy: zapis **tworzy** plik poza workspace, odczyt **oddaje** treść spoza, dowiązanie do katalogu poświadczeń **oddaje** kanarka |
+| **P** | wycofana reguła wzorców `Glob`/`Grep` | `tests/credential-guard.test.ts` | `expected [false, false] to deeply equal [true, false]` — wzorzec `../../**` przechodzi |
+| **R** | `decideTool` daje `auto` bez deklaracji ścieżki (+ narzędzie dopisane do listy) | `tests/credential-guard.test.ts` | **za pierwszym razem ZIELONA** — patrz znalezisko; po poprawce asercji: „NoweNarzedzie jest wstepnie zatwierdzone, ale nie zadeklarowalo argumentu sciezki” |
+| **S** | powrót do leksykalnego `resolve()` we **wspólnym** walkerze `util/real-path.ts` | `tests/isolation-paths.test.ts`, `tests/credential-guard.test.ts` | 7 testów: `expected '/tmp/kolejnosc-…/wnetrze/ofiara' to be '/tmp/poza-…/ofiara'` oraz trzy kształty narzędzi plikowych agenta |
 
 ### Znalezisko z próby A
 
@@ -94,6 +192,21 @@ bo ta druga stała w teście niżej. Test sprawdzał właściwą rzecz, ale nie 
 czyta się jego wynik. Kolejność asercji zmieniono (commit `82c61c9`) tak, żeby asercja o kanarku była
 pierwsza, i próbę powtórzono: oblewa teraz na wycieku. To jest przykład próby, która złapała **test**,
 nie kod — zgodnie z G16 potraktowany jako znalezisko, nie jako formalność.
+
+### Znalezisko z próby R — próba, która wyszła zielona
+
+Próba R w pierwszym podejściu **nie oblała**, mimo że reguła była wyłączona. Asercja brzmiała: „każde
+narzędzie z listy `auto` daje `decideTool → 'auto'`" — co pod zepsutą wersją (`return 'auto'`
+bezwarunkowo) jest tym **bardziej** prawdziwe. Asercja nie mogła oblać na wadzie, której dotyczyła.
+
+Niezmiennik brzmi inaczej i dopiero on oblewa: **narzędzie wstępnie zatwierdzone musi mieć
+zadeklarowany argument ścieżki** (`declaresPathArguments`). Oblewa w chwili dopisania takiego
+narzędzia, czyli tam, gdzie popełnia się błąd.
+
+Osobno, i też do zapisania: **próbę R wykonałem najpierw na niezatwierdzonym drzewie**, więc
+`git checkout` cofnął razem z nią mój własny, potrzebny eksport — `pnpm verify` oblał na brakującym
+symbolu. To jest dokładnie powód, dla którego G16 mówi „commit najpierw": bez tego próba i praca
+mieszają się w jednym cofnięciu. Powtórzona na czystym drzewie, zgodnie z procedurą.
 
 ### Znalezisko z próby G — i ostrzeżenie o niej samej
 
@@ -182,6 +295,30 @@ Co ten zapis rozstrzyga mimo to:
 3. **Po 00:38 plik jest zamrożony.** mtime i skrót refresh tokena (`c4ffe5d5ebe855d8`) identyczne w
    sześciu próbkach z trzech przebiegów przez prawdziwe SDK i takie same do teraz.
 
+### Obserwacja WYKONANA — rotacja refresh tokena potwierdzona
+
+Bierna obserwacja opisana niżej **zaszła sama** w trakcie rundy 3 i rozstrzyga pytanie, na którym
+opierała się odmowa próby ze skutecznym odświeżeniem.
+
+| Chwila | `mtime` | `expiresAt` | `sha256(accessToken)[:16]` | `sha256(refreshToken)[:16]` |
+|---|---|---|---|---|
+| 02:26:40 | 02:26:40 | 2026-09-19 08:38:26 | `6749d3f422e64897` | `c4ffe5d5ebe855d8` |
+| **10:40:23** | 10:40:23 | 2026-09-19 **18:40:23** | `28a7f055641487a6` | **`3864260bdfd102d2`** |
+
+Poprzedni token dostępu wygasł o 08:38:26; o 10:40:23 sesja użytkownika odświeżyła go sama
+(`expiresAt − mtime` = równo 8.0000 h, ten sam podpis odświeżenia co poprzednio).
+**Zmienił się także refresh token** — `refreshTokenExpiresAt` pozostało praktycznie bez zmian
+(15:58:22 → 15:58:21), więc nie było to ponowne logowanie, tylko wymiana zestawu przy odświeżeniu.
+
+**Refresh token ROTUJE.** Odmowa próby 1 opierała się dotąd na wniosku z kształtu kodu CLI
+(compare-and-swap po refresh tokenie); teraz jest to **obserwacja**. Gdyby próba „skutecznego
+odświeżenia na kopii" została wykonana, w pliku użytkownika zostałby token poprzedniej generacji —
+a przy jego najbliższym użyciu CLI wyczyściłoby logowanie na dysku (zachowanie potwierdzone
+dwukrotnie w rundzie fazy 2). L8.10 zostaje **świadomie poza zakresem**, i to już nie z ostrożności,
+tylko na dowodzie.
+
+Obserwacja jest **wyłącznie odczytem** — G21 nienaruszone.
+
 ### Tania obserwacja, której nie wykonano — i która rozstrzygnęłaby L8.10
 
 Nie mamy skrótu refresh tokena **sprzed** 00:38, więc nie wiadomo, czy tamto odświeżenie **wymieniło**
@@ -197,7 +334,8 @@ odświeży token sama.
 - skrót **się nie zmieni** → rotacji nie ma, próba ze skutecznym odświeżeniem na kopii jest
   bezpieczna i L8.10 da się domknąć **bez** konta testowego.
 
-Wykracza poza okno tego zadania (potrzebuje ~7 h zwłoki), więc zostaje opisana, nie wykonana.
+Wykracza poza okno tego zadania (potrzebuje ~7 h zwłoki), więc została opisana, nie wykonana —
+**i zaszła sama przed końcem pracy**; wynik wyżej.
 
 ### Dlaczego nie ma próby ze *skutecznym* odświeżeniem
 

@@ -672,32 +672,44 @@ describe('L9.7, L9.14 — powtorzenie i jednoczesne ponowienia daja jeden skutek
     expect(h.service.repo.getItem(item.id, h.ownerId).item.quantityMilli).toBe(3000);
   });
 
-  it('powtorzenie BEZ operationId: trzy narzedzia dubluja skutek, cztery sa chronione inaczej', async () => {
+  it('L9.7 domkniecie: operationId jest teraz wymagany w trzech narzedziach, a repeat z kluczem daje jeden skutek', async () => {
     /*
-     * The open half of L9.7, written as a test rather than as a sentence in a
-     * backlog column.
-     *
-     * Without a key the platform cannot tell a retry from a second request, so
-     * the question is which write tools would actually double something. Three
-     * would; the other four are stopped by a guard they have for another reason
-     * — a version, a missing row, or a merge that finds nothing to change. The
-     * distinction decides where the next package has to look, and a claim about
-     * it that nothing executes is worth exactly as much as a comment.
+     * Was: "powtorzenie BEZ operationId: trzy narzedzia dubluja skutek, cztery
+     * sa chronione inaczej" — a test that proved the gap by reproducing it.
+     * `canvas_add_card`, `agent_view_create` and `files_publish_version` now
+     * require `operationId` in their schema (the same contract as
+     * `artifact_create` / `artifact_publish_file`), so the call this test used
+     * to make no longer parses — the repeat is refused before the handler ever
+     * runs, not after it ran twice. Two things are proved instead, for each of
+     * the three: the schema refuses the call without a key (`validation_failed`,
+     * naming `operationId`), and a repeat *with* a key produces exactly one row
+     * — checked in the database, not in what the tool answers. The four tools
+     * that were already protected another way are unchanged and stay below, so
+     * the distinction the old test made is not lost, only re-based on a fix
+     * instead of on a gap.
      */
     const conversationId = h.platform.services.conversations.create({
       ownerId: h.ownerId,
-      title: 'Powtorzenia bez klucza',
+      title: 'Powtorzenia z i bez klucza',
     }).id;
     const ctx = { conversationId };
-    const space = h.platform.services.canvas.createSpace({ ownerId: h.ownerId, title: 'Bez klucza' });
+    const space = h.platform.services.canvas.createSpace({ ownerId: h.ownerId, title: 'Z kluczem' });
     const spec = { kind: 'component' as const, component: 'platform.markdown', props: { markdown: 'x' } };
     const cardsIn = (spaceId: string) =>
       h.platform.services.canvas.getState(spaceId, h.ownerId).cards.length;
 
-    /* --- dubluje: canvas_add_card ---------------------------------------- */
-    await callPlatformTool('canvas_add_card', { spaceId: space.id, title: 'K', spec }, ctx);
-    await callPlatformTool('canvas_add_card', { spaceId: space.id, title: 'K', spec }, ctx);
-    expect(cardsIn(space.id), 'canvas_add_card nie zdublowal — opis braku L9.7 jest nieaktualny').toBe(2);
+    /* --- canvas_add_card: bez klucza odrzucone, z kluczem jeden skutek --- */
+    await expect(
+      callPlatformTool('canvas_add_card', { spaceId: space.id, title: 'K', spec }, ctx),
+    ).rejects.toMatchObject({
+      code: 'validation_failed',
+      details: { issues: [expect.objectContaining({ path: 'operationId' })] },
+    });
+    expect(cardsIn(space.id), 'wywolanie bez operationId nie powinno bylo nic zapisac').toBe(0);
+    const addCardOp = 'op-canvas-add-card-1';
+    await callPlatformTool('canvas_add_card', { spaceId: space.id, title: 'K', spec, operationId: addCardOp }, ctx);
+    await callPlatformTool('canvas_add_card', { spaceId: space.id, title: 'K', spec, operationId: addCardOp }, ctx);
+    expect(cardsIn(space.id), 'canvas_add_card zdublowal mimo tego samego operationId').toBe(1);
 
     /* --- chronione: canvas_update_card (wersja) --------------------------- */
     const card = h.platform.services.canvas.getState(space.id, h.ownerId).cards[0]!;
@@ -713,14 +725,20 @@ describe('L9.7, L9.14 — powtorzenie i jednoczesne ponowienia daja jeden skutek
       code: 'not_found',
     });
 
-    /* --- dubluje: agent_view_create -------------------------------------- */
+    /* --- agent_view_create: bez klucza odrzucone, z kluczem jeden skutek - */
     const source = 'root = TextContent("widok")';
-    const firstView = (await callPlatformTool('agent_view_create', { title: 'W', source }, ctx)) as {
-      cardId: string;
-      spaceId: string;
-    };
-    await callPlatformTool('agent_view_create', { title: 'W', source }, ctx);
-    expect(cardsIn(firstView.spaceId), 'agent_view_create nie zdublowal').toBe(2);
+    await expect(callPlatformTool('agent_view_create', { title: 'W', source }, ctx)).rejects.toMatchObject({
+      code: 'validation_failed',
+      details: { issues: [expect.objectContaining({ path: 'operationId' })] },
+    });
+    const createViewOp = 'op-agent-view-create-1';
+    const firstView = (await callPlatformTool(
+      'agent_view_create',
+      { title: 'W', source, operationId: createViewOp },
+      ctx,
+    )) as { cardId: string; spaceId: string };
+    await callPlatformTool('agent_view_create', { title: 'W', source, operationId: createViewOp }, ctx);
+    expect(cardsIn(firstView.spaceId), 'agent_view_create zdublowal mimo tego samego operationId').toBe(1);
 
     /* --- chronione: agent_view_update (scalenie bez zmiany) --------------- */
     const edit = { cardId: firstView.cardId, patch: 'root = TextContent("inny")' };
@@ -736,20 +754,104 @@ describe('L9.7, L9.14 — powtorzenie i jednoczesne ponowienia daja jeden skutek
       callPlatformTool('agent_view_remove', { cardId: firstView.cardId }, ctx),
     ).rejects.toMatchObject({ code: 'not_found' });
 
-    /* --- dubluje: files_publish_version ---------------------------------- */
+    /* --- files_publish_version: bez klucza odrzucone, z kluczem jeden skutek */
     const workspaceDir = mkdtempSync(join(tmpdir(), 'agentic-workspace-'));
     tempDirs.push(workspaceDir);
     mkdirSync(join(workspaceDir, 'output'), { recursive: true });
     writeFileSync(join(workspaceDir, 'output', 'wersja.csv'), 'a,b\n1,2\n');
     const original = h.platform.services.files.list(h.ownerId)[0]!;
     const filesBefore = h.platform.services.files.list(h.ownerId).length;
-    const publish = { path: 'wersja.csv', originalFileId: original.id };
+    const publishNoKey = { path: 'wersja.csv', originalFileId: original.id };
+    await expect(
+      callPlatformTool('files_publish_version', publishNoKey, { ...ctx, workspaceDir }),
+    ).rejects.toMatchObject({
+      code: 'validation_failed',
+      details: { issues: [expect.objectContaining({ path: 'operationId' })] },
+    });
+    expect(
+      h.platform.services.files.list(h.ownerId).length,
+      'wywolanie bez operationId nie powinno bylo nic zapisac',
+    ).toBe(filesBefore);
+    const publish = { ...publishNoKey, operationId: 'op-files-publish-version-1' };
     await callPlatformTool('files_publish_version', publish, { ...ctx, workspaceDir });
     await callPlatformTool('files_publish_version', publish, { ...ctx, workspaceDir });
     expect(
       h.platform.services.files.list(h.ownerId).length,
-      'files_publish_version nie zdublowal',
-    ).toBe(filesBefore + 2);
+      'files_publish_version zdublowal mimo tego samego operationId',
+    ).toBe(filesBefore + 1);
+  });
+
+  /*
+   * The rule behind the three tools above, derived from code instead of typed
+   * by hand.
+   *
+   * A hand-written list of tool names goes stale the moment a ninth tool is
+   * added: whoever writes it either has to remember this describe block exists
+   * or the new tool passes with nothing checking it at all — which is exactly
+   * how `canvas_add_card`, `agent_view_create` and `files_publish_version` got
+   * here in the first place. This test instead walks every *registered* write
+   * tool (platform tools and every installed module's, the same list the MCP
+   * server offers the model) and asks each one, structurally, whether it has
+   * declared its idempotency:
+   *
+   *  - an `operationId` field that is REQUIRED passes outright — the schema
+   *    itself refuses a keyless repeat before any handler runs;
+   *  - an `operationId` field that is optional, or no such field at all, only
+   *    passes if the tool is named in `OPTIONAL_OPERATION_ID_REASON` below,
+   *    with a one-line reason.
+   *
+   * That map is the only hand-written list left, and it is an *exemption*
+   * list, not an enumeration: it fails closed. A new write tool that creates a
+   * row and ships without `operationId` is not in the map, so the test fails
+   * loudly on it — it does not need the map to be kept in sync to be caught,
+   * the way the old test needed its hand-written call sites kept in sync. The
+   * only way to make this test pass for such a tool is to either give it a
+   * required `operationId` (the default) or add it here with a reason a
+   * reviewer can check against the handler — the same discipline the comments
+   * on `canvas_update_card` and `saveComparisonInput` already write out.
+   */
+  describe('narzedzie zapisu deklaruje idempotencje (wyliczone z kodu, nie z listy)', () => {
+    const OPTIONAL_OPERATION_ID_REASON: Record<string, string> = {
+      // expectedSpecVersion required: a repeat is a conflict, not a second write.
+      canvas_update_card: 'wersja wymagana (expectedSpecVersion) — powtorzenie konczy sie conflict',
+      // Absolute geometry set: two identical calls converge to the same row, no card is created.
+      canvas_move_card: 'ustawienie bezwzgledne geometrii — powtorzenie zbiega do tego samego stanu, bez nowego wiersza',
+      // Delete by id: nothing left to delete twice.
+      canvas_remove_card: 'usuniecie po id — powtorzenie konczy sie not_found, nie drugim usunieciem',
+      // Merge detects a no-op: see `agent_view_update`'s own handler ("unchanged: true").
+      agent_view_update: 'scalenie wykrywa brak zmiany — powtorzenie zwraca unchanged=true bez zapisu',
+      // Delete by id: same as canvas_remove_card.
+      agent_view_remove: 'usuniecie po id — powtorzenie konczy sie not_found, nie drugim usunieciem',
+      // expectedVersion required (module-procurement/src/server/inputs.ts): same shape as canvas_update_card.
+      procurement_update_offer_item: 'wersja wymagana (expectedVersion) — powtorzenie konczy sie conflict',
+      // Absolute upsert of criteria weights: no row is created, repeat writes the same values.
+      procurement_set_criteria_weights: 'ustawienie bezwzgledne wag (upsert) — powtorzenie zapisuje te sama wartosc',
+    };
+
+    it('kazde effect: "write" ma operationId wymagane albo udokumentowany powod, ze nie musi', () => {
+      const entries = collectToolEntries({
+        registry: h.platform.registry,
+        platformTools: platformTools(h.platform.services),
+      });
+      const writeTools = entries.filter((e) => e.def.effect === 'write');
+      // A change to the registry that silently drops every write tool would
+      // make every assertion below vacuously true; this keeps that honest.
+      expect(writeTools.length).toBeGreaterThanOrEqual(10);
+
+      const undeclared: string[] = [];
+      for (const { localName, def } of writeTools) {
+        const shape = def.inputSchema.shape as Record<string, { safeParse: (v: unknown) => { success: boolean } }>;
+        const operationIdSchema = shape.operationId;
+        const isRequired = operationIdSchema ? !operationIdSchema.safeParse(undefined).success : false;
+        if (isRequired) continue; // Compliant by construction: the schema itself refuses a keyless call.
+        if (!(localName in OPTIONAL_OPERATION_ID_REASON)) undeclared.push(localName);
+      }
+      expect(
+        undeclared,
+        'narzedzia zapisu bez wymaganego operationId i bez wpisu w OPTIONAL_OPERATION_ID_REASON — ' +
+          'kazde z nich albo potrzebuje operationId: OPERATION_ID (wymagane), albo wpisu z powodem powyzej',
+      ).toEqual([]);
+    });
   });
 
   it('publikacja z workspace: ten sam klucz z inna sciezka LUB inna trescia jest odrzucany', async () => {

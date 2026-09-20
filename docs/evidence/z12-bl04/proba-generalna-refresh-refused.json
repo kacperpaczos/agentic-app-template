@@ -36,21 +36,21 @@
   "logowanieUzytkownika": {
     "nietkniete": true,
     "przed": {
-      "plik": "/home/paczos/.claude/.credentials.json",
+      "plik": "~/.claude/.credentials.json",
       "obecny": true,
       "bajtow": 524,
       "mtimeMs": 1789777600860.4153,
-      "accessTokenSha": "6749d3f422e64897",
-      "refreshTokenSha": "c4ffe5d5ebe855d8",
+      "accessTokenSha": "[redakcja-higiena-bylo-SHA-256-prefiks-16-zn]",
+      "refreshTokenSha": "[redakcja-higiena-bylo-SHA-256-prefiks-16-zn]",
       "expiresAt": 1789799906144
     },
     "po": {
-      "plik": "/home/paczos/.claude/.credentials.json",
+      "plik": "~/.claude/.credentials.json",
       "obecny": true,
       "bajtow": 524,
       "mtimeMs": 1789777600860.4153,
-      "accessTokenSha": "6749d3f422e64897",
-      "refreshTokenSha": "c4ffe5d5ebe855d8",
+      "accessTokenSha": "[redakcja-higiena-bylo-SHA-256-prefiks-16-zn]",
+      "refreshTokenSha": "[redakcja-higiena-bylo-SHA-256-prefiks-16-zn]",
       "expiresAt": 1789799906144
     },
     "uwaga": "Skroty tokenow sa po to, zeby dalo sie stwierdzic ZMIANE bez zapisywania wartosci. Rozny skrot po przebiegu znaczylby, ze proba dotknela logowania uzytkownika."

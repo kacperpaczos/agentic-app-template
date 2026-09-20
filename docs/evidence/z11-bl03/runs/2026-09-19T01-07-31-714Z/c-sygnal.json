@@ -1,0 +1,31 @@
+{
+  "zapisano": "2026-09-19T01:08:19.940Z",
+  "kodCommit": "1b9a1809d6b997b81d4fc17df03e19feae982c07",
+  "zrodlo": "prawdziwy model (subskrypcja Claude) przez @mastra/claude i proces Claude Agent SDK",
+  "pakiet": "BL-03 (Z11)",
+  "przebieg": "2026-09-19T01-07-31-714Z",
+  "spec": "e2e/bl03-model-lifecycle.spec.ts",
+  "przebiegPlanu": "C/D",
+  "turyWydaneWTymPliku": 1,
+  "turyWydaneLacznie": 15,
+  "budzet": 25,
+  "kroki": [],
+  "kryteria": [
+    "L1.6"
+  ],
+  "decyzjeZgody": [],
+  "procesyWTrakcie": {
+    "potomkowiePrzed": 0,
+    "potomkowieWTrakcie": 0,
+    "uruchomionePrzezWykonanie": [],
+    "robocze": []
+  },
+  "zamkniecie": {
+    "zakonczony": true,
+    "ms": 62,
+    "kod": 0,
+    "sygnal": null
+  },
+  "procesyPo": [],
+  "wynik": "niezaliczona"
+}

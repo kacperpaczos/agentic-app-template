@@ -91,7 +91,8 @@ describe('platforma dziala bez modulu zakupowego', () => {
     // the tool actually writes through the module's own handler
     await p.registry.callTool(
       'probe_add_note',
-      { text: 'notatka z testu' },
+      // operationId required since L9.7's closure — see `module-devkit-probe/src/server/index.ts`.
+      { text: 'notatka z testu', operationId: 'probe-add-note-boundary-1' },
       {
         ownerId: DEFAULT_USER_ID,
         appContext: {
@@ -107,6 +108,45 @@ describe('platforma dziala bez modulu zakupowego', () => {
     const after = await (await p.app.request('/api/m/probe/notes', { headers: { cookie } })).json();
     expect(after.notes).toHaveLength(1);
     expect(after.notes[0].text).toBe('notatka z testu');
+  });
+
+  /*
+   * L9.7, fourth tool found by the audit and not named in the original gap:
+   * `probe_add_note` inserted a row with no `operationId` at all, the same
+   * defect class as `canvas_add_card` before it was fixed. It is a devkit
+   * module never installed by the real app (`apps/server/src/compose.ts`
+   * loads only the procurement module), but the pattern is the same, so the
+   * fix is the same — required `operationId`, wired through the shared
+   * `IdempotencyStore` — and it gets the same proof: a repeat under one key
+   * is one row, checked in the database.
+   */
+  it('L9.7: probe_add_note wymaga operationId, a powtorzenie z tym samym kluczem daje jeden wiersz', async () => {
+    const p = boot('probe');
+    const ctx = {
+      ownerId: DEFAULT_USER_ID,
+      appContext: {
+        conversationId: null, spaceId: null, resource: null,
+        selection: [], filters: {}, viewport: null, drafts: [], ui: null,
+      },
+      conversationId: null,
+      runId: null,
+      workspaceDir: null,
+      emit: () => {},
+    };
+    const notesOf = () =>
+      (p.db.$client.prepare('SELECT COUNT(*) AS n FROM probe_notes WHERE owner_id = ?').get(DEFAULT_USER_ID) as {
+        n: number;
+      }).n;
+
+    await expect(p.registry.callTool('probe_add_note', { text: 'bez klucza' }, ctx)).rejects.toMatchObject({
+      code: 'validation_failed',
+    });
+    expect(notesOf(), 'wywolanie bez operationId nie powinno bylo nic zapisac').toBe(0);
+
+    const operationId = 'probe-add-note-repeat-1';
+    await p.registry.callTool('probe_add_note', { text: 'z kluczem', operationId }, ctx);
+    await p.registry.callTool('probe_add_note', { text: 'z kluczem', operationId }, ctx);
+    expect(notesOf(), 'probe_add_note zdublowal mimo tego samego operationId').toBe(1);
   });
 
   it('domyslna kompozycja modulu testowego jest walidowana tym samym katalogiem', async () => {

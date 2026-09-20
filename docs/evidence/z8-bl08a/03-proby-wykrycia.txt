@@ -115,7 +115,7 @@ wycofano linie w packages/platform-ui/src/chat/ConversationTitle.tsx
     Error: expect(locator).toHaveText(expected) failed
            - unexpected value "Podsumuj krotko stan sprawy zakupowej"
     > 156 |     await expect(strip).toHaveText(renamed);
-        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:156:25
+        at ~/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:156:25
     test-results/chat-history-czat-i-histor-0d5c3--uzytkownik-moze-go-zmienic-chromium/test-failed-1.png
     Error Context: test-results/chat-history-czat-i-histor-0d5c3--uzytkownik-moze-go-zmienic-chromium/error-context.md
     Error Context: test-results/chat-history-czat-i-histor-0d5c3--uzytkownik-moze-go-zmienic-chromium/error-context.md
@@ -133,7 +133,7 @@ wycofano linie w packages/platform-ui/src/chat/ChatPanel.tsx
     Error: expect(locator).toHaveAttribute(expected) failed
            - unexpected value "succeeded"
     > 538 |     await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'running', {
-        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:538:49
+        at ~/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:538:49
     test-results/chat-history-czat-i-histor-03e43-ierwszej-nie-miesza-niczego-chromium/test-failed-1.png
     Error Context: test-results/chat-history-czat-i-histor-03e43-ierwszej-nie-miesza-niczego-chromium/error-context.md
     Error Context: test-results/chat-history-czat-i-histor-03e43-ierwszej-nie-miesza-niczego-chromium/error-context.md
@@ -162,7 +162,7 @@ wycofano linie w packages/platform-ui/src/shell/SettingsPage.tsx
     Error: expect(received).toEqual(expected) // deep equality
     > 204 |     expect(declared).toEqual(fromApi);
       205 |     expect(Object.keys(declared).length).toBeGreaterThan(3);
-        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:204:22
+        at ~/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:204:22
     test-results/chat-history-czat-i-histor-3d905--z-tym-co-interfejs-oferuje-chromium/test-failed-1.png
     Error Context: test-results/chat-history-czat-i-histor-3d905--z-tym-co-interfejs-oferuje-chromium/error-context.md
     Error Context: test-results/chat-history-czat-i-histor-3d905--z-tym-co-interfejs-oferuje-chromium/error-context.md
@@ -181,7 +181,7 @@ wycofano linie w packages/platform-ui/src/chat/AssistantMessage.tsx
     Error: element(s) not found
     > 272 |     await expect(message.getByTestId('assistant-prose').first()).toContainText(
       275 |     await expect(message.getByTestId('assistant-prose').last()).toContainText(
-        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:272:66
+        at ~/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:272:66
     test-results/chat-history-czat-i-histor-4c7f5-dz-po-narzedziu-sa-widoczne-chromium/test-failed-1.png
     Error Context: test-results/chat-history-czat-i-histor-4c7f5-dz-po-narzedziu-sa-widoczne-chromium/error-context.md
     Error Context: test-results/chat-history-czat-i-histor-4c7f5-dz-po-narzedziu-sa-widoczne-chromium/error-context.md
@@ -201,7 +201,7 @@ wycofano linie w packages/platform-server/src/agent/projection.ts
       326 |     expect(assistant[0]!.content).toContain('Zanim odpowiem, sprawdzam katalog');
       327 |     expect(assistant[0]!.toolCalls).toHaveLength(1);
       328 |     expect(assistant.at(-1)!.content).toContain('to jest koncowa odpowiedz');
-        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:325:30
+        at ~/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:325:30
     test-results/chat-history-czat-i-histor-e899c-ie-ginie-—-jest-krokiem-osi-chromium/test-failed-1.png
     Error Context: test-results/chat-history-czat-i-histor-e899c-ie-ginie-—-jest-krokiem-osi-chromium/error-context.md
     Error Context: test-results/chat-history-czat-i-histor-e899c-ie-ginie-—-jest-krokiem-osi-chromium/error-context.md
@@ -231,7 +231,7 @@ wycofano linie w packages/platform-ui/src/chat/ChatPanel.tsx
     Error: element(s) not found
     > 485 |     await expect(preview).toBeVisible({ timeout: 30_000 });
       486 |     await expect(preview).toHaveAttribute('data-artifact-id', /^art_/);
-        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:485:27
+        at ~/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:485:27
     test-results/chat-history-czat-i-histor-ef386-arzedzi-i-odpowiedz-zostaja-chromium/test-failed-1.png
     Error Context: test-results/chat-history-czat-i-histor-ef386-arzedzi-i-odpowiedz-zostaja-chromium/error-context.md
     Error Context: test-results/chat-history-czat-i-histor-ef386-arzedzi-i-odpowiedz-zostaja-chromium/error-context.md
@@ -274,7 +274,7 @@ wycofano linie w packages/platform-server/src/services/conversations.ts
       661 |     await expect
     > 663 |       .toBe(0);
       664 |     expect((await getJson(page, `/api/threads/get/${conversationId}`)).error?.code).toBe('not_found');
-        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:663:8
+        at ~/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:663:8
     test-results/chat-history-czat-i-histor-d0450-aniem-zatrzymuje-to-zadanie-chromium/test-failed-1.png
     Error Context: test-results/chat-history-czat-i-histor-d0450-aniem-zatrzymuje-to-zadanie-chromium/error-context.md
     Error Context: test-results/chat-history-czat-i-histor-d0450-aniem-zatrzymuje-to-zadanie-chromium/error-context.md
@@ -293,7 +293,7 @@ wycofano linie w packages/platform-server/src/agent/runtime.ts
     > 419 |     expect(live.request, 'argumenty wywolania nie sa widoczne').toContain('limit');
       420 |     expect(live.request, 'wartosc argumentu nie jest widoczna').toMatch(/limit"?\s*:\s*3/);
       422 |     expect(live.result, 'tresc udanego wyniku nie jest widoczna').toContain('platform.canvas');
-        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:419:65
+        at ~/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:419:65
     test-results/chat-history-czat-i-histor-44c34-rzeladowaniu-i-po-restarcie-chromium/test-failed-1.png
     Error Context: test-results/chat-history-czat-i-histor-44c34-rzeladowaniu-i-po-restarcie-chromium/error-context.md
     Error Context: test-results/chat-history-czat-i-histor-44c34-rzeladowaniu-i-po-restarcie-chromium/error-context.md
@@ -319,7 +319,7 @@ wycofano linie w packages/platform-ui/src/chat/ChatPanel.tsx
     Error: expect(locator).toHaveAttribute(expected) failed
            - unexpected value "succeeded"
     > 562 |     await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'running', {
-        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:562:49
+        at ~/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:562:49
     test-results/chat-history-czat-i-histor-03e43-ierwszej-nie-miesza-niczego-chromium/test-failed-1.png
     Error Context: test-results/chat-history-czat-i-histor-03e43-ierwszej-nie-miesza-niczego-chromium/error-context.md
     Error Context: test-results/chat-history-czat-i-histor-03e43-ierwszej-nie-miesza-niczego-chromium/error-context.md
@@ -337,7 +337,7 @@ wycofano linie w packages/platform-server/src/services/conversations.ts
       745 |     await expect
     > 747 |       .toBe(0);
       748 |     expect((await getJson(page, `/api/threads/get/${conversationId}`)).error?.code).toBe('not_found');
-        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:747:8
+        at ~/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:747:8
     test-results/chat-history-czat-i-histor-d0450-aniem-zatrzymuje-to-zadanie-chromium/test-failed-1.png
     Error Context: test-results/chat-history-czat-i-histor-d0450-aniem-zatrzymuje-to-zadanie-chromium/error-context.md
     Error Context: test-results/chat-history-czat-i-histor-d0450-aniem-zatrzymuje-to-zadanie-chromium/error-context.md
@@ -355,7 +355,7 @@ wycofano linie w packages/platform-server/src/services/conversations.ts
     > 756 |     expect(artifactsAfter.length).toBe(artifactsBefore.length);
       757 |     expect(artifactsAfter.map((a) => a.id)).toContain(ownedId);
       758 |     expect(artifactsAfter.filter((a) => a.threadId === conversationId)).toEqual([]);
-        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:756:35
+        at ~/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:756:35
     test-results/chat-history-czat-i-histor-d0450-aniem-zatrzymuje-to-zadanie-chromium/test-failed-1.png
     Error Context: test-results/chat-history-czat-i-histor-d0450-aniem-zatrzymuje-to-zadanie-chromium/error-context.md
     Error Context: test-results/chat-history-czat-i-histor-d0450-aniem-zatrzymuje-to-zadanie-chromium/error-context.md
@@ -372,7 +372,7 @@ wycofano linie w packages/platform-ui/src/state/accessReset.ts
     Error: expect(locator).toHaveAttribute(expected) failed
             - unexpected value "queued"
     > 46 |   expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'succeeded', { timeout: 90_000 });
-        at /home/paczos/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:659:11
+        at ~/Documents/agentic-app-template-wt/z8-bl08a/e2e/chat-history.spec.ts:659:11
     test-results/chat-history-czat-i-histor-e5cbe-e-sie-nie-zostaje-w-kolejce-chromium/test-failed-1.png
     Error Context: test-results/chat-history-czat-i-histor-e5cbe-e-sie-nie-zostaje-w-kolejce-chromium/error-context.md
     Error Context: test-results/chat-history-czat-i-histor-e5cbe-e-sie-nie-zostaje-w-kolejce-chromium/error-context.md

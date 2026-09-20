@@ -12,6 +12,9 @@ playwright-report/
 # Katalogi danych suit przeglądarkowych (własne bazy, własne porty)
 .e2e-data/
 .e2e-scripted*/
+# Instancja produkcyjna, ktora spec BL-03 uruchamia i zatrzymuje sam (wlasny port,
+# wlasny katalog danych) — potrzebna, bo test sygnalu musi byc wlascicielem procesu.
+.e2e-real*/
 
 # Dane syntetyczne prób kopii, migracji i odtworzenia (tests/backup-migration.test.ts
 # oraz scripts/synthetic-state.mjs). Wymyślone, ale to nadal katalogi danych — nie

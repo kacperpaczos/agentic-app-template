@@ -1,14 +1,14 @@
 PRZEBIEG ODBIOROWY — zadanie Z2 / BL-07 (trwalosc, kopia, migracje)
 data: 2026-09-18T12:42:31+02:00
 commit: a8e726b — Runda poprawek 2: kopia nie moze byc zapisana do zywego katalogu danych (A)
-katalog roboczy: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod  (dane SYNTETYCZNE; .e2e-bl07/ jest ignorowany przez git)
+katalog roboczy: ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod  (dane SYNTETYCZNE; .e2e-bl07/ jest ignorowany przez git)
 zadna komenda ponizej nie dotyka data/, APP_DATA_DIR ani zadnego katalogu poza .e2e-bl07/dowod
 wersja node: v24.19.0
 
 ### 1. Syntetyczny katalog danych sprzed migracji platform-0003-file-versions,
    z zatwierdzonym zapisem pozostawionym wylacznie w WAL (proces zabity bez punktu kontrolnego)
 $ node scripts/synthetic-state.mjs --out .e2e-bl07/dowod/dane --stage platform-0003-file-versions --leave-wal
-[syntetyk] katalog: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/dane
+[syntetyk] katalog: ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/dane
 [syntetyk] etap:    platform-0003-file-versions (zastosowane: platform-0001-init, platform-0002-run-measurement-points, procurement-0001-init)
 [syntetyk] WAL:      zatwierdzona rozmowa cnv_syn_tylko_w_wal lezy wylacznie w app.db-wal (proces zabity bez punktu kontrolnego)
 [syntetyk] wiersze:  users=2 conversations=1 messages=3 agent_runs=1 run_events=10 canvas_cards=1 files=2 artifacts=1
@@ -32,7 +32,7 @@ e6a1f5c6b8e2ba1851f25d6341d6b5ef0d41bb3c23478eb1b198131fcdf7a310  .e2e-bl07/dowo
 ### 3. Kontrola: sam app.db (to, co skopiowalby 'cp data/app.db') nie zawiera zapisu z WAL
 $ node -e 
 const {createRequire}=require('node:module');
-const D=createRequire('/home/paczos/Documents/agentic-app-template-wt/z2-bl07/packages/platform-server/package.json')('better-sqlite3');
+const D=createRequire('~/Documents/agentic-app-template-wt/z2-bl07/packages/platform-server/package.json')('better-sqlite3');
 for (const [etykieta, plik] of [['sam app.db','.e2e-bl07/dowod/tylko-app-db.db'],['app.db + app.db-wal','.e2e-bl07/dowod/dane/app.db']]) {
   const db=new D(plik,{readonly:true});
   console.log(etykieta.padEnd(20), 'rozmowy=', db.prepare('SELECT COUNT(*) n FROM conversations').get().n,
@@ -45,8 +45,8 @@ app.db + app.db-wal  rozmowy= 2  zapis z WAL obecny= 1
 
 ### 4. Kopia (pnpm backup === node scripts/backup-state.mjs)
 $ node scripts/backup-state.mjs --data .e2e-bl07/dowod/dane --out .e2e-bl07/dowod/kopia
-[backup] zrodlo:   /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/dane
-[backup] kopia:    /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia
+[backup] zrodlo:   ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/dane
+[backup] kopia:    ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia
 [backup] baza:     app.db 268 kB, app.db-wal 28 kB, app.db-shm 32 kB → app.db 268 kB po zwinieciu WAL
 [backup] migracje: platform-0001-init, platform-0002-run-measurement-points, procurement-0001-init
 [backup] wiersze:  conversations=2 messages=4 agent_runs=1 run_events=10 canvas_spaces=1 canvas_cards=1 artifacts=1 files=2
@@ -65,7 +65,7 @@ drwxr-xr-x. 1 paczos paczos     20 Sep 18 12:42 files
 ### 5. Kopia zawiera zapis, ktory lezal wylacznie w WAL
 $ node -e 
 const {createRequire}=require('node:module');
-const D=createRequire('/home/paczos/Documents/agentic-app-template-wt/z2-bl07/packages/platform-server/package.json')('better-sqlite3');
+const D=createRequire('~/Documents/agentic-app-template-wt/z2-bl07/packages/platform-server/package.json')('better-sqlite3');
 const db=new D('.e2e-bl07/dowod/kopia/app.db',{readonly:true});
 console.log('rozmowy w kopii =', db.prepare('SELECT COUNT(*) n FROM conversations').get().n);
 console.log('cnv_syn_tylko_w_wal =', db.prepare("SELECT COUNT(*) n FROM conversations WHERE id='cnv_syn_tylko_w_wal'").get().n);
@@ -101,7 +101,7 @@ session.secret w kopii: false
 
 ### 7. Ponowny odczyt i sprawdzenie kopii (pnpm backup:verify)
 $ node scripts/backup-state.mjs --verify .e2e-bl07/dowod/kopia
-[backup] kopia /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia sprawdzona: bez zastrzezen
+[backup] kopia ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia sprawdzona: bez zastrzezen
 [kod wyjscia: 0]
 
 ### 8. Sumy kontrolne zrodla PO kopii i po weryfikacji
@@ -115,8 +115,8 @@ b57c9e88860ca566e7fd30a166caa767949f85a2f027150f4d0f3e90b2e04909  .e2e-bl07/dowo
 
 ### 9. Proba migracji na kopii (pnpm migration:rehearsal)
 $ node scripts/migration-rehearsal.mjs --backup .e2e-bl07/dowod/kopia --out .e2e-bl07/dowod/proba --json .e2e-bl07/dowod/raport-proby.json
-[proba] kopia zrodlowa: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia
-[proba] katalog proby:  /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/proba
+[proba] kopia zrodlowa: ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia
+[proba] katalog proby:  ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/proba
 [proba] przed:  migracje=[platform-0001-init, platform-0002-run-measurement-points, procurement-0001-init]
 [proba]         rozmowy=2 wiadomosci=4 uruchomienia=1 zdarzenia=10 karty=1 pliki=2
 [proba] po:     migracje=[platform-0001-init, platform-0002-run-measurement-points, platform-0003-file-versions, procurement-0001-init]
@@ -125,7 +125,7 @@ $ node scripts/migration-rehearsal.mjs --backup .e2e-bl07/dowod/kopia --out .e2e
 [proba] zmiana oczekiwana — files: dodane kolumny derived_from_file_id, version (platform-0003-file-versions dodaje kolumny derived_from_file_id i version; istniejace wiersze zachowuja wszystkie dotychczasowe wartosci); dane bez zmian
 [proba] zmiana oczekiwana — messages: 4 → 6 wierszy (odtworzenie aktywnosci narzedzi zastepuje pojedyncza wiadomosc asystenta pelna tura)
 [proba] zmiana oczekiwana — schema_migrations: 3 → 4 wierszy (migracja dopisuje swoj wpis)
-[proba] raport: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/raport-proby.json
+[proba] raport: ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/raport-proby.json
 [proba] zachowane: 2 rozmow, 3 wiadomosci uzytkownika (tresc i przypisanie), 1 kart canvasu (kompozycje bez zmian), 2 plikow, 1 artefaktow
 [proba] powtorne uruchomienie: nic nie zmienilo (brak dublowania)
 [proba] kopia zrodlowa: 6 plikow bez zmian (sumy SHA-256)
@@ -161,7 +161,7 @@ problemy: (brak)
 ### 11. Trzecie uruchomienie — odcisk wszystkich tabel liczony poza skryptem
 $ node -e 
 const {createRequire}=require('node:module');const {createHash}=require('node:crypto');
-const D=createRequire('/home/paczos/Documents/agentic-app-template-wt/z2-bl07/packages/platform-server/package.json')('better-sqlite3');
+const D=createRequire('~/Documents/agentic-app-template-wt/z2-bl07/packages/platform-server/package.json')('better-sqlite3');
 const spis=(f)=>{const db=new D(f,{readonly:true});
   const t=db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map(r=>r.name);
   const o={};for(const x of t){o[x]=createHash('sha256').update(db.prepare('SELECT * FROM "'+x+'"').all().map(r=>JSON.stringify(Object.entries(r).sort())).sort().join('|')).digest('hex').slice(0,16);}
@@ -173,7 +173,7 @@ odcisk przed trzecim startem zapisany, tabel: 21
 [kod wyjscia: 0]
 $ node --experimental-transform-types --no-warnings=ExperimentalWarning -e 
 import { composeApp } from './apps/server/src/compose.ts';
-const p = composeApp({ dataDir: '/home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/proba' });
+const p = composeApp({ dataDir: '~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/proba' });
 console.log('rozmowy po trzecim starcie =', p.db.$client.prepare('SELECT COUNT(*) AS n FROM conversations').get().n);
 p.close();
 rozmowy po trzecim starcie = 2
@@ -181,7 +181,7 @@ No `storage` configured on Mastra — falling back to an in-memory store. In-mem
 [kod wyjscia: 0]
 $ node -e 
 const {createRequire}=require('node:module');const {createHash}=require('node:crypto');
-const D=createRequire('/home/paczos/Documents/agentic-app-template-wt/z2-bl07/packages/platform-server/package.json')('better-sqlite3');
+const D=createRequire('~/Documents/agentic-app-template-wt/z2-bl07/packages/platform-server/package.json')('better-sqlite3');
 const spis=(f)=>{const db=new D(f,{readonly:true});
   const t=db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map(r=>r.name);
   const o={};for(const x of t){o[x]=createHash('sha256').update(db.prepare('SELECT * FROM "'+x+'"').all().map(r=>JSON.stringify(Object.entries(r).sort())).sort().join('|')).digest('hex').slice(0,16);}
@@ -220,36 +220,36 @@ $ sha256sum .e2e-bl07/dowod/udawane-dane/app.db
 [kod wyjscia: 0]
 -- proba migracji z APP_DATA_DIR wskazujacym ten katalog:
 $ APP_DATA_DIR=.e2e-bl07/dowod/udawane-dane node scripts/migration-rehearsal.mjs --backup .e2e-bl07/dowod/udawane-dane
-[proba] ODMAWIAM: Kopia zrodlowa /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane lezy w katalogu danych aplikacji /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane. Nie tkne go.
+[proba] ODMAWIAM: Kopia zrodlowa ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane lezy w katalogu danych aplikacji ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane. Nie tkne go.
 [kod wyjscia: 2]
 -- proba migracji bez APP_DATA_DIR (rozpoznanie po session.secret):
 $ node scripts/migration-rehearsal.mjs --backup .e2e-bl07/dowod/udawane-dane
-[proba] ODMAWIAM: Kopia zrodlowa /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane lezy w katalogu danych aplikacji /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane (rozpoznany po pliku session.secret, ktorego kopia nigdy nie zawiera). Nie tkne go.
+[proba] ODMAWIAM: Kopia zrodlowa ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane lezy w katalogu danych aplikacji ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane (rozpoznany po pliku session.secret, ktorego kopia nigdy nie zawiera). Nie tkne go.
 [kod wyjscia: 2]
 -- kopia do wnetrza kopiowanego katalogu:
 $ node scripts/backup-state.mjs --data .e2e-bl07/dowod/udawane-dane --out .e2e-bl07/dowod/udawane-dane/backups/x
-[backup] ODMAWIAM: Katalog kopii /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane/backups/x lezy wewnatrz katalogu danych /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane.
+[backup] ODMAWIAM: Katalog kopii ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane/backups/x lezy wewnatrz katalogu danych ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane.
 Wskaz katalog poza katalogiem danych (--out), inaczej kopia jest czescia tego, co kopiuje.
 [kod wyjscia: 2]
 -- generator danych syntetycznych wycelowany w ten katalog:
 $ node scripts/synthetic-state.mjs --out .e2e-bl07/dowod/udawane-dane --stage current
-[syntetyk] ODMAWIAM: Katalog danych syntetycznych /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane lezy w katalogu danych aplikacji /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane (rozpoznany po pliku session.secret, ktorego kopia nigdy nie zawiera). Nie tkne go.
+[syntetyk] ODMAWIAM: Katalog danych syntetycznych ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane lezy w katalogu danych aplikacji ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane (rozpoznany po pliku session.secret, ktorego kopia nigdy nie zawiera). Nie tkne go.
 [kod wyjscia: 2]
 -- generator wycelowany WEWNATRZ katalogu danych (przypadek z przegladu):
 $ node scripts/synthetic-state.mjs --out .e2e-bl07/dowod/udawane-dane/files --stage empty
-[syntetyk] ODMAWIAM: Katalog danych syntetycznych /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane/files lezy w katalogu danych aplikacji /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane (rozpoznany po pliku session.secret, ktorego kopia nigdy nie zawiera). Nie tkne go.
+[syntetyk] ODMAWIAM: Katalog danych syntetycznych ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane/files lezy w katalogu danych aplikacji ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane (rozpoznany po pliku session.secret, ktorego kopia nigdy nie zawiera). Nie tkne go.
 [kod wyjscia: 2]
 -- proba migracji wycelowana WEWNATRZ katalogu danych:
 $ node scripts/migration-rehearsal.mjs --backup .e2e-bl07/dowod/kopia --out .e2e-bl07/dowod/udawane-dane/files
-[proba] ODMAWIAM: Katalog proby /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane/files lezy w katalogu danych aplikacji /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane (rozpoznany po pliku session.secret, ktorego kopia nigdy nie zawiera). Nie tkne go.
+[proba] ODMAWIAM: Katalog proby ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane/files lezy w katalogu danych aplikacji ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane (rozpoznany po pliku session.secret, ktorego kopia nigdy nie zawiera). Nie tkne go.
 [kod wyjscia: 2]
 -- generator wycelowany w katalog NADRZEDNY wobec katalogu danych:
 $ node scripts/synthetic-state.mjs --out .e2e-bl07/dowod --stage empty
-[syntetyk] ODMAWIAM: Katalog danych syntetycznych /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod zawiera katalog danych aplikacji /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane (rozpoznany po pliku session.secret). Nie tkne go.
+[syntetyk] ODMAWIAM: Katalog danych syntetycznych ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod zawiera katalog danych aplikacji ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane (rozpoznany po pliku session.secret). Nie tkne go.
 [kod wyjscia: 2]
 -- generator wycelowany w cudzy niepusty katalog (bez znacznika):
 $ node scripts/synthetic-state.mjs --out .e2e-bl07/dowod/cudzy-katalog --stage empty
-[syntetyk] ODMAWIAM: Katalog danych syntetycznych /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/cudzy-katalog istnieje, nie jest pusty i nie zostal utworzony przez te skrypty (brak znacznika .katalog-roboczy-agentic).
+[syntetyk] ODMAWIAM: Katalog danych syntetycznych ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/cudzy-katalog istnieje, nie jest pusty i nie zostal utworzony przez te skrypty (brak znacznika .katalog-roboczy-agentic).
 Nie kasuje cudzego katalogu. Wskaz katalog nieistniejacy albo pusty.
 [kod wyjscia: 2]
 -- pliki uzytkownika i cudzy katalog po wszystkich probach:
@@ -268,11 +268,11 @@ $ sha256sum .e2e-bl07/dowod/udawane-dane/app.db
 
 ### 16. Odtworzenie — najpierw na sucho (--check)
 $ node scripts/restore-state.mjs --backup .e2e-bl07/dowod/kopia --data .e2e-bl07/dowod/cel --check
-[odtworzenie] kopia /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia: sprawdzona (sumy, census, integrity_check)
+[odtworzenie] kopia ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia: sprawdzona (sumy, census, integrity_check)
 [odtworzenie] migracje w kopii:  platform-0001-init, platform-0002-run-measurement-points, procurement-0001-init
 [odtworzenie] migracje w kodzie: platform-0001-init, platform-0002-run-measurement-points, platform-0003-file-versions, procurement-0001-init
 [odtworzenie] kopia jest starsza niz kod: pierwszy start zastosuje platform-0003-file-versions.
-              Przecwicz to najpierw: node scripts/migration-rehearsal.mjs --backup /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia
+              Przecwicz to najpierw: node scripts/migration-rehearsal.mjs --backup ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia
 [odtworzenie] sesje przegladarki: `session.secret` nie jest w kopii; jest przenoszony ze stanu odlozonego na bok, a bez niego wszyscy musza zalogowac sie ponownie (dane pozostaja)
 [odtworzenie] transkrypty Claude Agent SDK: leza poza katalogiem danych, nie sa kopiowane ani
               usuwane. Pamiec modelu NIE wraca wraz z baza. Rozmowa z zapisanym
@@ -293,11 +293,11 @@ $ sha256sum .e2e-bl07/dowod/cel/app.db
 9e4470d0cbe957b61d75c7f99a7b2aae832612a20e7f290842bc081c867abf8a  .e2e-bl07/dowod/cel/app.db
 [kod wyjscia: 0]
 $ node scripts/restore-state.mjs --backup .e2e-bl07/dowod/kopia --data .e2e-bl07/dowod/cel
-[odtworzenie] kopia /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia: sprawdzona (sumy, census, integrity_check)
+[odtworzenie] kopia ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia: sprawdzona (sumy, census, integrity_check)
 [odtworzenie] migracje w kopii:  platform-0001-init, platform-0002-run-measurement-points, procurement-0001-init
 [odtworzenie] migracje w kodzie: platform-0001-init, platform-0002-run-measurement-points, platform-0003-file-versions, procurement-0001-init
 [odtworzenie] kopia jest starsza niz kod: pierwszy start zastosuje platform-0003-file-versions.
-              Przecwicz to najpierw: node scripts/migration-rehearsal.mjs --backup /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia
+              Przecwicz to najpierw: node scripts/migration-rehearsal.mjs --backup ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia
 [odtworzenie] sesje przegladarki: `session.secret` nie jest w kopii; jest przenoszony ze stanu odlozonego na bok, a bez niego wszyscy musza zalogowac sie ponownie (dane pozostaja)
 [odtworzenie] transkrypty Claude Agent SDK: leza poza katalogiem danych, nie sa kopiowane ani
               usuwane. Pamiec modelu NIE wraca wraz z baza. Rozmowa z zapisanym
@@ -310,7 +310,7 @@ $ node scripts/restore-state.mjs --backup .e2e-bl07/dowod/kopia --data .e2e-bl07
                   a rozmowa zostaje przepieta na sesje, ktora istnieje.
               Ktora z tych drog zachodzi na prawdziwym SDK — NIE ZOSTALO ZAOBSERWOWANE
               (kryterium L7.13 jest z tego powodu otwarte, patrz docs/ACCEPTANCE.md).
-[odtworzenie] stan sprzed proby odlozony: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/cel.przed-odtworzeniem-2026-09-18T10-42-46-594Z (nic nie zostalo usuniete)
+[odtworzenie] stan sprzed proby odlozony: ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/cel.przed-odtworzeniem-2026-09-18T10-42-46-594Z (nic nie zostalo usuniete)
 [odtworzenie] przeniesiono session.secret — otwarte sesje przegladarki pozostaja wazne
 [odtworzenie] odtworzono: conversations=2 messages=4 agent_runs=1 canvas_cards=1 files=2 artifacts=1; integrity_check ok
 [odtworzenie] gotowe — uruchom: pnpm build && pnpm start
@@ -331,7 +331,7 @@ sekret-instalacji
 -- odtworzony stan zawiera zapis, ktory lezal wylacznie w WAL:
 $ node -e 
 const {createRequire}=require('node:module');
-const D=createRequire('/home/paczos/Documents/agentic-app-template-wt/z2-bl07/packages/platform-server/package.json')('better-sqlite3');
+const D=createRequire('~/Documents/agentic-app-template-wt/z2-bl07/packages/platform-server/package.json')('better-sqlite3');
 const db=new D('.e2e-bl07/dowod/cel/app.db',{readonly:true});
 console.log('rozmowy =', db.prepare('SELECT COUNT(*) n FROM conversations').get().n,
   '| cnv_syn_tylko_w_wal =', db.prepare("SELECT COUNT(*) n FROM conversations WHERE id='cnv_syn_tylko_w_wal'").get().n);
@@ -342,7 +342,7 @@ rozmowy = 2 | cnv_syn_tylko_w_wal = 1
 ### 18. Aplikacja wstaje na odtworzonym stanie (ta sama sciezka co pnpm start)
 $ node --experimental-transform-types --no-warnings=ExperimentalWarning -e 
 import { composeApp } from './apps/server/src/compose.ts';
-const p = composeApp({ dataDir: '/home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/cel' });
+const p = composeApp({ dataDir: '~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/cel' });
 console.log('rozmowy =', p.db.$client.prepare('SELECT COUNT(*) AS n FROM conversations').get().n,
   '| migracje =', p.db.$client.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get().n);
 p.close();
@@ -353,7 +353,7 @@ No `storage` configured on Mastra — falling back to an in-memory store. In-mem
 
 ### 19. Odmowa odtworzenia kopii nowszej niz build
 $ node scripts/restore-state.mjs --backup .e2e-bl07/dowod/kopia-nowsza --data .e2e-bl07/dowod/cel --check
-[odtworzenie] kopia /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia-nowsza: sprawdzona (sumy, census, integrity_check)
+[odtworzenie] kopia ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia-nowsza: sprawdzona (sumy, census, integrity_check)
 [odtworzenie] migracje w kopii:  platform-0001-init, platform-0002-run-measurement-points, platform-0004-z-przyszlosci, procurement-0001-init
 [odtworzenie] migracje w kodzie: platform-0001-init, platform-0002-run-measurement-points, platform-0003-file-versions, procurement-0001-init
 [odtworzenie] ODMAWIAM: kopia zawiera migracje nieznane temu buildowi: platform-0004-z-przyszlosci.
@@ -369,11 +369,11 @@ $ node scripts/restore-state.mjs --backup .e2e-bl07/dowod/kopia-uszkodzona --dat
 
 ### 21. Odmowa odtworzenia do katalogu, ktory nie wyglada na katalog danych
 $ node scripts/restore-state.mjs --backup .e2e-bl07/dowod/kopia --data .e2e-bl07/dowod/cudzy-cel
-[odtworzenie] kopia /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia: sprawdzona (sumy, census, integrity_check)
+[odtworzenie] kopia ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia: sprawdzona (sumy, census, integrity_check)
 [odtworzenie] migracje w kopii:  platform-0001-init, platform-0002-run-measurement-points, procurement-0001-init
 [odtworzenie] migracje w kodzie: platform-0001-init, platform-0002-run-measurement-points, platform-0003-file-versions, procurement-0001-init
 [odtworzenie] kopia jest starsza niz kod: pierwszy start zastosuje platform-0003-file-versions.
-              Przecwicz to najpierw: node scripts/migration-rehearsal.mjs --backup /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia
+              Przecwicz to najpierw: node scripts/migration-rehearsal.mjs --backup ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia
 [odtworzenie] sesje przegladarki: `session.secret` nie jest w kopii; jest przenoszony ze stanu odlozonego na bok, a bez niego wszyscy musza zalogowac sie ponownie (dane pozostaja)
 [odtworzenie] transkrypty Claude Agent SDK: leza poza katalogiem danych, nie sa kopiowane ani
               usuwane. Pamiec modelu NIE wraca wraz z baza. Rozmowa z zapisanym
@@ -386,7 +386,7 @@ $ node scripts/restore-state.mjs --backup .e2e-bl07/dowod/kopia --data .e2e-bl07
                   a rozmowa zostaje przepieta na sesje, ktora istnieje.
               Ktora z tych drog zachodzi na prawdziwym SDK — NIE ZOSTALO ZAOBSERWOWANE
               (kryterium L7.13 jest z tego powodu otwarte, patrz docs/ACCEPTANCE.md).
-[odtworzenie] ODMAWIAM: Katalog docelowy /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/cudzy-cel istnieje, nie jest pusty i nie wyglada na katalog danych aplikacji (nie ma zadnego z: app.db, session.secret, files, workspaces, .katalog-roboczy-agentic).
+[odtworzenie] ODMAWIAM: Katalog docelowy ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/cudzy-cel istnieje, nie jest pusty i nie wyglada na katalog danych aplikacji (nie ma zadnego z: app.db, session.secret, files, workspaces, .katalog-roboczy-agentic).
 Nie przenosze cudzego katalogu. Sprawdz sciezke --data.
 [kod wyjscia: 2]
 $ cat .e2e-bl07/dowod/cudzy-cel/notatki.md
@@ -404,11 +404,11 @@ file_syn_2-notatka.txt
 [kod wyjscia: 0]
 -- kopia CZEGOKOLWIEK --out do tego katalogu:
 $ node scripts/backup-state.mjs --data .e2e-bl07/dowod/dane --out .e2e-bl07/dowod/udawane-dane
-[backup] ODMAWIAM: Katalog kopii /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane lezy w katalogu danych aplikacji /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane (rozpoznany po pliku session.secret, ktorego kopia nigdy nie zawiera). Nie tkne go.
+[backup] ODMAWIAM: Katalog kopii ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane lezy w katalogu danych aplikacji ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/udawane-dane (rozpoznany po pliku session.secret, ktorego kopia nigdy nie zawiera). Nie tkne go.
 [kod wyjscia: 2]
 -- kopia do cudzego niepustego katalogu (bez manifestu i bez znacznika):
 $ node scripts/backup-state.mjs --data .e2e-bl07/dowod/dane --out .e2e-bl07/dowod/cudzy-cel-kopii
-[backup] ODMAWIAM: Katalog kopii /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/cudzy-cel-kopii istnieje, nie jest pusty i nie zostal utworzony przez te skrypty (nie ma zadnego z: manifest.json, .katalog-roboczy-agentic).
+[backup] ODMAWIAM: Katalog kopii ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/cudzy-cel-kopii istnieje, nie jest pusty i nie zostal utworzony przez te skrypty (nie ma zadnego z: manifest.json, .katalog-roboczy-agentic).
 Nie nadpisuje cudzego katalogu. Wskaz katalog nieistniejacy, pusty albo wlasna wczesniejsza kopie.
 [kod wyjscia: 2]
 -- baza i pliki po probach (musza byc te same):
@@ -425,8 +425,8 @@ file_syn_2-notatka.txt
 [kod wyjscia: 0]
 -- kontrola odwrotna: kopia do katalogu pustego, a potem POWTORZONA do tego samego:
 $ node scripts/backup-state.mjs --data .e2e-bl07/dowod/dane --out .e2e-bl07/dowod/kopia-powtarzalna
-[backup] zrodlo:   /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/dane
-[backup] kopia:    /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia-powtarzalna
+[backup] zrodlo:   ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/dane
+[backup] kopia:    ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia-powtarzalna
 [backup] baza:     app.db 268 kB, app.db-wal 28 kB, app.db-shm 32 kB → app.db 268 kB po zwinieciu WAL
 [backup] migracje: platform-0001-init, platform-0002-run-measurement-points, procurement-0001-init
 [backup] wiersze:  conversations=2 messages=4 agent_runs=1 run_events=10 canvas_spaces=1 canvas_cards=1 artifacts=1 files=2
@@ -436,8 +436,8 @@ $ node scripts/backup-state.mjs --data .e2e-bl07/dowod/dane --out .e2e-bl07/dowo
 [backup] kopia to jeden plik app.db — odtworzenie: patrz docs/odzyskiwanie-stanu.md
 [kod wyjscia: 0]
 $ node scripts/backup-state.mjs --data .e2e-bl07/dowod/dane --out .e2e-bl07/dowod/kopia-powtarzalna
-[backup] zrodlo:   /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/dane
-[backup] kopia:    /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia-powtarzalna
+[backup] zrodlo:   ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/dane
+[backup] kopia:    ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia-powtarzalna
 [backup] baza:     app.db 268 kB, app.db-wal 28 kB, app.db-shm 32 kB → app.db 268 kB po zwinieciu WAL
 [backup] migracje: platform-0001-init, platform-0002-run-measurement-points, procurement-0001-init
 [backup] wiersze:  conversations=2 messages=4 agent_runs=1 run_events=10 canvas_spaces=1 canvas_cards=1 artifacts=1 files=2
@@ -449,8 +449,8 @@ $ node scripts/backup-state.mjs --data .e2e-bl07/dowod/dane --out .e2e-bl07/dowo
 
 ### 23. Proba migracji jest powtarzalna do tego samego --out (regresja B)
 $ node scripts/migration-rehearsal.mjs --backup .e2e-bl07/dowod/kopia --out .e2e-bl07/dowod/proba-powtorna
-[proba] kopia zrodlowa: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia
-[proba] katalog proby:  /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/proba-powtorna
+[proba] kopia zrodlowa: ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia
+[proba] katalog proby:  ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/proba-powtorna
 [proba] przed:  migracje=[platform-0001-init, platform-0002-run-measurement-points, procurement-0001-init]
 [proba]         rozmowy=2 wiadomosci=4 uruchomienia=1 zdarzenia=10 karty=1 pliki=2
 [proba] po:     migracje=[platform-0001-init, platform-0002-run-measurement-points, platform-0003-file-versions, procurement-0001-init]
@@ -478,8 +478,8 @@ workspaces
 [kod wyjscia: 0]
 -- drugi przebieg do TEGO SAMEGO katalogu:
 $ node scripts/migration-rehearsal.mjs --backup .e2e-bl07/dowod/kopia --out .e2e-bl07/dowod/proba-powtorna
-[proba] kopia zrodlowa: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia
-[proba] katalog proby:  /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/proba-powtorna
+[proba] kopia zrodlowa: ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia
+[proba] katalog proby:  ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/proba-powtorna
 [proba] przed:  migracje=[platform-0001-init, platform-0002-run-measurement-points, procurement-0001-init]
 [proba]         rozmowy=2 wiadomosci=4 uruchomienia=1 zdarzenia=10 karty=1 pliki=2
 [proba] po:     migracje=[platform-0001-init, platform-0002-run-measurement-points, platform-0003-file-versions, procurement-0001-init]
@@ -496,8 +496,8 @@ $ node scripts/migration-rehearsal.mjs --backup .e2e-bl07/dowod/kopia --out .e2e
 [kod wyjscia: 0]
 -- przebieg przerwany zostawilby sekret; symulacja i trzeci przebieg:
 $ node scripts/migration-rehearsal.mjs --backup .e2e-bl07/dowod/kopia --out .e2e-bl07/dowod/proba-powtorna
-[proba] kopia zrodlowa: /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia
-[proba] katalog proby:  /home/paczos/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/proba-powtorna
+[proba] kopia zrodlowa: ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/kopia
+[proba] katalog proby:  ~/Documents/agentic-app-template-wt/z2-bl07/.e2e-bl07/dowod/proba-powtorna
 [proba] przed:  migracje=[platform-0001-init, platform-0002-run-measurement-points, procurement-0001-init]
 [proba]         rozmowy=2 wiadomosci=4 uruchomienia=1 zdarzenia=10 karty=1 pliki=2
 [proba] po:     migracje=[platform-0001-init, platform-0002-run-measurement-points, platform-0003-file-versions, procurement-0001-init]
@@ -516,11 +516,11 @@ $ node scripts/migration-rehearsal.mjs --backup .e2e-bl07/dowod/kopia --out .e2e
 ### 24. Awaria skryptu ma inny kod wyjscia (4) niz werdykt proby (1)
 $ node scripts/migration-rehearsal.mjs --backup .e2e-bl07/dowod/kopia-bez-bazy --out .e2e-bl07/dowod/proba-awaria
 [proba] AWARIA: SqliteError: unable to open database file
-    at new Database (/home/paczos/Documents/agentic-app-template-wt/z2-bl07/node_modules/.pnpm/better-sqlite3@13.0.3/node_modules/better-sqlite3/lib/database.js:58:27)
-    at census (file:///home/paczos/Documents/agentic-app-template-wt/z2-bl07/scripts/lib/state-tools.mjs:405:14)
-    at main (file:///home/paczos/Documents/agentic-app-template-wt/z2-bl07/scripts/migration-rehearsal.mjs:262:18)
-    at runScript (file:///home/paczos/Documents/agentic-app-template-wt/z2-bl07/scripts/lib/state-tools.mjs:80:5)
-    at file:///home/paczos/Documents/agentic-app-template-wt/z2-bl07/scripts/migration-rehearsal.mjs:374:1
+    at new Database (~/Documents/agentic-app-template-wt/z2-bl07/node_modules/.pnpm/better-sqlite3@13.0.3/node_modules/better-sqlite3/lib/database.js:58:27)
+    at census (file://~/Documents/agentic-app-template-wt/z2-bl07/scripts/lib/state-tools.mjs:405:14)
+    at main (file://~/Documents/agentic-app-template-wt/z2-bl07/scripts/migration-rehearsal.mjs:262:18)
+    at runScript (file://~/Documents/agentic-app-template-wt/z2-bl07/scripts/lib/state-tools.mjs:80:5)
+    at file://~/Documents/agentic-app-template-wt/z2-bl07/scripts/migration-rehearsal.mjs:374:1
     at ModuleJob.run (node:internal/modules/esm/module_job:439:25)
     at async node:internal/modules/esm/loader:643:26
     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)

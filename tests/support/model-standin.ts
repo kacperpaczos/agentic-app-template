@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { invokeTool, resolveInWorkspace, type ModelAgentLike, type ToolEntry } from '@platform/server';
 import type { ToolCallContext } from '@platform/contracts';
 
@@ -80,7 +81,33 @@ export type Step =
        * one field is present.
        */
       subagent?: boolean;
+      /**
+       * Z7 — wyścig TOCTOU: podmienia dowiązanie **po** powrocie z hooka,
+       * a **przed** otwarciem. Dokładnie okno, w którym przepisanie wejścia ma
+       * znaczenie.
+       */
+      swapBeforeOpen?: { link: string; to: string };
+      /**
+       * Treść do zapisania, gdy `name` to `Write`.
+       *
+       * Zapis jest **wykonywany naprawdę**, gdy hook nie odmówi — inaczej
+       * „zapis został zablokowany" byłoby asercją o zwróconym obiekcie, a nie o
+       * tym, czy plik powstał.
+       */
+      content?: string;
     }
+  /**
+   * Tworzy dowiązanie **wewnątrz** katalogu roboczego uruchomienia.
+   *
+   * Odtwarza materiał, który w prawdziwym uruchomieniu leży tam od początku:
+   * `createRunWorkspace` linkuje biblioteki toolkitu do `node_modules/`, a ich
+   * cele są poza workspace. Atakujący niczego nie musi przygotowywać — i to
+   * jest powód, dla którego ten kształt ma własny krok, zamiast być ustawiany
+   * z zewnątrz przez test.
+   */
+  | { kind: 'linkIntoWorkspace'; from: string; to: string }
+  /** Tworzy katalog wewnątrz workspace (do budowania scenariuszy z dowiązaniami). */
+  | { kind: 'mkdir'; path: string }
   /** The model's stream reports a failure — a stream existed and then failed. */
   | { kind: 'streamError'; message: string }
   /**
@@ -110,6 +137,10 @@ export interface StandInHandle {
   consents: Array<{ toolName: string; allowed: boolean }>;
   /** Every `fileTool` step: whether a hook refused it, and with what reason. */
   fileTools: Array<{ name: string; denied: boolean; reason: string | null }>;
+  /** Z7 — ścieżki, które narzędzie NAPRAWDĘ otworzyło (w kolejności kroków). */
+  opened: string[];
+  /** Z7 — czy zastępnik podstawia `updatedInput` z hooka (domyślnie tak). */
+  honorUpdatedInput: boolean;
   /**
    * The Claude session this run asked the adapter to continue, or null for a
    * fresh one.
@@ -125,6 +156,8 @@ export interface StandInHandle {
 
 /** A handle with every field at its empty value; scenarios fill it as they run. */
 export const newStandInHandle = (): StandInHandle => ({
+  opened: [],
+  honorUpdatedInput: true,
   childExitedAt: null,
   childPid: null,
   performed: [],
@@ -186,17 +219,26 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
      * such refusal untestable — the hook would be called, the assertion on its
      * return value would pass, and the tool would still have run.
      */
+    let updatedInput: Record<string, unknown> | null = null;
     const firePreToolUse = async (payload: Record<string, unknown>): Promise<string | null> => {
       let refusal: string | null = null;
       for (const group of hooks.PreToolUse ?? []) {
         for (const hook of group.hooks ?? []) {
           const answer = (await hook({ hook_event_name: 'PreToolUse', ...payload })) as
-            | { hookSpecificOutput?: { permissionDecision?: string; permissionDecisionReason?: string } }
+            | {
+                hookSpecificOutput?: {
+                  permissionDecision?: string;
+                  permissionDecisionReason?: string;
+                  updatedInput?: Record<string, unknown>;
+                };
+              }
             | undefined;
           const specific = answer?.hookSpecificOutput;
           if (specific?.permissionDecision === 'deny') {
             refusal = specific.permissionDecisionReason ?? 'odmowa hooka PreToolUse';
           }
+          /* Z7 — zapamiętane, żeby narzędzie mogło otworzyć PRZEPISANĄ ścieżkę. */
+          if (specific?.updatedInput) updatedInput = specific.updatedInput;
         }
       }
       return refusal;
@@ -266,17 +308,112 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
             else signal?.addEventListener('abort', kill, { once: true });
             continue;
           }
+          if (step.kind === 'mkdir') {
+            if (!ctx?.workspaceDir) throw new Error('stand-in: brak workspace uruchomienia');
+            mkdirSync(join(ctx.workspaceDir, step.path), { recursive: true });
+            continue;
+          }
+          if (step.kind === 'linkIntoWorkspace') {
+            if (!ctx?.workspaceDir) throw Error('stand-in: brak workspace uruchomienia');
+            const target = join(ctx.workspaceDir, step.to);
+            /* `$workspace/` w źródle wskazuje katalog roboczy TEGO uruchomienia. */
+            const from = step.from.startsWith('$workspace/')
+              ? join(ctx.workspaceDir, step.from.slice('$workspace/'.length))
+              : step.from;
+            mkdirSync(dirname(target), { recursive: true });
+            if (!existsSync(target)) symlinkSync(from, target);
+            continue;
+          }
           if (step.kind === 'fileTool') {
             callSeq += 1;
+            const fileId = `tu_file_${callSeq}`;
+            /**
+             * The subagent marker, carried on **every** hook of this call.
+             *
+             * The SDK marks the whole call, not only its announcement, so a
+             * stand-in that put `agent_id` on `PreToolUse` alone would let a
+             * bridge look correct on the one hook a test happened to watch and
+             * wrong on the two it did not.
+             */
+            const origin = step.subagent ? { agent_id: 'agent_podwykonawca' } : {};
+            /*
+             * `$workspace/` wskazuje katalog roboczy TEGO uruchomienia, którego
+             * test nie zna z góry. Bez tego nie dałoby się napisać kontroli
+             * odwrotnej — a kontrola odwrotna jest tu równie ważna jak odmowa:
+             * ochrona, która blokuje wszystko, nie jest ochroną.
+             */
+            const resolved = Object.fromEntries(
+              Object.entries(step.input).map(([k, v]) => [
+                k,
+                /*
+                 * Złożenie LEKSYKALNE, celowo bez walidacji: ten placeholder ma
+                 * tylko nazwać ścieżkę względem katalogu roboczego uruchomienia,
+                 * tak jak zrobiłby to model. Gdyby przechodził przez
+                 * `resolveInWorkspace`, to on odrzucałby ucieczki — i test
+                 * mierzyłby zastępnik zamiast strażnika, którego dotyczy.
+                 */
+                /*
+                 * Sklejenie NAPISÓW, nie `path.join` — bo `join` normalizuje, a
+                 * normalizacja zwija `..` leksykalnie i **niszczy kształt ataku
+                 * zanim dotrze do strażnika**. Test mierzyłby wtedy Node'a,
+                 * nie regułę. Model wysyła surowy napis i tak samo robi to krok.
+                 */
+                typeof v === 'string' && v.startsWith('$workspace/')
+                  ? `${ctx?.workspaceDir ?? ''}/${v.slice('$workspace/'.length)}`
+                  : v,
+              ]),
+            );
+
             const refusal = await firePreToolUse({
-              tool_use_id: `tu_file_${callSeq}`,
+              tool_use_id: fileId,
               tool_name: step.name,
-              tool_input: step.input,
-              ...(step.subagent ? { agent_id: 'agent_podwykonawca' } : {}),
+              tool_input: resolved,
+              ...origin,
             });
+            /*
+             * Z7 — narzędzie otwiera to, co hook KAZAŁ podstawić (o ile
+             * honorowanie przepisania jest włączone); inaczej surowy napis
+             * modelu. Cała różnica między próbami A10 i A10b recenzji.
+             */
+            const effective =
+              handle.honorUpdatedInput && updatedInput ? { ...resolved, ...updatedInput } : resolved;
+            const targetPath = String(effective.file_path ?? effective.path ?? '');
+            handle.opened.push(targetPath);
+
+            if (step.swapBeforeOpen) {
+              const link = step.swapBeforeOpen.link.startsWith('/')
+                ? step.swapBeforeOpen.link
+                : `${ctx?.workspaceDir ?? ''}/${step.swapBeforeOpen.link}`;
+              try {
+                unlinkSync(link);
+              } catch {
+                /* nie istnieje */
+              }
+              mkdirSync(dirname(link), { recursive: true });
+              symlinkSync(
+                step.swapBeforeOpen.to.startsWith('/')
+                  ? step.swapBeforeOpen.to
+                  : `${ctx?.workspaceDir ?? ''}/${step.swapBeforeOpen.to}`,
+                link,
+              );
+            }
+
             handle.fileTools.push({ name: step.name, denied: refusal !== null, reason: refusal });
             if (refusal !== null) {
+              // A refused call never runs, so no `Post*` hook follows it — the
+              // same asymmetry the SDK has, and the reason a refusal has to be
+              // announced from `PreToolUse` or not at all.
               yield { type: 'text-delta', payload: { text: `[plik:${step.name}] odmowa ` } };
+              continue;
+            }
+            if (step.name === 'Write') {
+              // Naprawdę zapisuje: inaczej „zapis zablokowany" nie byłoby sprawdzalne.
+              try {
+                writeFileSync(targetPath, step.content ?? 'tresc zapisana przez narzedzie');
+                yield { type: 'text-delta', payload: { text: `[plik:Write] zapisano ${targetPath} ` } };
+              } catch (err) {
+                yield { type: 'text-delta', payload: { text: `[plik:Write] blad=${(err as Error).message} ` } };
+              }
               continue;
             }
             /*
@@ -284,13 +421,27 @@ export function dispatchingAgent(plans: Map<string, Plan>, tools: () => ToolEntr
              * exactly as they would have if the application had no protection.
              * That is the negative control built into the step itself.
              */
-            const target = String(step.input.file_path ?? step.input.path ?? '');
             let contents: string;
+            let failed = false;
             try {
-              contents = readFileSync(target, 'utf8');
+              contents = readFileSync(targetPath, 'utf8');
             } catch (err) {
               contents = `blad odczytu: ${(err as Error).message}`;
+              failed = true;
             }
+            /*
+             * The outcome, through the same `Post*` hooks an MCP tool uses.
+             *
+             * Not an embellishment: the SDK reports a **built-in** file tool
+             * this way too, and turn 17's own evidence shows it — the `Read` of
+             * the canary was recorded with `blad: false` and a `rawResult`, and
+             * the only thing in the platform that writes a tool result is the
+             * `PostToolUse` branch of the bridge. A stand-in that fired
+             * `PreToolUse` alone could never tell a bridge that loses results
+             * from one that does not.
+             */
+            if (failed) await fire('PostToolUseFailure', { tool_use_id: fileId, error: contents, ...origin });
+            else await fire('PostToolUse', { tool_use_id: fileId, tool_response: contents, ...origin });
             yield { type: 'text-delta', payload: { text: `[plik:${step.name}] ${contents} ` } };
             continue;
           }

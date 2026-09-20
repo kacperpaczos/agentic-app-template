@@ -1,6 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 import { resolveTestInstance } from './e2e/support/isolation.ts';
-import { MODEL_SPEC_PATTERNS, modelSpecsRequested } from './e2e/support/model-turns.ts';
+import {
+  MODEL_SPEC_PATTERNS,
+  Z11_MODEL_SPEC_PATTERNS,
+  modelSpecsRequested,
+  z11SpecsRequested,
+} from './e2e/support/model-turns.ts';
 
 /**
  * Browser acceptance.
@@ -30,6 +35,7 @@ export default defineConfig({
   retries: 0,
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'docs/evidence/playwright-report' }]],
   globalSetup: './e2e/global-setup.ts',
+  globalTeardown: './e2e/global-teardown.ts',
   use: {
     baseURL: instance.baseUrl,
     trace: 'retain-on-failure',
@@ -44,11 +50,24 @@ export default defineConfig({
    * default, which is how a routine `pnpm test:e2e` came to spend subscription
    * turns and overwrite the recorded acceptance evidence with its own failures.
    *
-   * `pnpm test:e2e:model` sets the switch and runs exactly those three.
+   * `pnpm test:e2e:model` sets the switch and runs exactly the three of
+   * BL-01/BL-02. The four of BL-03 need a **second** switch on top of it
+   * (`pnpm test:e2e:z11`), because they spend a different grant: folding them
+   * into the same project would change what `pnpm test:e2e:model` costs without
+   * anybody choosing that. Exactly one project exists at a time, so the two
+   * grants can never be spent by one invocation either.
    */
-  projects: modelSpecsRequested()
-    ? [{ name: 'model', testMatch: MODEL_SPEC_PATTERNS, use: { ...devices['Desktop Chrome'] } }]
-    : [{ name: 'chromium', testIgnore: MODEL_SPEC_PATTERNS, use: { ...devices['Desktop Chrome'] } }],
+  projects: z11SpecsRequested()
+    ? [{ name: 'model-z11', testMatch: Z11_MODEL_SPEC_PATTERNS, use: { ...devices['Desktop Chrome'] } }]
+    : modelSpecsRequested()
+      ? [{ name: 'model', testMatch: MODEL_SPEC_PATTERNS, use: { ...devices['Desktop Chrome'] } }]
+      : [
+          {
+            name: 'chromium',
+            testIgnore: [...MODEL_SPEC_PATTERNS, ...Z11_MODEL_SPEC_PATTERNS],
+            use: { ...devices['Desktop Chrome'] },
+          },
+        ],
   webServer: {
     // Prepares the test database and then starts the production bundle on it,
     // in one process. Playwright runs `webServer` before `globalSetup`, so
