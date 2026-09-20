@@ -297,7 +297,10 @@ dowód dotyczył wersji SDK, adaptera i CLI zainstalowanych w tym drzewie — po
 z nich test oblewa i trzeba sondę powtórzyć.
 
 `pnpm test:e2e` działa na istniejącym buildzie, więc uruchamiaj go po `pnpm verify` albo `pnpm build`.
-Testy startują własne serwery na portach 8792–8799 z własnymi katalogami danych.
+Testy startują własne serwery na portach 8792–8799 z własnymi katalogami danych. Po przebiegu
+`globalTeardown` usuwa z korzenia repo katalogi instancji `.e2e-*` (rozpoznawane po `app.db`
+lub `session.secret`); dane nieinstancyjne pod tym prefiksem — jak rejestr tur
+`.e2e-model-turns/` — zostają nietknięte.
 
 **Rejestr wersji wygasa po 180 dniach.** `tests/versions.test.ts` sprawdza offline zapis z
 `docs/acceptance/wersje-rejestr.json`: czy opisuje ten lockfile (sha256) i czy twierdzenie „React i

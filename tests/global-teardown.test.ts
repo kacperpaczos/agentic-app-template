@@ -21,6 +21,14 @@ import { credentialFile, fingerprintCredential } from '../e2e/credential-guard.t
  * nie da się zapytać — też zostawia katalog, bo porządki nie są okazją do
  * kasowania na ślepo).
  *
+ * **Prefiks nie wystarcza (fix final review I-1).** Warunkiem jest KSZTAŁT
+ * danych instancji — `app.db` albo `session.secret` bezpośrednio w katalogu,
+ * bo obie rzeczy zawsze zostawia boot instancji. Bez tego porządki skasowałyby
+ * `.e2e-model-turns/`, jedyny rejestr wydanego budżetu tur, i kolejny przebieg
+ * modelowy zaczął liczyć od zera — ciche obejście sufitu subskrypcji. Katalog
+ * bez cech instancji zostaje z powodem; lista wyjątków nie jest potrzebna,
+ * bo nowy nieinstancyjny katalog jest z natury bezpieczny.
+ *
  * Zawsze na atrapach w katalogach tymczasowych — prawdziwe logowanie nie
  * bierze udziału (G21).
  */
@@ -36,14 +44,15 @@ afterAll(() => {
   for (const d of katalogi.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-describe('usunKatalogiInstancjiTestowych — co odchodzi', () => {
-  it('usuwa katalogi .e2e* (takie z zawartoscia tez), zostawia wszystko inne', () => {
+describe('usunKatalogiInstancjiTestowych — co odchodzi (kształt danych instancji)', () => {
+  it('usuwa katalogi .e2e* z app.db lub session.secret, zostawia wszystko inne', () => {
     const repo = tmpKatalog();
-    const pusty = resolve(repo, '.e2e-pusty');
-    const zZawartoscia = resolve(repo, '.e2e-z-baza');
-    mkdirSync(pusty, { recursive: true });
-    mkdirSync(zZawartoscia, { recursive: true });
-    writeFileSync(resolve(zZawartoscia, 'app.db'), 'atrapa-bazy-testowej');
+    const zBaza = resolve(repo, '.e2e-z-baza');
+    const zSekretem = resolve(repo, '.e2e-z-sekretem');
+    mkdirSync(zBaza, { recursive: true });
+    mkdirSync(zSekretem, { recursive: true });
+    writeFileSync(resolve(zBaza, 'app.db'), 'atrapa-bazy-testowej');
+    writeFileSync(resolve(zSekretem, 'session.secret'), 'atrapa-sekret-instancji');
 
     const inne = resolve(repo, 'data-inna');
     mkdirSync(inne, { recursive: true });
@@ -55,14 +64,13 @@ describe('usunKatalogiInstancjiTestowych — co odchodzi', () => {
 
     const wynik = usunKatalogiInstancjiTestowych(repo);
 
-    expect([...wynik.usuniete].sort()).toEqual([pusty, zZawartoscia].sort());
-    expect(existsSync(pusty)).toBe(false);
-    expect(existsSync(zZawartoscia)).toBe(false);
+    expect([...wynik.usuniete].sort()).toEqual([zBaza, zSekretem].sort());
+    expect(existsSync(zBaza)).toBe(false);
+    expect(existsSync(zSekretem)).toBe(false);
     // Nic poza zakresem: katalog bez prefiksu, PLIK .e2e*, dowiązanie .e2e*.
     expect(existsSync(inne)).toBe(true);
     expect(existsSync(resolve(repo, '.e2e.lock'))).toBe(true);
     expect(existsSync(link)).toBe(true);
-    expect(wynik.zostawione).toEqual([]);
   });
 
   it('PROBA ZDOLNOSCI WYKRYCIA: regula, ktora kasuje wszystko, tez by tu przeszla', () => {
@@ -75,6 +83,71 @@ describe('usunKatalogiInstancjiTestowych — co odchodzi', () => {
     writeFileSync(resolve(obcy, 'plik.txt'), 'nie jest katalogiem testowym');
     expect(usunKatalogiInstancjiTestowych(repo).usuniete).toEqual([]);
     expect(existsSync(obcy)).toBe(true);
+  });
+});
+
+describe('usunKatalogiInstancjiTestowych — prefiks to za malo (fix final review I-1)', () => {
+  it('.e2e-model-turns z rejestrem budzetu tur PRZEZYWA porzadki, z powodem', () => {
+    const repo = tmpKatalog();
+    const rejestr = resolve(repo, '.e2e-model-turns');
+    mkdirSync(rejestr, { recursive: true });
+    // Atrapy rejestru tur: sam JSON, żadnych cech danych instancji.
+    writeFileSync(resolve(rejestr, 'bl01-bl02.json'), JSON.stringify({ wydane: 3, sufit: 11 }));
+    writeFileSync(resolve(rejestr, 'z11-bl03.json'), JSON.stringify({ wydane: 21, sufit: 25 }));
+
+    const wynik = usunKatalogiInstancjiTestowych(repo);
+
+    expect(wynik.usuniete).toEqual([]);
+    expect(wynik.zostawione).toHaveLength(1);
+    expect(wynik.zostawione[0]!.katalog).toBe(rejestr);
+    // POWÓD: nie kształt danych instancji, więc porządki go nie dotykają.
+    expect(wynik.zostawione[0]!.powod).toMatch(/nie nosi cech danych instancji/);
+    // Rejestr nietknięty — sufit subskrypcji zachowany.
+    expect(existsSync(resolve(rejestr, 'z11-bl03.json'))).toBe(true);
+    expect(readFileSync(resolve(rejestr, 'z11-bl03.json'), 'utf8')).toContain('21');
+  });
+
+  it('katalog .e2e-* tylko z JSON-em (bez app.db i session.secret) NIE jest kasowany', () => {
+    const repo = tmpKatalog();
+    const notatki = resolve(repo, '.e2e-notatki');
+    mkdirSync(notatki, { recursive: true });
+    writeFileSync(resolve(notatki, 'wykres.json'), '{}');
+
+    const wynik = usunKatalogiInstancjiTestowych(repo);
+
+    expect(wynik.usuniete).toEqual([]);
+    expect(wynik.zostawione[0]!.powod).toMatch(/nie nosi cech danych instancji/);
+    expect(existsSync(notatki)).toBe(true);
+  });
+
+  it('kontrola przeciwna: dokladnie te same dane z app.db odchodza', () => {
+    // Bez tej kontroli warunek kształtu mógłby być stałą „nic nie kasuj".
+    const repo = tmpKatalog();
+    const rejestr = resolve(repo, '.e2e-model-turns-instancja');
+    mkdirSync(rejestr, { recursive: true });
+    writeFileSync(resolve(rejestr, 'bl01-bl02.json'), '{}');
+    writeFileSync(resolve(rejestr, 'app.db'), 'atrapa-bazy');
+
+    const wynik = usunKatalogiInstancjiTestowych(repo);
+
+    expect(wynik.usuniete).toEqual([rejestr]);
+    expect(existsSync(rejestr)).toBe(false);
+  });
+
+  it('PROBA ZDOLNOSCI WYKRYCIA: regula liczonalo z samego prefiksu kasowalaby rejestr tur', () => {
+    // Rekonstrukcja defektu z recenzji: funkcja, która kasuje każdy katalog
+    // .e2e* bez pytania o kształt, usuwa .e2e-model-turns — i o to chodzi, że
+    // warunek kształtu MUSI różnić się od reguły prefiksowej w tym właśnie
+    // przypadku.
+    const repo = tmpKatalog();
+    const rejestr = resolve(repo, '.e2e-model-turns');
+    mkdirSync(rejestr, { recursive: true });
+    writeFileSync(resolve(rejestr, 'z11-bl03.json'), '{}');
+
+    const regulaPrefiksowa = existsSync(rejestr) && rejestr.includes('.e2e');
+    expect(regulaPrefiksowa, 'próba traci sens, gdyby rejestr nie nosił prefiksu').toBe(true);
+    expect(usunKatalogiInstancjiTestowych(repo).usuniete).toEqual([]);
+    expect(existsSync(rejestr)).toBe(true);
   });
 });
 
@@ -127,6 +200,8 @@ describe('kolejnosc w globalTeardown: najpierw odcisk, potem porzadki (dziura 5)
     const repo = tmpKatalog();
     const transferDir = tmpKatalog();
     mkdirSync(resolve(repo, '.e2e-porzadki'), { recursive: true });
+    // Katalog musi nosić cechy danych instancji — porządki kasują instancje, nie prefiksy.
+    writeFileSync(resolve(repo, '.e2e-porzadki', 'app.db'), 'atrapa-bazy');
 
     // Odcisk zapisywany JUŻ na atrapie: prawdziwe poświadczenie w ogóle nie
     // bierze udziału w próbie.

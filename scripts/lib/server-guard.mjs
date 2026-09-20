@@ -91,8 +91,10 @@ const PREFIKS_SCIEZKI = 'sciezka: ';
 
 /**
  * The one label that means "a test instance" in the sense of `config.ts`:
- * only `agenticapp-test` is constrained server-side to an `.e2e` directory
- * inside the repository, so only that pair may waive the secret check.
+ * only `agenticapp-test` is constrained server-side to an `.e2e`-named
+ * directory (the check is the basename only — containment in the repository is
+ * added by the harness, not by `config.ts`), so only that pair may waive the
+ * secret check.
  */
 export const ETYKIETY_TESTOWE = ['agenticapp-test'];
 
