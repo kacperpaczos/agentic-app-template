@@ -1246,8 +1246,10 @@ export class AgentRuntime {
         allowed,
       });
 
+      /* Zasada „sprawdzone = otwarte" w obu rozgałęzieniach: zgoda też zwraca
+         ścieżkę rozwiązaną, nie surowy napis modelu (resztka rundy 4). */
       return allowed
-        ? { behavior: 'allow', updatedInput: input }
+        ? { behavior: 'allow', updatedInput: resolvedInput }
         : { behavior: 'deny', message: `Uzytkownik nie zgodzil sie na wykonanie ${toolName}.` };
     };
   }

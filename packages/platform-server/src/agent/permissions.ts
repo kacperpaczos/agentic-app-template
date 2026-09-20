@@ -400,9 +400,11 @@ export function realResolve(base: string, candidate: string): string {
    * jądra: każdy człon jest rozwijany fizycznie, zanim zostanie zinterpretowany
    * następny, a `..` cofa się od ścieżki **już rozwiniętej**.
    *
-   * `util/real-path.ts` zostaje tam, gdzie był — jego wywołujący porównują
-   * katalogi, nie ścieżki budowane przez model. Ta sama wada dotyczy jednak i
-   * jego; zgłoszone w raporcie jako znalezisko poza zakresem tego pakietu.
+   * Historia: `util/real-path.ts` miało tę samą wadę i przez jedną rundę
+   * pozostało z nią — naprawione w rundach 7/8 tym samym algorytmem; parzystość
+   * obu implementacji, łącznie z kształtami rozbieżnymi (`..` za
+   * nieistniejącym członem, zerwane dowiązanie), jest przypięta testem w
+   * `tests/isolation-paths.test.ts`.
    */
   return resolvePhysically(base, candidate);
 }
@@ -413,18 +415,21 @@ export function realResolve(base: string, candidate: string): string {
  * Idzie komponent po komponencie od katalogu bazowego (albo od korzenia, gdy
  * ścieżka jest bezwzględna). Każdy istniejący człon jest rozwijany przez
  * `realpathSync`, więc dowiązanie jest rozwinięte **zanim** kolejny `..` je
- * przeskoczy. Człon, którego jeszcze nie ma, kończy rozwijanie fizyczne —
- * poniżej nieistniejącej ścieżki nie ma czego rozwijać, więc reszta jest
- * doklejana, a `..` traktowane leksykalnie, co jest wtedy równoważne.
+ * przeskoczy. Człon, którego jeszcze nie ma, kończy rozwijanie fizyczne — a
+ * `..` po nim czyni ścieżkę **nierozwiązywalną** i rzuca
+ * `UnresolvablePathError` (runda 6): składanie leksykalne poniżej
+ * nierozwiązanego członu było drogą A6 z przeglądu zewnętrznego.
  */
 export function resolvePhysically(base: string, candidate: string): string {
   /*
-   * Jedno przejście, w jednym miejscu (`util/real-path.ts`).
+   * Jedno przejście, w jednym miejscu (`util/real-path.ts`, runda 5+6).
    *
    * Przez jedną rundę stało tutaj drugie, bo naprawiałem wadę tam, gdzie
    * patrzyłem. Dwie podobne funkcje rozwiązujące ścieżki to dokładnie ten układ,
    * w którym wadę naprawia się w jednej i zostawia w drugiej — co w tym
-   * repozytorium właśnie się zdarzyło i kosztowało osobną rundę.
+   * repozytorium właśnie się zdarzyło i kosztowało osobną rundę. Parzystość
+   * (również na kształtach rozbieżnych) przypięta testem w
+   * `tests/isolation-paths.test.ts`.
    */
   return realResolveFrom(base, candidate);
 }
