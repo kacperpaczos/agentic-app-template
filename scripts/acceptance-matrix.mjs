@@ -6,15 +6,27 @@
  * docs/ARCHITECTURE.md, więc kryterium nie może zniknąć ani zmienić brzmienia
  * po cichu. Ocena każdego kryterium i pakiety backlogu leżą w
  * docs/acceptance/assessment.json. Sumy, zamknięte warstwy, pokrycie prób i
- * przypisanie otwartych kryteriów do backlogu liczy ten skrypt.
+ * przypisanie otwartych kryteriów do backlogu liczy wspólny rdzeń
+ * scripts/lib/matrix-core.mjs — ta sama arytmetyka, z której korzysta
+ * `check:matrix`, więc dwie bramki nie mogą się rozjechać.
  *
  *   node scripts/acceptance-matrix.mjs            # zapisuje docs/ACCEPTANCE.md i docs/BACKLOG.md
  *   node scripts/acceptance-matrix.mjs --check    # tylko sprawdza; kod 1 przy brakach lub dryfie plików
  *   node scripts/acceptance-matrix.mjs --summary  # wypisuje podsumowanie
  */
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  EXPECTED,
+  EVIDENCE,
+  OPEN,
+  ORIGIN,
+  STATUS,
+  evaluateMatrix,
+  parseAssessment,
+  parseSpecification,
+} from './lib/matrix-core.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SPEC = resolve(root, 'docs/ARCHITECTURE.md');
@@ -22,164 +34,33 @@ const DATA = resolve(root, 'docs/acceptance/assessment.json');
 const OUT_MATRIX = resolve(root, 'docs/ACCEPTANCE.md');
 const OUT_BACKLOG = resolve(root, 'docs/BACKLOG.md');
 
-const EXPECTED = { layers: 12, criteria: 200, scenarios: 27 };
-
-const STATUS = {
-  potwierdzone: 'potwierdzone',
-  czesciowe: 'częściowe',
-  niespelnione: 'niespełnione',
-  niesprawdzone: 'niesprawdzone',
-};
-const OPEN = new Set(['czesciowe', 'niespelnione', 'niesprawdzone']);
-const EVIDENCE = {
-  model: 'rzeczywisty model',
-  gui: 'test GUI bez modelu',
-  test: 'test kontraktu lub logiki',
-  symulacja: 'symulacja',
-  kod: 'analiza kodu',
-  /*
-   * A recorded run of an acceptance command — `pnpm verify` on a clean copy,
-   * `pnpm check:module-swap`, a probe script — with its log kept as evidence.
-   * G17 allows exactly this ("skrypt odbiorowy z logiem") and none of the five
-   * names above fits it: it was executed, so calling it code analysis would be
-   * false, and no test file carries it.
-   */
-  przebieg: 'przebieg odbiorowy z logiem',
-  brak: '—',
-};
-const ORIGIN = { szablon: 'szablon', historyczny: 'historyczny (AgenticApp)', brak: '—' };
-
 const problems = [];
 
-/* ------------------------------ specyfikacja ------------------------------ */
+/* --------------------- specyfikacja i oceny (matrix-core) ------------------ */
 
 const spec = readFileSync(SPEC, 'utf8');
-const parts = spec.split(/^### (\d+)\. (.+)$/m);
-const layers = [];
-for (let i = 1; i < parts.length; i += 3) {
-  const num = Number(parts[i]);
-  const body = parts[i + 2].split(/^## /m)[0];
-  const items = [...body.matchAll(/^- \[ \] \*\*(L\d+\.\d+)\*\* (.+)$/gm)].map((m) => ({ id: m[1], text: m[2].trim() }));
-  if (items.length === 0) continue;
-  layers.push({ num, title: parts[i + 1].trim(), items });
-}
-const criteria = new Map();
-for (const L of layers) {
-  L.items.forEach((c, idx) => {
-    const expectedId = `L${L.num}.${idx + 1}`;
-    if (c.id !== expectedId) problems.push(`specyfikacja: ${c.id} na pozycji ${expectedId}`);
-    if (criteria.has(c.id)) problems.push(`specyfikacja: duplikat ${c.id}`);
-    criteria.set(c.id, { ...c, layer: L.num });
-  });
-}
-const scenarios = new Map();
-for (const m of spec.matchAll(/^\| (T\d{2}) — ([^|]+)\| ([^|]+)\| ([^|]+)\| ([^|]+)\|$/gm)) {
-  const layersOf = [...m[3].matchAll(/L(\d+)/g)].map((x) => Number(x[1]));
-  if (scenarios.has(m[1])) problems.push(`specyfikacja: duplikat próby ${m[1]}`);
-  scenarios.set(m[1], { id: m[1], name: m[2].trim(), layers: layersOf, positive: m[4].trim(), negative: m[5].trim() });
-}
-if (layers.length !== EXPECTED.layers) problems.push(`specyfikacja: ${layers.length} warstw zamiast ${EXPECTED.layers}`);
-if (criteria.size !== EXPECTED.criteria) problems.push(`specyfikacja: ${criteria.size} kryteriów zamiast ${EXPECTED.criteria}`);
-if (scenarios.size !== EXPECTED.scenarios) problems.push(`specyfikacja: ${scenarios.size} prób zamiast ${EXPECTED.scenarios}`);
+const { layers, criteria, scenarios, problems: specProblems } = parseSpecification(spec, EXPECTED);
+problems.push(...specProblems);
 
-/* --------------------------------- oceny ---------------------------------- */
+const data = parseAssessment(readFileSync(DATA, 'utf8'));
+const ev = evaluateMatrix({ layers, criteria, scenarios }, data, { evidenceRoot: root });
+problems.push(...ev.problems);
 
-const data = JSON.parse(readFileSync(DATA, 'utf8'));
-const backlog = new Map((data.backlog ?? []).map((b) => [b.id, { ...b, criteria: [] }]));
-const A = data.criteria ?? {};
-
-for (const id of Object.keys(A)) if (!criteria.has(id)) problems.push(`ocena ${id} bez kryterium w specyfikacji`);
-
-const counts = Object.fromEntries(Object.keys(STATUS).map((k) => [k, 0]));
-const evidenceCounts = {};
-const originCounts = {};
-const histCounts = {};
-const scenarioRefs = new Map([...scenarios.keys()].map((k) => [k, []]));
-
-for (const [id, c] of criteria) {
-  const a = A[id];
-  if (!a) {
-    problems.push(`brak oceny ${id}`);
-    continue;
-  }
-  if (!STATUS[a.status]) problems.push(`${id}: nieznany status "${a.status}"`);
-  if (!EVIDENCE[a.evidence]) problems.push(`${id}: nieznany rodzaj dowodu "${a.evidence}"`);
-  if (!ORIGIN[a.origin]) problems.push(`${id}: nieznane pochodzenie dowodu "${a.origin}"`);
-  if (a.status === 'potwierdzone' && a.origin !== 'szablon') {
-    problems.push(`${id}: „potwierdzone” wymaga dowodu z szablonu, nie historycznego`);
-  }
-  if (a.status === 'potwierdzone' && a.evidence === 'brak') problems.push(`${id}: „potwierdzone” bez rodzaju dowodu`);
-  if (OPEN.has(a.status)) {
-    if (!a.gap || a.gap.trim() === '' || a.gap.trim() === '—') problems.push(`${id}: otwarte kryterium bez opisu braku`);
-    if (!a.backlog) problems.push(`${id}: otwarte kryterium bez pakietu backlogu`);
-    else if (!backlog.has(a.backlog)) problems.push(`${id}: nieznany pakiet backlogu ${a.backlog}`);
-    else backlog.get(a.backlog).criteria.push(id);
-  } else if (a.backlog) {
-    problems.push(`${id}: potwierdzone kryterium przypisane do backlogu ${a.backlog}`);
-  }
-  for (const t of a.scenarios ?? []) {
-    const s = scenarios.get(t);
-    if (!s) problems.push(`${id}: nieznana próba ${t}`);
-    else {
-      if (!s.layers.includes(c.layer)) problems.push(`${id}: próba ${t} nie obejmuje warstwy L${c.layer}`);
-      scenarioRefs.get(t).push(id);
-    }
-  }
-  counts[a.status] = (counts[a.status] ?? 0) + 1;
-  evidenceCounts[a.evidence] = (evidenceCounts[a.evidence] ?? 0) + 1;
-  originCounts[a.origin] = (originCounts[a.origin] ?? 0) + 1;
-  const h = a.historical?.status ?? 'brak-oceny';
-  histCounts[h] = (histCounts[h] ?? 0) + 1;
-}
-for (const [t, refs] of scenarioRefs) if (refs.length === 0) problems.push(`próba ${t} nie jest powiązana z żadnym kryterium`);
-for (const b of backlog.values()) if (b.criteria.length === 0) problems.push(`pakiet backlogu ${b.id} bez kryteriów`);
-
-const S = data.scenarios ?? {};
-for (const t of Object.keys(S)) if (!scenarios.has(t)) problems.push(`ocena próby ${t} bez próby w specyfikacji`);
-for (const t of scenarios.keys()) if (!S[t]) problems.push(`brak oceny próby ${t}`);
-
-/*
- * The index of trials, checked rather than described (BL-12).
- *
- * Every trial has to say **what kind of proof** it rests on and **which file
- * carries it** — and the file has to exist. A trial that has no evidence says
- * so with `brak`, which is a statement, not an omission: the one thing that may
- * not happen is a row that reads as evidence and points at nothing.
- */
-for (const [t, s] of scenarios) {
-  const a = S[t];
-  if (!a) continue;
-  const kinds = a.evidence ?? [];
-  if (!Array.isArray(kinds) || kinds.length === 0) {
-    problems.push(`próba ${t}: brak rodzaju dowodu (pole evidence)`);
-  } else {
-    for (const k of kinds) if (!EVIDENCE[k]) problems.push(`próba ${t}: nieznany rodzaj dowodu "${k}"`);
-  }
-  const files = a.pliki ?? [];
-  if (!Array.isArray(files)) problems.push(`próba ${t}: pole pliki nie jest lista`);
-  else {
-    for (const f of files) {
-      if (!existsSync(resolve(root, f))) problems.push(`próba ${t}: dowód wskazuje nieistniejący ${f}`);
-    }
-    if (files.length === 0 && !kinds.includes('brak')) {
-      problems.push(`próba ${t}: rodzaj dowodu podany, ale żaden plik go nie niesie`);
-    }
-  }
-  if (a.status === 'potwierdzone' && kinds.includes('brak')) {
-    problems.push(`próba ${t}: „potwierdzona” bez dowodu`);
-  }
-  if (!s) problems.push(`próba ${t}: brak w specyfikacji`);
-}
+const A = ev.A;
+const S = ev.S;
+const backlog = ev.backlog;
+const counts = ev.counts;
+const evidenceCounts = ev.evidenceCounts;
+const originCounts = ev.originCounts;
+const histCounts = ev.histCounts;
+const scenarioRefs = ev.scenarioRefs;
 
 /* -------------------------------- render ---------------------------------- */
 
 const esc = (s) => String(s ?? '—').replace(/\|/g, '\\|').replace(/\n/g, ' ');
-const total = criteria.size;
-const perLayer = layers.map((L) => {
-  const open = L.items.filter((c) => OPEN.has(A[c.id]?.status ?? 'niesprawdzone'));
-  return { ...L, open };
-});
-const closed = perLayer.filter((l) => l.open.length === 0);
+const total = ev.total;
+const perLayer = ev.perLayer;
+const closed = ev.closed;
 
 const meta = data.meta ?? {};
 const m = [];
@@ -215,22 +96,14 @@ for (const [k, v] of Object.entries(histCounts).sort((a, b) => b[1] - a[1])) {
   m.push(`| ${STATUS[k] ?? (k === 'brak-oceny' ? 'brak oceny (kryterium spoza 95)' : k)} | ${v} |`);
 }
 m.push('');
-const scenarioCounts = {};
-for (const t of scenarios.keys()) {
-  const st = S[t]?.status ?? 'brak';
-  scenarioCounts[st] = (scenarioCounts[st] ?? 0) + 1;
-  if (S[t] && !STATUS[S[t].status]) problems.push(`próba ${t}: nieznany status "${S[t].status}"`);
-}
 m.push('| Stan prób odbiorowych w szablonie | Liczba |');
 m.push('|---|---|');
-for (const k of Object.keys(STATUS)) m.push(`| ${STATUS[k]} | ${scenarioCounts[k] ?? 0} |`);
+for (const k of Object.keys(STATUS)) m.push(`| ${STATUS[k]} | ${ev.scenarioCounts[k] ?? 0} |`);
 m.push(`| **Razem** | **${scenarios.size}** |`);
 m.push('');
-const scenarioEvidence = {};
-for (const t of scenarios.keys()) for (const k of S[t]?.evidence ?? []) scenarioEvidence[k] = (scenarioEvidence[k] ?? 0) + 1;
 m.push('| Rodzaj dowodu prób odbiorowych | Liczba prób |');
 m.push('|---|---|');
-for (const [k, v] of Object.entries(scenarioEvidence).sort((a, b) => b[1] - a[1])) m.push(`| ${EVIDENCE[k] ?? k} | ${v} |`);
+for (const [k, v] of Object.entries(ev.scenarioEvidence).sort((a, b) => b[1] - a[1])) m.push(`| ${EVIDENCE[k] ?? k} | ${v} |`);
 m.push('');
 m.push(`**Warstwy zamknięte — ${closed.length} z ${layers.length}:** ${closed.map((l) => `L${l.num}`).join(', ') || 'brak'}.`);
 m.push('');
