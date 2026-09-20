@@ -753,3 +753,80 @@ dokumentacja mówi, że podlega „tym samym regułom uprawnień, co narzędzie 
 L11.4 i L11.11 dałoby się zamknąć bez tury. Sprawdzone: `readFile` zachowuje się **identycznie** przy
 sandboxie i bez niego oraz w trybie `default` i `bypassPermissions` — jest po prostu ograniczony do
 `cwd`. Nie jest więc świadkiem decyzji bramki uprawnień i nie został użyty jako dowód.
+
+## Domknięcie platformy — wnioski fazy 4 (2026-09-20)
+
+### Strażnik, który trzykrotnie przeszedł recenzję przez lekturę i za każdym razem padał na próbach
+
+Granice plików agenta (BL-04) przeszły dziewięć rund. Pierwsze trzy wersje zatwierdzali recenzenci
+czytający kod; każdy atakujący (czterech kolejnych recenzentów, 33+17+16 uruchomionych prób)
+znajdował ucieczkę o jeden człon dłuższą niż testy. Sedno ostateczne: **tryb awaryjny walkera
+ścieżek był leksykalny** — przy pierwszym komponencie, którego nie dało się rozwiązać (brak albo
+zerwane dowiązanie), reszta ścieżki składana leksykalnie, a `..` cofał się od ścieżki
+nierozwiązanej. Ucieczki nie wymagały przygotowania: dowiązania `node_modules` tworzył sam
+`createRunWorkspace`. Kod bezpieczeństwa, który „wygląda poprawnie", nie jest dowodem poprawności;
+dowodem jest pakiet ataków pisany przed uznaniem za domknięte.
+
+### Dwa języki, jedna logika — dryf mierzy się na kształtach rozbieżnych
+
+Walker ścieżek istniał w TS i w `.mjs` skryptów stanu. Po rundach TS rzucał, a `.mjs` wciąż składał
+leksykalnie; test „równoważności" porównywał obie kopie tylko na kształtach, na których się
+zgadzały, a nagłówek pliku twierdził „cannot drift". Równoważność kopii mierzy się na kształtach
+**rozbieżnych** (`nie-ma/../x`, zerwane dowiązanie + `..`), nie na zgodnych — inaczej test dowodzi
+zgody, która już istniała.
+
+### Granica testu ma zbiegać się z granicą twierdzenia
+
+Dwa razy test egzekwował mniej, niż obiecywał komentarz: bramka skryptów stanu pilnowała „regionu"
+pliku, a komentarz deklarował „jedno miejsce"; wyliczanie narzędzi idempotencji bywało siatką
+deklaratywną tam, gdzie trzeba dowodu behawioralnego. Poprawki tanie, rozjazdy ciche.
+
+### Liczy się zdarzenie narzędzia ze strumienia, nie zdanie modelu
+
+Tura 17 zapisała „ODCZYTANE" o pliku, którego wywołania nie było w strumieniu zdarzeń. Test
+obserwowalności przez prawdziwy most hooków rozstrzygnął (model zmyślił) i odkrył drugi defekt:
+`finally` zapisywał rekord dowodu ucięty przez asercję (`probyPlikowe: []`). Naprawa obroniła się
+empirycznie: tura 21 padła na pierwszej asercji, a pełny rekord i tak został zapisany. Rejestry
+dowodu zapisuje się **przed** asercjami.
+
+### Mechanizm naprawiający klasę potrafi w niej stworzyć nową dziurę
+
+Przepisywanie `updatedInput` miało likwidować rozjazd „sprawdzono A, otwarto B" — a w kształcie
+`nie-ma/../link/X` zamieniało nieszkodliwy ENOENT w udany odczyt poza workspace. Każda poprawka
+strażnika dostaje własny pakiet ataków, nie tylko regresję starych kształtów.
+
+### Zgoda użytkownika to pytanie, nie ochrona
+
+Trzy kształty (narzędzie w niezadeklarowanym polu; wyścig pre-walka; odczyt przez dowiązanie
+utworzone za zgodą) przechodzą tylko tam, gdzie użytkownik powiedział „tak". Nie zamykamy ich
+symulacją ochrony — zapisujemy jawnie jako kategorię, z nazwaniem zdolności, jakiej wymaga
+przeciwnik.
+
+### Audyt wyliczany z rejestru znajduje więcej niż skarga
+
+Luka mówiła o trzech narzędziach dublujących skutek; audyt wyliczający wszystkie narzędzia
+mutujące z rejestru (tej samej listy, którą serwer MCP daje modelowi) znalazł czwarte. Reguła
+z rejestru z jawną listą wyjątków z powodami: nowe narzędzie bez klucza psuje test samo. Ten sam
+strażnik przyłapał własną regresję fixture'a scenariusza — to był dowód działania, nie flak.
+
+### Wykrywanie bije zapobieganie — ale tylko tam, gdzie biega
+
+Zakaz dotykania pliku poświadczeń złamano cztery razy, zanim powstał mechanizm odcisku; mechanizm
+nie zawiódł nigdy. Luką okazało się pokrycie: vitest miał strażnika, Playwright miał tylko zakaz
+(regułę zależną od pamięci). Ochronę reklamuj wraz z listą środowisk, w których faktycznie biega.
+
+### Recenzja przed turami to nie formalność
+
+Licznik zdarzeń `permission_resolved` w T17 filtrował złą nazwę (zdarzenia własne leżą w kopercie
+AG-UI: `name: 'CUSTOM'`, nazwa w `payload.name`) — zawsze 0, a spec sam wymuszał ≥1 pytanie bramki:
+każda wydana tura oblewałaby. Próba generalna tego nie łapała, bo bliźniak nie asertował
+rozstrzygnięć. Wyłapała recenzja; kontrola czerwona potwierdziła. Bliźniak generalny ma asertować
+to samo, co spec płatny.
+
+### Proces: dwie pułapki powłoki z tej fazy
+
+`git checkout … | tail -1` zamaskował błąd checkoutu (status z pipeline'u brał od `tail`) i pierwszy
+bieg weryfikacji poszedł na starym drzewie; `sed` z separatorem `|` i alternacją `a|b` we wzorcu
+poszedł w „unknown option to s", a potem zjadał zamykający cudzysłów JSON. Lekcja wspólna:
+operacje mutujące prowadzić z kontrolą poprawności w tej samej komendzie (`JSON.parse` po każdej
+redakcji; potwierdzenie HEAD przed pomiarem), nie po fakcie.
