@@ -81,8 +81,13 @@ Wykaz scaleni: `git log --first-parent --oneline e4fe9d7..HEAD | grep -i scaleni
 | Macierz | 187/11/2 — odchylenia jawnie uzasadnione w §2a/§2b |
 | Plik poświadczeń | nietknięty przez program; trzy obserwowane rotacje ~8 h (10:40 / 18:40 / 02:36) to własna kadencja sesji właściciela — potwierdzone strukturą i świeżością tokenu; strażniki vitest i e2e zielone w oknach wszystkich przebiegów |
 
-> Adnotacja: wynik pełnego `pnpm test:e2e` na `ad2ae79` dopisany w §5a poniżej po zakończeniu
-> przebiegu; wszystkie pozostałe bramki wyżej są finalne.
+
+
+### 5a. Pełny test przeglądarkowy na `ad2ae79`
+
+**224/224 zielone, exit 0 (16,5 min).** W trakcie przebiegu strażnik poświadczeń z rundy 7
+potwierdził sam: *„[e2e] poświadczenie użytkownika nietknięte (odcisk zgodny z globalSetup)"* —
+mechanizm wykrywania zadziałał w produkcji, nie tylko w próbie zdolności wykrycia.
 
 ## 6. Wady bezpieczeństwa znalezione i zamknięte w programie
 
