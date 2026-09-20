@@ -350,10 +350,26 @@ describe('narzedzia widokow agenta', () => {
     };
   }
 
+  /*
+   * L9.7: `agent_view_create` now requires `operationId` (same contract as
+   * `artifact_create`), and this file's calls are not what that requirement
+   * guards against — they exercise composition validation, patching and
+   * ownership, not replay. Rather than hand-write ~20 unique ids (a repeat
+   * literal would make the store treat a later call as a replay of an
+   * earlier, unrelated one, and corrupt the test in a confusing way), this
+   * helper supplies one automatically when a call omits it. Tools that do
+   * not declare the field simply drop it — plain `z.object()` strips unknown
+   * keys — so this is safe for every call `call()` makes, not only creates.
+   */
+  let opSeq = 0;
   async function call(name: string, input: unknown, ctx: ToolCallContext) {
     const entry = tools().find((t) => t.localName === name)!;
     expect(entry, name).toBeTruthy();
-    const out = await invokeTool(entry, input, ctx);
+    const withOperationId =
+      input && typeof input === 'object' && !Array.isArray(input) && !('operationId' in (input as Record<string, unknown>))
+        ? { ...(input as Record<string, unknown>), operationId: `test-op-${(opSeq += 1)}` }
+        : input;
+    const out = await invokeTool(entry, withOperationId, ctx);
     const body = JSON.parse(out.content[0]!.text);
     return { ok: !out.isError, body };
   }
@@ -855,7 +871,11 @@ describe('narzedzia widokow agenta', () => {
     expect(ours.map((t) => t.name)).toEqual(['agent_views_list', 'agent_view_create', 'agent_view_update', 'agent_view_remove']);
     const required: Record<string, string[]> = {
       agent_views_list: [],
-      agent_view_create: ['title', 'source'],
+      // `operationId` became required with L9.7's closure: creating a view
+      // duplicated on a keyless repeat, the same gap `artifact_create` and
+      // `canvas_add_card` had. `agent_view_update` / `agent_view_remove` keep
+      // it optional — each is protected another way (see `agent-views.ts`).
+      agent_view_create: ['title', 'source', 'operationId'],
       agent_view_update: ['cardId'],
       agent_view_remove: ['cardId'],
     };

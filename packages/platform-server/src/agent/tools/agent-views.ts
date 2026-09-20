@@ -95,7 +95,24 @@ function compositionWarnings(source: string, services: PlatformServices): Compos
   return warnings;
 }
 
+/** Optional: `agent_view_update` and `agent_view_remove` are protected another way (see each tool). */
 const operationId = z.string().min(8).max(200).optional();
+/*
+ * Required for `agent_view_create` only — the same contract as
+ * `artifact_create` in `artifacts.ts` and `canvas_add_card` above it in
+ * `canvas.ts`. Creating a view adds a card the same way `canvas_add_card`
+ * does (both go through `services.canvas.addCard`), so it inherits the same
+ * gap: without a key the model is never told to supply, a reconnect's retry
+ * added a second view instead of replaying the first (L9.7). `agent_view_update`
+ * and `agent_view_remove` keep the optional field above because each is
+ * protected by something else — a merge that detects "nothing changed" and a
+ * delete that answers a repeat with `not_found`, not with a second effect.
+ */
+const REQUIRED_OPERATION_ID = z
+  .string()
+  .min(8)
+  .max(200)
+  .describe('Wlasny identyfikator tego utworzenia; powtorzenie z tym samym nie tworzy drugiego widoku');
 const sourceText = z
   .string()
   .min(1)
@@ -202,15 +219,17 @@ export function agentViewTools(services: PlatformServices): Array<ModuleToolDefi
         'pobieraja je z backendu. Identyfikatory w source.input biora sie z odczytu narzedziem modulu albo z ' +
         'biezacego kontekstu — nigdy z kodu biznesowego, ktory uzytkownik wpisal w rozmowie. Kompozycja jest ' +
         'sprawdzana przed zapisem (schemat, nie istnienie rekordu); odmowa podaje przyczyne. Wynik mowi tylko, ' +
-        'ze kompozycja zostala ZAPISANA, nie ze karta ja narysowala — co widac na ekranie odczytaj przez ui_state.',
+        'ze kompozycja zostala ZAPISANA, nie ze karta ja narysowala — co widac na ekranie odczytaj przez ui_state. ' +
+        'operationId jest wymagane: nadaj wlasny identyfikator tego utworzenia. Powtorzone wywolanie z tym samym ' +
+        'operationId zwraca ten sam widok zamiast tworzyc drugi.',
       effect: 'write',
       alwaysLoad: true,
       inputSchema: z.object({
         title: z.string().min(1).max(200).describe('Krotki tytul widoku'),
         source: sourceText,
-        operationId,
+        operationId: REQUIRED_OPERATION_ID,
       }),
-      handler: async (input: { title: string; source: string; operationId?: string }, ctx: ToolCallContext) => {
+      handler: async (input: { title: string; source: string; operationId: string }, ctx: ToolCallContext) => {
         const spec = validated(input.source);
         const space = ensureSpace(ctx);
         const card = await services.canvas.addCard(

@@ -1588,12 +1588,11 @@
       }
     },
     "L9.7": {
-      "status": "czesciowe",
-      "evidence": "test",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "Naprawiony konkretny defekt: procurement_save_comparison przyjmowal operationId i go nie uzywal, wiec powtorzenie tworzylo drugi artefakt tego samego zestawienia. Teraz przechodzi przez idempotency.once z odciskiem zadania, a operationId jest w tym narzedziu WYMAGANY — podobnie jak w artifact_create i artifact_publish_file, czyli tam, gdzie powtorzenie tworzy trwaly rekord i gdzie nie ma drugich drzwi HTTP, wiec wymagalnosc nie rozjezdza sie z L9.2. tests/domain-guarantees.test.ts: „osiem jednoczesnych zapisow zestawienia tworzy jeden artefakt”, „powtorzony zapis zestawienia po zakonczeniu pierwszego tez nie tworzy drugiego artefaktu”, „osiem jednoczesnych ponowien zmiany pozycji: jeden przyrost wersji, jeden wynik”. Zachowane wczesniejsze testy powtorzen sekwencyjnych w contracts.test.ts. Proby zdolnosci wykrycia: docs/evidence/z6-bl11b/proby-wykrycia.txt (P9 — klucz ignorowany: osiem artefaktow; P10c — bez rezerwacji klucza: osiem artefaktow). Runda poprawek 1: kolumna braku wymienia teraz trzy narzedzia, ktore faktycznie dubluja, a nie siedem przyjmujacych klucz opcjonalnie — cztery z tamtych siedmiu sa chronione inaczej, co sprawdza osobny test.",
-      "gap": "Powtorzenie BEZ operationId dubluje skutek w TRZECH narzedziach: canvas_add_card (druga karta), agent_view_create (drugi widok) i files_publish_version (druga wersja pliku). Pozostale narzedzia zapisu, ktore przyjmuja klucz opcjonalnie, sa chronione czym innym i powtorzenie niczego w nich nie dubluje: canvas_update_card wymaga wersji (powtorzenie daje conflict), canvas_remove_card i agent_view_remove koncza sie not_found, agent_view_update scala i zwraca unchanged=true. Rozroznienie jest wykonywane, nie deklarowane — tests/domain-guarantees.test.ts „powtorzenie BEZ operationId: trzy narzedzia dubluja skutek, cztery sa chronione inaczej”. Domkniecie wymaga uczynienia operationId wymaganym w tych trzech narzedziach po obu stronach drzwi: w agent_view_create zmienia to kontrakt pol wymaganych bedacy dowodem innego pakietu (tests/agent-views.test.ts), a w canvas_add_card wymaga generowania klucza w interfejsie (POST /api/canvas/cards wola useAddCard) — oba naleza do osobnego pakietu.",
-      "backlog": "BL-11",
+      "proof": "Naprawiony konkretny defekt: procurement_save_comparison przyjmowal operationId i go nie uzywal, wiec powtorzenie tworzylo drugi artefakt tego samego zestawienia. Teraz przechodzi przez idempotency.once z odciskiem zadania. Runda poprawek 1: kolumna braku wymieniala trzy narzedzia, ktore dubluj bez klucza — canvas_add_card, agent_view_create i files_publish_version; cztery pozostale narzedzia z kluczem opcjonalnym sa chronione innym mechanizmem (wersja, not_found, merge bez zmiany), co sprawdza osobny test. Z10/BL-09: te trzy narzedzia maja operationId WYMAGANE w schemacie (z opisem dla modelu i wzmianka w opisie narzedzia), jak artifact_create i artifact_publish_file; wywolanie bez klucza odrzuca walidacja przed handlerem. Audit wszystkich narzedzi effect: write wykazal czwarte: probe_add_note (modul kontrolny devkit-probe) takze tworzyl wiersz bez klucza — naprawione tym samym srodkiem (klucz wymagany w narzedziu MCP, zapis przez wspoldzielony IdempotencyStore z odciskiem; trasa HTTP modulu zostaje bez klucza, z komentarzem uzasadniajacym asymetrie). Regula jest wyprowadzana z rejestru, nie z listy pisanej recznie: tests/domain-guarantees.test.ts „kazde effect: write ma operationId wymagane albo udokumentowany powod, ze nie musi” wylicza narzedzia zapisu i wymaga od kazdego deklaracji idempotencji — nowe narzedzie bez klucza psuje test. Powtorzenia z kluczem daja jeden wiersz, liczone w bazie. Proba negatywna: po cofnieciu poprawki trzy testy padaja na starej wersji (kluczowe wywolanie przechodzi i zapisuje; wyliczenie wymienia trzy narzedzia po nazwach). Dowod z rzeczywistego interfejsu (test GUI bez modelu): docs/evidence/z10-bl09/dowod-l97-idempotencja-narzedzi.json (e2e/idempotent-tools.spec.ts, scena bl09-l97) — polecenie wyslane z przegladarki, wykonanie przez prawdziwy runtime, narzedzia przez ta sama walidacje i wykonanie co serwer MCP: canvas_add_card, agent_view_create i files_publish_version wolane dwa razy z tym samym operationId daja po jednym wierszu (przestrzen canvas, widoki agenta, magazyn plikow, biblioteka artefaktow — czytane z API odczytu), a wywolanie canvas_add_card bez klucza jest widocznym bledem narzedzia (validation_failed, issue operationId) i nie zapisuje niczego. Czego ten dowod nie pokazuje: czy zywy model podaje wlasne operationId — to wlasciwosc modelu, cwiczona dopiero przebiegiem platnym; opisy narzedzi mowia mu o tym wprost. Pozostaje swiadome i skomentowane w kodzie: drzwi HTTP POST /api/canvas/cards oraz przycisk interfejsu (useAddCard) nie generuja klucza — klik uzytkownika nie jest ponawianym zadaniem agenta, a uscislenie po stronie interfejsu nalezy do BL-11.",
+      "gap": "—",
       "scenarios": [
         "T10"
       ],
@@ -2550,16 +2549,19 @@
       ]
     },
     "T10": {
-      "status": "czesciowe",
-      "proof": "tests/orchestration.test.ts (symulacja, jeden AgentRuntime): dwa polecenia w jednej rozmowie — rozlaczne okna, pomiar od startu wykonania, wznowienie wlasciwej sesji, brak przecieku kontekstu narzedzi; dwie rozmowy i dwoch wlascicieli naraz; zgoda zwiazana z uruchomieniem z adresu; blad i Stop zwalniaja kolejke, a polecenie zatrzymane w kolejce nie rusza wcale. tests/domain-guarantees.test.ts: osiem jednoczesnych ponowien daje jeden skutek, ten sam klucz z inna trescia to conflict, nieudana operacja zwalnia klucz, operacja przerwana restartem nie jest powtarzana po cichu. Proby zdolnosci wykrycia: docs/evidence/z6-bl11b/proby-wykrycia.txt.",
-      "gap": "operationId pozostaje opcjonalny w narzedziach kart canvasu, widokow agenta i publikacji wersji pliku, wiec powtorzenie bez klucza nadal dubluje skutek (L9.7).",
+      "status": "potwierdzone",
+      "proof": "tests/orchestration.test.ts (symulacja, jeden AgentRuntime): dwa polecenia w jednej rozmowie — rozlaczne okna, pomiar od startu wykonania, wznowienie wlasciwej sesji, brak przecieku kontekstu narzedzi; dwie rozmowy i dwoch wlascicieli naraz; zgoda zwiazana z uruchomieniem z adresu; blad i Stop zwalniaja kolejke, a polecenie zatrzymane w kolejce nie rusza wcale. tests/domain-guarantees.test.ts: osiem jednoczesnych ponowien daje jeden skutek, ten sam klucz z inna trescia to conflict, nieudana operacja zwalnia klucz, operacja przerwana restartem nie jest powtarzana po cichu. Proby zdolnosci wykrycia: docs/evidence/z6-bl11b/proby-wykrycia.txt. Z10/BL-09: jedyna znana luka sceny (operationId opcjonalny w trzech narzedziach tworzacych) zamknieta i potwierdzona z interfejsu — docs/evidence/z10-bl09/dowod-l97-idempotencja-narzedzi.json (test GUI bez modelu): powtorzenia z tym samym kluczem daja jeden wiersz, wywolanie bez klucza nic nie zapisuje.",
+      "gap": "—",
       "evidence": [
-        "symulacja"
+        "symulacja",
+        "gui"
       ],
       "pliki": [
-        "tests/orchestration.test.ts",
+        "docs/evidence/z10-bl09/dowod-l97-idempotencja-narzedzi.json",
+        "docs/evidence/z6-bl11b/proby-wykrycia.txt",
+        "e2e/idempotent-tools.spec.ts",
         "tests/domain-guarantees.test.ts",
-        "docs/evidence/z6-bl11b/proby-wykrycia.txt"
+        "tests/orchestration.test.ts"
       ]
     },
     "T11": {

@@ -81,6 +81,9 @@ const foundItem = (calls: CallRecord[], fragment: string): string => {
  */
 export function bl03CanvasScript(prompt: string): Step[] {
   if (prompt.includes('PROBA-DODAJ')) {
+    // Minted per invocation: the idempotency key does not carry the conversation,
+    // so a literal would collide across two conversations of one instance.
+    const operationId = `e2e-bl03-canvas-dodaj-${Date.now()}`;
     return [
       { kind: 'call', name: 'get_context', maxChars: 300 },
       {
@@ -93,6 +96,7 @@ export function bl03CanvasScript(prompt: string): Step[] {
             component: 'procurement.costChart',
             props: { caseId: caseOf(calls) },
           },
+          operationId,
         }),
         maxChars: 300,
       },
@@ -256,8 +260,13 @@ export function bl03LifecycleScript(prompt: string): Step[] {
         kind: 'call',
         name: 'canvas_add_card',
         // A component that is not in the catalog: refused by the real
-        // validation, so `PostToolUseFailure` fires with a real reason.
-        input: { title: 'Karta z bledem', spec: { kind: 'component', component: 'nie.istnieje' } },
+        // validation, so `PostToolUseFailure` fires with a real reason. Minted
+        // per invocation — the idempotency key does not carry the conversation.
+        input: {
+          title: 'Karta z bledem',
+          spec: { kind: 'component', component: 'nie.istnieje' },
+          operationId: `e2e-bl03-canvas-blad-${Date.now()}`,
+        },
         maxChars: 400,
       },
       { kind: 'text', text: 'Narzedzie odmowilo.' },

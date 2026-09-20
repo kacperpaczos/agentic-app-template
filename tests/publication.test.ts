@@ -333,7 +333,8 @@ describe('publikacja jest niepodzielna', () => {
       {
         kind: 'call',
         name: 'files_publish_version',
-        input: { path: 'dane-poprawione.csv', originalFileId: original.id },
+        // Required since L9.7's closure — see `files.ts`.
+        input: { path: 'dane-poprawione.csv', originalFileId: original.id, operationId: 'publikacja-nowa-wersja' },
       },
     ]);
     await started.done;

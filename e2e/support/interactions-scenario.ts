@@ -59,12 +59,19 @@ const listCases: Step = { kind: 'call', name: 'procurement_list_cases', maxChars
 
 export function interactionsScript(prompt: string): Step[] {
   if (prompt.includes('[widok]')) {
+    // Minted per invocation: the idempotency key does not carry the conversation,
+    // so a literal would collide across two conversations of one instance.
+    const operationId = `e2e-interactions-widok-${Date.now()}`;
     return [
       listCases,
       {
         kind: 'call',
         name: 'agent_view_create',
-        input: (calls) => ({ title: VIEW_TITLE, source: viewComposition(caseIdFrom(calls)) }),
+        input: (calls) => ({
+          title: VIEW_TITLE,
+          source: viewComposition(caseIdFrom(calls)),
+          operationId,
+        }),
       },
       { kind: 'text', text: 'Tabela i wykres cen projektorow sa w Widokach agenta.' },
     ];
