@@ -577,6 +577,23 @@ th[aria-sort='descending'] .pf-sort::after { content: '▼' / ''; opacity: 1; }
 .pf-tasks__phase { font-size: 11px; color: var(--pf-muted, #666); }
 
 /*
+  Task center page (L11.6).
+
+  A flat list on purpose: an operational view is scanned, not explored. The
+  counters line is the progress display — an honest set of numbers instead of a
+  percentage the run cannot actually know.
+*/
+.pf-tasklist { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.pf-tasklist__item {
+  padding: 10px 12px; border: 1px solid var(--pf-border); border-radius: 8px; background: #fff;
+  display: grid; gap: 6px;
+}
+.pf-tasklist__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pf-tasklist__progress, .pf-tasklist__meta { margin: 0; font-size: 12px; color: var(--pf-muted, #555); }
+.pf-tasklist__artifact { display: inline-block; margin-right: 10px; }
+.pf-tasklist__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+
+/*
   Attaching a file, inside the ready-made composer.
 
   Both pieces are portalled into the library's own markup (see

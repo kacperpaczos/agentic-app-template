@@ -354,6 +354,10 @@ export class AgentRuntime {
       appContext: input.appContext,
       workspaceDir: null,
       abort,
+      // Wejście zadania utrwalone od startu: centrum zadań pokazuje, co
+      // wykonanie dostało, także gdy pliki już znikną z rozmowy.
+      inputFileIds: input.attachFileIds ?? [],
+      userMessageId: input.userMessageId ?? null,
     });
 
     const workspace = createRunWorkspace(

@@ -272,6 +272,27 @@ export const PLATFORM_MIGRATIONS: ModuleMigration[] = [
       CREATE INDEX IF NOT EXISTS idx_attachments_conv ON message_attachments(conversation_id);
     `,
   },
+  {
+    /**
+     * Task input (L11.6): what a run received to start with.
+     *
+     * `attachFileIds` and `userMessageId` already reached the runtime — but
+     * only as workspace staging and an attachment link. The run row itself did
+     * not remember its input list, so the task center could not show a
+     * command's files without reconstructing them from circumstances. The
+     * columns are nullable: rows from before this migration have nothing to
+     * put in them, and the center shows "no files" for those, not an invented
+     * list.
+     *
+     * `user_message_id` completes the task-to-conversation link (the event in
+     * the source thread); L11.19 is its main consumer.
+     */
+    id: 'platform-0007-run-task-inputs',
+    sql: /* sql */ `
+      ALTER TABLE agent_runs ADD COLUMN input_file_ids TEXT;
+      ALTER TABLE agent_runs ADD COLUMN user_message_id TEXT;
+    `,
+  },
 ];
 
 /** Applies every not-yet-applied migration inside one transaction each. */

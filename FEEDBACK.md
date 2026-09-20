@@ -1101,3 +1101,49 @@ GLM przygotowane, ale puste. Dowody z subskrypcją Claude pozostają dowodami su
 GLM nie pójdą, „informacyjne" nie twierdzi nic o GLM, a GLM nie potwierdza żadnego kryterium.
 Jak potwierdzenie rzetelności trybu do czasu prób: testy kontraktu powyżej + `pnpm diag` (zero tur)
 w trybie glm, który wypisze provider, endpoint jako ORIGIN i model.
+
+## T12 — 2026-09-21 — BL-13a: globalne centrum zadań (L11.6)
+
+**Problem.** v0.4 wymaga obowiązkowego, globalnego centrum zadań (L11.6, decyzja D-05): zadania
+ze wszystkich rozmów z postępem, użytymi narzędziami, plikami wejściowymi, artefaktami, błędami
+oraz akcjami otwarcia rozmowy/wyniku, anulowania i ponowienia — niezależnie od zamknięcia panelu
+i przełączenia rozmowy. Istniała wyłącznie listka zadań w tle przy pasku stanu (per rozmowa,
+bez postępu, narzędzi, wejść, wyników i ponowienia), więc kryterium stało w macierzy jako
+„częściowe" z brakiem „kontraktu zadania i testu GUI".
+
+**Zmiana.** (1) Kontrakt `TaskView` (`packages/platform-contracts/src/tasks.ts`): projekcja
+składana z rekordów, które już są prawdą — rejestr wykonań, dziennik zdarzeń, pliki, artefakty;
+zero drugiego właściciela stanu. Postęp jest **licznikami** (wywołania narzędzi started/finished,
+fragmenty tekstu, artefakty, ostatnia aktywność), nie procentem — wykonanie nie zna z góry liczby
+kroków, a zmyślony procent byłby kłamstwem w UI. (2) Wejście zadania utrwalone od startu:
+migracja `platform-0007-run-task-inputs` (`input_file_ids`, `user_message_id`, nullable — stare
+wiersze mają „brak plików", nie zmyśloną listę); `RunRegistry.start` przyjmuje obie wartości,
+runtime przekazuje to, co już dostawał. (3) Endpointy: `GET /api/tasks` (aktywne od najstarszych,
+potem zakończone od najnowszych; limit), `GET /api/tasks/:id`, `POST /api/runs/:id/retry`
+(409 dla wykonań w toku; to samo polecenie i rozmowa, **nowe** wykonanie, źródłowy wiersz bez
+zmian; ochrona podwójnego żądania tym samym mechanizmem `startingRuns`, co `/api/agui/run`).
+(4) `TasksPage` pod `/tasks` z pozycją „Centrum zadań" w nawigacji kompozycji: intencja, tytuł
+rozmowy, status, licznikowy postęp z czasem liczonym w przeglądarce, narzędzia, pliki wejściowe,
+artefakty, błąd; akcje Otwórz rozmowę / Otwórz wynik / Anuluj / Ponów z blokadą przycisku w locie.
+(5) Scenariusz `task-center` w serwerze skryptowanym (błąd „AWARIA", długa praca z narzędziem
+i opublikowanym artefaktem).
+
+**Recenzja niezależna** (subagent, całość diffu): zero ustaleń blokujących; wdrożone uwagi
+„powinno być" — tytuł rozmowy w wierszu, rozróżnienie akcji wyniku z dowodem GUI, idempotencja
+ponowienia, dowód globalności i limitu w teście kontraktowym, wsadowe zapytania listing
+(`eventStats`/`toolSummaryFor`/`listForRuns` raz na listę), rozróżniony stan błędu pobrania;
+pozostałe drobne ustalenia (etykieta „użytych" narzędzi liczy też wywołania odrzucone przez
+bramkę zgód; brak ponownej walidacji `spaceId` przy ponowieniu — retry nie przepisuje powiązania
+przestrzeni, więc ryzyko fałszerstwa nie istnieje) przyjęte jako świadome.
+
+**Weryfikacja.** `pnpm verify` = 0 (typecheck 3 programy, granice, macierze 200/95, build,
+1172 testy jednostkowe, w tym `tests/task-center.test.ts` ×8 i rozszerzony pin migracji);
+celowane e2e: `task-center` ×3, `background-tasks`, `app` — razem 23/23 na buildzie produkcyjnym;
+`check:acceptance`, `check:matrix`, `check:closure` = 0 po regeneracji. Ocena L11.6: potwierdzone
+(dowód: test kontraktowy + GUI, zapis w `assessment.json`, data snapshotu 2026-09-21).
+
+**Czego to NIE dowodzi.** L11.6 domyka wyłącznie centrum zadań: formularz „wymaga uwagi" w centrum,
+trwała plakietka i jednorazowy komunikat to L11.19, a wybór i egzekwowanie trzech trybów zgód
+(L11.12) oraz izolowany dowód pełnej ścieżki GLM (L12.6) pozostają w BL-13. Wszystkie dowody
+powstały bez tury modelu (instancja skryptowa i harness jednostkowy) — żadnego potwierdzenia GLM
+to pakiet nie niesie.

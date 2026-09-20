@@ -11,6 +11,7 @@ export * from './canvas.ts';
 export * from './conversation.ts';
 export * from './artifacts.ts';
 export * from './agent.ts';
+export * from './tasks.ts';
 export * from './module.ts';
 export * from './agui.ts';
 export * from './ui.ts';

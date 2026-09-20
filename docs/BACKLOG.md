@@ -3,7 +3,7 @@
 > Plik generowany przez `node scripts/acceptance-matrix.mjs` z `docs/acceptance/assessment.json`.
 > Każde otwarte kryterium macierzy (`docs/ACCEPTANCE.md`) należy do dokładnie jednego pakietu.
 
-Otwartych kryteriów: **13** z 200, w 5 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem. Kryteria „informacyjne / poza bramką odbioru” nie są w tej liczbie — nie blokują zamknięcia warstwy ani nie należą do backlogu.
+Otwartych kryteriów: **12** z 200, w 5 pakietach. Kolejność pakietów jest propozycją, nie harmonogramem. Kryteria „informacyjne / poza bramką odbioru” nie są w tej liczbie — nie blokują zamknięcia warstwy ani nie należą do backlogu.
 
 | Pakiet | Tytuł | Kryteria | Liczba |
 |---|---|---|---|
@@ -11,7 +11,7 @@ Otwartych kryteriów: **13** z 200, w 5 pakietach. Kolejność pakietów jest pr
 | BL-07 | Trwałość, kopia i migracje | L7.13 | 1 |
 | BL-09 | Pliki, sandbox i zadania w tle | L11.7, L11.23 | 2 |
 | BL-11 | Domena, backend i cache | L6.11 | 1 |
-| BL-13 | v0.4 — centrum zadań, tryby zgód i pełna ścieżka GLM | L11.6, L11.12, L11.19, L12.6 | 4 |
+| BL-13 | v0.4 — centrum zadań, tryby zgód i pełna ścieżka GLM | L11.12, L11.19, L12.6 | 3 |
 
 ## BL-03 — Powtarzalne próby na prawdziwym modelu w szablonie
 
@@ -66,7 +66,6 @@ Decyzje v0.4 wzmacniają istniejące funkcje: wymagają globalnego centrum zada�
 
 | ID | Wymaganie | Stan | Brak |
 |---|---|---|---|
-| L11.6 | Zadanie ma trwały status i powiązanie z rozmową; globalne centrum zadań pokazuje jego postęp, wejścia, wyniki i akcje niezależnie od zamknięcia panelu lub przełączenia rozmowy. | częściowe | Istniejąca lista aktywnych przebiegów nie dowodzi pełnego globalnego centrum zadań v0.4: postępu, narzędzi, plików wejściowych, artefaktów, błędów oraz akcji otwarcia, anulowania i ponowienia niezależnie od rozmowy. Wymaga implementacji kontraktu zadania i testu GUI. |
 | L11.12 | Tryby ręczny, nadzorowany i pełnej automatyzacji mają odrębne, sprawdzone zachowanie zgód; model nie podnosi trybu samodzielnie, a lista allowedTools nie jest traktowana jako gwarancja wywołania bramki zgody. | częściowe | Obecna trzykategoryjna polityka narzędzi nie realizuje trzech wybieranych przez użytkownika trybów ręcznego, nadzorowanego i pełnej automatyzacji, nie pokazuje ich w centrum zadań i nie dowodzi, że model nie może eskalować trybu. Wymaga implementacji oraz testów kontraktowych i GUI. |
 | L11.19 | Wykonanie w tle wymagające decyzji ma ustrukturyzowany formularz w centrum zadań, zapis zdarzenia w źródłowej rozmowie, trwałą plakietkę uwagi i jednorazowy komunikat z przejściem do zadania; brak otwartego panelu nie oznacza automatycznej zgody ani niewidocznego oczekiwania. | częściowe | Obecny sygnał `awaiting_consent` przy rozmowie nie realizuje wymaganego formularza w centrum zadań, trwałej plakietki uwagi i jednorazowego nieinwazyjnego toastu z przejściem do zadania. Wymaga implementacji i testu między rozmowami. |
 | L12.6 | Rzeczywista ścieżka GLM/Z.AI → Claude Code / Claude Agent SDK → Mastra → AG-UI → OpenUI została potwierdzona; mocki są oznaczone osobno. | częściowe | v0.4 wymaga rzeczywistej, izolowanej ścieżki GLM od GUI przez Claude Agent SDK, Mastrę, AG-UI i OpenUI z widocznym wynikiem oraz oznaczoną kopertą dowodu. Historyczny przebieg subskrypcyjny nie potwierdza nowego providera. |

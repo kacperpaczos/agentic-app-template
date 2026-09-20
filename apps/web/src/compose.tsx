@@ -13,12 +13,13 @@ const platformMenu: MenuItemContribution[] = [
   { id: 'platform.canvas', section: 'workspace', label: 'Canvas', to: '/', order: 1 },
   { id: 'platform.spaces', section: 'workspace', label: 'Zapisane kompozycje', to: '/spaces', order: 2 },
   { id: 'platform.agentViews', section: 'workspace', label: 'Widoki agenta', to: '/agent-views', order: 3 },
+  { id: 'platform.tasks', section: 'workspace', label: 'Centrum zadań', to: '/tasks', order: 4 },
   { id: 'platform.files', section: 'files', label: 'Pliki i raporty', to: '/files', order: 1 },
   { id: 'platform.settings', section: 'settings', label: 'Ustawienia', to: '/settings', order: 1 },
 ];
 
 /** Paths `router.tsx` mounts for the platform's own screens. */
-export const platformScreenPaths = ['/', '/spaces', '/agent-views', '/files', '/settings'];
+export const platformScreenPaths = ['/', '/spaces', '/agent-views', '/tasks', '/files', '/settings'];
 
 export const registry = buildRegistry({
   modules: [procurementUiModule],

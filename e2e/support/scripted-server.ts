@@ -674,6 +674,49 @@ const stopMeasurementScript = (prompt: string): Step[] =>
  * Scenarios whose steps depend on the user's message — a whole conversation
  * played by one server instance.
  */
+/**
+ * L11.6 — centrum zadań. Wybierany treścią polecenia, bo jedna instancja
+ * testowa gra jeden scenariusz:
+ *
+ *  - polecenie ze słowem „AWARIA" kończy się jawnym błędem — to daje zadanie
+ *    zakończone niepowodzeniem, którego błąd i ponowienie pokazuje centrum;
+ *  - pozostałe polecenia grają długą pracę: narzędzie, opublikowany artefakt
+ *    (na tyle wcześnie, żeby zdążył przed anulowaniem z centrum), potem jeszcze
+ *    chwilę pracy — wystarczająco długo, by wyjść z rozmowy źródłowej, otworzyć
+ *    centrum i obsłużyć zadanie (podgląd, wynik, anulowanie, ponowienie).
+ */
+const taskCenterScript = (prompt: string): Step[] => {
+  if (prompt.includes('AWARIA')) {
+    return [{ kind: 'fail', message: 'Symulowana awaria narzedzia centrum zadan.' }];
+  }
+  const operationId = `tc-${prompt.replace(/[^a-zA-Z0-9]/g, '').slice(-24) || 'domyslna'}`;
+  return [
+    { kind: 'text', text: 'Zaczynam dlugie zadanie centrum. ', delayMs: 150 },
+    {
+      kind: 'tool',
+      name: 'mcp__app__canvas_list_cards',
+      input: { spaceId: 'sp_scripted' },
+      result: '{"cards":[],"marker":"CENTRUM-ZADAN-NARZEDZIE"}',
+    },
+    {
+      kind: 'call',
+      name: 'artifact_create',
+      input: {
+        title: 'Raport centrum zadan',
+        kind: 'report',
+        rendererType: 'platform.markdown',
+        content: { text: 'Wynik dlugiego zadania centrum.' },
+        operationId,
+      },
+      maxChars: 200,
+    },
+    { kind: 'wait', delayMs: 2500 },
+    { kind: 'text', text: 'Dzialam nadal. ', delayMs: 150 },
+    { kind: 'wait', delayMs: 2500 },
+    { kind: 'text', text: 'Koncze zadanie centrum.', delayMs: 150 },
+  ];
+};
+
 const CONVERSATION_SCENARIOS: Record<string, (prompt: string) => Step[]> = {
   'agent-views': agentViewsScript,
   'bl10-messages': messageKindsScript,
@@ -696,6 +739,8 @@ const CONVERSATION_SCENARIOS: Record<string, (prompt: string) => Step[]> = {
   /* BL-08b: coming back to a run that is still going. */
   'bl08b-live-reconnect': liveReconnectScript,
   'bl08b-consent-then-work': consentThenWorkScript,
+  /* L11.6: obsługa pracy w tle z globalnego centrum zadań. */
+  'task-center': taskCenterScript,
   /*
    * BL-03: rehearsals of the paid runs. Simulations, and never evidence for a
    * criterion of that package — see the header of `bl03-scenarios.ts`.

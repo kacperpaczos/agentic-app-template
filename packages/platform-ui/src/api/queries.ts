@@ -11,6 +11,7 @@ import type {
   CardGeometry,
   CardSpec,
   StoredFileWithUse,
+  TaskList,
   UiTarget,
   ViewDefinition,
 } from '@platform/contracts';
@@ -56,6 +57,8 @@ export const qk = {
    * invalidates {@link qk.agentViewsAll} explicitly (see `runEvents.ts`).
    */
   agentViews: (conversationId: string) => ['canvas', accessScope(), 'agent-views', conversationId] as const,
+  /** Zadania właściciela ze wszystkich rozmów — globalne centrum zadań (L11.6). */
+  tasks: () => ['tasks', accessScope()] as const,
   agentViewsAll: () => ['canvas', accessScope(), 'agent-views'] as const,
   uiTargets: () => ['ui-targets', accessScope()] as const,
   uiViews: () => ['ui-views', accessScope()] as const,
@@ -155,6 +158,21 @@ export const useFiles = (scope?: { kind: string; id: string }) =>
       apiGet<{ files: StoredFileWithUse[] }>(
         scope ? `/api/files?scopeKind=${scope.kind}&scopeId=${scope.id}` : '/api/files',
       ),
+  });
+
+/**
+ * Zadania ze wszystkich rozmów — widok centrum zadań (L11.6).
+ *
+ * Odświeża się cyklicznie, bo zadanie żyje niezależnie od tego, co robi ta
+ * karta przeglądarki: postęp ma być aktualny także wtedy, gdy nikt nie patrzy
+ * na rozmowę źródłową. Interwał jest łagodny dla lokalnego backendu, a klucz
+ * zawiera zakres dostępu, więc zmiana tożsamości nie odziedziczy cudzych zadań.
+ */
+export const useTasks = () =>
+  useQuery({
+    queryKey: qk.tasks(),
+    queryFn: () => apiGet<TaskList>('/api/tasks'),
+    refetchInterval: 2000,
   });
 
 /** Generic reader for a business module's own HTTP routes. */

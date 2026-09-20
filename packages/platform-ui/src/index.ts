@@ -24,6 +24,7 @@ export * from './shell/SettingsPage.tsx';
 export * from './shell/FilesPage.tsx';
 export * from './shell/WorkspacePage.tsx';
 export * from './shell/AgentViewsPage.tsx';
+export * from './shell/TasksPage.tsx';
 export * from './state/uiSemantics.ts';
 export * from './state/uiSnapshot.ts';
 export * from './state/displayedCanvas.ts';

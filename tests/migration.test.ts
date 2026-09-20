@@ -327,6 +327,8 @@ describe('migracja istniejacej bazy', () => {
       'platform-0004-artifact-run-link',
       'platform-0005-idempotency-reservation',
       'platform-0006-message-attachments',
+      // L11.6: wejście zadania (pliki polecenia, wiadomość źródłowa) na wierszu wykonania.
+      'platform-0007-run-task-inputs',
       'procurement-0001-init',
     ]);
   });

@@ -4,6 +4,7 @@ import { getCookie, setCookie } from 'hono/cookie';
 import { streamSSE, type SSEStreamingApi } from 'hono/streaming';
 import { z } from 'zod';
 import {
+  ACTIVE_RUN_STATUSES,
   AGENT_VIEWS_SCOPE_KIND,
   AppError,
   parseRunAppContext,
@@ -760,6 +761,151 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
         conversationTitle: services.conversations.get(r.conversationId, ownerId).title,
       })),
     });
+  });
+
+  /* ----------------------- task center (L11.6) ----------------------- */
+
+  /**
+   * Per-run inputs for a batch of task rows, computed in batched queries.
+   *
+   * The center refreshes on a schedule and renders every row it returns, so
+   * the per-row work must not be per-row *queries*: stats, tool summaries and
+   * artifacts are each fetched once for the whole listing. Only the
+   * conversation title stays a primary-key lookup per row — a run cannot
+   * outlive its conversation (the delete cascades), so the row is always there.
+   */
+  const taskPayload = (
+    row: ReturnType<PlatformServices['runs']['task']>,
+    precomputed?: {
+      stats: ReturnType<PlatformServices['runs']['eventStats']>;
+      tools: ReturnType<PlatformServices['runs']['toolSummaryFor']>;
+      artifacts: ReturnType<PlatformServices['artifacts']['listForRuns']>;
+    },
+  ) => {
+    const stats = precomputed?.stats.get(row.id) ?? services.runs.eventStats([row.id]).get(row.id)!;
+    const artifacts =
+      precomputed?.artifacts.get(row.id) ?? services.artifacts.list(row.ownerId, { runId: row.id });
+    const inputFiles = row.inputFileIds.flatMap((id) => {
+      try {
+        const f = services.files.meta(id, row.ownerId);
+        return [{ id: f.id, filename: f.filename }];
+      } catch {
+        // A file deleted after the run: the task shows the input is gone,
+        // not an error nobody can fix.
+        return [];
+      }
+    });
+    const { prompt, inputFileIds, appContext: _appContext, ...run } = row;
+    return {
+      run,
+      conversationId: row.conversationId,
+      conversationTitle: services.conversations.get(row.conversationId, row.ownerId).title,
+      intent: prompt,
+      progress: {
+        toolCallsStarted: stats.toolCallsStarted,
+        toolCallsFinished: stats.toolCallsFinished,
+        textParts: stats.textParts,
+        artifactsPublished: artifacts.length,
+        lastEventAt: stats.lastEventAt,
+      },
+      tools: precomputed?.tools.get(row.id) ?? services.runs.toolSummary(row.id),
+      inputFiles,
+      artifacts: artifacts.map((a) => ({ id: a.id, title: a.title, kind: a.kind, mode: a.mode })),
+    };
+  };
+
+  /**
+   * The owner's tasks across every conversation: active first, then the most
+   * recently finished. This is a global operational view — not an
+   * "unread" list — so finished tasks do not disappear from it once their
+   * conversation has been opened.
+   */
+  app.get('/api/tasks', (c) => {
+    const ownerId = c.get('ownerId');
+    const raw = Number(c.req.query('limit') ?? 50);
+    const limit = Number.isFinite(raw) ? Math.min(Math.max(Math.trunc(raw), 1), 200) : 50;
+    const rows = services.runs.listTasks(ownerId, limit);
+    const runIds = rows.map((r) => r.id);
+    const precomputed = {
+      stats: services.runs.eventStats(runIds),
+      tools: services.runs.toolSummaryFor(runIds),
+      artifacts: services.artifacts.listForRuns(ownerId, runIds),
+    };
+    return json(c, { tasks: rows.map((row) => taskPayload(row, precomputed)) });
+  });
+
+  app.get('/api/tasks/:id', (c) =>
+    json(c, taskPayload(services.runs.task(c.req.param('id'), c.get('ownerId')))),
+  );
+
+  /**
+   * Retry: the same command, the same conversation, a **new** run.
+   *
+   * The source row is left exactly as it was — a failed run does not become a
+   * successful one because somebody tried again. The command re-enters the
+   * conversation as an ordinary user message, so the history says what was
+   * actually issued. Inputs come from the run's own record; files already
+   * deleted cannot be resurrected, so the retry starts with those that
+   * survived.
+   *
+   * A repeat of the request in flight is one retry, not two: the same
+   * `startingRuns` discipline `POST /api/agui/run` uses closes the window
+   * while the new run is being created, so a double click (or a proxy retry)
+   * waits for the first start and is answered with the run it produced.
+   * After the run exists, another POST is a *new* retry — the user pressing
+   * "retry" again is a new decision, and the durable key below is per attempt.
+   */
+  app.post('/api/runs/:id/retry', async (c) => {
+    const ownerId = c.get('ownerId');
+    const source = services.runs.task(c.req.param('id'), ownerId);
+    if ((ACTIVE_RUN_STATUSES as readonly string[]).includes(source.status)) {
+      throw new AppError('conflict', 'To wykonanie nadal trwa — zatrzymaj je albo poczekaj na wynik.');
+    }
+    const retryKey = `${ownerId}\u0000retry:${source.id}`;
+    const pending = startingRuns.get(retryKey);
+    if (pending) {
+      const recorded = await pending.catch(() => null);
+      if (recorded) {
+        return json(c, {
+          run: services.runs.get(recorded.runId, ownerId),
+          conversationId: recorded.conversationId,
+        });
+      }
+    }
+    const attempt = (async (): Promise<RecordedRun> => {
+      const survivingInputs: string[] = [];
+      for (const id of source.inputFileIds) {
+        try {
+          services.files.meta(id, ownerId);
+          survivingInputs.push(id);
+        } catch {
+          // A missing input does not sink the retry; it just goes without it.
+        }
+      }
+      const userMessage = services.conversations.appendMessage(source.conversationId, ownerId, {
+        role: 'user',
+        content: source.prompt,
+      });
+      const started = await runtime.start({
+        ownerId,
+        conversationId: source.conversationId,
+        prompt: source.prompt,
+        appContext: source.appContext,
+        attachFileIds: survivingInputs,
+        userMessageId: userMessage.id,
+      });
+      return { runId: started.runId, conversationId: source.conversationId };
+    })();
+    startingRuns.set(retryKey, attempt);
+    try {
+      const recorded = await attempt;
+      return json(c, {
+        run: services.runs.get(recorded.runId, ownerId),
+        conversationId: recorded.conversationId,
+      });
+    } finally {
+      startingRuns.delete(retryKey);
+    }
   });
 
   /**

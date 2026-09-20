@@ -1,7 +1,7 @@
 {
   "meta": {
     "codeState": "gałąź domkniecie/integracja po minimalnej bramce GLM: Claude Code / Claude Agent SDK jako harness, GLM/Z.AI jako provider; izolowana sonda SDK i jedna odpowiedź modelu potwierdzone w raporcie domknięcia. Pozostałe oceny zachowują swój dowód i nie są deklaracją pełnego odbioru całego systemu.",
-    "date": "2026-09-20",
+    "date": "2026-09-21",
     "scope": "snapshot v0.4: klasyfikacja kryteriów oraz zatwierdzone decyzje architektury. Statusy opisują istniejące dowody na tym kodzie; wersja dokumentacji nie zastępuje odbioru implementacji nowych funkcji produktu.",
     "classification": "v0.4: kazde kryterium ma pole class: produktowe, jakosciowe albo informacyjne. Produktowe i jakosciowe blokują odbior; informacyjne wymagają uzasadnienia, lecz nie trafiają do backlogu."
   },
@@ -2180,11 +2180,10 @@
       "class": "jakosciowe"
     },
     "L11.6": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "e2e/background-tasks.spec.ts „przelaczenie rozmowy i przeladowanie nie anuluja zadania” (skryptowany serwer): po przejściu do nowej rozmowy i przeładowaniu zadanie w backendzie ma status queued lub running, lista zadań w tle jest widoczna bez przejęcia widoku. tests/runtime.test.ts „zadanie ma trwaly status i powiazanie z rozmowa”; tests/background-runs.test.ts „przerwanie odczytu strumienia nie zatrzymuje pracy” i „lista aktywnych zadan obejmuje wszystkie rozmowy wlasciciela i tylko jego” (symulacja). Nie obejmuje: zwinięcia panelu czatu bez przeładowania (sprawdzone są przeładowanie i zmiana rozmowy).",
-      "gap": "Istniejąca lista aktywnych przebiegów nie dowodzi pełnego globalnego centrum zadań v0.4: postępu, narzędzi, plików wejściowych, artefaktów, błędów oraz akcji otwarcia, anulowania i ponowienia niezależnie od rozmowy. Wymaga implementacji kontraktu zadania i testu GUI.",
+      "proof": "Kontrakt zadania i globalne centrum zadan wdrozone: projekcja TaskView (packages/platform-contracts/src/tasks.ts) skladana z rejestru wykonań, dziennika zdarzeń oraz rejestrów plików i artefaktów; endpointy GET /api/tasks (aktywne, potem zakonczone), GET /api/tasks/:id i POST /api/runs/:id/retry (konflikt 409 dla wykonań w toku, powtórzenie żądania w locie odpowiadane tym samym nowym wykonaniem; stary wiersz bez zmian). Wejścia zadania utrwalane w wierszu wykonania od startu (migracja platform-0007-run-task-inputs: input_file_ids, user_message_id). UI: TasksPage (/tasks, pozycja „Centrum zadań” w nawigacji) pokazuje zadania ze wszystkich rozmów: intencję, tytuł rozmowy, status, licznikowy postęp (czas, wywołania narzędzi, fragmenty tekstu, artefakty, ostatnia aktywność), użyte narzędzia, pliki wejściowe, artefakty, błąd oraz akcje otwarcia rozmowy, otwarcia wyniku, anulowania i ponowienia. Dowody: tests/task-center.test.ts (8): jedna odpowiedź /api/tasks zawiera zadania z dwóch rozmów (aktywne przed zakonczonymi), limit zapytania, narzędzia i liczniki ze zdarzeń, pliki wejściowe, artefakty, 403 innego właściciela, 409 ponowienia w toku, ponowienie jako nowe wykonanie w tej samej rozmowie z komunikatem błędu; e2e/task-center.spec.ts (3, instancja scenariuszowa, build produkcyjny): zadanie prowadzone z centrum po przejściu do innej rozmowy i przeładowaniu, widoczny postęp i narzędzie, opublikowany artefakt wymieniony w centrum, „Otwórz wynik” prowadzi do rozmowy z widocznym rezultatem, anulowanie i ponowienie z centrum, czytelny stan pusty. Wcześniejsze dowody bez zmian: e2e/background-tasks.spec.ts, tests/background-runs.test.ts, tests/runtime.test.ts. Nie obejmuje: formularza „wymaga uwagi”, plakietki i komunikatu jednorazowego (L11.19) oraz wyboru trybów zgód (L11.12).",
       "scenarios": [
         "T22",
         "T16"
@@ -2193,8 +2192,7 @@
         "status": "potwierdzone",
         "note": "przebieg: background-tasks.spec (5) i background-runs.test (10) po naprawie mapowania abort na /cancel"
       },
-      "class": "produktowe",
-      "backlog": "BL-13"
+      "class": "produktowe"
     },
     "L11.7": {
       "status": "czesciowe",

@@ -297,12 +297,19 @@ export class ArtifactService {
     return { meta: toArt(this.#row(id, ownerId)), version: this.version(id, ownerId) };
   }
 
-  list(ownerId: string, filter?: { conversationId?: string; type?: string[] }): ArtifactMeta[] {
+  list(
+    ownerId: string,
+    filter?: { conversationId?: string; type?: string[]; runId?: string },
+  ): ArtifactMeta[] {
     let sql = 'SELECT * FROM artifacts WHERE owner_id = ?';
     const args: unknown[] = [ownerId];
     if (filter?.conversationId) {
       sql += ' AND conversation_id = ?';
       args.push(filter.conversationId);
+    }
+    if (filter?.runId) {
+      sql += ' AND run_id = ?';
+      args.push(filter.runId);
     }
     if (filter?.type?.length) {
       sql += ` AND renderer_type IN (${filter.type.map(() => '?').join(',')})`;
@@ -310,6 +317,28 @@ export class ArtifactService {
     }
     sql += ' ORDER BY updated_at DESC';
     return (this.db.$client.prepare(sql).all(...args) as ArtRow[]).map(toArt);
+  }
+
+  /**
+   * Artifacts of many runs, grouped, in one query — the task center renders an
+   * artifacts section for every row it shows, so it must not issue one query
+   * per task on every refresh tick.
+   */
+  listForRuns(ownerId: string, runIds: string[]): Map<string, ArtifactMeta[]> {
+    const out = new Map<string, ArtifactMeta[]>();
+    for (const id of runIds) out.set(id, []);
+    if (runIds.length === 0) return out;
+    const placeholders = runIds.map(() => '?').join(',');
+    const rows = this.db.$client
+      .prepare(
+        `SELECT * FROM artifacts WHERE owner_id = ? AND run_id IN (${placeholders})
+          ORDER BY updated_at DESC`,
+      )
+      .all(ownerId, ...runIds) as ArtRow[];
+    for (const row of rows) {
+      out.get(row.run_id ?? '')?.push(toArt(row));
+    }
+    return out;
   }
 
   meta(id: string, ownerId: string): ArtifactMeta {

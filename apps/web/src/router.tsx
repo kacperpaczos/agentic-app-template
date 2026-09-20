@@ -11,6 +11,7 @@ import {
   CanvasHost,
   FilesPage,
   SettingsPage,
+  TasksPage,
   WorkspacePage,
 } from '@platform/ui';
 import { parseAddressSearch, stringifyAddressSearch } from '@platform/contracts';
@@ -109,6 +110,13 @@ const agentViewsRoute = createRoute({
   component: AgentViewsPage,
 });
 
+/** Globalne centrum zadań (L11.6): praca w tle ze wszystkich rozmów. */
+const tasksRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/tasks',
+  component: TasksPage,
+});
+
 const filesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/files',
@@ -145,6 +153,7 @@ const routeTree = rootRoute.addChildren([
   canvasRoute,
   spacesRoute,
   agentViewsRoute,
+  tasksRoute,
   filesRoute,
   settingsRoute,
   ...moduleScreenRoutes,
