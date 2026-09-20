@@ -167,6 +167,16 @@ test.describe('czas odswiezenia po mutacji przez interfejs', () => {
  */
 const CANARY = 'sk-ant-kanarek-e2e-z3bl05-0123456789abcdef';
 /*
+ * The canary rides `ANTHROPIC_AUTH_TOKEN` — the variable the explicit GLM mode
+ * deliberately passes to the agent process. Keeping this scenario out of a
+ * GLM-mode run is a rule, not an optimisation: the point here is to watch a
+ * value that is *scrubbed*, and under the GLM policy the value would no longer
+ * be scrubbed — a live secret on its way to an endpoint, even if only a fake
+ * one. The subscription-mode secret scan (this one) keeps the canary in the
+ * variables that are removed in every mode.
+ */
+const canaryRequiresSubscriptionMode = process.env.APP_MODEL_PROVIDER === 'glm';
+/*
  * Captured into a working directory, not into the evidence tree. A test run has
  * to produce this log to be able to scan it, but an ordinary run must leave the
  * repository clean — so the copy that becomes evidence is written only when
@@ -190,6 +200,11 @@ const BASE = slow.baseUrl;
 
 test.describe('czas anulowania', () => {
   test.describe.configure({ timeout: 240_000 });
+  test.skip(
+    canaryRequiresSubscriptionMode,
+    'kanarek jedzie w ANTHROPIC_AUTH_TOKEN, ktore tryb GLM celowo przepuszcza do procesu agenta — ' +
+      'ten scenariusz sekretowy jest wylacznie dla trybu subskrypcji, gdzie zmienna jest skrubowana',
+  );
 
   test.beforeAll(async () => {
     slow.prepareDatabase();
@@ -423,6 +438,8 @@ test.describe('czas anulowania', () => {
 /* ------------------------------ secrets in logs --------------------------- */
 
 test.describe('diagnostyka serwera po przebiegu', () => {
+  // Reads the log the cancellation block produced; skipped together with it.
+  test.skip(canaryRequiresSubscriptionMode, 'pominiete razem ze scenariuszem kanarka (tryb subskrypcji)');
   test('log serwera z pelnego przebiegu nie zawiera wartosci poswiadczenia', async () => {
     // Read after the instance has been stopped by the previous block's
     // `afterAll`, so everything it printed on the way out is in the file too.

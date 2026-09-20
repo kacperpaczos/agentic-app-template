@@ -270,7 +270,48 @@ describe('sandbox zna katalog poswiadczen', () => {
     expect(claudeConfigDir({ CLAUDE_CONFIG_DIR: '/gdzies/indziej' } as NodeJS.ProcessEnv)).toBe('/gdzies/indziej');
     expect(claudeConfigDir({} as NodeJS.ProcessEnv)).toMatch(/\.claude$/);
   });
+
+  /*
+   * Tryb GLM (decyzja właściciela 2026-09-20): izolowany `CLAUDE_CONFIG_DIR`
+   * jest wymagany w środowisku **serwera** — i ochrona ma strzec właśnie tej
+   * ścieżki, bo `protectedDirsFor` czyta środowisko procesu, nie konfigurację
+   * dziecka. Strażnik, który broniłby starej ścieżki, broniłby niczego.
+   */
+  it('izolowany katalog z srodowiska SERWERA jest chroniony przez wszystkie trzy mechanizmy', () => {
+    const isolated = mkdtempSync(join(tmpdir(), 'glm-isolated-config-'));
+    try {
+      isolatedDirGuardedEverywhere(isolated);
+    } finally {
+      rmSync(isolated, { recursive: true, force: true });
+    }
+  });
 });
+
+/** The three mechanisms that must guard the mode's isolated directory, at one place. */
+function isolatedDirGuardedEverywhere(isolated: string): void {
+  const serverEnv = { CLAUDE_CONFIG_DIR: isolated } as NodeJS.ProcessEnv;
+
+  // (1) Lista katalogow chronionych czyta srodowisko serwera.
+  const dirs = protectedDirsFor('/tmp/dane-app', claudeConfigDir(serverEnv));
+  const guarded = dirs.map((d) => d.dir);
+  expect(guarded).toContain(isolated);
+  expect(guarded).toContain(`${isolated}.json`);
+
+  // (2) Sandbox blokuje ten katalog do odczytu i zapisu.
+  const sandbox = sandboxSettings({
+    workspaceDir: '/tmp/ws',
+    dataDir: '/tmp/dane-app',
+    credentialDirs: dirs.filter((d) => d.dir !== '/tmp/dane-app').map((d) => d.dir),
+  }) as any;
+  expect(sandbox.filesystem.denyRead).toContain(isolated);
+  expect(sandbox.filesystem.denyWrite).toContain(isolated);
+
+  // (3) Strażnik narzędzi plikowych odmawia odwołania do izolowanego katalogu.
+  const fromWorkspace = (p: string) => resolve('/tmp/ws/run_1', p);
+  expect(
+    protectedPathRefusal('Read', { file_path: join(isolated, '.credentials.json') }, dirs, fromWorkspace),
+  ).toBeTruthy();
+}
 
 /* ------------------------------ through a run ------------------------------ */
 

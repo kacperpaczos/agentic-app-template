@@ -510,3 +510,170 @@ test.describe('uwierzytelnienie i limity w interfejsie (symulacja na granicy ada
     expect(/email|organization|@/i.test(answer), 'raport sesji niesie dane konta').toBe(false);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/*        The explicit GLM provider mode, end to end in the interface          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The owner's decision of 2026-09-20: the harness stays the Claude Agent SDK,
+ * the model calls go to a GLM/Z.AI endpoint through `ANTHROPIC_BASE_URL` and
+ * `ANTHROPIC_AUTH_TOKEN`. This block drives that mode through the real server
+ * and the real interface, on a stand-in model that never starts the SDK.
+ *
+ * **Nothing here can reach anything.** The endpoint is a `.invalid` name that
+ * resolves nowhere, the token is a fabricated value, and the session probe is
+ * answered by a stand-in (`SDK_SESSION=glm`) — so no request, no turn and no
+ * read of any credential ever happens. What is real is the configuration
+ * validation, the provider policy on the environment, the status surface and
+ * both labels the mode owns.
+ */
+test.describe('tryb GLM: konfiguracja i etykiety w interfejsie (symulacja, bez SDK)', () => {
+  test.describe.configure({ mode: 'serial', timeout: 120_000 });
+
+  const FAKE_TOKEN = 'FAKE-GLM-TOKEN-E2E-nigdy-nie-byl-tokenem';
+  const FAKE_ENDPOINT = 'https://glm.endpoint.invalid';
+  const FAKE_MODEL = 'glm-fake-model';
+  const glmConfigDir = mkdtempSync(join(tmpdir(), 'e2e-glm-config-'));
+
+  const glmInstance = new ScriptedInstance({
+    port: 8796,
+    dataDirName: '.e2e-scripted-glm',
+    env: {
+      APP_MODEL_PROVIDER: 'glm',
+      APP_MODEL: FAKE_MODEL,
+      ANTHROPIC_BASE_URL: FAKE_ENDPOINT,
+      ANTHROPIC_AUTH_TOKEN: FAKE_TOKEN,
+      CLAUDE_CONFIG_DIR: glmConfigDir,
+    },
+    logFile: '.e2e-scripted-glm-log/serwer.log',
+  });
+
+  /* Same discipline as the subscription block: each test owns one start/stop. */
+  test.afterEach(async () => {
+    await glmInstance.stop();
+  });
+  test.afterAll(() => glmInstance.stop());
+  test.afterAll(() => rmSync(glmConfigDir, { recursive: true, force: true }));
+
+  test.beforeAll(() => {
+    glmInstance.prepareDatabase();
+  });
+
+  test('status i pasek nazywaja GLM, polityke glm_explicit i model z konfiguracji', async ({ page }) => {
+    await glmInstance.start('auth-expired-ok', { SDK_SESSION: 'glm' });
+    const base = glmInstance.baseUrl;
+    await page.goto(`${base}/settings`);
+    await page.evaluate(() =>
+      fetch('/api/auth/session', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      }),
+    );
+    await page.goto(`${base}/settings`);
+    await expect(page.getByTestId('settings-page')).toBeVisible();
+
+    await expect(page.getByTestId('auth-method')).toHaveAttribute('data-method', 'glm');
+    await expect(page.getByTestId('auth-method')).toContainText(/GLM\/Z\.AI/);
+    await expect(page.getByTestId('auth-policy')).toHaveAttribute('data-policy', 'glm_explicit');
+    await expect(page.getByTestId('auth-policy')).toContainText(/tryb GLM/i);
+    // The credential row says the file is irrelevant here — not "brak" as a
+    // (false) statement about the user's login.
+    await expect(page.getByTestId('auth-credential-state')).toContainText(/nieistotne/i);
+
+    await page.goto(`${base}/`);
+    await expect(page.getByTestId('statusbar-auth')).toHaveAttribute('data-auth-method', 'glm');
+    await expect(page.getByTestId('statusbar-auth')).toContainText(/GLM\/Z\.AI — dostep niesprawdzony/);
+    // Untried access is neutral, not broken: usable without a confirmed call.
+    const dot = await page.locator('.pf-statusbar .pf-dot').getAttribute('class');
+    expect(dot, 'tryb glm niesprawdzony nie moze byc malowany jako awaria').not.toContain('pf-dot--warn');
+
+    // The model from APP_MODEL is the one the status names.
+    await page.goto(`${base}/settings`);
+    await expect(page.getByTestId('settings-page')).toContainText(FAKE_MODEL);
+  });
+
+  test('sesja SDK na poswiadczeniu endpointu jest oczekiwana i nie dyskwalifuje', async ({ page }) => {
+    await glmInstance.start('auth-expired-ok', { SDK_SESSION: 'glm' });
+    const base = glmInstance.baseUrl;
+    await page.goto(`${base}/settings`);
+    await page.evaluate(() =>
+      fetch('/api/auth/session', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      }),
+    );
+    await page.goto(`${base}/settings`);
+    await expect(page.getByTestId('settings-page')).toBeVisible();
+
+    await page.getByTestId('sdk-session-check').click();
+    await expect(page.getByTestId('sdk-session-state')).toHaveAttribute('data-state', 'api_key', {
+      timeout: 30_000,
+    });
+    // The GLM wording, not the subscription-only "niezgodne z polityka".
+    await expect(page.getByTestId('sdk-session-state')).toContainText(/oczekiwane w trybie GLM/);
+
+    const dot = await page.locator('.pf-statusbar .pf-dot').getAttribute('class');
+    expect(dot, 'sesja na poswiadczeniu endpointu jest w glm oczekiwana').not.toContain('pf-dot--warn');
+  });
+
+  test('wartosc tokena endpointu nie wystepuje w interfejsie ani w logu serwera, a plik poswiadczen nie jest czytany', async ({
+    page,
+  }) => {
+    await glmInstance.start('auth-expired-ok', { SDK_SESSION: 'glm' });
+    const base = glmInstance.baseUrl;
+    await page.goto(`${base}/settings`);
+    await page.evaluate(() =>
+      fetch('/api/auth/session', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      }),
+    );
+    await page.goto(`${base}/settings`);
+    await expect(page.getByTestId('settings-page')).toBeVisible();
+
+    const body = await page.locator('body').innerText();
+    expect(body.includes(FAKE_TOKEN), 'wartosc tokena w interfejsie').toBe(false);
+
+    // The isolated credential directory holds a *parseable* file with a
+    // canary plan: if anything in the glm status path opened it, the
+    // Settings screen would be able to name the plan. It may not.
+    writeFileSync(
+      join(glmConfigDir, '.credentials.json'),
+      JSON.stringify({
+        claudeAiOauth: {
+          accessToken: 'SYNTETYCZNY-NIE-JEST-TOKENEM',
+          refreshToken: 'SYNTETYCZNY-REFRESH',
+          subscriptionType: 'max',
+          expiresAt: Date.now() + 3_600_000,
+        },
+      }),
+    );
+    await page.reload();
+    await expect(page.getByTestId('settings-page')).toBeVisible();
+    await expect(page.getByTestId('auth-credential-state')).toContainText(/nieistotne/i);
+    const bodyAfter = await page.locator('body').innerText();
+    expect(bodyAfter.includes('SYNTETYCZNY'), 'tresc pliku poswiadczen w interfejsie').toBe(false);
+
+    // The server's own printout is a surface too.
+    const log = glmInstance.readLog();
+    expect(log.length, 'nie przechwycono zadnego wyjscia serwera').toBeGreaterThan(0);
+    expect(log, 'wartosc tokena w logu serwera').not.toContain(FAKE_TOKEN);
+    expect(log, 'wartosc pliku poswiadczen w logu serwera').not.toContain('SYNTETYCZNY');
+
+    // And the wire names the mode, so a silent fallback cannot hide: this is
+    // the same status answer the production boot log would describe.
+    const status = await page.evaluate(async () => {
+      const r = await fetch('/api/status', { credentials: 'include' });
+      return r.text();
+    });
+    expect(status).toContain('"method":"glm"');
+    expect(status.includes(FAKE_TOKEN), 'wartosc tokena w /api/status').toBe(false);
+  });
+});

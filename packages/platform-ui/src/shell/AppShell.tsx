@@ -90,28 +90,47 @@ function StatusBar() {
   const usable = authIsUsable(auth);
   const confirmed = authIsConfirmed(auth);
   const plan = auth.credential.subscriptionType ? ` (${auth.credential.subscriptionType})` : '';
+  /*
+   * The explicit GLM mode states its provider in the label and names the
+   * harness in the prefix — the two facts the owner's decision (2026-09-20)
+   * keeps apart. Its sdkSession may well report `api_key`, which is the
+   * expected answer there, so the subscription-only "niezgodna z polityka"
+   * branch must not fire; the endpoint credential is what "logowanie wygaslo"
+   * advice would be wrong about, too.
+   */
   const label =
-    auth.sdkSession.state === 'api_key'
-      ? 'sesja SDK na kluczu API — niezgodna z polityka'
-      : auth.access.state === 'revoked' || auth.access.state === 'refresh_refused'
-        ? 'logowanie wygaslo — wykonaj /login'
+    auth.method === 'glm'
+      ? auth.access.state === 'revoked' || auth.access.state === 'refresh_refused'
+        ? 'GLM/Z.AI — dostep odrzucony przez endpoint; sprawdz token'
         : auth.access.state === 'rate_limited'
-          ? `limit uzycia wyczerpany${plan}`
+          ? 'GLM/Z.AI — limit uzycia wyczerpany'
           : auth.access.state === 'failed'
-            ? `blad polaczenia z modelem${plan}`
-            : !auth.credential.present
-              ? 'brak logowania'
-              : confirmed
-                ? `subskrypcja${plan} — dostep potwierdzony`
-                : `subskrypcja${plan} — dostep niesprawdzony`;
+            ? 'GLM/Z.AI — blad polaczenia z modelem'
+            : confirmed
+              ? 'GLM/Z.AI — dostep potwierdzony'
+              : 'GLM/Z.AI — dostep niesprawdzony'
+      : auth.sdkSession.state === 'api_key'
+        ? 'sesja SDK na kluczu API — niezgodna z polityka'
+        : auth.access.state === 'revoked' || auth.access.state === 'refresh_refused'
+          ? 'logowanie wygaslo — wykonaj /login'
+          : auth.access.state === 'rate_limited'
+            ? `limit uzycia wyczerpany${plan}`
+            : auth.access.state === 'failed'
+              ? `blad polaczenia z modelem${plan}`
+              : !auth.credential.present
+                ? 'brak logowania'
+                : confirmed
+                  ? `subskrypcja${plan} — dostep potwierdzony`
+                  : `subskrypcja${plan} — dostep niesprawdzony`;
   /* Green only for a confirmed call; a warning for anything unusable; neutral
      for "we have not tried yet", which is neither good news nor bad. */
   const dot = confirmed ? 'pf-dot--ok' : usable ? 'pf-dot--idle' : 'pf-dot--warn';
   return (
     <div className="pf-statusbar" data-testid="statusbar">
       <span className={`pf-dot ${dot}`} aria-hidden="true" />
-      <span data-testid="statusbar-auth" data-auth-state={auth.access.state} data-auth-confirmed={String(confirmed)}>
-        Claude: {label}
+      <span data-testid="statusbar-auth" data-auth-state={auth.access.state} data-auth-confirmed={String(confirmed)} data-auth-method={auth.method}>
+        {auth.method === 'glm' ? 'Agent (Claude Code): ' : 'Claude: '}
+        {label}
       </span>
       <span className="pf-statusbar__sep">·</span>
       <span>model {data.model}</span>

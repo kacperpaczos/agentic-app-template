@@ -8,6 +8,7 @@ import {
   collectToolEntries,
   platformTools,
   subscriptionOnlyEnv,
+  scrubbedEnvKeys,
 } from '@platform/server';
 import { AppError } from '@platform/contracts';
 import { createHarness, login, type Harness } from './helpers.ts';
@@ -525,6 +526,23 @@ describe('sekret ze srodowiska nie trafia do diagnostyki', () => {
       expect(subscriptionOnlyEnv().ANTHROPIC_AUTH_TOKEN).toBeUndefined();
       expect(JSON.stringify(subscriptionOnlyEnv())).not.toContain(CANARY);
       expect(subscriptionOnlyEnv().APP_TAJNY_KANAREK).toBe(CANARY_GENERIC);
+
+      /*
+       * The explicit GLM policy, applied to the same canary environment —
+       * asserted here so the two policies are read side by side on one value.
+       * Under glm the endpoint token is *meant* to reach the child process
+       * (that is the one place it belongs), so the assertion inverts for
+       * AUTH_TOKEN while the paid-API key stays scrubbed unconditionally.
+       * The surfaces above stay clean in both policies: the token passing
+       * into the child environment is not a leak, and nothing else in this
+       * file or its evidence may carry it.
+       */
+      const asGlm = subscriptionOnlyEnv(process.env, 'glm');
+      expect(asGlm.ANTHROPIC_AUTH_TOKEN).toBe(CANARY);
+      expect(asGlm.ANTHROPIC_API_KEY).toBeUndefined();
+      expect(scrubbedEnvKeys(process.env, 'glm')).toContain('ANTHROPIC_API_KEY');
+      expect(scrubbedEnvKeys(process.env, 'glm')).not.toContain('ANTHROPIC_AUTH_TOKEN');
+      expect(scrubbedEnvKeys(process.env, 'subscription')).toContain('ANTHROPIC_AUTH_TOKEN');
     } finally {
       for (const s of spies) s.mockRestore();
     }
