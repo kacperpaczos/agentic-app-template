@@ -268,7 +268,7 @@ wykonuje `node scripts/probe-sdk-session.ts` (patrz „Sprawdzanie zmian”).
 ### Sprawdzanie zmian
 
 ```bash
-pnpm verify          # kontrola granicy, spójność dokumentów oceny, typy, build i testy (bez modelu)
+pnpm verify          # kontrola granicy, spójność macierzy odbioru (200 kryteriów) i jej archiwum 95, typy, build i testy (bez modelu)
 pnpm test:e2e        # testy w przeglądarce na zbudowanej aplikacji; bez testów z prawdziwym modelem
 pnpm test:e2e:model  # tylko testy z prawdziwym modelem — kosztują 11 tur subskrypcji na przebieg
 pnpm check:module-swap   # próba podmiany modułu przykładowego na kontrolny, na kopii repozytorium
