@@ -1,5 +1,6 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { UNPROBED_SDK_SESSION, type SdkSession } from '@platform/contracts';
+import type { ModelProvider } from '../config.ts';
 import { subscriptionOnlyEnv } from './auth.ts';
 
 /**
@@ -138,6 +139,14 @@ export interface ProbeOptions {
    * check that cannot fail is not a check.
    */
   applyPolicy?: boolean;
+  /**
+   * Which provider policy to apply when `applyPolicy` is on.
+   *
+   * The default `subscription` scrubs every provider variable; `glm` passes
+   * the two GLM endpoint variables through, exactly as a run in that mode
+   * would — the probe must describe the same environment the agent gets.
+   */
+  provider?: ModelProvider;
 }
 
 export async function probeSdkSession(opts: ProbeOptions = {}): Promise<SdkSession> {
@@ -172,7 +181,7 @@ export async function probeSdkSession(opts: ProbeOptions = {}): Promise<SdkSessi
             ? (Object.fromEntries(
                 Object.entries(opts.env ?? process.env).filter(([, v]) => v !== undefined),
               ) as Record<string, string>)
-            : subscriptionOnlyEnv(opts.env ?? process.env),
+            : subscriptionOnlyEnv(opts.env ?? process.env, opts.provider ?? 'subscription'),
         // A probe does nothing. Listing no allowed tool and forbidding the ones
         // that could act keeps that true even if a future SDK decided to start
         // a turn on its own.

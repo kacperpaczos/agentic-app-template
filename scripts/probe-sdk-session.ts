@@ -91,10 +91,22 @@ const shell = (cmd: string, args: string[]): string => {
   }
 };
 
-const subscription = await probeSdkSession({ timeoutMs: 45_000 });
+/*
+ * Wariant oczekiwań zależy od trybu, nigdy od wartości tokena: w subskrypcji
+ * środowisko aplikacji ma prowadzić do sesji `subscription`; w jawnym trybie
+ * GLM środowisko aplikacji celowo niesie poświadczenie endpointu, więc sesja
+ * `subscription` byłaby tu NIESPÓJNA z trybem. Wartość tokena nie trafia do
+ * rekordu w żadnym wariancie — zapis mówi o źródle poświadczenia, nie o jego
+ * treści.
+ */
+const GLM_MODE = process.env.APP_MODEL_PROVIDER === 'glm';
+const PROVIDER = GLM_MODE ? 'glm' : 'subscription';
+
+const subscription = await probeSdkSession({ timeoutMs: 45_000, provider: PROVIDER });
 const keyInParent = await probeSdkSession({
   env: { ...process.env, ANTHROPIC_API_KEY: FAKE_KEY },
   timeoutMs: 45_000,
+  provider: PROVIDER,
 });
 const keyOnPath = await probeSdkSession({
   env: { ...process.env, ANTHROPIC_API_KEY: FAKE_KEY },
@@ -103,14 +115,32 @@ const keyOnPath = await probeSdkSession({
 });
 
 const record = {
-  opis:
-    'Sposob uwierzytelnienia sesji Claude Agent SDK, odczytany zadaniem sterujacym accountInfo() ' +
-    'oraz odczytem limitow planu. Zadanie sterujace nie wydaje tury modelu: sesja nie dostaje ' +
-    'zadnego polecenia, a strumien wejsciowy nie emituje wiadomosci.',
+  opis: GLM_MODE
+    ? 'Sposob uwierzytelnienia sesji Claude Agent SDK w JAWNYM TRYBIE GLM, odczytany zadaniem ' +
+      'sterujacym accountInfo() oraz odczytem limitow planu. Zadanie sterujace nie wydaje tury ' +
+      'modelu: sesja nie dostaje zadnego polecenia, a strumien wejsciowy nie emituje wiadomosci. ' +
+      'Subskrypcja Claude jest w tym trybie nieuzywana.'
+    : 'Sposob uwierzytelnienia sesji Claude Agent SDK, odczytany zadaniem sterujacym accountInfo() ' +
+      'oraz odczytem limitow planu. Zadanie sterujace nie wydaje tury modelu: sesja nie dostaje ' +
+      'zadnego polecenia, a strumien wejsciowy nie emituje wiadomosci.',
   zrodlo:
     'node --experimental-transform-types --no-warnings=ExperimentalWarning scripts/probe-sdk-session.ts',
   rodzajDowodu: 'rzeczywiste wywolanie SDK (zadanie sterujace, bez tury modelu)',
   zapisano: new Date().toISOString(),
+  provider: GLM_MODE
+    ? {
+        nazwa: 'GLM/Z.AI',
+        endpoint: (() => {
+          try {
+            return new URL(process.env.ANTHROPIC_BASE_URL ?? '').origin;
+          } catch {
+            return 'nieustalony';
+          }
+        })(),
+        model: process.env.APP_MODEL ?? 'nieustalony',
+        subskrypcjaClaude: 'nieuzywana (tryb GLM)',
+      }
+    : 'subskrypcja Claude (domyslny tryb)',
   wersje: {
     node: process.versions.node,
     /*
@@ -130,9 +160,13 @@ const record = {
   przebiegi: {
     /* The path the application actually takes. */
     srodowiskoAplikacji: {
-      warunki:
-        'env = subscriptionOnlyEnv(process.env): usuniete ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ' +
-        'ANTHROPIC_BASE_URL, Bedrock, Vertex i zmienne mostka CLAUDE_CODE_* poza CLAUDE_CONFIG_DIR.',
+      warunki: GLM_MODE
+        ? 'env = subscriptionOnlyEnv(process.env, "glm"): przepuszczone wylacznie ANTHROPIC_BASE_URL ' +
+          'i ANTHROPIC_AUTH_TOKEN (endpoint GLM); usuniete ANTHROPIC_API_KEY, Bedrock, Vertex, ' +
+          'ANTHROPIC_MODEL i zmienne mostka CLAUDE_CODE_* poza CLAUDE_CONFIG_DIR. Spodziewany wynik: ' +
+          'sesja NIE jest subskrypcja OAuth — poświadczeniem jest token endpointu.'
+        : 'env = subscriptionOnlyEnv(process.env): usuniete ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ' +
+          'ANTHROPIC_BASE_URL, Bedrock, Vertex i zmienne mostka CLAUDE_CODE_* poza CLAUDE_CONFIG_DIR.',
       wynik: subscription,
     },
     /* The case the criterion asks about: a key in the operator's own shell. */
@@ -140,7 +174,11 @@ const record = {
       warunki:
         'ANTHROPIC_API_KEY ustawiony w srodowisku procesu nadrzednego, polityka wlaczona. Klucz jest ' +
         'nieprawdziwy — apiKeySource opisuje pochodzenie poswiadczenia, nie jego waznosc, wiec do ' +
-        'obserwacji sciezki wystarczy, a kupic nic nie moze.',
+        'obserwacji sciezki wystarczy, a kupic nic nie moze.' +
+        (GLM_MODE
+          ? ' W trybie GLM token endpointu (AUTH_TOKEN) i tak przechodzi polityki; ten przebieg pokazuje, ' +
+            'co widzi sonda, gdy w procesie nadrzednym jest DRUGIE poswiadczenie.'
+          : ''),
       wynik: keyInParent,
     },
     /* The control: the same key, with the policy switched off. */
@@ -151,10 +189,19 @@ const record = {
       wynik: keyOnPath,
     },
   },
-  wniosek:
-    subscription.state === 'subscription' &&
-    keyInParent.state === 'subscription' &&
-    keyOnPath.state === 'api_key'
+  wniosek: GLM_MODE
+    ? subscription.state !== 'subscription' && keyOnPath.state !== 'subscription'
+      ? 'Tryb GLM potwierdzony: sesja w srodowisku aplikacji NIE jest subskrypcja OAuth — korzysta z ' +
+        'poswiadczenia endpointu (stan "' +
+        subscription.state +
+        '"), a kontrola przy wylaczonej polityce pokazuje, ze sonda rozroznia stany. Subskrypcja ' +
+        'Claude pozostaje nieuzywana.'
+      : `Kontrola nie wypadla spojnie z trybem GLM: srodowisko aplikacji => "${subscription.state}", ` +
+        `klucz przy wylaczonej polityce => "${keyOnPath.state}". Sesja nie powinna raportowac ` +
+        'subskrypcji OAuth w trybie, ktory jej nie uzywa. Zobacz pole error kazdego przebiegu.'
+    : subscription.state === 'subscription' &&
+        keyInParent.state === 'subscription' &&
+        keyOnPath.state === 'api_key'
       ? 'Aktywna sciezka to subskrypcja OAuth. Klucz API obecny w procesie nadrzednym nie zmienia ' +
         'sciezki, a ten sam klucz przy wylaczonej polityce jest przez sonde widziany — wiec jego brak ' +
         'w przebiegu aplikacji jest obserwacja, a nie zalozeniem.'

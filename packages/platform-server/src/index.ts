@@ -177,7 +177,7 @@ export function createPlatform(input: {
     );
   }
 
-  const runtime = new AgentRuntime(services, input.modelAgent ?? null);
+  const runtime = new AgentRuntime(services, input.modelAgent ?? null, input.env ?? process.env);
   const versions = readVersions();
   const auth = SessionAuth.load(config.dataDir);
   const app = createPlatformApp({
@@ -186,6 +186,7 @@ export function createPlatform(input: {
     auth,
     versions,
     sessionProbe: input.sessionProbe ?? probeSdkSession,
+    env: input.env ?? process.env,
   });
 
   return {

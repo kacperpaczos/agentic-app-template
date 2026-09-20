@@ -192,6 +192,8 @@ describe('serwer odmawia startu przy niezgodnej konfiguracji', () => {
       allowedOrigins: [],
       webDistDir: null,
       model: 'm',
+      modelProvider: 'subscription',
+      modelEndpointOrigin: null,
       runTimeoutMs: 1,
       consentTimeoutMs: 1,
       maxUploadBytes: 1,

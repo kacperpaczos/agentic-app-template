@@ -1,4 +1,5 @@
 import { mkdirSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { basename, resolve } from 'node:path';
 import { isSymlink, realResolve } from './util/real-path.ts';
 
@@ -6,6 +7,25 @@ const int = (v: string | undefined, d: number) => {
   const n = v ? Number.parseInt(v, 10) : Number.NaN;
   return Number.isFinite(n) ? n : d;
 };
+
+/**
+ * Who provides the model the harness executes.
+ *
+ * **Subscription is the default and is unchanged in every detail.** `glm` is an
+ * explicit, opt-in mode (decyzja właściciela 2026-09-20): the Claude Agent SDK
+ * remains the harness, and the model calls go to a GLM/Z.AI endpoint that
+ * speaks the Anthropic wire protocol, configured with `ANTHROPIC_BASE_URL` and
+ * `ANTHROPIC_AUTH_TOKEN`. Anything else is refused — an unknown value of
+ * `APP_MODEL_PROVIDER` fails the start rather than falling back to the default,
+ * because a typo silently selecting the paid-API policy would be worse than a
+ * server that does not start.
+ */
+export type ModelProvider = 'subscription' | 'glm';
+
+export const MODEL_PROVIDERS: readonly ModelProvider[] = ['subscription', 'glm'];
+
+const isModelProvider = (v: string | undefined): v is ModelProvider =>
+  v === 'subscription' || v === 'glm';
 
 export interface PlatformConfig {
   dataDir: string;
@@ -18,6 +38,16 @@ export interface PlatformConfig {
   /** Static bundle served in production; absent in dev. */
   webDistDir: string | null;
   model: string;
+  /** How the model is reached: the local subscription, or the explicit GLM mode. */
+  modelProvider: ModelProvider;
+  /**
+   * Origin of the Anthropic-compatible endpoint, **glm mode only**.
+   *
+   * The origin alone — never the full URL, whose query could carry a
+   * credential, and never the token itself, which this configuration does not
+   * hold anywhere. Diagnostics print it; nothing else reads it.
+   */
+  modelEndpointOrigin: string | null;
   /** Hard ceiling for a single agent run. */
   runTimeoutMs: number;
   /**
@@ -134,6 +164,71 @@ export function assertTestInstanceIsIsolated(cfg: PlatformConfig, defaultDataDir
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): PlatformConfig {
+  /*
+   * Provider first, and fail-closed: an unknown value of `APP_MODEL_PROVIDER`
+   * refuses the start before anything else is resolved. The default — no
+   * variable at all — is and stays `subscription`, whose behaviour this change
+   * does not alter in any detail.
+   */
+  if (env.APP_MODEL_PROVIDER !== undefined && !isModelProvider(env.APP_MODEL_PROVIDER)) {
+    throw new Error(
+      `[konfiguracja] APP_MODEL_PROVIDER="${env.APP_MODEL_PROVIDER}" jest nieznany. ` +
+        `Dozwolone wartości: ${MODEL_PROVIDERS.join(', ')}. Start odmówiony — ` +
+        'nieznany provider modelu nigdy nie jest obsługiwany po cichu.',
+    );
+  }
+  const modelProvider: ModelProvider = env.APP_MODEL_PROVIDER ?? 'subscription';
+
+  /*
+   * GLM mode has hard requirements, and a start without any one of them is
+   * refused with the **complete** list of what is missing — not with the first
+   * missing item, which would turn one misconfiguration into several failed
+   * starts.
+   */
+  let modelEndpointOrigin: string | null = null;
+  if (modelProvider === 'glm') {
+    const missing: string[] = [];
+    if (!env.APP_MODEL?.trim()) missing.push('APP_MODEL (model GLM, np. nazwa udostępniona przez Z.AI)');
+    if (!env.ANTHROPIC_BASE_URL?.trim()) {
+      missing.push('ANTHROPIC_BASE_URL (endpoint GLM/Z.AI kompatybilny z Anthropic)');
+    }
+    if (!env.ANTHROPIC_AUTH_TOKEN?.trim()) {
+      missing.push('ANTHROPIC_AUTH_TOKEN (token Z.AI podany wyłącznie w środowisku procesu)');
+    }
+    if (!env.CLAUDE_CONFIG_DIR?.trim()) {
+      missing.push('CLAUDE_CONFIG_DIR (izolowany katalog konfiguracji; domyślny ~/.claude jest zakazany)');
+    }
+
+    const defaultClaudeDir = resolve(homedir(), '.claude');
+    if (env.CLAUDE_CONFIG_DIR?.trim()) {
+      const given = resolve(env.CLAUDE_CONFIG_DIR);
+      const real = realResolve(given);
+      if (given === defaultClaudeDir || real === defaultClaudeDir) {
+        missing.push(
+          `CLAUDE_CONFIG_DIR wskazuje domyślny katalog poświadczeń OAuth (${defaultClaudeDir}` +
+            (real !== given ? `, rzeczywiście ${real}` : '') +
+            ') — w trybie GLM poświadczenia OAuth nie są używane ani czytane; wskaż pusty, izolowany katalog',
+        );
+      }
+    }
+
+    if (env.ANTHROPIC_BASE_URL?.trim()) {
+      try {
+        modelEndpointOrigin = new URL(env.ANTHROPIC_BASE_URL).origin;
+      } catch {
+        missing.push(`ANTHROPIC_BASE_URL="${env.ANTHROPIC_BASE_URL}" nie jest poprawnym adresem URL`);
+      }
+    }
+
+    if (missing.length > 0) {
+      throw new Error(
+        `[konfiguracja] Tryb APP_MODEL_PROVIDER=glm wymaga zmiennych środowiskowych, których brakuje:\n` +
+          missing.map((m) => `  - ${m}`).join('\n') +
+          '\nStart odmówiony. Żadna operacja nie została wykonana.',
+      );
+    }
+  }
+
   const defaultDataDir = resolve(process.cwd(), 'data');
   const dataDir = resolve(env.APP_DATA_DIR ?? defaultDataDir);
   const cfg: PlatformConfig = {
@@ -149,6 +244,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PlatformConfig
       .filter(Boolean),
     webDistDir: env.APP_WEB_DIST ? resolve(env.APP_WEB_DIST) : null,
     model: env.APP_MODEL ?? 'claude-sonnet-4-5',
+    modelProvider,
+    modelEndpointOrigin,
     runTimeoutMs: int(env.APP_RUN_TIMEOUT_MS, 300_000),
     consentTimeoutMs: int(env.APP_CONSENT_TIMEOUT_MS, 120_000),
     maxUploadBytes: int(env.APP_MAX_UPLOAD_BYTES, 8 * 1024 * 1024),

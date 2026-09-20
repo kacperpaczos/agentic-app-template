@@ -105,6 +105,15 @@ export interface PlatformAppDeps {
   versions: Record<string, string>;
   /** Asks the SDK how it is authenticated. Replaceable for tests. */
   sessionProbe: SessionProbe;
+  /**
+   * The environment the platform was configured from.
+   *
+   * `probeAuth` reads the configured method from it — so a status answer
+   * describes *this* platform's configuration, and a test that booted the
+   * platform with its own env gets an answer about that env rather than about
+   * whatever the test runner's shell carries.
+   */
+  env: NodeJS.ProcessEnv;
 }
 
 type Env = { Variables: { ownerId: string } };
@@ -383,7 +392,7 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
   });
 
   app.get('/api/status', (c) => {
-    const authStatus = probeAuth();
+    const authStatus = probeAuth(deps.env);
     return json(c, {
       auth: authStatus,
       versions: deps.versions,
