@@ -40,6 +40,14 @@ export const STATUS = Object.freeze({
   czesciowe: 'częściowe',
   niespelnione: 'niespełnione',
   niesprawdzone: 'niesprawdzone',
+  /*
+   * Klasyfikacja właściciela 2026-09-20: kryteria **proceduralne albo
+   * niewywoływalne** w tej konfiguracji — poza bramką odbioru. To nie jest
+   * „potwierdzone” (brak dowodu) i nie jest otwarte (nic nie blokują): mają
+   * uzasadnienie w polu braku i nie należą do żadnego pakietu backlogu, a
+   * warstwy zamykają się tak, jakby ich w otwartych nie było.
+   */
+  informacyjne: 'informacyjne / poza bramką odbioru',
 });
 export const OPEN = new Set(['czesciowe', 'niespelnione', 'niesprawdzone']);
 export const EVIDENCE = Object.freeze({
@@ -165,6 +173,15 @@ export function evaluateMatrix({ layers, criteria, scenarios }, data, opts = {})
       if (!a.backlog) problems.push(`${id}: otwarte kryterium bez pakietu backlogu`);
       else if (!backlog.has(a.backlog)) problems.push(`${id}: nieznany pakiet backlogu ${a.backlog}`);
       else backlog.get(a.backlog).criteria.push(id);
+    } else if (a.status === 'informacyjne') {
+      /* Poza bramką, ale nie bez słowa: uzasadnienie jest obowiązkowe, pakiet
+         backlogu — zakazany (kryterium poza bramką niczego nie planuje). */
+      if (!a.gap || a.gap.trim() === '' || a.gap.trim() === '—') {
+        problems.push(`${id}: kryterium „informacyjne” bez uzasadnienia w opisie braku`);
+      }
+      if (a.backlog) {
+        problems.push(`${id}: kryterium „informacyjne” nie może mieć pakietu backlogu (${a.backlog})`);
+      }
     } else if (a.backlog) {
       problems.push(`${id}: potwierdzone kryterium przypisane do backlogu ${a.backlog}`);
     }
@@ -242,6 +259,7 @@ export function evaluateMatrix({ layers, criteria, scenarios }, data, opts = {})
     S,
     backlog,
     counts,
+    openCriteria: [...OPEN].reduce((sum, k) => sum + (counts[k] ?? 0), 0),
     evidenceCounts,
     originCounts,
     histCounts,
@@ -508,7 +526,7 @@ export function compareBacklogSummary(parsed, ev) {
     P('brak wiersza „Otwartych kryteriów: …” w znanym kształcie (raport stary albo ręcznie ruszany)');
     return problems;
   }
-  const otwarte = ev.total - (ev.counts.potwierdzone ?? 0);
+  const otwarte = ev.openCriteria;
   if (parsed.otwarte !== otwarte) P(`raport mówi ${parsed.otwarte} otwartych kryteriów, a oceny dają ${otwarte}`);
   if (parsed.total !== ev.total) P(`raport mówi ${parsed.total} kryteriów, a oceny dają ${ev.total}`);
   if (parsed.pakietyLiczba !== ev.backlog.size) P(`raport mówi ${parsed.pakietyLiczba} pakietów, a oceny dają ${ev.backlog.size}`);

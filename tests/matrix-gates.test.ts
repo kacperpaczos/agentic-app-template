@@ -204,6 +204,49 @@ describe('rdzeń macierzy: kontrola negatywna na fixture\'ach', () => {
     expect(dryf.some((p) => p.includes('status „niesprawdzone”: raport mówi 0, a oceny dają 1')), `ma wskazać rozjazd niesprawdzonych 0≠1, a jest: ${dryf.join(' | ')}`).toBe(true);
   });
 
+  /* Klasyfikacja właściciela 2026-09-20: status „informacyjne” jest poza bramką
+     odbioru — nie liczy się do otwartych (nie blokuje zamknięcia warstwy), ale
+     nie może przemknąć bez uzasadnienia ani nie może trafić do backlogu. */
+  it('2b. status „informacyjne” jest poza bramką: wymaga uzasadnienia, zakazuje backlogu, nie liczy się do otwartych', () => {
+    const uzasadnione = wylicz(
+      KANON,
+      ocenyZ({
+        'L1.1': {},
+        'L1.2': { status: 'informacyjne', gap: 'proceduralne/niewywoływalne — klasyfikacja właściciela 2026-09-20' },
+        'L2.1': {},
+      }),
+    );
+    expect(uzasadnione.problems, 'informacyjne z uzasadnieniem i bez backlogu ma być spójne').toEqual([]);
+    // Outside OPEN: the layer closes, and the criterion plans nothing.
+    expect(uzasadnione.counts.informacyjne).toBe(1);
+    expect(uzasadnione.perLayer.find((l) => l.num === 1)?.open).toEqual([]);
+    expect(uzasadnione.closed.map((l) => l.num)).toContain(1);
+    expect(uzasadnione.openCriteria).toBe(0);
+    expect([...uzasadnione.backlog.keys()], 'informacyjne nie może trafić do pakietu').toEqual([]);
+
+    // Without a justification it is a problem — the classification cannot be silent.
+    const bezUzasadnienia = wylicz(
+      KANON,
+      ocenyZ({
+        'L1.1': {},
+        'L1.2': { status: 'informacyjne', gap: '—' },
+        'L2.1': {},
+      }),
+    );
+    expect(bezUzasadnienia.problems).toContain('L1.2: kryterium „informacyjne” bez uzasadnienia w opisie braku');
+
+    // With a backlog package it is a problem too: poza bramką niczego nie planuje.
+    const zBacklogiem = wylicz(
+      KANON,
+      ocenyZ({
+        'L1.1': {},
+        'L1.2': { status: 'informacyjne', gap: 'uzasadnienie', backlog: 'BL-01' },
+        'L2.1': {},
+      }),
+    );
+    expect(zBacklogiem.problems).toContain('L1.2: kryterium „informacyjne” nie może mieć pakietu backlogu (BL-01)');
+  });
+
   it('3. duplikat identyfikatora oblewa w kanonie i w archiwum', () => {
     const duplikat = core.parseSpecification('# x\n\n### 1. Warstwa 1\n\n- [ ] **L1.1** a\n- [ ] **L1.1** b\n', { layers: 1, criteria: 2, scenarios: 0 });
     expect(duplikat.problems, 'drugi L1.1 stoi na pozycji L1.2').toContain('specyfikacja: L1.1 na pozycji L1.2');

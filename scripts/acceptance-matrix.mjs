@@ -156,7 +156,7 @@ b.push('');
 b.push('> Plik generowany przez `node scripts/acceptance-matrix.mjs` z `docs/acceptance/assessment.json`.');
 b.push('> Każde otwarte kryterium macierzy (`docs/ACCEPTANCE.md`) należy do dokładnie jednego pakietu.');
 b.push('');
-b.push(`Otwartych kryteriów: **${total - counts.potwierdzone}** z ${total}, w ${backlog.size} pakietach. Kolejność pakietów jest propozycją, nie harmonogramem.`);
+b.push(`Otwartych kryteriów: **${ev.openCriteria}** z ${total}, w ${backlog.size} pakietach. Kolejność pakietów jest propozycją, nie harmonogramem. Kryteria „informacyjne / poza bramką odbioru” nie są w tej liczbie — nie blokują zamknięcia warstwy ani nie należą do backlogu.`);
 b.push('');
 b.push('| Pakiet | Tytuł | Kryteria | Liczba |');
 b.push('|---|---|---|---|');
