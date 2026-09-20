@@ -104,6 +104,11 @@ Odcisk przenoszony jest **plikiem** w gitignorowanym `test-results/` — rozstrz
 honorowanie `CLAUDE_CONFIG_DIR`, wykrycie zmiany mtime przy identycznej treści, głośny błąd przy
 braku zapisanego odcisku).
 
+**Trzecia obserwowana rotacja, poza oknem pracy (odczyt):** `mtime` 2026-09-20 02:36:16, nowy
+refresh token — ~8 h od poprzedniej (10:40 → 18:40 → 02:36), zawsze tuż po wygaśnięciu tokenu
+dostępu. Kadencja potwierdzona trzema pomiarami. Strażnik e2e przeszedł z odciskiem zgodnym w swoim
+oknie, więc rotacja zaszła poza pomiarem żadnego przebiegu.
+
 **Próba procesowa (wykrywanie, na ATRAPIE):** `CLAUDE_CONFIG_DIR` całego przebiegu skierowany na
 katalog tymczasowy z fałszywym poświadczeniem + tymczasowy spec piszący do tej atrapy →
 `globalTeardown` podnosi błąd `[bezpiecznik e2e] plik poswiadczen uzytkownika … ZMIENIL SIE w trakcie
