@@ -100,7 +100,7 @@ pnpm verify          # granica, macierz 200, macierze historyczne, typy (pakiety
 pnpm test:e2e        # przeglądarka na istniejącym buildzie produkcyjnym (po verify/build — inaczej testuje stary bundle);
                      # BEZ testów z prawdziwym modelem — nie zużywa ani jednej tury subskrypcji
 pnpm test:e2e:model  # tylko testy z prawdziwym modelem BL-01/BL-02; koszt: 11 tur subskrypcji na przebieg
-pnpm test:e2e:z11    # tylko proby modelowe pakietu BL-03; koszt: do 15 tur z grantu 25 (osobny rejestr)
+pnpm test:e2e:z11    # tylko proby modelowe pakietu BL-03; koszt: do 16 tur z grantu 25 (osobny rejestr)
 pnpm diag            # prawdziwa sesja SDK, wylacznie zadania sterujace — 0 tur; porownuje narzedzia
 pnpm check:module-swap   # przy zmianach kontraktu modułu lub warstwy składania
 pnpm evidence            # regeneracja plików dowodowych z regresji (APP_WRITE_EVIDENCE=1) — na żądanie
@@ -133,7 +133,7 @@ domyślnego przebiegu — żaden argument ani filtr do nich nie sięgnie. Urucha
 `pnpm test:e2e:model` (czyli `APP_E2E_MODEL=1`). Domyślny przebieg wypisuje, co pominął i ile by to
 kosztowało.
 
-Cztery spece pakietu BL-03 (`e2e/bl03-model-*.spec.ts`, razem 15 tur) wydają **inny grant** i mają
+Pięć specek pakietu BL-03 (`e2e/bl03-model-*.spec.ts`, razem 16 tur) wydaje **inny grant** i ma
 **drugi przełącznik**: `pnpm test:e2e:z11` (`APP_E2E_MODEL=1 APP_E2E_MODEL_Z11=1`). Nie należą do
 projektu `model`, więc `pnpm test:e2e:model` nadal kosztuje 11 tur i ani jednej więcej — dołożenie ich
 tam zmieniłoby cenę polecenia, którego cena jest udokumentowana. Ich licznik to osobny plik
