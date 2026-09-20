@@ -11,7 +11,13 @@ import {
   readInstanceLabel,
   resolveTestInstance,
 } from '../e2e/support/isolation.ts';
-import { assertDirectoryFree, assertPortFree, directoryInUse, portInUse } from '../e2e/support/port-probe.ts';
+import {
+  assertDirectoryFree,
+  assertPortFree,
+  directoryFreeProblem,
+  directoryInUse,
+  portInUse,
+} from '../e2e/support/port-probe.ts';
 import { ScriptedInstance } from '../e2e/support/scripted.ts';
 import { descendants, stillRunning } from '../e2e/support/bl03-checks.ts';
 
@@ -162,6 +168,34 @@ describe('katalog otwarty przez dzialajacy proces', () => {
     // Kontrola przeciwna: po zamknieciu ten sam katalog jest wolny.
     expect(directoryInUse(instance.config.dataDir)).toBe(false);
     expect(() => assertDirectoryFree(instance.config.dataDir, 'przygotowanie')).not.toThrow();
+  });
+});
+
+describe('odpowiedzi, ktorych nie da sie zadac, sa odmowa (ETAP 2, dziura 6)', () => {
+  /*
+   * `null` z `directoryInUse` dawniej przechodził po cichu: na systemie bez
+   * /proc każdy katalog wyglądał na wolny i cała kontrola była zdaniem o
+   * systemie, na który przypadek trafił. Odpowiedź nieznana to odmowa z
+   * jawnym komunikatem — dla harnessu testowego decyzją jest też „nie wiem".
+   */
+  it('directoryFreeProblem: null i true to komunikaty odmowy, false to zgoda', () => {
+    const katalog = resolve(REPO, '.e2e-przyklad');
+    expect(directoryFreeProblem(null, katalog)).toMatch(/nie udalo sie ustalic/);
+    expect(directoryFreeProblem(null, katalog)).toContain(katalog);
+    expect(directoryFreeProblem(null, katalog)).toMatch(/uruchom na systemie z \/proc/i);
+    expect(directoryFreeProblem(true, katalog)).toMatch(/otwarty przez dzialajacy proces/);
+    expect(directoryFreeProblem(false, katalog)).toBeNull();
+  });
+
+  it('assertDirectoryFree odmawia, gdy pytanie nie daje sie zadac', () => {
+    // Tu tego przypadku nie da się wymusić realnie (jest /proc), więc decision
+    // function jest sprawdzana bezpośrednio wyżej; ta asercja zamraża kształt:
+    // brak odpowiedzi NIE jest przepuszczeniem.
+    const katalog = resolve(REPO, '.e2e-przyklad');
+    expect(() => {
+      const problem = directoryFreeProblem(null, katalog);
+      if (problem) throw new Error(`[izolacja testow] przygotowanie: ${problem}`);
+    }).toThrow(/nie udalo sie ustalic/);
   });
 });
 

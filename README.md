@@ -327,11 +327,25 @@ dodają karty. Dlatego, zanim wyślą pierwsze żądanie, pytają `/api/health`,
 instancja musi mieć etykietę `agenticapp-dev`, `agenticapp-test` albo `agenticapp-acceptance`.
 Zainstalowana instancja nie ma żadnej etykiety, więc odpowiedź bez etykiety kończy się odmową i
 kodem wyjścia 3, zanim cokolwiek zostanie zapisane; `APP_BASE` wskazujący port 8791 jest odrzucany z
-podaniem powodu, tak samo jak adres spoza pętli zwrotnej. Instancję odbiorową uruchamiasz świadomie:
+podaniem powodu, tak samo jak adres spoza pętli zwrotnej.
+
+Etykieta jest wspólna dla wszystkich instancji testowych, więc sama nie odróżnia instancji wskazanej
+tej próbie od osieroconej po przerwanym starcie. Dlatego próba wymaga też **identyfikatora
+przebiegu** (`APP_INSTANCE_RUN_ID` — porównywanego z tym, który instancja wypisuje w
+`/api/health`; inna wartość, także jej brak po stronie instancji, kończy się odmową), **katalogu
+danych testowego** (`APP_DATA_DIR` o nazwie z prefiksem `.e2e` albo w systemowym `tmp`) oraz samej
+deklaracji obu wartości w środowisku próby. Na końcu próba porównuje odcisk pliku poświadczeń
+użytkownika (rozmiar:czas modyfikacji — treść nie jest nigdy czytana); zmiana kończy ją kodem 5
+z nazwaniem przebiegu sprawcą. Instancję odbiorową uruchamiasz świadomie, w jednej powłoce z próbą:
 
 ```bash
-APP_INSTANCE_LABEL=agenticapp-acceptance APP_DATA_DIR=$PWD/.acceptance-data \
-  PORT=8790 APP_ALLOWED_ORIGINS=http://127.0.0.1:8790 pnpm start
+export APP_INSTANCE_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+export APP_DATA_DIR="$(mktemp -d /tmp/.e2e-odbiorcza-XXXXXX)"
+APP_INSTANCE_LABEL=agenticapp-acceptance APP_INSTANCE_RUN_ID="$APP_INSTANCE_RUN_ID" \
+  APP_DATA_DIR="$APP_DATA_DIR" APP_ALLOWED_ORIGINS=http://127.0.0.1:8790 PORT=8790 pnpm start
+
+# w tej samej powłoce, po zgłoszeniu „[server] http://localhost:8790":
+pnpm acceptance            # albo: node scripts/run-agent.mjs "<prompt>" --case <id> --space <id>
 ```
 
 ## Własna aplikacja na tym szablonie

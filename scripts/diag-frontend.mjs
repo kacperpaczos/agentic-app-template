@@ -20,7 +20,12 @@ import { requireAcceptanceInstance } from './lib/acceptance-target.mjs';
 
 let url;
 try {
-  const target = await requireAcceptanceInstance({ APP_BASE: process.argv[2] ?? process.env.APP_BASE_URL });
+  const target = await requireAcceptanceInstance({
+    // Środowisko w całości: bramka czyta APP_INSTANCE_RUN_ID i APP_DATA_DIR —
+    // te same wartości, z jakimi wystartowała instancja odbiorcza.
+    ...process.env,
+    APP_BASE: process.argv[2] ?? process.env.APP_BASE_URL,
+  });
   url = `${target.base}/`;
 } catch (e) {
   console.error(e.message);

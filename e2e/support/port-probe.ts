@@ -115,16 +115,41 @@ export function assertPortFree(port: number, what: string): void {
 }
 
 /**
- * Refuses to delete a data directory that a live process still has open.
+ * The refusal message for deleting `dir`, given `directoryInUse`'s answer — or
+ * `null` when the delete may proceed.
  *
- * The second half of the same question. A refusal only when the answer is a
- * definite `true`: `null` means the check could not run, and a check that
- * cannot run must not block a legitimate run either.
+ * **All three answers are decisions, and `null` is a refusal.** A `true` means
+ * a live process has the directory open; a `false` means nobody has; a `null`
+ * means the question could not even be asked — no `/proc`, or no process
+ * readable. Used to be that `null` passed silently, which made the whole guard
+ * a statement about a system the run happened to land on: on one without
+ * `/proc`, every directory looked free. A check that cannot run must say so
+ * and stop, not report a clean result.
+ */
+export function directoryFreeProblem(answer: boolean | null, dir: string): string | null {
+  if (answer === null) {
+    return (
+      `nie udalo sie ustalic, czy katalog ${dir} jest otwarty przez jakis proces ` +
+      '(brak /proc albo zaden proces nie mogl byc obejrzany). Skasowanie katalogu bez tej ' +
+      'odpowiedzi mogloby wyjac baze spod dzialajacego procesu — kontrola odmawia zamiast ' +
+      'udawac, ze jest czysto. Uruchom na systemie z /proc (Linux) albo oczysc katalog recznie, ' +
+      'po sprawdzeniu jego wlasciciela.'
+    );
+  }
+  if (answer === true) {
+    return (
+      `katalog ${dir} jest otwarty przez dzialajacy proces (widoczne w /proc). ` +
+      'Skasowanie go teraz wyjeloby baze spod tego procesu. Zatrzymaj go samodzielnie, po jego pid.'
+    );
+  }
+  return null;
+}
+
+/**
+ * Refuses to delete a data directory that a live process still has open — and
+ * refuses equally loudly when the question could not be asked at all.
  */
 export function assertDirectoryFree(dir: string, what: string): void {
-  if (directoryInUse(dir) !== true) return;
-  throw new TestIsolationError(
-    `${what}: katalog ${dir} jest otwarty przez dzialajacy proces (widoczne w /proc). ` +
-      'Skasowanie go teraz wyjeloby baze spod tego procesu. Zatrzymaj go samodzielnie, po jego pid.',
-  );
+  const problem = directoryFreeProblem(directoryInUse(dir), dir);
+  if (problem) throw new TestIsolationError(`${what}: ${problem}`);
 }

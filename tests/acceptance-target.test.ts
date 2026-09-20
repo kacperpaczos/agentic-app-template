@@ -1,7 +1,17 @@
 import { spawn } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
@@ -30,13 +40,16 @@ const REPO = resolve(import.meta.dirname, '..');
 
 const katalogi: string[] = [];
 /** Kontrolowane drzewo skryptów dla prób reguły. */
-const tmpKatalog = (): string => {
-  const d = mkdtempSync(resolve(tmpdir(), 'agentic-skrypty-'));
+const tmpKatalog = (prefiks = 'agentic-skrypty-'): string => {
+  const d = mkdtempSync(resolve(tmpdir(), prefiks));
   katalogi.push(d);
   return d;
 };
 const RUN_AGENT = resolve(REPO, 'scripts/run-agent.mjs');
 const MODULE = resolve(REPO, 'scripts/lib/acceptance-target.mjs');
+
+/** Procesy potomne uruchomione przez ten plik; sprzątane po pid w afterAll. */
+const dzieciProc: import('node:child_process').ChildProcess[] = [];
 
 interface AcceptanceTargetModule {
   DEFAULT_ACCEPTANCE_BASE: string;
@@ -49,13 +62,26 @@ interface AcceptanceTargetModule {
     base: string;
     port: number;
     allowedLabels: string[];
+    expectedRunId?: string;
   };
   checkAcceptanceInstance: (
-    target: { base: string; allowedLabels: string[] },
+    target: { base: string; allowedLabels: string[]; expectedRunId?: string },
     fetchImpl?: typeof fetch,
     timeoutMs?: number,
   ) => Promise<string | null>;
-  requireAcceptanceInstance: (env?: Record<string, string | undefined>) => Promise<{ base: string }>;
+  problemSrodowiskaOdbiorczego: (
+    env?: Record<string, string | undefined>,
+  ) => string | null;
+  plikPoswiadczen: () => string;
+  odciskPoswiadczen: () => string;
+  sciezkaPrzenosnika: (env?: Record<string, string | undefined>) => string;
+  odciskZPrzenosnika: (przenosnik?: string) => string | undefined;
+  zapiszOdciskPoswiadczen: (przenosnik?: string) => string;
+  sprawdzOdciskPoswiadczen: (odcisk: string | undefined) => void;
+  requireAcceptanceInstance: (env?: Record<string, string | undefined>) => Promise<{
+    base: string;
+    odciskPoswiadczen?: string;
+  }>;
 }
 
 const mod = (await import(MODULE)) as AcceptanceTargetModule;
@@ -66,19 +92,20 @@ let running: Server | null = null;
 let seen: string[] = [];
 
 /**
- * A stand-in instance answering `/api/health` with the given label.
+ * A stand-in instance answering `/api/health` with the given label and run id.
  *
  * `null` is the interesting one: that is exactly what an installed instance
  * answers, because `APP_INSTANCE_LABEL` is set only by this repository's own
- * commands.
+ * commands. The same holds for `instanceRunId` on an instance started without
+ * the identifier.
  */
-async function instanceAnswering(label: string | null): Promise<string> {
+async function instanceAnswering(label: string | null, runId: string | null = null): Promise<string> {
   seen = [];
   const server = createServer((req, res) => {
     seen.push(`${req.method} ${req.url}`);
     if (req.url === '/api/health') {
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ ok: true, instanceLabel: label }));
+      res.end(JSON.stringify({ ok: true, instanceLabel: label, instanceRunId: runId }));
       return;
     }
     if (req.url === '/api/auth/session') {
@@ -130,6 +157,10 @@ async function instanceThatNeverAnswers(): Promise<string> {
 
 afterAll(() => {
   for (const d of katalogi.splice(0)) rmSync(d, { recursive: true, force: true });
+  // Wyłącznie procesy, które ten plik sam uruchomił, i wyłącznie po pid.
+  for (const dziecko of dzieciProc.splice(0)) {
+    if (dziecko.exitCode === null && !dziecko.killed) dziecko.kill('SIGKILL');
+  }
 });
 
 afterEach(async () => {
@@ -150,9 +181,12 @@ afterEach(async () => {
  * not reply", which is the wrong refusal for the right reason. That mistake
  * made the first version of this file pass its main assertion by accident.
  */
-async function runScript(base: string): Promise<{ status: number | null; stdout: string; stderr: string }> {
+async function runScript(
+  base: string,
+  srodowisko: Record<string, string> = {},
+): Promise<{ status: number | null; stdout: string; stderr: string }> {
   const child = spawn(process.execPath, [RUN_AGENT, 'cokolwiek', '--space', 's1'], {
-    env: { ...process.env, APP_BASE: base },
+    env: { ...process.env, ...srodowisko, APP_BASE: base },
   });
   let stdout = '';
   let stderr = '';
@@ -387,6 +421,12 @@ const KLASYFIKACJA: Record<string, Wpis> = {
     powod: 'to JEST bramka: jej jedyne żądanie to odczyt etykiety z /api/health, od którego zależy reszta',
   },
   'lib/matrix-core.mjs': { siec: false, powod: '' },
+  'lib/server-guard.mjs': {
+    siec: true,
+    powod:
+      'sonda TCP portu przed startem wlasnego serwera i odczyt /proc, kto ten port trzyma, po starcie; ' +
+      'polaczenie wyłącznie kontrolne na pare port/loopback, odczyt, nigdy zapis',
+  },
   'lib/state-tools.mjs': { siec: false, powod: '' },
   'matrix-summary.mjs': { siec: false, powod: '' },
   'migration-rehearsal.mjs': { siec: false, powod: '' },
@@ -503,15 +543,22 @@ describe('run-agent.mjs wobec instancji uzytkownika', () => {
     expect(seen.filter((r) => r.startsWith('POST'))).toEqual([]);
   });
 
-  it('kontrola przeciwna: przy dozwolonej etykiecie skrypt naprawde pisze', async () => {
+  it('kontrola przeciwna: przy dozwolonej etykiecie i srodowisku proba naprawde pisze', async () => {
     /*
      * Without this, the test above could pass for the wrong reason — a script
      * that crashes on startup also sends no POST. Here the same stand-in says
-     * `agenticapp-dev`, and the POST has to arrive.
+     * `agenticapp-dev`, and the POST has to arrive. The gate now also requires
+     * the run to declare its identifier and the instance's test data
+     * directory, so the control carries them — the same values the stand-in
+     * echoes.
      */
-    const base = await instanceAnswering('agenticapp-dev');
-    const out = await runScript(base);
+    const base = await instanceAnswering('agenticapp-dev', 'przebieg-odbiorczy');
+    const out = await runScript(base, {
+      APP_INSTANCE_RUN_ID: 'przebieg-odbiorczy',
+      APP_DATA_DIR: katalogTestowy(),
+    });
 
+    expect(out.stderr, `stderr: ${out.stderr}`).toContain('HTTP 503');
     expect(out.stdout).toContain(`# instancja: ${base}`);
     expect(seen).toContain('GET /api/health');
     expect(seen).toContain('POST /api/auth/session');
@@ -519,4 +566,491 @@ describe('run-agent.mjs wobec instancji uzytkownika', () => {
     // The stand-in refuses the run itself, so the script reports the HTTP error.
     expect(out.status).toBe(1);
   });
+});
+
+/* ---------------- identyfikator przebiegu i katalog testowy (ETAP 2) ------ */
+
+/** Katalog testowy zgodny z bramką: w systemowym tmp, jak dla instancji odbiorczej. */
+const katalogTestowy = (): string => tmpKatalog('.e2e-odbiorcza-');
+
+describe('identyfikator przebiegu i katalog testowy (ETAP 2, dziura 4)', () => {
+  it('srodowisko bez identyfikatora przebiegu jest problemem z instrukcja', () => {
+    expect(mod.problemSrodowiskaOdbiorczego({})).toMatch(/brak APP_INSTANCE_RUN_ID/);
+    expect(mod.problemSrodowiskaOdbiorczego({ APP_INSTANCE_RUN_ID: '   ' })).toMatch(
+      /brak APP_INSTANCE_RUN_ID/,
+    );
+    // Instrukcja musi prowadzić do działającej konfiguracji.
+    expect(mod.problemSrodowiskaOdbiorczego({})).toContain('mktemp');
+    expect(mod.problemSrodowiskaOdbiorczego({})).toContain('APP_INSTANCE_LABEL');
+  });
+
+  it('srodowisko bez katalogu danych jest problemem', () => {
+    const problem = mod.problemSrodowiskaOdbiorczego({ APP_INSTANCE_RUN_ID: 'p1' });
+    expect(problem).toMatch(/brak APP_DATA_DIR/);
+    expect(mod.problemSrodowiskaOdbiorczego({ APP_INSTANCE_RUN_ID: 'p1', APP_DATA_DIR: '' })).toMatch(
+      /brak APP_DATA_DIR/,
+    );
+  });
+
+  it('katalog spoza testowych jest problemem; .e2e i tmp przechodza', () => {
+    // Realistyczny katalog nie-testowy: pod katalogiem domowym, bez prefiksu.
+    const cudzyKatalog = resolve(homedir(), 'agentic-dane-nie-testowe');
+    const zly = mod.problemSrodowiskaOdbiorczego({
+      APP_INSTANCE_RUN_ID: 'p1',
+      APP_DATA_DIR: cudzyKatalog,
+    });
+    expect(zly).toMatch(/nie jest katalogiem testowym/);
+    expect(zly).toContain(cudzyKatalog);
+
+    // Prefiks .e2e wystarcza, także w tmp…
+    expect(
+      mod.problemSrodowiskaOdbiorczego({ APP_INSTANCE_RUN_ID: 'p1', APP_DATA_DIR: katalogTestowy() }),
+    ).toBeNull();
+    // …i katalog w tmp bez prefiksu też: oba są z gatunku katalogów testowych.
+    expect(
+      mod.problemSrodowiskaOdbiorczego({
+        APP_INSTANCE_RUN_ID: 'p1',
+        APP_DATA_DIR: tmpKatalog('agentic-odbiorcza-'),
+      }),
+    ).toBeNull();
+  });
+
+  it('kontrola: poprawne srodowisko w ogole nie jest problemem', () => {
+    expect(
+      mod.problemSrodowiskaOdbiorczego({
+        APP_INSTANCE_RUN_ID: 'p1',
+        APP_DATA_DIR: katalogTestowy(),
+      }),
+    ).toBeNull();
+  });
+
+  it('brak identyfikatora przebiegu: odmowa PRZED pierwszym zapisem', async () => {
+    const base = await instanceAnswering('agenticapp-acceptance');
+    const out = await runScript(base);
+
+    expect(out.status, `stderr: ${out.stderr}`).toBe(3);
+    expect(out.stderr).toContain('brak APP_INSTANCE_RUN_ID');
+    // Zdrowie odpytane, zero zapisu — odmowa poprzedza operacje zapisujące.
+    expect(seen).toEqual(['GET /api/health']);
+    expect(seen.filter((r) => r.startsWith('POST'))).toEqual([]);
+  });
+
+  it('instancja z innego przebiegu jest odrzucona mimo dobrej etykiety', async () => {
+    const base = await instanceAnswering('agenticapp-acceptance', 'przebieg-sprzed-godziny');
+    const out = await runScript(base, {
+      APP_INSTANCE_RUN_ID: 'przebieg-terazniejszy',
+      APP_DATA_DIR: katalogTestowy(),
+    });
+
+    expect(out.status, `stderr: ${out.stderr}`).toBe(3);
+    expect(out.stderr).toContain('Z INNEGO PRZEBIEGU');
+    expect(out.stderr).toContain('"przebieg-sprzed-godziny"');
+    expect(seen).toEqual(['GET /api/health']);
+  });
+
+  it('instancja bez pola instanceRunId tez jest odrzucona', async () => {
+    // Serwer sprzed wprowadzenia pola odpowiada null — to nie jest ten przebieg.
+    const base = await instanceAnswering('agenticapp-test', null);
+    const out = await runScript(base, {
+      APP_INSTANCE_RUN_ID: 'przebieg-terazniejszy',
+      APP_DATA_DIR: katalogTestowy(),
+    });
+
+    expect(out.status).toBe(3);
+    expect(out.stderr).toContain('Z INNEGO PRZEBIEGU');
+    expect(out.stderr).toContain('null');
+  });
+
+  it('wlasciwy przebieg, ale katalog spoza testowych: odmowa przed zapisem', async () => {
+    const base = await instanceAnswering('agenticapp-acceptance', 'przebieg-terazniejszy');
+    const out = await runScript(base, {
+      APP_INSTANCE_RUN_ID: 'przebieg-terazniejszy',
+      APP_DATA_DIR: resolve(homedir(), 'agentic-dane-nie-testowe'),
+    });
+
+    expect(out.status, `stderr: ${out.stderr}`).toBe(3);
+    expect(out.stderr).toContain('nie jest katalogiem testowym');
+    expect(seen).toEqual(['GET /api/health']);
+    expect(seen.filter((r) => r.startsWith('POST'))).toEqual([]);
+  });
+
+  it('resolveAcceptanceTarget niesie identyfikator przebiegu z srodowiska', () => {
+    expect(mod.resolveAcceptanceTarget({ APP_INSTANCE_RUN_ID: 'p9' }).expectedRunId).toBe('p9');
+    expect(mod.resolveAcceptanceTarget({}).expectedRunId).toBeUndefined();
+  });
+
+  it('ten sam przebieg i katalog testowy: bramka przepuszcza przed pierwszym zapisem', async () => {
+    const base = await instanceAnswering('agenticapp-acceptance', 'przebieg-terazniejszy');
+    const target = await mod.requireAcceptanceInstance({
+      APP_BASE: base,
+      APP_INSTANCE_RUN_ID: 'przebieg-terazniejszy',
+      APP_DATA_DIR: katalogTestowy(),
+      APP_PRZENOSNIK_ODCISKU: tmpKatalog(),
+    });
+    expect(target.base).toBe(base);
+  });
+});
+
+/* --------------------- odcisk poświadczeń (ETAP 2, dziura 2) -------------- */
+
+describe('odcisk poswiadczen w probie odbiorczej (ETAP 2, dziura 2)', () => {
+  const atrapaConfig = (): { dir: string; plik: string } => {
+    const dir = mkdtempSync(resolve(tmpdir(), 'atrapa-config-odbiorcza-'));
+    katalogi.push(dir);
+    const plik = resolve(dir, '.credentials.json');
+    writeFileSync(plik, 'ATRAPA-zadne-poswiadczenie-nie-bierze-udzialu');
+    return { dir, plik };
+  };
+
+  it('odcisk to rozmiar i czas modyfikacji, honoruje CLAUDE_CONFIG_DIR', () => {
+    const { dir, plik } = atrapaConfig();
+    const realDir = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = dir;
+    try {
+      expect(mod.plikPoswiadczen()).toBe(plik);
+      const odcisk = mod.odciskPoswiadczen();
+      expect(odcisk).toMatch(/^\d+:\d+(\.\d+)?$/);
+      const st = statSync(plik);
+      expect(odcisk).toBe(`${st.size}:${st.mtimeMs}`);
+    } finally {
+      if (realDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = realDir;
+    }
+  });
+
+  it('zmiana pliku (nawet samego mtime, ta sama tresc) jest wykrywana i rzuca', () => {
+    const { dir, plik } = atrapaConfig();
+    const przenosnik = resolve(tmpKatalog(), 'przenosnik.json');
+    const realDir = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = dir;
+    try {
+      const przed = mod.zapiszOdciskPoswiadczen(przenosnik);
+      // Ta sama treść, nowy mtime: zapis identycznej treści to nadal zapis.
+      const st = statSync(plik);
+      utimesSync(plik, st.atime, new Date(st.mtimeMs + 5000));
+      expect(mod.odciskPoswiadczen()).not.toBe(przed);
+      expect(() => mod.sprawdzOdciskPoswiadczen(przed)).toThrow(/ZMIENIL SIE/);
+    } finally {
+      if (realDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = realDir;
+    }
+  });
+
+  it('brak pliku jest jawny: odcisk "brak", a POJAWIENIE sie pliku jest wykryte', () => {
+    const dir = mkdtempSync(resolve(tmpdir(), 'atrapa-config-brak-'));
+    katalogi.push(dir);
+    const przenosnik = resolve(tmpKatalog(), 'przenosnik.json');
+    const realDir = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = dir;
+    try {
+      // Bez pliku: odcisk "brak", porównanie przechodzi — ale nic nie jest milczone.
+      expect(mod.odciskPoswiadczen()).toBe('brak');
+      expect(mod.zapiszOdciskPoswiadczen(przenosnik)).toBe('brak');
+      expect(() => mod.sprawdzOdciskPoswiadczen('brak')).not.toThrow();
+
+      // Plik powstał w trakcie próby: naruszenie, głośny błąd.
+      writeFileSync(resolve(dir, '.credentials.json'), 'powstal-w-trakcie');
+      expect(() => mod.sprawdzOdciskPoswiadczen('brak')).toThrow(/ZMIENIL SIE/);
+    } finally {
+      if (realDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = realDir;
+    }
+  });
+
+  it('plik-przenosnik w test-results niesie odcisk i on jest czytany z powrotem', () => {
+    const { dir } = atrapaConfig();
+    const przenosnik = mod.sciezkaPrzenosnika({
+      APP_PRZENOSNIK_ODCISKU: tmpKatalog(),
+    });
+    const realDir = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = dir;
+    try {
+      // Bez pliku: czytanie niczego nie udaje.
+      expect(mod.odciskZPrzenosnika(przenosnik)).toBeUndefined();
+
+      const odcisk = mod.zapiszOdciskPoswiadczen(przenosnik);
+      expect(existsSync(przenosnik)).toBe(true);
+      const zapis = JSON.parse(readFileSync(przenosnik, 'utf8')) as { plik: string; odcisk: string };
+      expect(zapis.odcisk).toBe(odcisk);
+      expect(zapis.plik).toBe(mod.plikPoswiadczen());
+      expect(mod.odciskZPrzenosnika(przenosnik)).toBe(odcisk);
+      // Wartość z pliku-przenośnika przechodzi porównanie i broni przy kończeniu
+      // procesu, który sam odcisku w pamięci nie ma (awaryjna ścieżka fix I-1).
+      expect(() => mod.sprawdzOdciskPoswiadczen(mod.odciskZPrzenosnika(przenosnik))).not.toThrow();
+    } finally {
+      if (realDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = realDir;
+    }
+  });
+
+  it('brak zapisanego odcisku jest głośnym błędem, nie cichym przejściem', () => {
+    expect(() => mod.sprawdzOdciskPoswiadczen(undefined)).toThrow(/brak zapisanego odcisku/);
+  });
+
+  it('bramka zwraca odcisk przy przepuszczeniu proby', async () => {
+    const base = await instanceAnswering('agenticapp-acceptance', 'przebieg-terazniejszy');
+    const target = await mod.requireAcceptanceInstance({
+      APP_BASE: base,
+      APP_INSTANCE_RUN_ID: 'przebieg-terazniejszy',
+      APP_DATA_DIR: katalogTestowy(),
+      APP_PRZENOSNIK_ODCISKU: tmpKatalog(),
+    });
+    expect(typeof target.odciskPoswiadczen).toBe('string');
+  });
+
+  it('PROBA NA PRAWDZIWYM SKRYPCIE: zmiana pliku w trakcie konczy probe kodem 5', async () => {
+    const { dir, plik } = atrapaConfig();
+    const base = await instanceAnswering('agenticapp-acceptance', 'przebieg-odbiorczy');
+
+    const dziecko = spawn(process.execPath, [RUN_AGENT, 'cokolwiek', '--space', 's1'], {
+      env: {
+        ...process.env,
+        APP_BASE: base,
+        APP_INSTANCE_RUN_ID: 'przebieg-odbiorczy',
+        APP_DATA_DIR: katalogTestowy(),
+        CLAUDE_CONFIG_DIR: dir,
+        APP_PRZENOSNIK_ODCISKU: tmpKatalog(),
+      },
+    });
+    dzieciProc.push(dziecko);
+
+    let stdout = '';
+    let stderr = '';
+    let dotkniety = false;
+    dziecko.stdout.on('data', (b: Buffer) => {
+      stdout += b.toString();
+      // Bramka przeszła (odcisk zapisany) — dopiero teraz dotykamy pliku.
+      if (!dotkniety && stdout.includes('# instancja:')) {
+        dotkniety = true;
+        const st = statSync(plik);
+        utimesSync(plik, st.atime, new Date(st.mtimeMs + 5000));
+      }
+    });
+    dziecko.stderr.on('data', (b: Buffer) => (stderr += b.toString()));
+    const status = await new Promise<number | null>((done) => dziecko.on('close', done));
+
+    expect(dotkniety, 'proba nie dotarla do komunikatu instancji').toBe(true);
+    expect(status, `stderr: ${stderr}`).toBe(5);
+    expect(stderr).toContain('ZMIENIL SIE');
+    expect(stderr).toContain('poswiadczen');
+  }, 20_000);
+
+  it('kontrola przeciwna: bez zmiany pliku proba konczy sie jak dotad (1), nie 5', async () => {
+    const { dir } = atrapaConfig();
+    const base = await instanceAnswering('agenticapp-acceptance', 'przebieg-odbiorczy');
+
+    const dziecko = spawn(process.execPath, [RUN_AGENT, 'cokolwiek', '--space', 's1'], {
+      env: {
+        ...process.env,
+        APP_BASE: base,
+        APP_INSTANCE_RUN_ID: 'przebieg-odbiorczy',
+        APP_DATA_DIR: katalogTestowy(),
+        CLAUDE_CONFIG_DIR: dir,
+        APP_PRZENOSNIK_ODCISKU: tmpKatalog(),
+      },
+    });
+    dzieciProc.push(dziecko);
+
+    let stdout = '';
+    let stderr = '';
+    dziecko.stdout.on('data', (b: Buffer) => (stdout += b.toString()));
+    dziecko.stderr.on('data', (b: Buffer) => (stderr += b.toString()));
+    const status = await new Promise<number | null>((done) => dziecko.on('close', done));
+
+    // Stand-in odmawia zapisu (503) — to znany koniec kodem 1, nie naruszenie.
+    expect(stdout).toContain('# instancja:');
+    expect(status, `stderr: ${stderr}`).toBe(1);
+    expect(stderr).not.toContain('ZMIENIL SIE');
+  }, 20_000);
+});
+
+/* ---------- nieprzechwycony wyjątek nie omija porównania (fix I-1) -------- */
+
+/**
+ * Stand-in, którego strumień AG-UI psuje się w połowie: 200, `text/event-stream`
+ * i linia `data:`, której `JSON.parse` nie przełknie. Dokładnie ta klasa krachu
+ * (parsowanie cudzej odpowiedzi) była dziurą: dawny `zakoncz` stał tylko na
+ * jawnych ścieżkach kończenia, więc wywaliwszy się w połowie biegu, próba
+ * omijała porównanie odcisku.
+ */
+async function instanceZepsutymStrumieniem(label: string | null, runId: string | null): Promise<string> {
+  seen = [];
+  const server = createServer((req, res) => {
+    seen.push(`${req.method} ${req.url}`);
+    if (req.url === '/api/health') {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ ok: true, instanceLabel: label, instanceRunId: runId }));
+      return;
+    }
+    if (req.url === '/api/auth/session') {
+      res.setHeader('content-type', 'application/json');
+      res.setHeader('set-cookie', 'sid=test; Path=/');
+      res.end('{}');
+      return;
+    }
+    res.setHeader('content-type', 'text/event-stream');
+    res.end('data: {zepsute-json\n\n');
+  });
+  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+  running = server;
+  const address = server.address();
+  if (typeof address === 'string' || address === null) throw new Error('brak portu');
+  return `http://127.0.0.1:${address.port}`;
+}
+
+/**
+ * Stand-in dla acceptance-agent.mjs: bramka przechodzi, a pierwszy krok setupu
+ * (`GET /api/m/procurement/cases`) odpowiada 500 — `call()` rzuca i bieg się
+ * wywala, zanim jakikolwiek scenariusz zdąży wystartować.
+ */
+async function instanceOdbiorczaKraczaca(label: string | null, runId: string | null): Promise<string> {
+  seen = [];
+  const server = createServer((req, res) => {
+    seen.push(`${req.method} ${req.url}`);
+    if (req.url === '/api/health') {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ ok: true, instanceLabel: label, instanceRunId: runId }));
+      return;
+    }
+    if (req.url === '/api/m/procurement/cases') {
+      res.statusCode = 500;
+      res.end('stand-in-awaria');
+      return;
+    }
+    res.setHeader('content-type', 'application/json');
+    res.setHeader('set-cookie', 'sid=test; Path=/');
+    res.end('{}');
+  });
+  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+  running = server;
+  const address = server.address();
+  if (typeof address === 'string' || address === null) throw new Error('brak portu');
+  return `http://127.0.0.1:${address.port}`;
+}
+
+interface Rozmowa {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+/**
+ * Uruchamia skrypt próby i dotyka atrapy poświadczeń, gdy tylko bramka
+ * przejdzie (komunikat „# instancja" znaczy, że odcisk został już zapisany).
+ * Dotknięcie = ta sama treść, nowy mtime — naruszenie według G21.
+ */
+const uruchomZDotknieciem = (
+  skrypt: string,
+  argumenty: string[],
+  base: string,
+  dir: string,
+  plik: string,
+  znacznik: string,
+  dotknij: boolean,
+): Promise<Rozmowa> =>
+  new Promise((gotowe) => {
+    const dziecko = spawn(process.execPath, [skrypt, ...argumenty], {
+      env: {
+        ...process.env,
+        APP_BASE: base,
+        APP_INSTANCE_RUN_ID: 'przebieg-odbiorczy',
+        APP_DATA_DIR: katalogTestowy(),
+        CLAUDE_CONFIG_DIR: dir,
+        APP_PRZENOSNIK_ODCISKU: tmpKatalog(),
+      },
+    });
+    dzieciProc.push(dziecko);
+
+    let stdout = '';
+    let stderr = '';
+    let dotkniety = false;
+    dziecko.stdout.on('data', (b: Buffer) => {
+      stdout += b.toString();
+      if (dotknij && !dotkniety && stdout.includes(znacznik)) {
+        dotkniety = true;
+        const st = statSync(plik);
+        utimesSync(plik, st.atime, new Date(st.mtimeMs + 5000));
+      }
+    });
+    dziecko.stderr.on('data', (b: Buffer) => (stderr += b.toString()));
+    void dziecko.on('close', (status) => gotowe({ status, stdout, stderr }));
+  });
+
+describe('nieprzechwycony wyjatek nie omija porownania odcisku (fix I-1)', () => {
+  const atrapaDoProb = (): { dir: string; plik: string } => {
+    const dir = mkdtempSync(resolve(tmpdir(), 'atrapa-config-crash-'));
+    katalogi.push(dir);
+    const plik = resolve(dir, '.credentials.json');
+    writeFileSync(plik, 'ATRAPA-zadne-poswiadczenie-nie-bierze-udzialu');
+    return { dir, plik };
+  };
+
+  it('run-agent: krach parsowania SSE w trakcie biegu NIE omija porownania — kod 5 z powodem', async () => {
+    const { dir, plik } = atrapaDoProb();
+    const base = await instanceZepsutymStrumieniem('agenticapp-acceptance', 'przebieg-odbiorczy');
+    const out = await uruchomZDotknieciem(
+      RUN_AGENT,
+      ['cokolwiek', '--space', 's1'],
+      base,
+      dir,
+      plik,
+      '# instancja:',
+      true,
+    );
+
+    // POWÓD: komunikat o niezgodności odcisku jest na wyjściu mimo krachu…
+    expect(out.status, `stderr: ${out.stderr}`).toBe(5);
+    expect(out.stderr).toContain('ZMIENIL SIE');
+    expect(out.stderr).toContain('poswiadczen');
+    // …a sam krach też jest widoczny, nie zamaskowany przez porównanie.
+    expect(out.stderr).toContain('SyntaxError');
+    expect(out.stdout).toContain('# instancja:');
+  }, 20_000);
+
+  it('kontrola przeciwna: krach bez naruszenia pliku pozostaje krachem (kod 1)', async () => {
+    const { dir } = atrapaDoProb();
+    const base = await instanceZepsutymStrumieniem('agenticapp-acceptance', 'przebieg-odbiorczy');
+    const out = await uruchomZDotknieciem(RUN_AGENT, ['cokolwiek', '--space', 's1'], base, dir, resolve(dir, 'brak-pliku'), '# instancja:', false);
+
+    expect(out.status, `stderr: ${out.stderr}`).toBe(1);
+    expect(out.stderr).toContain('SyntaxError');
+    expect(out.stderr).not.toContain('ZMIENIL SIE');
+  }, 20_000);
+
+  it('acceptance-agent: krach w setupie NIE omija porownania — kod 5 z powodem', async () => {
+    const { dir, plik } = atrapaDoProb();
+    const base = await instanceOdbiorczaKraczaca('agenticapp-acceptance', 'przebieg-odbiorczy');
+    const out = await uruchomZDotknieciem(
+      resolve(REPO, 'scripts', 'acceptance-agent.mjs'),
+      [],
+      base,
+      dir,
+      plik,
+      '# instancja odbiorowa:',
+      true,
+    );
+
+    expect(out.status, `stderr: ${out.stderr}`).toBe(5);
+    expect(out.stderr).toContain('ZMIENIL SIE');
+    expect(out.stderr).toContain('poswiadczen');
+    expect(out.stdout).toContain('# instancja odbiorowa:');
+  }, 20_000);
+
+  it('kontrola przeciwna: krach acceptance-agent bez naruszenia to kod 1', async () => {
+    const { dir } = atrapaDoProb();
+    const base = await instanceOdbiorczaKraczaca('agenticapp-acceptance', 'przebieg-odbiorczy');
+    const out = await uruchomZDotknieciem(
+      resolve(REPO, 'scripts', 'acceptance-agent.mjs'),
+      [],
+      base,
+      dir,
+      resolve(dir, 'brak-pliku'),
+      '# instancja odbiorowa:',
+      false,
+    );
+
+    expect(out.status, `stderr: ${out.stderr}`).toBe(1);
+    expect(out.stderr).toContain('procurement/cases -> 500');
+    expect(out.stderr).not.toContain('ZMIENIL SIE');
+  }, 20_000);
 });

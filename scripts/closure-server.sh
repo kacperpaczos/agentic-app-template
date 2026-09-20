@@ -12,12 +12,21 @@ case "${1:-start}" in
   start)
     if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then echo "running $(cat "$PIDFILE")"; exit 0; fi
     cd "$ROOT"
+    # ETAP 2, dziura 1 — odmowa, gdy katalog danych wygląda na żywe dane
+    # aplikacji (instancja startuje bez etykiety, więc straż config.ts jej
+    # nie obejmuje). Odmowa zanim cokolwiek zostanie uruchomione.
+    # ETAP 2, dziura 3 — sonda portu PRZED startem: zajęty port to cudzy proces.
+    node scripts/lib/server-guard.mjs przed --katalog "$DATA" --port "$PORT" --repo "$ROOT" || exit $?
     APP_DATA_DIR="$DATA" APP_WEB_DIST="$ROOT/apps/web/dist" PORT="$PORT" \
       APP_ALLOWED_ORIGINS="http://127.0.0.1:$PORT,http://localhost:$PORT" \
       setsid node apps/server/dist/server.js > "$LOG" 2>&1 < /dev/null &
     echo $! > "$PIDFILE"
     for _ in $(seq 1 60); do
-      curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1 && { echo "started pid=$(cat "$PIDFILE") port=$PORT data=$DATA"; exit 0; }
+      curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1 && {
+        # ETAP 2, dziura 3 — „started" dopiero po potwierdzeniu własnego procesu.
+        node scripts/lib/server-guard.mjs po --pid "$(cat "$PIDFILE")" --port "$PORT" || { echo "FAILED: port $PORT trzyma nie-ten proces"; tail -20 "$LOG"; exit 1; }
+        echo "started pid=$(cat "$PIDFILE") port=$PORT data=$DATA"; exit 0;
+      }
       sleep 0.25
     done
     echo "FAILED"; tail -20 "$LOG"; exit 1 ;;

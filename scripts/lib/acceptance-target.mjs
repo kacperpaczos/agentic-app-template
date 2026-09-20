@@ -25,9 +25,26 @@
  * development proxy answers 502 and keeps retrying because its backend may
  * still be starting; an acceptance run has nothing to wait for and stops.
  *
+ * **The hole this closure adds on top.** The label answers "is this *a* test
+ * instance"; it is the same string for every instance ever started, so it
+ * cannot answer "is this the instance *this run* was pointed at". The browser
+ * suites solved that with `APP_INSTANCE_RUN_ID` (`e2e/support/isolation.ts`):
+ * a value the starter generates, the server echoes on `/api/health`, and the
+ * harness compares. An acceptance run used to compare nothing, so a labelled
+ * instance orphaned by an interrupted run passed the whole gate on a database
+ * the operator had since turned into something else. Now the run requires its
+ * environment to carry `APP_INSTANCE_RUN_ID`, compares it with what answered,
+ * and requires the instance's data directory to be declared and to *look*
+ * test-like (an `.e2e` name or a directory under the system temp) — before the
+ * first request that writes.
+ *
  * Kryteria: L1.8 (konfiguracja kierująca próbę na instancję użytkownika jest
  * odrzucana przed operacją zapisu).
  */
+
+import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { basename, dirname, resolve, sep } from 'node:path';
 
 /** Port an installed instance listens on when nobody configures one. */
 export const USER_APP_PORT = 8791;
@@ -96,7 +113,16 @@ export function resolveAcceptanceTarget(env = {}) {
         `Uruchom osobna instancje z osobnym katalogiem danych (domyslnie ${DEFAULT_ACCEPTANCE_BASE}).`,
     );
   }
-  return { base: url.origin, port, allowedLabels: [...ACCEPTANCE_LABELS] };
+  /*
+   * The run identifier the caller declares, if any. Read here so every caller
+   * of `resolveAcceptanceTarget` sees the same expectation; the comparison
+   * itself happens when somebody actually answers.
+   */
+  const expectedRunId =
+    typeof env.APP_INSTANCE_RUN_ID === 'string' && env.APP_INSTANCE_RUN_ID.trim() !== ''
+      ? env.APP_INSTANCE_RUN_ID
+      : undefined;
+  return { base: url.origin, port, allowedLabels: [...ACCEPTANCE_LABELS], expectedRunId };
 }
 
 /**
@@ -111,6 +137,7 @@ export const HEALTH_TIMEOUT_MS = 10_000;
 
 export async function checkAcceptanceInstance(target, fetchImpl = fetch, timeoutMs = HEALTH_TIMEOUT_MS) {
   let label;
+  let runId;
   try {
     const res = await fetchImpl(`${target.base}/api/health`, {
       /*
@@ -134,6 +161,7 @@ export async function checkAcceptanceInstance(target, fetchImpl = fetch, timeout
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = await res.json();
     label = body?.instanceLabel ?? null;
+    runId = body?.instanceRunId ?? null;
   } catch (e) {
     return (
       `Instancja pod ${target.base} nie odpowiada na /api/health poprawnie ` +
@@ -151,7 +179,168 @@ export async function checkAcceptanceInstance(target, fetchImpl = fetch, timeout
       'nic nie zostalo zapisane. Ustaw APP_INSTANCE_LABEL na wlasnej instancji albo wskaz APP_BASE.'
     );
   }
+  if (target.expectedRunId !== undefined && runId !== target.expectedRunId) {
+    return (
+      `Pod ${target.base} odpowiada instancja Z INNEGO PRZEBIEGU ` +
+      `(instanceRunId=${JSON.stringify(runId)}, oczekiwano ${JSON.stringify(target.expectedRunId)}). ` +
+      'Etykieta jest wspolna dla wszystkich instancji testowych i odbiorczych, wiec sama nie ' +
+      'odroznia serwera osieroconego po przerwanym starcie od tego, ktory ta proba wskazala. ' +
+      'Uruchom instancje z APP_INSTANCE_RUN_ID o tej samej wartosci, ktora podajesz tutaj, ' +
+      'albo zatrzymaj tamten proces po jego pid. Nic nie zostalo zapisane.'
+    );
+  }
   return null;
+}
+
+/**
+ * Refuses an acceptance run whose environment does not *declare* what it is
+ * talking to.
+ *
+ * The label gate checks what answers; this checks what the run itself claims.
+ * `APP_INSTANCE_RUN_ID` must be carried by the run so it can be compared with
+ * the answering instance, and `APP_DATA_DIR` must be carried so the run can
+ * refuse a data directory that does not look like a test one (an `.e2e` name,
+ * or a directory under the system temp). Both are the same values the instance
+ * was started with, so the honest invocation is one `export` away — and the
+ * refusal message is that invocation.
+ */
+export function problemSrodowiskaOdbiorczego(env = {}) {
+  const runId = env.APP_INSTANCE_RUN_ID;
+  if (typeof runId !== 'string' || runId.trim() === '') {
+    return (
+      'brak APP_INSTANCE_RUN_ID — ta proba musi wiedziec, z ktora instancja mowi. ' +
+      'Uruchom instancje odbiorcza i probe z ta sama wartoscia, np.:\n' +
+      '  export APP_INSTANCE_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"\n' +
+      '  export APP_DATA_DIR="$(mktemp -d /tmp/.e2e-odbiorcza-XXXXXX)"\n' +
+      '  APP_INSTANCE_LABEL=agenticapp-acceptance APP_INSTANCE_RUN_ID="$APP_INSTANCE_RUN_ID" ' +
+      `APP_DATA_DIR="$APP_DATA_DIR" PORT=${DEFAULT_ACCEPTANCE_PORT} pnpm start\n` +
+      'Bramka porownuje ten identyfikator z instanceRunId na /api/health i odmawia instancji ' +
+      'z innego przebiegu, zanim cokolwiek zapisze.'
+    );
+  }
+  const katalog = env.APP_DATA_DIR;
+  if (typeof katalog !== 'string' || katalog.trim() === '') {
+    return (
+      'brak APP_DATA_DIR — proba nie moze sprawdzic, w jakim katalogu danych stoi instancja, ' +
+      'ktorej zamierza pisac. Ustaw APP_DATA_DIR na ta sama wartosc, z jaka wystartowala ' +
+      'instancja odbiorcza (katalog o nazwie z prefiksem ".e2e" albo katalog w systemowym tmp).'
+    );
+  }
+  const realna = (() => {
+    try {
+      return realpathSync(resolve(katalog));
+    } catch {
+      return resolve(katalog);
+    }
+  })();
+  const tmp = (() => {
+    try {
+      return realpathSync(tmpdir());
+    } catch {
+      return resolve(tmpdir());
+    }
+  })();
+  const wTmp = realna === tmp || realna.startsWith(tmp + sep);
+  const prefiksTestowy = basename(realna).startsWith('.e2e');
+  if (!wTmp && !prefiksTestowy) {
+    return (
+      `APP_DATA_DIR (${katalog}) nie jest katalogiem testowym — proba wykonuje zapisy ` +
+      '(zmiana ilosci pozycji, dodanie kart) i wymaga katalogu o nazwie z prefiksem ".e2e" ' +
+      'albo katalogu w systemowym tmp, nie miejsca, w ktorym stoia komus dane.'
+    );
+  }
+  return null;
+}
+
+/**
+ * The credentials file of the login this machine is running under — the same
+ * path the browser harness guards (`e2e/credential-guard.ts`).
+ *
+ * **Never read for content.** The only thing this module does with the file is
+ * `stat` it: the fingerprint below is size and mtime, neither of which is a
+ * secret. Reading the contents — even to hash them — would copy the user's
+ * tokens into this process's memory for no gain, and the rule this whole
+ * mechanism serves (G21) is that nothing in this repository touches that file.
+ */
+export function plikPoswiadczen() {
+  return resolve(process.env.CLAUDE_CONFIG_DIR ?? resolve(homedir(), '.claude'), '.credentials.json');
+}
+
+/** Rozmiar i czas modyfikacji; `brak`, gdy pliku nie ma. Ani jedno nie jest sekretem. */
+export function odciskPoswiadczen() {
+  try {
+    const st = statSync(plikPoswiadczen());
+    return `${st.size}:${st.mtimeMs}`;
+  } catch {
+    return 'brak';
+  }
+}
+
+/**
+ * Where the gate-time fingerprint travels.
+ *
+ * The browser harness decided this question already (`e2e/credential-guard.ts`):
+ * a fingerprint kept only in memory dies with the process, and a run that
+ * *crashes* — an uncaught exception mid-stream, a killed child — must still be
+ * checked at its end, not silently excused by its own failure. So the gate
+ * writes the value to a carrier file in gitignored `test-results/`, and the
+ * end-of-run check can read it back. `APP_PRZENOSNIK_ODCISKU` moves the file
+ * (the suites and the tests point it at a scratch directory); it never lands
+ * in `docs/evidence/` and it holds only size:mtime of the credentials file —
+ * never a secret.
+ */
+export function sciezkaPrzenosnika(env = process.env) {
+  const katalog = resolve(env.APP_PRZENOSNIK_ODCISKU ?? resolve(process.cwd(), 'test-results'));
+  return resolve(katalog, 'acceptance-credential-fingerprint.json');
+}
+
+/** Odcisk zapisany w pliku-przenośniku, albo `undefined`, gdy go tam nie ma. */
+export function odciskZPrzenosnika(przenosnik = sciezkaPrzenosnika()) {
+  try {
+    const zapis = JSON.parse(readFileSync(przenosnik, 'utf8'));
+    return typeof zapis?.odcisk === 'string' ? zapis.odcisk : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Saves the fingerprint at gate time — to memory **and** to the carrier file —
+ * and says so when there is nothing to guard: a machine without the
+ * credentials file must not pass silently — the absence is stated, and what is
+ * guarded is then the file's *appearance*.
+ */
+export function zapiszOdciskPoswiadczen(przenosnik = sciezkaPrzenosnika()) {
+  const odcisk = odciskPoswiadczen();
+  if (odcisk === 'brak') {
+    console.error(
+      `[proba odbiorowa] plik poswiadczen (${plikPoswiadczen()}) nie istnieje — odcisk "brak". ` +
+        'Proba pilnuje teraz, zeby plik w jej trakcie nie powstal; to stwierdzenie jest jawne, ' +
+        'nie milczaca zgoda.',
+    );
+  }
+  mkdirSync(dirname(przenosnik), { recursive: true });
+  writeFileSync(przenosnik, JSON.stringify({ plik: plikPoswiadczen(), odcisk }, null, 2) + '\n');
+  return odcisk;
+}
+
+/** Porównuje odcisk z gate time i głośno kończy probe błędem przy zmianie. */
+export function sprawdzOdciskPoswiadczen(odcisk) {
+  if (typeof odcisk !== 'string') {
+    throw new Error(
+      '[proba odbiorowa][odcisk] brak zapisanego odcisku poswiadczen — bramka instancji nie ' +
+        'przeszla przez zapis odcisku? Konca proby nie wolno przyjac bez tego porownania.',
+    );
+  }
+  const po = odciskPoswiadczen();
+  if (po !== odcisk) {
+    throw new Error(
+      `[proba odbiorowa][odcisk] plik poswiadczen uzytkownika (${plikPoswiadczen()}) ZMIENIL SIE ` +
+        `w trakcie tej proby (odcisk przed: ${odcisk}, po: ${po}). Zadna proba odbiorcza nie ` +
+        'zapisuje tego pliku w zadnym celu — takze identyczna trescia, bo zapis i tak obcina ' +
+        'i przepisuje plik. To jest wykrycie naruszenia; proba konczy sie bledem.',
+    );
+  }
 }
 
 /**
@@ -160,10 +349,19 @@ export async function checkAcceptanceInstance(target, fetchImpl = fetch, timeout
  * Both scripts call this as their first statement, before the session cookie is
  * fetched — `/api/auth/session` is itself a POST, and a POST to the user's
  * instance is already the thing this prevents.
+ *
+ * Passing the gate also takes the credentials fingerprint: the returned target
+ * carries `odciskPoswiadczen`, and the calling scripts compare it at the end
+ * (`sprawdzOdciskPoswiadczen`) and refuse success when it changed. The probe
+ * itself spawns a real agent; the fingerprint is how the *run* proves it did
+ * not write through the user's login while doing it.
  */
 export async function requireAcceptanceInstance(env = {}, fetchImpl = fetch, timeoutMs = HEALTH_TIMEOUT_MS) {
   const target = resolveAcceptanceTarget(env);
   const problem = await checkAcceptanceInstance(target, fetchImpl, timeoutMs);
   if (problem) throw new AcceptanceTargetError(problem);
+  const srodowisko = problemSrodowiskaOdbiorczego(env);
+  if (srodowisko) throw new AcceptanceTargetError(srodowisko);
+  target.odciskPoswiadczen = zapiszOdciskPoswiadczen(sciezkaPrzenosnika(env));
   return target;
 }

@@ -875,3 +875,103 @@ przenumerowuję, bo dziennik jest zapisem przebiegu — zgłaszam jako zauważon
 numeracji. Kuriozum pomocnicze: archiwalny `FEEDBACK.md` podaje „Razem 95”, a jego własne
 podsumowanie per status (50+33+10+2=95) się zgadza — przed konsolidacją dryfował (raportował 91),
 co naprawiono już w AgenticApp (wpis #29 archiwum).
+
+## T9 — 2026-09-20 — ETAP 2: domknięcie dziur izolacji testów (straż skryptowa, odcisk poświadczeń w próbach, RUN_ID, porządki)
+
+**Problem.** Audyt wejściowy ETAPU 2 (`etap2-a-audyt.md`) wskazał sześć dziur, z których najcięższe
+dotyczyły procesu **bez etykiety**: straż w `config.ts` celowo ogranicza tylko instancje z
+etykietą `agenticapp-test` (proces bez etykiety to aplikacja użytkownika i musi móc startować na
+swoich danych — potwierdza `tests/isolation.test.ts:215-223`), więc `dev-server.sh`,
+`audit-server.sh` i `closure-server.sh` przyjmowały `APP_DATA_DIR` wskazany na żywe dane;
+`dev-server.sh` pollował `/api/health` pod stałym 8791 i zgłaszał „started", gdy odpowiadała cudza
+instancja, zostawiając pidfile martwego procesu; próby odbiorcze (`pnpm acceptance`,
+`run-agent.mjs`) nie miały odpowiednika `APP_INSTANCE_RUN_ID` z e2e ani wymogu testowego katalogu
+danych, a o niczym nie dowodziły, że nie naruszyły logowania użytkownika; `globalTeardown`
+zostawiał po sobie katalogi `.e2e*` (~30 sztuk w repo); `assertDirectoryFree` traktował brak
+odpowiedzi z `/proc` jako „wolny".
+
+**Ruling, którym kierowałem cały pakiet:** żadna zmiana nie dotyka zachowania `pnpm start`;
+`packages/platform-server/src/config.ts` nietknięty. Wszystkie naprawy są na warstwie skryptów
+testowych/audytowych, harnessu e2e i testów.
+
+**Zmiana** (sześć commitów, po jednym na dziurę z dokładnością do pary 5-6):
+- **Dziura 1** — nowy `scripts/lib/server-guard.mjs`, spięty w trzy skrypty PRZED `setsid`:
+  odmowa, gdy katalog danych zawiera wskaźnik żywych danych (`session.secret`; istnienie pliku,
+  nigdy treść), wykrywany w trzech kierunkach jak w `state-tools.mjs` (w katalogu, powyżej,
+  poniżej — do tej samej granicy głębokości). Wyjątki: para `agenticapp-test` + prefiks `.e2e`
+  (ta sama, którą serwer i tak wymusza dla tej etykiety) oraz własny znacznik straży z
+  wcześniejszego startu, powiązany ścieżką jak znacznik `state-tools` — bez niego udokumentowane
+  polecenie działałoby raz, a drugi start na własnym katalogu instancji byłby „żywymi danymi".
+  Znacznik **nie** otwiera domyślnego katalogu `data/` repozytorium. Dowiązanie symboliczne
+  odrzucone. `dev-server.sh` dostaje `DEV_DATA`/`DEV_PORT` (domyślnie bez zmian), żeby komunikat
+  odmowy miał drogę wyjścia.
+- **Dziura 3** — `przed` sonduje zajetość portu TCP (wzorzec `port-probe.ts`) i odmawia z pidem
+  właściciela; po pierwszej odpowiedzi zdrowia podpolecenie `po` potwierdza w `/proc`, że port
+  trzyma właśnie proces z pidfile: żywy, uruchamiający `apps/server/dist/server.js`, właściciel
+  gniazda LISTEN. „Started" bez tego potwierdzenia nie pada.
+- **Dziura 4** — `requireAcceptanceInstance` wymaga w środowisku próby `APP_INSTANCE_RUN_ID`
+  (porównywanego z `instanceRunId` z `/api/health`; instancja z innego przebiegu i instancja bez
+  pola są odmawiane) oraz `APP_DATA_DIR` będącego katalogiem testowym (prefiks `.e2e` albo katalog
+  w systemowym tmp). Odmowa przed pierwszym żądaniem zapisującym; komunikat podaje gotowe
+  polecenia. `diag-frontend.mjs` i `probe-chat-composer.mjs` przechodzą przez tę samą bramkę i
+  dostają przekazanie pełnego środowiska.
+- **Dziura 2** — bramka przy przepuszczeniu zapisuje odcisk pliku poświadczeń (rozmiar:czas
+  modyfikacji — wyłącznie `stat`, treść nigdy nie jest czytana; brat `e2e/credential-guard.ts`).
+  `run-agent.mjs` porównuje go przy **każdym** kończeniu, także błędnym; `acceptance-agent.mjs`
+  przy końcu nadrzędnym (każdy potomek `run-agent` sprawdza swój odcisk osobno). Zmiana kończy
+  kodem 5 z nazwaniem przebiegu sprawcą. Brak pliku (CI-like) jest jawny (odcisk „brak" +
+  komunikat; pilnowane jest wtedy pojawienie się pliku), brak zapisanego odcisku przy końcu to
+  też błąd, nie ciche przejście.
+- **Dziura 5** — `globalTeardown` PO pomyślnym `checkCredentialFingerprint` usuwa katalogi
+  `.e2e*` w korzeniu repozytorium, których nie trzyma żaden żywy proces; przy niezgodności
+  odcisku porządki nie idą (dowód naruszenia zostaje). Pliki i dowiązania poza zakresem; katalog
+  otwarty przez proces albo pytanie niemożliwe (brak `/proc`) zostają z powodem na wyjściu.
+- **Dziura 6** — `directoryFreeProblem` w `port-probe.ts`: wszystkie trzy odpowiedzi
+  `directoryInUse` są decyzjami; `null` (nie da się zapytać) to odmowa z jasnym komunikatem,
+  nie cicha zgoda.
+
+**Decyzje.**
+- Etykietą wyjątku jest wyłącznie `agenticapp-test`: tylko tę etykietę `config.ts` faktycznie
+  wiąże z prefiksem `.e2e`, więc tylko ta para jest wiarygodnym oświadczeniem „to katalog
+  testowy". Instancje `agenticapp-dev`/`agenticapp-acceptance` nie są serwerowo ograniczane, więc
+  straż skryptowa ich nie zwalnia.
+- Wymóg `APP_INSTANCE_RUN_ID`/`APP_DATA_DIR` w próbach odbiorczych to wymóg **deklaracji**
+  (środowisko próby musi nieść to, co środowisko startu instancji) połączony z weryfikacją, co
+  naprawdę odpowiedziało — sam z siebie nie obroni przed świadomym kłamstwem operatora, ale
+  domyka klasę przypadków, którą audyt nazwał (osierocona instancja z poprzedniego startu), i
+  czyni uczciwe użycie jednym `export`iem.
+- README: dotychczasowe polecenie startu instancji odbiorczej (`.acceptance-data`, bez
+  identyfikatora) nowa bramka odrzuciłaby — zamienione na pełny, działający przebieg w jednej
+  powłoce, z opisem porównania identyfikatora i odcisku na końcu.
+- Kontrola przeciwna w `tests/acceptance-target.test.ts` („przy dozwolonej etykiecie skrypt
+  naprawdę pisze") dostała do środowiska nowe wymagane zmienne — cel testu (POST muszą dotrzeć)
+  pozostał, rozszerzyłem konfigurację, nie osłabiłem asercji.
+
+**Własne błędy przy tym pakiecie.** (1) Podpolecenie `po` w strażu wpadło w sprawdzanie `--katalog`
+i wypisywało usage — wyszło w testach, naprawione przed commitem. (2) Regresja klasyfikacji
+skryptów (`tests/acceptance-target.test.ts`) natychmiast oznaczyła `run-agent.mjs` i
+`acceptance-agent.mjs` jako niesklasyfikowane, gdy import bramki złamałem na kilka linii — reguła
+liczy import w jednej linii; importy wróciły do jednej linii, a reguła po raz kolejny pokazała, że
+działa (fail-closed, nie przepuściła). (3) Pierwsza wersja testu granicy głębokości zakładała
+wykrywanie sekretu trzy poziomy niżej; granica jest taka sama jak w `state-tools` (dwa poziomy) —
+poprawiłem oczekiwanie, nie kod, żeby obie kopie pozostawały równoważne.
+
+**Weryfikacja.** Baseline przed zmianami: `pnpm install --frozen-lockfile`, `pnpm verify` = 0
+(69 plików, 1067 testów). Po pakiecie: `pnpm verify` = 0 (**71 plików, 1125 testów**),
+`pnpm test:e2e` = 0 (**224 passed, 16.5 min**, bez żadnej tury modelu). Próby dymne na prawdziwym
+skrypcie i prawdziwym serwerze (własne procesy, katalogi w tmp, porty 18791-18795, porządki po
+pid): żywy katalog z fałszywym sekretem → odmowa (kod 2), brak pidfile, nic nie wystartowało;
+zajęty port → odmowa z pidem właściciela; świeży katalog → „started" z potwierdzeniem własnego
+pid, zdrowie odpowiada `instanceLabel:null`, stop po pid; restart na tym samym katalogu przechodzi
+znacznik; `audit-server.sh` start/stop bez zastrzeżeń. W realnym przebiegu e2e porządki usunęły
+22 katalogi `.e2e-scripted-*` i zostawiły `.e2e-data` z powodem (webServer wciąż żył — Playwright
+zabija go po `globalTeardown`); następny boot i tak go wymazuje.
+
+**Otwarte.** (a) `audit-server.sh`/`closure-server.sh` dalej startują instancję bez etykiety — na
+świeżym katalogu bez sekretu to zgodne z rulingiem, ale pełną etykietę + prefiks `.e2e` mogłyby
+dostać dopiero wtedy, gdy ich katalogi danych przeniosą się do repo (dziś są w `/tmp`, a `config.ts`
+wymaga katalogu `.e2e` w repo). (b) Odcisk poświadczeń w `acceptance-agent.mjs` porównywany jest
+przy normalnym końcu; nagły crash nadrzędnego omija porównanie — każde dziecko `run-agent`
+sprawdza swoje osobno, więc ścieżki ryzyka (rzeczywiste uruchomienia agenta) są pokryte.
+(c) `stop` w `audit-server.sh` wypisuje błąd `cat /tmp/audit_data_dir`, gdy pliku nie ma —
+zachowanie sprzed pakietu, nie ruszałem poza zakresem.
