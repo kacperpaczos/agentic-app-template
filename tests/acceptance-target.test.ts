@@ -335,7 +335,6 @@ const SONDA_W_ZAKRESIE_TESTOWYM =
 /** Każdy plik wykonywalny w `scripts/`, który nie importuje bramki. */
 const KLASYFIKACJA: Record<string, Wpis> = {
   'acceptance-matrix.mjs': { siec: false, powod: '' },
-  'audit-matrix.mjs': { siec: false, powod: '' },
   'audit-probe-chat-layout.mjs': { siec: true, powod: SONDA_W_ZAKRESIE_TESTOWYM },
   'audit-probe-chat-tools.mjs': { siec: true, powod: SONDA_W_ZAKRESIE_TESTOWYM },
   'audit-probe-remount.mjs': { siec: true, powod: SONDA_W_ZAKRESIE_TESTOWYM },
@@ -387,6 +386,7 @@ const KLASYFIKACJA: Record<string, Wpis> = {
     siec: true,
     powod: 'to JEST bramka: jej jedyne żądanie to odczyt etykiety z /api/health, od którego zależy reszta',
   },
+  'lib/matrix-core.mjs': { siec: false, powod: '' },
   'lib/state-tools.mjs': { siec: false, powod: '' },
   'matrix-summary.mjs': { siec: false, powod: '' },
   'migration-rehearsal.mjs': { siec: false, powod: '' },
