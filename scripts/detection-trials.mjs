@@ -31,15 +31,38 @@
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { arch, platform, release } from 'node:os';
+import { arch, platform, release, tmpdir } from 'node:os';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const REGISTRY = resolve(REPO, 'docs/acceptance/detection-trials.json');
 const EVIDENCE_DIR = 'docs/evidence/z13-bl12';
-/** The shared browser lock; one browser run at a time across all worktrees. */
-const LOCK = '/home/paczos/Documents/agentic-app-template-wt/.e2e.lock';
+
+/**
+ * The browser lock, derived rather than written down.
+ *
+ * **What the lock is for decides where it lives.** It serialises browser runs,
+ * and what a browser run consumes — the reserved test ports and the browsers
+ * themselves — is **machine-global**: parallel suites in two worktrees of one
+ * clone collide on port 8799 no matter which tree each came from. So the scope
+ * is the machine, and the lock goes in `os.tmpdir()` under a fixed name. A
+ * literal path was found by review: it named one laptop, and
+ * `check:detection` broke everywhere else. Repo root would scope the lock to
+ * one worktree — precisely the collision it exists to prevent.
+ *
+ * `AGENTIC_E2E_LOCK` overrides, so a run can join an existing lock instead —
+ * this programme's own convention keeps one beside its worktrees, and a caller
+ * that wants to share it sets the variable rather than teaching this file a
+ * layout. If the override or the fallback directory is unusable, that is the
+ * caller's statement to make; the harness never guesses a machine layout.
+ */
+export function e2eLockPath(repo = REPO, env = process.env) {
+  const override = env.AGENTIC_E2E_LOCK;
+  return resolve(override || resolve(tmpdir(), 'agenticapp-e2e.lock'));
+}
+
+const LOCK = e2eLockPath();
 
 /** Outcomes of one trial. `NIEWYKRYTE` is the one that matters. */
 export const WYKRYTE = 'wykryte';
