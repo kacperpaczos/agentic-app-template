@@ -451,7 +451,9 @@ describe('spece z prawdziwym modelem: opt-in i nienaruszalnosc dowodow', () => {
     // Statyczna kontrola polaczenia: samo wykonanie hooka wymagaloby uruchomienia
     // speca modelowego, czego to zadanie nie robi (grant zamkniety).
     const source = readFileSync(resolve(REPO, 'e2e/bl01-bl02-model.spec.ts'), 'utf8');
-    expect(source).toContain('const preflight = acceptancePreflight(MODEL_TURN_BUDGET);');
+    // Preflight jest podpiety pod sufit AKTYWNEGO rejestru (ACTIVE_BUDGET:
+    // subskrypcja, albo rejestr GLM w trybie glm) — nie pod sztywna stala.
+    expect(source).toContain('const preflight = acceptancePreflight(ACTIVE_BUDGET);');
     expect(source).toContain('test.skip(!preflight.ok, preflight.ok ? \'\' : preflight.message);');
     // Skip w beforeEach, czyli przed cialem testu — a wiec przed sendForRun.
     const hook = source.indexOf('test.beforeEach(');
