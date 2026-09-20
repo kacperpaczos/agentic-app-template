@@ -2,9 +2,9 @@
   "opis": "Kontrolowane warianty wadliwe krytycznych napraw. Kazdy wpis mowi, ktora naprawe chroni, ktora linie zepsuc i ktory test ma wtedy oblac. Test, ktory mimo wadliwego wariantu PRZECHODZI, jest znaleziskiem: naprawa nie jest chroniona.",
   "zrodlo": "node scripts/detection-trials.mjs (APP_WRITE_EVIDENCE=1)",
   "rodzajWykonania": "test kontraktu lub logiki",
-  "zapisano": "2026-09-19T10:15:00.884Z",
+  "zapisano": "2026-09-20T02:37:45.733Z",
   "wersjaKodu": {
-    "commit": "9dfee11355eedec749c8ac89501c2be1ea8bcb79",
+    "commit": "cc62d469c29b8bedce43e0567e3744a4c2aab195",
     "brudneDrzewoPrzedProbami": false,
     "node": "24.19.0"
   },
@@ -25,7 +25,7 @@
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 1,
-      "fragmentWyniku": "Tests  1 failed | 7 skipped (8)"
+      "fragmentWyniku": "Tests \u001b[22m \u001b[1m\u001b[31m1 failed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[33m7 skipped\u001b[39m\u001b[90m (8)\u001b[39m"
     },
     {
       "id": "D-2-projekcja-segmentu",
@@ -37,7 +37,7 @@
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 12,
-      "fragmentWyniku": "Tests  1 failed | 11 passed (12)"
+      "fragmentWyniku": "Tests \u001b[22m \u001b[1m\u001b[31m1 failed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[1m\u001b[32m11 passed\u001b[39m\u001b[22m\u001b[90m (12)\u001b[39m"
     },
     {
       "id": "abort-na-cancel-w-tle",
@@ -49,7 +49,7 @@
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 1,
-      "fragmentWyniku": "Tests  1 failed | 9 skipped (10)"
+      "fragmentWyniku": "Tests \u001b[22m \u001b[1m\u001b[31m1 failed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[33m9 skipped\u001b[39m\u001b[90m (10)\u001b[39m"
     },
     {
       "id": "detektor-strumienia",
@@ -61,7 +61,7 @@
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 1,
-      "fragmentWyniku": "Tests  1 failed | 12 skipped (13)"
+      "fragmentWyniku": "Tests \u001b[22m \u001b[1m\u001b[31m1 failed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[33m12 skipped\u001b[39m\u001b[90m (13)\u001b[39m"
     },
     {
       "id": "guard-izolacji-dowiazanie",
@@ -73,7 +73,7 @@
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 1,
-      "fragmentWyniku": "Tests  1 failed | 11 skipped (12)"
+      "fragmentWyniku": "Tests \u001b[22m \u001b[1m\u001b[31m1 failed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[33m11 skipped\u001b[39m\u001b[90m (12)\u001b[39m"
     },
     {
       "id": "guard-izolacji-magazyn",
@@ -85,7 +85,7 @@
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 1,
-      "fragmentWyniku": "Tests  1 failed | 11 skipped (12)"
+      "fragmentWyniku": "Tests \u001b[22m \u001b[1m\u001b[31m1 failed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[33m11 skipped\u001b[39m\u001b[90m (12)\u001b[39m"
     },
     {
       "id": "guard-osieroconego-serwera",
@@ -97,7 +97,7 @@
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 1,
-      "fragmentWyniku": "Tests  1 failed | 11 skipped (12)"
+      "fragmentWyniku": "Tests \u001b[22m \u001b[1m\u001b[31m1 failed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[33m11 skipped\u001b[39m\u001b[90m (12)\u001b[39m"
     },
     {
       "id": "cel-proby-etykieta",
@@ -109,7 +109,7 @@
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 14,
-      "fragmentWyniku": "Tests  3 failed | 11 passed (14)"
+      "fragmentWyniku": "Tests \u001b[22m \u001b[1m\u001b[31m3 failed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[1m\u001b[32m11 passed\u001b[39m\u001b[22m\u001b[90m (14)\u001b[39m"
     },
     {
       "id": "cel-proby-domyslny-port",
@@ -121,7 +121,7 @@
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 1,
-      "fragmentWyniku": "Tests  1 failed | 13 skipped (14)"
+      "fragmentWyniku": "Tests \u001b[22m \u001b[1m\u001b[31m1 failed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[33m13 skipped\u001b[39m\u001b[90m (14)\u001b[39m"
     },
     {
       "id": "koperta-rodzaj-wykonania",
@@ -133,7 +133,7 @@
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 1,
-      "fragmentWyniku": "Tests  1 failed | 9 skipped (10)"
+      "fragmentWyniku": "Tests \u001b[22m \u001b[1m\u001b[31m1 failed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[33m9 skipped\u001b[39m\u001b[90m (10)\u001b[39m"
     },
     {
       "id": "D-1-szuflada-nad-canvasem",
@@ -150,7 +150,7 @@
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 1,
-      "fragmentWyniku": "Tests  1 failed | 18 skipped (19)"
+      "fragmentWyniku": "Tests \u001b[22m \u001b[1m\u001b[31m1 failed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[33m18 skipped\u001b[39m\u001b[90m (19)\u001b[39m"
     },
     {
       "id": "guard-izolacji-realpath",
@@ -162,7 +162,7 @@
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 1,
-      "fragmentWyniku": "Tests  1 failed | 11 skipped (12)"
+      "fragmentWyniku": "Tests \u001b[22m \u001b[1m\u001b[31m1 failed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[33m11 skipped\u001b[39m\u001b[90m (12)\u001b[39m"
     },
     {
       "id": "sciezka-sygnalowa-harnessu",
@@ -174,7 +174,7 @@
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 1,
-      "fragmentWyniku": "Tests  1 failed | 15 skipped (16)"
+      "fragmentWyniku": "Tests \u001b[22m \u001b[1m\u001b[31m1 failed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[33m17 skipped\u001b[39m\u001b[90m (18)\u001b[39m"
     },
     {
       "id": "regula-bramki-skryptow",
@@ -186,7 +186,7 @@
       "wynik": "wykryte",
       "kodWyjsciaTestu": 1,
       "testowPrzedMutacja": 1,
-      "fragmentWyniku": "Tests  1 failed | 13 skipped (14)"
+      "fragmentWyniku": "Tests \u001b[22m \u001b[1m\u001b[31m1 failed\u001b[39m\u001b[22m\u001b[2m | \u001b[22m\u001b[33m13 skipped\u001b[39m\u001b[90m (14)\u001b[39m"
     }
   ]
 }
