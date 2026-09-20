@@ -1,16 +1,11 @@
 # Dokumentacja techniczna
 
-Zacznij od [`CURRENT.md`](CURRENT.md), który wskazuje obowiązującą wersję.
+Kanonem jest [v0.4](versions/v0.4/README.md). To punkt startowy, kolejność
+czytania i rozdzielenie wymagań, decyzji, stanu odbioru, backlogu, dowodów oraz
+historii. `docs/*.md` poza tym krótkim indeksem, `CURRENT.md` i `versions/` są
+technicznymi projekcjami v0.4 wymaganymi przez generatory, skrypty i testy;
+nie są konkurencyjną dokumentacją.
 
-- [`ARCHITECTURE.md`](ARCHITECTURE.md) — architektura i kryteria odbioru;
-- [`ACCEPTANCE.md`](ACCEPTANCE.md) — wygenerowany stan kryteriów;
-- [`BACKLOG.md`](BACKLOG.md) — wygenerowane otwarte prace blokujące odbiór;
-- [`NEW-APPLICATION.md`](NEW-APPLICATION.md) — kontrakt modułu domenowego;
-- [`ADAPTERY.md`](ADAPTERY.md) — rejestr własnych adapterów;
-- [`observability.md`](observability.md) — telemetryka;
-- [`odzyskiwanie-stanu.md`](odzyskiwanie-stanu.md) — kopia, migracja i odzyskanie;
-- [`DOCUMENTATION-MAP.md`](DOCUMENTATION-MAP.md) — historia konsolidacji źródeł;
-- [`versions/`](versions/README.md) — zamrożone snapshoty dokumentacji.
-
-Raporty i dowody mają własne pochodzenie. Nie są alternatywną specyfikacją ani
-zamiennikiem aktualnej macierzy odbioru.
+`docs/versions/v0.3/`, `docs/archive/`, `docs/evidence/` i raporty zachowują
+pochodzenie. Są historią albo dowodem, nie definicją bieżącego systemu; dowód
+wspominający OAuth lub subskrypcję Anthropic nie potwierdza aktywnego trybu GLM.

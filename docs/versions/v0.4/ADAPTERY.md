@@ -12,8 +12,9 @@ Rozróżnienie jest to samo, którego używał FEEDBACK §6 w poprzedniej fazie:
 - **konfiguracja** — gotowa funkcja ustawiona pod ten backend;
 - **adapter** — kod dopisany dlatego, że gotowe rozwiązanie tego nie dawało.
 
-Pełny rejestr z fazy AgenticApp jest w [`docs/archive/agenticapp-2026-09/FEEDBACK.md`](archive/agenticapp-2026-09/FEEDBACK.md) §6.
-Ten plik jest jego aktualną wersją dla szablonu: obejmuje także adaptery powstałe po tamtym zapisie.
+Pełny rejestr z fazy AgenticApp pozostaje historią poza v0.4:
+`docs/archive/agenticapp-2026-09/FEEDBACK.md` §6. Ten plik jest bieżącym rejestrem
+szablonu i obejmuje także adaptery powstałe po tamtym zapisie.
 
 ## Adaptery interfejsu (gotowy czat OpenUI `AgentInterface`)
 
@@ -169,14 +170,14 @@ Ten plik jest jego aktualną wersją dla szablonu: obejmuje także adaptery pows
 - **Ograniczenie:** lista zakazanych konstrukcji pochodzi z zaobserwowanych awarii tej wersji SDK, nie z jego specyfikacji.
 - **Ponowne użycie:** tak.
 
-## A-16 — Polityka wyłącznie subskrypcyjna i izolacja konfiguracji
+## A-16 — Izolacja konfiguracji harnessu GLM
 
 - **Rodzaj:** adapter
-- **Czego brakowało:** SDK dziedziczy zmienne środowiska i prywatne ustawienia użytkownika; klucz API w środowisku milcząco zmienia sposób rozliczania.
-- **Co dopisano:** przycięte środowisko procesu agenta (`subscriptionOnlyEnv`) i `settingSources: []`.
+- **Czego brakowało:** SDK dziedziczy zmienne środowiska i prywatne ustawienia użytkownika; niekontrolowane poświadczenia mogą milcząco zmienić providera albo sposób dostępu.
+- **Co dopisano:** przycięte środowisko procesu agenta (`subscriptionOnlyEnv`) i `settingSources: []`; aktywną politykę GLM/Z.AI określa [ACCEPTED-DECISIONS.md](ACCEPTED-DECISIONS.md), a nie ten rejestr.
 - **Pliki:** `packages/platform-server/src/agent/sandbox.ts`, `packages/platform-server/src/agent/auth.ts`
 - **Próba zgodności:** `tests/credential-guard.test.ts`, `tests/auth.test.ts`
-- **Ograniczenie:** samo odcięcie zmiennych jest sprawdzone jako konfiguracja i skanem powierzchni; nie jako próba z prawdziwie wyczerpanym limitem (L8.11).
+- **Ograniczenie:** samo odcięcie zmiennych jest sprawdzone jako konfiguracja i skanem powierzchni; nie jako próba z rzeczywiście wyczerpanym limitem GLM (L8.11).
 - **Ponowne użycie:** tak.
 
 ## A-17 — Macierz uprawnień narzędzi SDK

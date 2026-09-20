@@ -1,9 +1,11 @@
 # Nowa aplikacja na szablonie — kontrakt modułu domenowego
 
-Ten dokument opisuje, jak z szablonu zrobić **inny produkt**: co dostarcza moduł domenowy, co
-zapewnia platforma i które pliki zmienia się przy składaniu aplikacji. Wymagania, które nowa
-aplikacja nadal musi spełniać, są w [`ARCHITECTURE.md`](ARCHITECTURE.md); ich bieżący stan w
-[`ACCEPTANCE.md`](ACCEPTANCE.md).
+Ten dokument jest kontraktem autora modułu domenowego: określa punkty rozszerzeń, granice
+odpowiedzialności i wymagane własności modułu. Nie jest drugą specyfikacją platformy, instrukcją
+provisioningu ani raportem odbioru. Wymagania systemu są wyłącznie w
+[ARCHITECTURE.md](ARCHITECTURE.md), decyzje providera w
+[ACCEPTED-DECISIONS.md](ACCEPTED-DECISIONS.md), a bieżący stan w
+[ACCEPTANCE.md](ACCEPTANCE.md) i [BACKLOG.md](BACKLOG.md).
 
 Przykładem wzorcowym jest `packages/module-procurement` (porównywanie ofert). Minimalnym dowodem,
 że kontrakt nie jest przywiązany do tej domeny, jest `packages/module-devkit-probe`.
@@ -246,8 +248,9 @@ bo platforma nie wie, czym jest rekord w twojej domenie.
 
 - gotowy czat (OpenUI Agent Interface) z historią, tytułami, narzędziami, artefaktami i
   załącznikami; przywracanie rozmowy i przestrzeni po przeładowaniu;
-- wykonanie agenta: Mastra + Claude Agent SDK na subskrypcji (bez klucza API), serwer MCP per
-  uruchomienie, kolejka per rozmowa, zadania w tle niezależne od panelu, jawne Stop;
+- wykonanie agenta: Mastra + Claude Agent SDK jako harness, z GLM/Z.AI przez endpoint zgodny z
+  Anthropic jako jedynym aktywnym providerem; serwer MCP per uruchomienie, kolejka per rozmowa,
+  zadania w tle niezależne od panelu, jawne Stop;
 - narzędzia platformy dostępne dla agenta: kontekst aplikacji, canvas (dodanie, zmiana, przesunięcie,
   usunięcie karty), pliki i ich wersje, artefakty snapshot/live, nawigacja po celach UI;
 - pliki PNG/JPEG/XLSX/CSV/tekst z analizą w sandboxie (biblioteki z kuratorowanej listy
@@ -256,11 +259,8 @@ bo platforma nie wie, czym jest rekord w twojej domenie.
 - trwałość (SQLite + WAL), migracje platformy, kopia i próba migracji (`docs/odzyskiwanie-stanu.md`),
   diagnostyka (`pnpm diag`), izolowane testy przeglądarkowe.
 
-Czego platforma dziś **nie** zapewnia (pełna lista: [`BACKLOG.md`](BACKLOG.md)): semantycznego
-opisu aktywnego ekranu (instancje komponentów, rekord–pole, wersja kompozycji) dla agenta, sortowania
-i paginacji sterowanych rozmową, wskazania wartości pola rekordu ani osobnej przestrzeni „Widoki
-agenta” (L2.16–17, L3.14–18, L6.15–17). Zawężanie filtrem działa tylko w widokach deklarujących pola
-i tylko na danych już pobranych przez widok.
+Bieżące braki produktu określa wyłącznie [BACKLOG.md](BACKLOG.md). Ten przewodnik nie powtarza
+statusów wdrożenia ani nie zastępuje macierzy odbioru.
 
 ## 6. Testy nowej aplikacji
 
@@ -274,9 +274,10 @@ i tylko na danych już pobranych przez widok.
 | `scripts/acceptance-agent.mjs`, `scripts/run-agent.mjs` | scenariusze z prawdziwym modelem na danych przykładu | przepisać scenariusze na własną domenę |
 
 Zasady dowodu, które obowiązują także nową aplikację: test GUI zaczyna się interakcją w GUI i
-kończy widocznym wynikiem; próba z prawdziwym modelem jest oznaczona osobno; testy nie używają
-instancji ani katalogu danych użytkownika; kontrola negatywna musi umieć oblać test. Szczegóły:
-[`../AGENTS.md`](../AGENTS.md) i sekcja „Jakość testów” w [`ARCHITECTURE.md`](ARCHITECTURE.md).
+kończy widocznym wynikiem; próba z prawdziwym modelem GLM jest oznaczona osobno; testy nie używają
+instancji ani katalogu danych użytkownika; kontrola negatywna musi umieć oblać test. Szczegóły są
+w sekcji „Jakość testów” w [ARCHITECTURE.md](ARCHITECTURE.md). Zasady pracy repozytorium są
+zewnętrznym odwołaniem wykonawczym: `AGENTS.md`.
 
 ## 7. Znane pułapki stosu
 
@@ -301,8 +302,8 @@ instancji ani katalogu danych użytkownika; kontrola negatywna musi umieć obla�
 ### 7.1 Kontrakt zdarzeń `CUSTOM`
 
 `CUSTOM` to furtka protokołu AG-UI: nic w protokole nie opisuje, co jest w środku. Dlatego ładunki
-platformy mają **własne schematy i wersję kształtu** w
-[`packages/platform-contracts/src/agui-payloads.ts`](../packages/platform-contracts/src/agui-payloads.ts):
+platformy mają **własne schematy i wersję kształtu** w kodzie repozytorium:
+`packages/platform-contracts/src/agui-payloads.ts` (odwołanie do kodu poza v0.4):
 
 - `platformCustomPayloadSchemas` jest mapą **totalną** względem `PLATFORM_CUSTOM_EVENTS` — nowe
   zdarzenie bez schematu nie skompiluje się;
@@ -326,5 +327,5 @@ przy zatrzymaniu uruchomienia.
 > otwartą — aż do `RUN_FINISHED` albo `RUN_ERROR`, które ją czyszczą. Dotyczy wyłącznie danych zapisanych
 > przed wprowadzeniem zdarzenia; każde nowe uruchomienie zamyka swoją prośbę w dzienniku.
 
-Historia tych ustaleń: [`archive/agenticapp-2026-09/FEEDBACK.md`](archive/agenticapp-2026-09/FEEDBACK.md)
-(wpisy #15, #17, #18, #23, #39, #40, #41 oraz sekcje 6–8).
+Historia tych ustaleń: `docs/archive/agenticapp-2026-09/FEEDBACK.md` (odwołanie historyczne poza
+v0.4; wpisy #15, #17, #18, #23, #39, #40, #41 oraz sekcje 6–8).

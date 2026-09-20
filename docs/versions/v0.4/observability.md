@@ -54,7 +54,7 @@ kroku — i piąta z nich nie jest zapisana tam, gdzie pozostałe:
 | `model_failed` | strumień modelu istniał i zgłosił awarię | `agent_runs.error_code`, zdarzenie `RUN_ERROR` |
 | `integration_failed` | wywołanie adaptera nie dało strumienia, albo minął limit czasu przebiegu | jw. |
 | `sandbox_denied` | izolacja odmówiła albo była niedostępna | jw. |
-| `rate_limited` / `unauthenticated` | limit subskrypcji albo zerwane logowanie | jw. + ekran Ustawień |
+| `rate_limited` / `unauthenticated` | limit GLM albo błąd konfiguracji dostępu GLM | jw. + ekran Ustawień |
 | `domain_rule_violated` | reguła domeny odmówiła — to **nie** jest awaria przebiegu | wiadomość `role: "tool"` z `meta.isError`; uruchomienie kończy się jako `succeeded` |
 
 Sam komunikat nie wystarcza do rozdzielenia dwóch pierwszych: „connection

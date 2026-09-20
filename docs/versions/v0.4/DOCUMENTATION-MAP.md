@@ -1,10 +1,11 @@
 # Status wersji dokumentacji
 
-Obowiązującą dokumentacją do przeglądu jest [v0.4](versions/v0.4/README.md).
-Wersja [v0.3](versions/v0.3/ARCHITECTURE.md) pozostaje niezmiennym punktem odniesienia.
-Niniejszy dokument opisuje historyczną konsolidację źródeł; jego redakcja i
-uproszczenie są osobnym zadaniem, więc nie należy go traktować jako drugiej
-specyfikacji architektury.
+Obowiązującą dokumentacją do przeglądu jest [README v0.4](README.md).
+`docs/versions/v0.3/` pozostaje niezmienną historią. Niniejszy dokument opisuje
+pochodzenie i konsolidację źródeł; jest załącznikiem historycznym, poza podstawową
+ścieżką wykonawczą i nie jest drugą specyfikacją architektury. Ścieżki do
+raportów, planów, kodu i archiwum są w nim oznaczone jako odwołania zewnętrzne
+poza v0.4.
 
 ---
 
@@ -16,7 +17,8 @@ Konsolidacja z 2026-09-16 połączyła trzy zbiory dokumentów w jeden zestaw w 
 `agentic-app-template`. Każdy wcześniejszy dokument ma tu jedną decyzję: **aktualizacja**,
 **scalenie**, **archiwum** albo **usunięcie duplikatu**. Nic nie zostało usunięte bez rozliczenia
 unikalnej treści. Stan kodu i wyniki testów nie wynikają z tej mapy: rozstrzyga o nich
-[`ACCEPTANCE.md`](ACCEPTANCE.md) oraz [`CONSOLIDATION-REPORT.md`](CONSOLIDATION-REPORT.md).
+[ACCEPTANCE.md](ACCEPTANCE.md) oraz zewnętrzny raport historyczny
+`docs/CONSOLIDATION-REPORT.md`.
 
 Oznaczenia źródeł:
 
@@ -57,7 +59,7 @@ Lokalna kopia wszystkich dokumentów sprzed zmian leży poza repozytorium, w kat
 
 | Stara ścieżka | Rola | Unikalna treść | Decyzja | Docelowa ścieżka | Uzasadnienie |
 |---|---|---|---|---|---|
-| `stary-szablon/docs/PLAN.md` (2026-08-16, status „Proposed”) | plan aplikacji na Next.js + CopilotKit + BYOK/LiteLLM, workspace dokument + formularz | reguła audytu open-core przed wpięciem zależności (§2.4); bramka „propozycja → zgoda → deterministyczna mutacja” i rebase kroków ProseMirror (§5); `Actor` obowiązkowy w sygnaturach (ADR-008); sygnały zmiany architektury (§12) | **archiwum** z adnotacją „nieaktualny stos” | `szablon/docs/archive/plan-2026-08/PLAN.md` | **sprzeczny z obowiązującą specyfikacją**: Next.js (spec: Vite + Hono), CopilotKit zamiast OpenUI Agent Interface, BYOK/LiteLLM zamiast wyłącznie subskrypcji Claude (L8.3). Idee zgodne ze specyfikacją są już w niej obecne: semantyczny kontekst UI (L6.1, L6.15), zadanie w tle nie przełącza widoku (L6.14), atomowa i idempotentna mutacja (L9.7, L9.14), własność danych po stronie backendu (L10.1). Nieprzeniesione: rebase dokumentu, PIN, BYOK — nie należą do obecnego zakresu |
+| `stary-szablon/docs/PLAN.md` (2026-08-16, status „Proposed”) | plan aplikacji na Next.js + CopilotKit + BYOK/LiteLLM, workspace dokument + formularz | reguła audytu open-core przed wpięciem zależności (§2.4); bramka „propozycja → zgoda → deterministyczna mutacja” i rebase kroków ProseMirror (§5); `Actor` obowiązkowy w sygnaturach (ADR-008); sygnały zmiany architektury (§12) | **archiwum** z adnotacją „nieaktualny stos” | `szablon/docs/archive/plan-2026-08/PLAN.md` | **sprzeczny z obowiązującą specyfikacją v0.4**: Next.js (spec: Vite + Hono), CopilotKit zamiast OpenUI Agent Interface, BYOK/LiteLLM zamiast GLM/Z.AI jako wyłącznego aktywnego providera z Claude Code / Claude Agent SDK jako harnessem. Idee zgodne ze specyfikacją są już w niej obecne: semantyczny kontekst UI (L6.1, L6.15), zadanie w tle nie przełącza widoku (L6.14), atomowa i idempotentna mutacja (L9.7, L9.14), własność danych po stronie backendu (L10.1). Nieprzeniesione: rebase dokumentu, PIN, BYOK — nie należą do obecnego zakresu |
 | `stary-szablon/docs/DECISIONS-OPEN.md` | arkusz trzech decyzji (format patcha, tożsamość, provider trybu B) | wzorzec „wdrażaj lokalnie, buduj jak dla wielu użytkowników” (`Actor` w sygnaturach) | **archiwum** z adnotacją | `szablon/docs/archive/plan-2026-08/DECISIONS-OPEN.md` | decyzja 3 (LiteLLM) jest sprzeczna z L8.3; decyzja 2 jest zgodna z kierunkiem L9.5 i L10.11, lecz nie wnosi wymagania spoza specyfikacji |
 
 ## 4. Nowe dokumenty szablonu
@@ -76,7 +78,8 @@ Lokalna kopia wszystkich dokumentów sprzed zmian leży poza repozytorium, w kat
 
 ## 5. Aktualizacja 2026-09-17 — poprawki AgenticApp po konsolidacji
 
-Pełna mapa różnic kodu i decyzji: [`CONSOLIDATION-UPDATE-2026-09-17.md`](CONSOLIDATION-UPDATE-2026-09-17.md).
+Pełna mapa różnic kodu i decyzji: zewnętrzny raport historyczny
+`docs/CONSOLIDATION-UPDATE-2026-09-17.md`.
 
 | Stara ścieżka | Rola | Decyzja | Docelowa ścieżka | Uzasadnienie |
 |---|---|---|---|---|
@@ -93,11 +96,11 @@ Ta faza nie przenosiła dokumentów między repozytoriami: powstała w szablonie
 
 | Dokument | Rola | Stan |
 |---|---|---|
-| [`plans/2026-09-17-bl01-bl02.md`](plans/2026-09-17-bl01-bl02.md) | plan pracy: decyzje architektoniczne AD-1…AD-9, wiążące ograniczenia, podział na zadania i mapa styków | nowy; opisuje zamiar, nie wynik |
-| [`RAPORT-ARCHITEKTA-BL01-BL02.md`](RAPORT-ARCHITEKTA-BL01-BL02.md) | rozliczenie: co dostarczono, jak weryfikowano, czego nauczył prawdziwy model, znane ograniczenia, rozdzielenie odbioru (L12.17) | nowy; rozstrzyga o stanie tej fazy |
+| zewnętrzny plan historyczny `docs/plans/2026-09-17-bl01-bl02.md` | plan pracy: decyzje architektoniczne AD-1…AD-9, wiążące ograniczenia, podział na zadania i mapa styków | opisuje zamiar, nie wynik |
+| zewnętrzny raport historyczny `docs/RAPORT-ARCHITEKTA-BL01-BL02.md` | rozliczenie: co dostarczono, jak weryfikowano, czego nauczył prawdziwy model, znane ograniczenia, rozdzielenie odbioru (L12.17) | nie definiuje wymagań |
 | [`ACCEPTANCE.md`](ACCEPTANCE.md), [`BACKLOG.md`](BACKLOG.md) | oceny 200 kryteriów i otwarte prace | zaktualizowane z `acceptance/assessment.json`; BL-01 i BL-02 zamknięte i usunięte z backlogu |
 | [`NEW-APPLICATION.md`](NEW-APPLICATION.md) §3.1, §3.2 | kontrakt autora modułu: opis wyniku odczytu z polami i akcjami, widoki modułu, komponenty OpenUI po stronie serwera | rozszerzony |
-| [`../FEEDBACK.md`](../FEEDBACK.md) §T2 | dziennik fazy, w tym własne pomyłki procesu i pułapka z nadpisywaniem dowodów | rozszerzony |
+| zewnętrzny dziennik historyczny `FEEDBACK.md` §T2 | dziennik fazy, w tym własne pomyłki procesu i pułapka z nadpisywaniem dowodów | historia wykonania |
 | `evidence/bl01-bl02-2026-09-17/` | dowody prób T25, T26, T27 z prawdziwego modelu, rejestr tur, przebiegi nieudane | nowy; zapisane werdykty są nienadpisywalne przez kolejne przebiegi |
 | `.superpowers/sdd/2026-09-17-bl01-bl02/` | ledger przebiegu, briefy, raporty zadań i pakiety przeglądów | **poza szablonem** (katalog ignorowany); cytowany w raporcie architekta |
 

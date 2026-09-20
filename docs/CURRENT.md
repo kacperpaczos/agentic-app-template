@@ -1,15 +1,10 @@
 # Obowiązująca dokumentacja
 
-Aktualną wersją do przeglądu jest **v0.4** w
-[`versions/v0.4/`](versions/v0.4/README.md). Aktywne pliki w `docs/` odpowiadają
-tej wersji tam, gdzie mają charakter kanoniczny lub generowany:
+Aktualnym kanonem jest [v0.4](versions/v0.4/README.md). Czytanie zaczyna się od
+jej README, następnie `ARCHITECTURE.md` (wymagania),
+`ACCEPTED-DECISIONS.md` (decyzje), `ACCEPTANCE.md` (stan i dowody) oraz
+`BACKLOG.md` (otwarte prace).
 
-- [`ARCHITECTURE.md`](ARCHITECTURE.md) — kanoniczna architektura;
-- [`ACCEPTANCE.md`](ACCEPTANCE.md) i [`BACKLOG.md`](BACKLOG.md) — generowane z
-  aktualnej macierzy;
-- [`DOCUMENTATION-MAP.md`](DOCUMENTATION-MAP.md) — kontekst konsolidacji oraz
-  historia źródeł.
-
-[`versions/v0.3/`](versions/v0.3/ARCHITECTURE.md) jest zamrożonym punktem odniesienia.
-Nie porównuj bieżącego wdrożenia z raportami historycznymi jako z dowodem
-aktualnego działania.
+Pliki `docs/*.md` są bajtowo zgodnymi projekcjami v0.4 dla generatorów, skryptów
+i testów. `docs/versions/v0.3/`, archiwum, dowody i raporty są materiałami
+historycznymi; nie są dowodem bieżącego działania ani alternatywną specyfikacją.

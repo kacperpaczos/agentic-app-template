@@ -1,9 +1,9 @@
 # Projekt techniczny aplikacji agentowej full stack
 
 > **Obowiązująca specyfikacja platformy v0.4** (12 warstw, 200 kryteriów, 27 prób odbiorowych).
-> Jest to pełny snapshot v0.3 z zatwierdzonymi decyzjami opisanymi w `versions/v0.4/CHANGES-FROM-v0.3.md`; identyfikatory kryteriów i pozostała treść specyfikacji są zachowane.
+> Kanon v0.4. Zmiany względem nieedytowanej historii v0.3 opisuje [CHANGES-FROM-v0.3.md](CHANGES-FROM-v0.3.md); identyfikatory kryteriów i pozostała treść specyfikacji są zachowane.
 > Pola odbioru pozostają celowo niezaznaczone. Stan realizacji każdego kryterium: [`ACCEPTANCE.md`](ACCEPTANCE.md) (generowany z tego pliku przez `scripts/acceptance-matrix.mjs`); otwarte prace: [`BACKLOG.md`](BACKLOG.md).
-> Poprzednia wersja (95 kryteriów), wobec której oceniano aplikację źródłową: [`archive/agenticapp-2026-09/stack-agentowy-ustalenia-i-materialy-95-kryteriow.md`](archive/agenticapp-2026-09/stack-agentowy-ustalenia-i-materialy-95-kryteriow.md).
+> Historia z 95 kryteriami jest materiałem archiwalnym poza v0.4: `docs/archive/agenticapp-2026-09/stack-agentowy-ustalenia-i-materialy-95-kryteriow.md`. Nie definiuje bieżącego systemu ani stanu odbioru.
 
 ## Cel i zakres systemu
 
@@ -579,7 +579,7 @@ Odbiór wymaga adekwatnych dowodów. Testy deterministyczne pokrywają kolejnoś
 
 ## Specyfikacja prób odbiorowych
 
-Poniższe scenariusze są opisem oczekiwanego zachowania i jakości dowodu, nie harmonogramem prac. Konkretne rekordy i nazwy wynikają z domeny produktu. Co najmniej jeden reprezentatywny przebieg przechodzi przez rzeczywisty model subskrypcyjny, a kontrolowane błędy i kolejności mogą używać jawnego stand-in na granicy adaptera SDK. Pozostałe warstwy w takiej próbie pozostają rzeczywiste.
+Poniższe scenariusze są opisem oczekiwanego zachowania i jakości dowodu, nie harmonogramem prac. Konkretne rekordy i nazwy wynikają z domeny produktu. Co najmniej jeden reprezentatywny przebieg przechodzi przez rzeczywisty model GLM/Z.AI, a kontrolowane błędy i kolejności mogą używać jawnego stand-in na granicy adaptera SDK. Pozostałe warstwy w takiej próbie pozostają rzeczywiste. Dosłowne dawne sformułowanie w T17 jest zachowane wyłącznie dla niezmienności tekstu 27 prób; nie ustanawia aktywnej ścieżki subskrypcyjnej.
 
 | Próba | Warstwy | Wymagany dowód pozytywny | Kontrola negatywna lub graniczna |
 |---|---|---|---|
@@ -637,7 +637,7 @@ Zamknięcie warstw musi odpowiadać działaniu produktu jako całości. Bramka p
 | Odniesienie | plik testu, wynik przebiegu i dowód, powiązane ze stanem kodu |
 | Brak | konkretna niespełniona część i jej skutek; bez ogólnego „biblioteka nie wspiera” |
 
-Rodzaj dowodu nie jest statusem. Analiza kodu może potwierdzić kierunek zależności, ale nie działanie przycisku, strumienia lub sandboxu. Kontrolowana symulacja może potwierdzić zachowanie aplikacji przy limicie, ale nie fakt rzeczywistego wyczerpania subskrypcji. Wymagania opcjonalne są oceniane zgodnie z treścią: wyłączony Langfuse nie blokuje systemu, lecz aktywowany eksport wymaga dowodu działania.
+Rodzaj dowodu nie jest statusem. Analiza kodu może potwierdzić kierunek zależności, ale nie działanie przycisku, strumienia lub sandboxu. Kontrolowana symulacja może potwierdzić zachowanie aplikacji przy limicie GLM, ale nie fakt rzeczywistego wyczerpania limitu GLM. Wymagania opcjonalne są oceniane zgodnie z treścią: wyłączony Langfuse nie blokuje systemu, lecz aktywowany eksport wymaga dowodu działania.
 
 Wszystkie 200 kryteriów mają dokładnie jeden wpis macierzy. Zestawienie sum oraz zamkniętych warstw jest wyliczane z jej treści i sprawdzane wobec specyfikacji; zmiana statusu nie może pozostawić ręcznie wpisanego starego podsumowania. Liczba testów nie jest liczbą kryteriów. Warstwa pozostaje otwarta, jeżeli którykolwiek obowiązujący punkt nie jest potwierdzony.
 
