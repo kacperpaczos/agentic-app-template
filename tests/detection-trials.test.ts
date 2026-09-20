@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -60,6 +60,7 @@ interface Harness {
   childEnv: () => Record<string, string | undefined>;
   currentMutation: () => { path: string; original: string } | null;
   installRescue: () => void;
+  e2eLockPath: (repo?: string, env?: Record<string, string | undefined>) => string;
   readRegistry: (path?: string) => { proby: Trial[] };
   assertCleanTree: (repo?: string, what?: string) => void;
   applyMutation: (trial: Trial, repo?: string) => { path: string; original: string };
@@ -302,6 +303,61 @@ describe('harness prob zdolnosci wykrycia', () => {
     expect(readFileSync(file, 'utf8')).toBe('const strzezone = true;\n');
     expect(code).toBe(130);
   }, 30_000);
+
+  it('sciezka blokady przegladarkowej jest wyprowadzona, nie zaszyta', () => {
+    /*
+     * Recenzja calej galezi: LOCK mial zaszyta sciezke /home/paczos/... — jedyne
+     * takie miejsce w kodzie poza dowodami. Lamalo regule wlasciciela o braku
+     * sciezek lokalnych i psulo check:detection na kazdej innej maszynie.
+     *
+     * Semantyka: blokada chroni zasoby MASYNOWE (zarezerwowane porty i
+     * przegladarki), wiec jej zakres to maszyna — os.tmpdir() pod stalym
+     * nazwaniem. Korzen repo bylby blednym zakresem (suita w drugim worktree
+     * koliduje na porcie 8799 niezaleznie od drzewa), a konwencja programu,
+     * ktora trzyma blokade obok worktree'ow, nie jest faktem gita — wolela
+     * bysmy nauczyc skrypt ukladu katalogow tej jednej maszyny.
+     */
+    const lock = harness.e2eLockPath();
+    expect(resolve(lock)).toBe(lock);
+    expect(lock.endsWith('.lock')).toBe(true);
+    // Nie pod katalogiem domowym: to byla wlasciwie awaria, nie wybor.
+    expect(lock.startsWith(process.env.HOME ?? '/home')).toBe(false);
+
+    // Jawne dolaczenie do cudzej blokady zamiast zgadywania ukladu.
+    expect(harness.e2eLockPath(REPO, { AGENTIC_E2E_LOCK: '/tmp/wspolny.lock' })).toBe('/tmp/wspolny.lock');
+  });
+
+  it('zadna sciezka lokalna tej maszyny nie jest zaszyta w kodzie wykonywalnym', () => {
+    /*
+     * Regula wlasciciela: repo nie niesie sciezek lokalnych. Skan obejmuje kod
+     * i harness (scripts/, pakiety, apps, e2e) — testy sa celowo poza nim, bo
+     * fixture'y uzywaja fikcyjnych uzytkownikow (/home/ktos) jako DANYCH
+     * straznikow sciezek, i to jest legalne.
+     */
+    const probes: Array<[string, string[]]> = [
+      ['scripts', ['detection-trials.mjs', 'lib/acceptance-target.mjs']],
+      ['packages/platform-server/src', ['config.ts', 'util/real-path.ts']],
+      ['apps/web/src', ['dev-proxy.ts']],
+      ['e2e/support', ['isolation.ts', 'port-probe.ts']],
+    ];
+    const suspicious: string[] = [];
+    for (const [dir, mustContain] of probes) {
+      const root = resolve(REPO, dir);
+      expect(existsSync(root), dir).toBe(true);
+      const walk = (d: string): string[] =>
+        readdirSync(d, { withFileTypes: true }).flatMap((e) => {
+          const p = resolve(d, e.name);
+          return e.isDirectory() ? walk(p) : /\.(mjs|cjs|js|ts|mts|cts|sh)$/.test(e.name) ? [p] : [];
+        });
+      for (const file of walk(root)) {
+        if (/\/home\/[A-Za-z0-9_.-]+\//.test(readFileSync(file, 'utf8'))) suspicious.push(file);
+      }
+      for (const name of mustContain) {
+        expect(existsSync(resolve(root, name)), `${dir}/${name}`).toBe(true);
+      }
+    }
+    expect(suspicious, suspicious.join('\n')).toEqual([]);
+  });
 
   it('po przywroceniu nie ma juz czego przywracac', () => {
     const { repo } = repoWithFile('const strzezone = true;\n');
