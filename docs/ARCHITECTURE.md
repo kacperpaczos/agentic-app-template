@@ -181,7 +181,9 @@ Polecenie prezentacyjne jest związane z rozmową, wykonaniem i docelową sesją
 
 Zadanie należy do backendu i rozmowy, nie do aktualnie zamontowanego panelu. Przełączenie rozmowy lub przestrzeni, zamknięcie panelu, odświeżenie i rozłączenie klienta nie oznaczają Stop. Zadanie działa dalej, dopóki backend jest uruchomiony, a wynik trafia do pierwotnej rozmowy. Jawne Stop anuluje wskazane wykonanie. Nie jest wymagane działanie po zatrzymaniu procesu backendu; taki przypadek podlega kontraktowi restartu i odzyskiwania.
 
-Zadanie w tle nie przejmuje aktywnego widoku innej rozmowy. Wynik lub oczekiwanie na zgodę są sygnalizowane przy właściwej rozmowie; użytkownik może do niej wrócić. Polecenie nawigacyjne wykonane w tle zostaje odłożone lub pokazane jako dostępna akcja, zamiast samoczynnie zmieniać bieżącą przestrzeń. Odłączenie obserwatora strumienia jest rozróżnione od anulowania pracy.
+Centrum zadań jest obowiązkowym, globalnym widokiem operacyjnym. Pokazuje zadania ze wszystkich rozmów wraz z intencją, statusem, postępem, użytymi narzędziami, wejściowymi plikami, wynikowymi artefaktami, błędami oraz akcjami otwarcia rozmowy lub wyniku, anulowania i ponowienia. Czat pozostaje miejscem rozmowy oraz wydawania poleceń i może pokazywać skrócony stan zadania, ale nie jest właścicielem jego wykonania ani jedynym miejscem jego obsługi.
+
+Zadanie w tle nie przejmuje aktywnego widoku innej rozmowy. Gdy wymaga danych lub zgody użytkownika, przechodzi do stanu oczekiwania na decyzję i udostępnia ustrukturyzowany formularz w centrum zadań. Źródłowa rozmowa zachowuje zapis zdarzenia, lecz nie musi pozostawać otwarta. Niezależnie od aktywnej rozmowy aplikacja pokazuje trwałą plakietkę liczby zadań wymagających uwagi przy centrum zadań oraz jednorazowy, nieprzełączający kontekstu komunikat z przejściem do właściwego zadania. Polecenie nawigacyjne wykonane w tle zostaje odłożone lub pokazane jako dostępna akcja, zamiast samoczynnie zmieniać bieżącą przestrzeń. Odłączenie obserwatora strumienia jest rozróżnione od anulowania pracy.
 
 ### Semantyczny interfejs i przestrzeń prezentacyjna agenta
 
@@ -189,7 +191,9 @@ Robocze widoki aplikacji są kompozycjami OpenUI z zarejestrowanych komponentów
 
 Polecenie „pokaż tę wartość” obejmuje odnalezienie rekordu i pola, odczyt wartości z backendu, rozpoznanie widoku, otwarcie właściwej przestrzeni i sekcji oraz wskazanie rzeczywistej wartości. Jeśli filtr lub paginacja ją ukrywa, agent może jawnie dostosować prezentację i przewinąć do celu. Nie zastępuje tego opisem słownym ani nie zmienia danych biznesowych. Niejednoznaczny cel wymaga rozstrzygnięcia, a brak celu lub dostępu daje jawny wynik.
 
-Aplikacja ma osobną, widoczną w nawigacji przestrzeń „Widoki agenta” albo równoważny obszar centralnego canvasu związany z rozmową. Agent sam dobiera tam formę prezentacji do intencji: tabelę, wykres, podsumowanie, porównanie lub ich połączenie. Użytkownik nie musi podawać nazwy komponentu. Swoboda dotyczy kompozycji z katalogu, nie generowania i wykonywania dowolnego kodu. Gdy katalog nie pozwala pokazać wyniku, agent ujawnia ograniczenie.
+Aplikacja ma obowiązkową, osobną i widoczną w nawigacji przestrzeń „Widoki agenta” związaną z rozmową. Agent sam dobiera tam formę prezentacji do intencji: tabelę, wykres, podsumowanie, porównanie lub ich połączenie. Użytkownik nie musi podawać nazwy komponentu. Swoboda dotyczy kompozycji z katalogu, nie generowania i wykonywania dowolnego kodu. Gdy katalog nie pozwala pokazać wyniku, agent ujawnia ograniczenie.
+
+Moduł domenowy może dodatkowo zdefiniować dla konkretnego widoku listę dopuszczonych miejsc i komponentów, które agent może eksperymentalnie dodać do bieżącej kompozycji użytkownika. Każda pozycja listy określa typ komponentu, schemat właściwości, dozwolone powiązania danych i granice aktualizacji. Poza tą listą agent nie zmienia widoku użytkownika; nie zastępuje też elementów stałych ani nie wykonuje dowolnego kodu. Dodany komponent jest widocznie oznaczony jako wynik pracy agenta, powiązany z rozmową i podlega tym samym zasadom trwałości oraz odświeżania co widoki agenta.
 
 Wygenerowany widok jest pełnoprawnym, interaktywnym widokiem aplikacji: korzysta z tego samego źródła danych, filtrów i dozwolonych operacji co widoki domyślne. Można go dalej modyfikować rozmową, zapisać i ponownie otworzyć. Aktualizacja backendu odświeża prezentację; nie ma drugiej bazy danych w treści modelu. Działanie z tła nie przełącza samowolnie aktywnej przestrzeni użytkownika.
 
@@ -506,7 +510,7 @@ Adapter Claude nie zapewnia automatycznie pamięci Mastry. Zapis rozmów i mapow
 
 **Odpowiedzialność warstwy.** Workspace jest przestrzenią pracy, sandbox ograniczeniem dostępu, a worktree tylko odseparowanym checkoutem kodu. Żadne z tych pojęć nie zastępuje pozostałych. Ochrona obejmuje narzędzia plikowe, powłokę, sieć i procesy potomne.
 
-Dopuszczenie narzędzia w konfiguracji SDK może ominąć późniejszą bramkę interaktywnej zgody. Macierz uprawnień rozróżnia operacje automatycznie dozwolone, wymagające decyzji i zabronione. Reguły dostępu backendu obowiązują niezależnie od zgody modelowej. Stop oznacza zakończenie wykonania, nie tylko zamknięcie połączenia HTTP lub zmianę ikony. Zerwane połączenie, zamknięty panel i jawne anulowanie mają opisane, odrębne skutki.
+Dopuszczenie narzędzia w konfiguracji SDK może ominąć późniejszą bramkę interaktywnej zgody. Aplikacja udostępnia trzy wybierane przez użytkownika tryby pracy. **Ręczny** wymaga decyzji przed każdą akcją inicjowaną przez agenta. **Nadzorowany** jest domyślny: agent sam odczytuje dane, nawiguje, filtruje i używa dozwolonych komponentów widoku, lecz pyta przed trwałą mutacją domenową, usunięciem zasobu lub skutkiem poza aplikacją. **Pełna automatyzacja** nie pyta przy poszczególnych akcjach, ale nadal respektuje uprawnienia backendu, sandbox, zakazy narzędzi i trwały rejestr wykonania. Tryb jest przypisany do wykonania, widoczny w centrum zadań i nie może zostać podniesiony przez model. Reguły dostępu backendu obowiązują niezależnie od zgody modelowej. Stop oznacza zakończenie wykonania, nie tylko zamknięcie połączenia HTTP lub zmianę ikony. Zerwane połączenie, zamknięty panel i jawne anulowanie mają opisane, odrębne skutki.
 
 **Kryteria odbioru:**
 
@@ -515,20 +519,20 @@ Dopuszczenie narzędzia w konfiguracji SDK może ominąć późniejszą bramkę 
 - [ ] **L11.3** Izolacja jest aktywna na docelowym systemie; kontrolowane próby niedozwolonego odczytu, zapisu i dostępu do sieci są odrzucane.
 - [ ] **L11.4** Sandbox poleceń i uprawnienia narzędzi plikowych obejmują wszystkie udostępnione sposoby dostępu, a nie tylko powłokę.
 - [ ] **L11.5** Narzędzia nie mają niejawnego dostępu do bazy domenowej pozwalającego ominąć MCP i serwisy backendu.
-- [ ] **L11.6** Zadanie ma trwały status i powiązanie z rozmową; zamknięcie panelu nie usuwa informacji o pracy.
+- [ ] **L11.6** Zadanie ma trwały status i powiązanie z rozmową; globalne centrum zadań pokazuje jego postęp, wejścia, wyniki i akcje niezależnie od zamknięcia panelu lub przełączenia rozmowy.
 - [ ] **L11.7** Stop dociera do wykonania i jego procesów potomnych; pomiar czasu anulowania znajduje się w odbiorze.
 - [ ] **L11.8** Restart rozróżnia zadanie zakończone od przerwanego; wznowienie nie udaje kontynuacji utraconego procesu.
 - [ ] **L11.9** Wymagane pytania i zgody pojawiają się w aplikacji; odmowa nie wykonuje operacji, zgoda nie wykonuje jej podwójnie.
 - [ ] **L11.10** Opublikowane wyniki pozostają trwałe po sprzątnięciu plików tymczasowych.
 - [ ] **L11.11** Próby izolacji obejmują zarówno narzędzia powłoki, jak i plikowe; obejście jednej ścieżki przez drugą nie zapewnia dostępu do bazy lub sekretów.
-- [ ] **L11.12** Polityka automatycznych zgód i pytań odpowiada faktycznej kolejności mechanizmów SDK; lista allowedTools nie jest traktowana jako gwarancja wywołania bramki zgody.
+- [ ] **L11.12** Tryby ręczny, nadzorowany i pełnej automatyzacji mają odrębne, sprawdzone zachowanie zgód; model nie podnosi trybu samodzielnie, a lista allowedTools nie jest traktowana jako gwarancja wywołania bramki zgody.
 - [ ] **L11.13** Zgoda i odmowa są przypisane do konkretnego wykonania; ponowiona odpowiedź nie wykonuje operacji drugi raz.
 - [ ] **L11.14** Pomiar Stop rozdziela potwierdzenie żądania, zakończenie strumienia i procesów; po zakończeniu nie występują dalsze mutacje, a kolejka działa.
 - [ ] **L11.15** Zamknięcie panelu i utrata sieci odłączają obserwację, a zadanie kontynuuje na backendzie; wyłącznie jawne anulowanie lub udokumentowany warunek zakończenia zatrzymuje wykonanie.
 - [ ] **L11.16** Pliki wynikowe są opublikowane atomowo do trwałego magazynu przed sprzątaniem workspace; zerwane zadanie nie publikuje niekompletnego artefaktu jako gotowego.
 - [ ] **L11.17** Po przejściu z rozmowy A do B zadanie A nadal działa i zapisuje wynik w A; w B można prowadzić niezależną rozmowę bez mieszania rezultatów.
 - [ ] **L11.18** Po odświeżeniu lub ponownym połączeniu klient odzyskuje status i wynik zadania bez uruchamiania go drugi raz; backend pracuje także bez otwartego panelu.
-- [ ] **L11.19** Wykonanie w tle wymagające decyzji ma widoczny sygnał przy swojej rozmowie; brak otwartego panelu nie oznacza automatycznej zgody ani niewidocznego oczekiwania.
+- [ ] **L11.19** Wykonanie w tle wymagające decyzji ma ustrukturyzowany formularz w centrum zadań, zapis zdarzenia w źródłowej rozmowie, trwałą plakietkę uwagi i jednorazowy komunikat z przejściem do zadania; brak otwartego panelu nie oznacza automatycznej zgody ani niewidocznego oczekiwania.
 - [ ] **L11.20** PNG/JPEG, XLSX, CSV i tekst można dołączyć do polecenia, odczytać przez właściwe narzędzie oraz powiązać z odpowiedzią; nieobsługiwany format jest jasno odrzucony.
 - [ ] **L11.21** Próba na obrazie potwierdza odczyt jego rzeczywistej treści; znajomość nazwy, MIME lub rozmiaru nie zalicza analizy.
 - [ ] **L11.22** Próba XLSX potwierdza odczyt wielu arkuszy i typów komórek, wykonaną zmianę oraz poprawny plik wynikowy; oryginał pozostaje nienaruszony.
