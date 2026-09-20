@@ -1,7 +1,23 @@
 # Raport domknięcia platformy — 2026-09-20 (sesja kontrolowanego dokończenia)
 
-Gałąź `domkniecie/integracja` @ `3d87dda`; `main` = `e4fe9d7` = `origin/main`, nietknięte.
+Gałąź `domkniecie/integracja`; `main` = `e4fe9d7` = `origin/main`, nietknięte.
 **Nic nie zostało wypchnięte na GitHub — publikacja to osobna decyzja właściciela (§8).**
+
+> **Zmiana dostawcy (decyzja właściciela, 2026-09-20 wieczór):** Claude Code / Claude Agent SDK
+> pozostaje harnesssem, providerem modelu jest **GLM/Z.AI przez kompatybilny endpoint Anthropic**
+> w jawnym trybie `APP_MODEL_PROVIDER=glm` (fail-closed; subskrypcja Claude i OAuth Anthropic
+> nieużywane i nieczytane w tym trybie). Próby modelowe na GLM są **wstrzymane do jednoznacznego
+> sygnału właściciela** (równoległa edycja specyfikacji v0.4 w toku — zmiany `ARCHITECTURE.md`
+> i `docs/versions/` w drzewie roboczym należą do właściciela i są nietknięte; bramki dryfu
+> zgłaszają rozjazd do czasu ich skommitowania). Sonda SDK w trybie glm potwierdziła: sesja nie
+> jest subskrypcją OAuth (stan „other"), poświadczenie z endpointu; dowód
+> `docs/evidence/z12-bl04/sesja-sdk-glm.json`. Rejestr tur GLM: `1/25` (tura dymna).
+> **Implikacja dla T17:** przeredagowane L11.12 (tryby zgód: ręczny/nadzorowany/pełna
+> automatyzacja) zmienia znaczenie kryterium — dzisiejszy spec T17 (kolejność allowedTools/
+> canUseTool) odpowiada STAREMU brzmieniu i wymaga przepracowania wobec nowego, zanim cokolwiek
+> domknie. Naprawiony przy okazji defekt: sonda `probe:sdk-session` w trybie glm nadpisała
+> istniejący dowód BL-04 (`sesja-sdk.json`) — dowód przywrócony z gita, wynik glm zachowany jako
+> `sesja-sdk-glm.json`, ścieżka zapisu sondy provider-aware (`7db6634`).
 
 Sesja to kontynuacja porannego programu (raport z rana opisywał stan `ad2ae79`/`3692094`).
 Ta sesja NIE domyka nowych kryteriów modelowych (dostęp organizacyjny nadal zablokowany) —
