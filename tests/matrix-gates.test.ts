@@ -48,6 +48,7 @@ interface Proba {
 interface Wyliczenie {
   problems: string[];
   counts: Record<string, number>;
+  openCriteria: number;
   scenarioCounts: Record<string, number>;
   evidenceCounts: Record<string, number>;
   originCounts: Record<string, number>;
