@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -73,7 +74,9 @@ interface AcceptanceTargetModule {
   ) => string | null;
   plikPoswiadczen: () => string;
   odciskPoswiadczen: () => string;
-  zapiszOdciskPoswiadczen: () => string;
+  sciezkaPrzenosnika: (env?: Record<string, string | undefined>) => string;
+  odciskZPrzenosnika: (przenosnik?: string) => string | undefined;
+  zapiszOdciskPoswiadczen: (przenosnik?: string) => string;
   sprawdzOdciskPoswiadczen: (odcisk: string | undefined) => void;
   requireAcceptanceInstance: (env?: Record<string, string | undefined>) => Promise<{
     base: string;
@@ -682,6 +685,7 @@ describe('identyfikator przebiegu i katalog testowy (ETAP 2, dziura 4)', () => {
       APP_BASE: base,
       APP_INSTANCE_RUN_ID: 'przebieg-terazniejszy',
       APP_DATA_DIR: katalogTestowy(),
+      APP_PRZENOSNIK_ODCISKU: tmpKatalog(),
     });
     expect(target.base).toBe(base);
   });
@@ -716,10 +720,11 @@ describe('odcisk poswiadczen w probie odbiorczej (ETAP 2, dziura 2)', () => {
 
   it('zmiana pliku (nawet samego mtime, ta sama tresc) jest wykrywana i rzuca', () => {
     const { dir, plik } = atrapaConfig();
+    const przenosnik = resolve(tmpKatalog(), 'przenosnik.json');
     const realDir = process.env.CLAUDE_CONFIG_DIR;
     process.env.CLAUDE_CONFIG_DIR = dir;
     try {
-      const przed = mod.zapiszOdciskPoswiadczen();
+      const przed = mod.zapiszOdciskPoswiadczen(przenosnik);
       // Ta sama treść, nowy mtime: zapis identycznej treści to nadal zapis.
       const st = statSync(plik);
       utimesSync(plik, st.atime, new Date(st.mtimeMs + 5000));
@@ -734,17 +739,44 @@ describe('odcisk poswiadczen w probie odbiorczej (ETAP 2, dziura 2)', () => {
   it('brak pliku jest jawny: odcisk "brak", a POJAWIENIE sie pliku jest wykryte', () => {
     const dir = mkdtempSync(resolve(tmpdir(), 'atrapa-config-brak-'));
     katalogi.push(dir);
+    const przenosnik = resolve(tmpKatalog(), 'przenosnik.json');
     const realDir = process.env.CLAUDE_CONFIG_DIR;
     process.env.CLAUDE_CONFIG_DIR = dir;
     try {
       // Bez pliku: odcisk "brak", porównanie przechodzi — ale nic nie jest milczone.
       expect(mod.odciskPoswiadczen()).toBe('brak');
-      expect(mod.zapiszOdciskPoswiadczen()).toBe('brak');
+      expect(mod.zapiszOdciskPoswiadczen(przenosnik)).toBe('brak');
       expect(() => mod.sprawdzOdciskPoswiadczen('brak')).not.toThrow();
 
       // Plik powstał w trakcie próby: naruszenie, głośny błąd.
       writeFileSync(resolve(dir, '.credentials.json'), 'powstal-w-trakcie');
       expect(() => mod.sprawdzOdciskPoswiadczen('brak')).toThrow(/ZMIENIL SIE/);
+    } finally {
+      if (realDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = realDir;
+    }
+  });
+
+  it('plik-przenosnik w test-results niesie odcisk i on jest czytany z powrotem', () => {
+    const { dir } = atrapaConfig();
+    const przenosnik = mod.sciezkaPrzenosnika({
+      APP_PRZENOSNIK_ODCISKU: tmpKatalog(),
+    });
+    const realDir = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = dir;
+    try {
+      // Bez pliku: czytanie niczego nie udaje.
+      expect(mod.odciskZPrzenosnika(przenosnik)).toBeUndefined();
+
+      const odcisk = mod.zapiszOdciskPoswiadczen(przenosnik);
+      expect(existsSync(przenosnik)).toBe(true);
+      const zapis = JSON.parse(readFileSync(przenosnik, 'utf8')) as { plik: string; odcisk: string };
+      expect(zapis.odcisk).toBe(odcisk);
+      expect(zapis.plik).toBe(mod.plikPoswiadczen());
+      expect(mod.odciskZPrzenosnika(przenosnik)).toBe(odcisk);
+      // Wartość z pliku-przenośnika przechodzi porównanie i broni przy kończeniu
+      // procesu, który sam odcisku w pamięci nie ma (awaryjna ścieżka fix I-1).
+      expect(() => mod.sprawdzOdciskPoswiadczen(mod.odciskZPrzenosnika(przenosnik))).not.toThrow();
     } finally {
       if (realDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
       else process.env.CLAUDE_CONFIG_DIR = realDir;
@@ -761,6 +793,7 @@ describe('odcisk poswiadczen w probie odbiorczej (ETAP 2, dziura 2)', () => {
       APP_BASE: base,
       APP_INSTANCE_RUN_ID: 'przebieg-terazniejszy',
       APP_DATA_DIR: katalogTestowy(),
+      APP_PRZENOSNIK_ODCISKU: tmpKatalog(),
     });
     expect(typeof target.odciskPoswiadczen).toBe('string');
   });
@@ -776,6 +809,7 @@ describe('odcisk poswiadczen w probie odbiorczej (ETAP 2, dziura 2)', () => {
         APP_INSTANCE_RUN_ID: 'przebieg-odbiorczy',
         APP_DATA_DIR: katalogTestowy(),
         CLAUDE_CONFIG_DIR: dir,
+        APP_PRZENOSNIK_ODCISKU: tmpKatalog(),
       },
     });
     dzieciProc.push(dziecko);
@@ -812,6 +846,7 @@ describe('odcisk poswiadczen w probie odbiorczej (ETAP 2, dziura 2)', () => {
         APP_INSTANCE_RUN_ID: 'przebieg-odbiorczy',
         APP_DATA_DIR: katalogTestowy(),
         CLAUDE_CONFIG_DIR: dir,
+        APP_PRZENOSNIK_ODCISKU: tmpKatalog(),
       },
     });
     dzieciProc.push(dziecko);
@@ -826,5 +861,196 @@ describe('odcisk poswiadczen w probie odbiorczej (ETAP 2, dziura 2)', () => {
     expect(stdout).toContain('# instancja:');
     expect(status, `stderr: ${stderr}`).toBe(1);
     expect(stderr).not.toContain('ZMIENIL SIE');
+  }, 20_000);
+});
+
+/* ---------- nieprzechwycony wyjątek nie omija porównania (fix I-1) -------- */
+
+/**
+ * Stand-in, którego strumień AG-UI psuje się w połowie: 200, `text/event-stream`
+ * i linia `data:`, której `JSON.parse` nie przełknie. Dokładnie ta klasa krachu
+ * (parsowanie cudzej odpowiedzi) była dziurą: dawny `zakoncz` stał tylko na
+ * jawnych ścieżkach kończenia, więc wywaliwszy się w połowie biegu, próba
+ * omijała porównanie odcisku.
+ */
+async function instanceZepsutymStrumieniem(label: string | null, runId: string | null): Promise<string> {
+  seen = [];
+  const server = createServer((req, res) => {
+    seen.push(`${req.method} ${req.url}`);
+    if (req.url === '/api/health') {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ ok: true, instanceLabel: label, instanceRunId: runId }));
+      return;
+    }
+    if (req.url === '/api/auth/session') {
+      res.setHeader('content-type', 'application/json');
+      res.setHeader('set-cookie', 'sid=test; Path=/');
+      res.end('{}');
+      return;
+    }
+    res.setHeader('content-type', 'text/event-stream');
+    res.end('data: {zepsute-json\n\n');
+  });
+  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+  running = server;
+  const address = server.address();
+  if (typeof address === 'string' || address === null) throw new Error('brak portu');
+  return `http://127.0.0.1:${address.port}`;
+}
+
+/**
+ * Stand-in dla acceptance-agent.mjs: bramka przechodzi, a pierwszy krok setupu
+ * (`GET /api/m/procurement/cases`) odpowiada 500 — `call()` rzuca i bieg się
+ * wywala, zanim jakikolwiek scenariusz zdąży wystartować.
+ */
+async function instanceOdbiorczaKraczaca(label: string | null, runId: string | null): Promise<string> {
+  seen = [];
+  const server = createServer((req, res) => {
+    seen.push(`${req.method} ${req.url}`);
+    if (req.url === '/api/health') {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ ok: true, instanceLabel: label, instanceRunId: runId }));
+      return;
+    }
+    if (req.url === '/api/m/procurement/cases') {
+      res.statusCode = 500;
+      res.end('stand-in-awaria');
+      return;
+    }
+    res.setHeader('content-type', 'application/json');
+    res.setHeader('set-cookie', 'sid=test; Path=/');
+    res.end('{}');
+  });
+  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+  running = server;
+  const address = server.address();
+  if (typeof address === 'string' || address === null) throw new Error('brak portu');
+  return `http://127.0.0.1:${address.port}`;
+}
+
+interface Rozmowa {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+/**
+ * Uruchamia skrypt próby i dotyka atrapy poświadczeń, gdy tylko bramka
+ * przejdzie (komunikat „# instancja" znaczy, że odcisk został już zapisany).
+ * Dotknięcie = ta sama treść, nowy mtime — naruszenie według G21.
+ */
+const uruchomZDotknieciem = (
+  skrypt: string,
+  argumenty: string[],
+  base: string,
+  dir: string,
+  plik: string,
+  znacznik: string,
+  dotknij: boolean,
+): Promise<Rozmowa> =>
+  new Promise((gotowe) => {
+    const dziecko = spawn(process.execPath, [skrypt, ...argumenty], {
+      env: {
+        ...process.env,
+        APP_BASE: base,
+        APP_INSTANCE_RUN_ID: 'przebieg-odbiorczy',
+        APP_DATA_DIR: katalogTestowy(),
+        CLAUDE_CONFIG_DIR: dir,
+        APP_PRZENOSNIK_ODCISKU: tmpKatalog(),
+      },
+    });
+    dzieciProc.push(dziecko);
+
+    let stdout = '';
+    let stderr = '';
+    let dotkniety = false;
+    dziecko.stdout.on('data', (b: Buffer) => {
+      stdout += b.toString();
+      if (dotknij && !dotkniety && stdout.includes(znacznik)) {
+        dotkniety = true;
+        const st = statSync(plik);
+        utimesSync(plik, st.atime, new Date(st.mtimeMs + 5000));
+      }
+    });
+    dziecko.stderr.on('data', (b: Buffer) => (stderr += b.toString()));
+    void dziecko.on('close', (status) => gotowe({ status, stdout, stderr }));
+  });
+
+describe('nieprzechwycony wyjatek nie omija porownania odcisku (fix I-1)', () => {
+  const atrapaDoProb = (): { dir: string; plik: string } => {
+    const dir = mkdtempSync(resolve(tmpdir(), 'atrapa-config-crash-'));
+    katalogi.push(dir);
+    const plik = resolve(dir, '.credentials.json');
+    writeFileSync(plik, 'ATRAPA-zadne-poswiadczenie-nie-bierze-udzialu');
+    return { dir, plik };
+  };
+
+  it('run-agent: krach parsowania SSE w trakcie biegu NIE omija porownania — kod 5 z powodem', async () => {
+    const { dir, plik } = atrapaDoProb();
+    const base = await instanceZepsutymStrumieniem('agenticapp-acceptance', 'przebieg-odbiorczy');
+    const out = await uruchomZDotknieciem(
+      RUN_AGENT,
+      ['cokolwiek', '--space', 's1'],
+      base,
+      dir,
+      plik,
+      '# instancja:',
+      true,
+    );
+
+    // POWÓD: komunikat o niezgodności odcisku jest na wyjściu mimo krachu…
+    expect(out.status, `stderr: ${out.stderr}`).toBe(5);
+    expect(out.stderr).toContain('ZMIENIL SIE');
+    expect(out.stderr).toContain('poswiadczen');
+    // …a sam krach też jest widoczny, nie zamaskowany przez porównanie.
+    expect(out.stderr).toContain('SyntaxError');
+    expect(out.stdout).toContain('# instancja:');
+  }, 20_000);
+
+  it('kontrola przeciwna: krach bez naruszenia pliku pozostaje krachem (kod 1)', async () => {
+    const { dir } = atrapaDoProb();
+    const base = await instanceZepsutymStrumieniem('agenticapp-acceptance', 'przebieg-odbiorczy');
+    const out = await uruchomZDotknieciem(RUN_AGENT, ['cokolwiek', '--space', 's1'], base, dir, resolve(dir, 'brak-pliku'), '# instancja:', false);
+
+    expect(out.status, `stderr: ${out.stderr}`).toBe(1);
+    expect(out.stderr).toContain('SyntaxError');
+    expect(out.stderr).not.toContain('ZMIENIL SIE');
+  }, 20_000);
+
+  it('acceptance-agent: krach w setupie NIE omija porownania — kod 5 z powodem', async () => {
+    const { dir, plik } = atrapaDoProb();
+    const base = await instanceOdbiorczaKraczaca('agenticapp-acceptance', 'przebieg-odbiorczy');
+    const out = await uruchomZDotknieciem(
+      resolve(REPO, 'scripts', 'acceptance-agent.mjs'),
+      [],
+      base,
+      dir,
+      plik,
+      '# instancja odbiorowa:',
+      true,
+    );
+
+    expect(out.status, `stderr: ${out.stderr}`).toBe(5);
+    expect(out.stderr).toContain('ZMIENIL SIE');
+    expect(out.stderr).toContain('poswiadczen');
+    expect(out.stdout).toContain('# instancja odbiorowa:');
+  }, 20_000);
+
+  it('kontrola przeciwna: krach acceptance-agent bez naruszenia to kod 1', async () => {
+    const { dir } = atrapaDoProb();
+    const base = await instanceOdbiorczaKraczaca('agenticapp-acceptance', 'przebieg-odbiorczy');
+    const out = await uruchomZDotknieciem(
+      resolve(REPO, 'scripts', 'acceptance-agent.mjs'),
+      [],
+      base,
+      dir,
+      resolve(dir, 'brak-pliku'),
+      '# instancja odbiorowa:',
+      false,
+    );
+
+    expect(out.status, `stderr: ${out.stderr}`).toBe(1);
+    expect(out.stderr).toContain('procurement/cases -> 500');
+    expect(out.stderr).not.toContain('ZMIENIL SIE');
   }, 20_000);
 });

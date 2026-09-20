@@ -42,9 +42,9 @@
  * odrzucana przed operacją zapisu).
  */
 
-import { realpathSync, statSync } from 'node:fs';
+import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { basename, resolve, sep } from 'node:path';
+import { basename, dirname, resolve, sep } from 'node:path';
 
 /** Port an installed instance listens on when nobody configures one. */
 export const USER_APP_PORT = 8791;
@@ -277,11 +277,40 @@ export function odciskPoswiadczen() {
 }
 
 /**
- * Saves the fingerprint at gate time and says so when there is nothing to
- * guard: a machine without the credentials file must not pass silently — the
- * absence is stated, and what is guarded is then the file's *appearance*.
+ * Where the gate-time fingerprint travels.
+ *
+ * The browser harness decided this question already (`e2e/credential-guard.ts`):
+ * a fingerprint kept only in memory dies with the process, and a run that
+ * *crashes* — an uncaught exception mid-stream, a killed child — must still be
+ * checked at its end, not silently excused by its own failure. So the gate
+ * writes the value to a carrier file in gitignored `test-results/`, and the
+ * end-of-run check can read it back. `APP_PRZENOSNIK_ODCISKU` moves the file
+ * (the suites and the tests point it at a scratch directory); it never lands
+ * in `docs/evidence/` and it holds only size:mtime of the credentials file —
+ * never a secret.
  */
-export function zapiszOdciskPoswiadczen() {
+export function sciezkaPrzenosnika(env = process.env) {
+  const katalog = resolve(env.APP_PRZENOSNIK_ODCISKU ?? resolve(process.cwd(), 'test-results'));
+  return resolve(katalog, 'acceptance-credential-fingerprint.json');
+}
+
+/** Odcisk zapisany w pliku-przenośniku, albo `undefined`, gdy go tam nie ma. */
+export function odciskZPrzenosnika(przenosnik = sciezkaPrzenosnika()) {
+  try {
+    const zapis = JSON.parse(readFileSync(przenosnik, 'utf8'));
+    return typeof zapis?.odcisk === 'string' ? zapis.odcisk : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Saves the fingerprint at gate time — to memory **and** to the carrier file —
+ * and says so when there is nothing to guard: a machine without the
+ * credentials file must not pass silently — the absence is stated, and what is
+ * guarded is then the file's *appearance*.
+ */
+export function zapiszOdciskPoswiadczen(przenosnik = sciezkaPrzenosnika()) {
   const odcisk = odciskPoswiadczen();
   if (odcisk === 'brak') {
     console.error(
@@ -290,6 +319,8 @@ export function zapiszOdciskPoswiadczen() {
         'nie milczaca zgoda.',
     );
   }
+  mkdirSync(dirname(przenosnik), { recursive: true });
+  writeFileSync(przenosnik, JSON.stringify({ plik: plikPoswiadczen(), odcisk }, null, 2) + '\n');
   return odcisk;
 }
 
@@ -331,6 +362,6 @@ export async function requireAcceptanceInstance(env = {}, fetchImpl = fetch, tim
   if (problem) throw new AcceptanceTargetError(problem);
   const srodowisko = problemSrodowiskaOdbiorczego(env);
   if (srodowisko) throw new AcceptanceTargetError(srodowisko);
-  target.odciskPoswiadczen = zapiszOdciskPoswiadczen();
+  target.odciskPoswiadczen = zapiszOdciskPoswiadczen(sciezkaPrzenosnika(env));
   return target;
 }
