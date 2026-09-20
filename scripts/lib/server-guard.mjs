@@ -50,9 +50,19 @@
  *
  * A refusal prints what was detected and never the contents of any file.
  *
+ * **Whose process is answering on that port?** The second hole this closes:
+ * a script that polls `/api/health` and reports "started" on the first answer
+ * reports success about *somebody else's* instance whenever that instance
+ * already held the port. So the port is probed **before** anything is spawned
+ * (`przed --port`), and after the health poll succeeds the answering process
+ * is verified against the script's own pidfile — alive, running this
+ * repository's server, and the process `/proc` shows holding the LISTEN
+ * socket (`po`). An unconfirmed "ours" is refused, not assumed.
+ *
  * Usage:
  *
- *   node scripts/lib/server-guard.mjs przed --katalog <dir> [--etykieta <label>] [--repo <root>]
+ *   node scripts/lib/server-guard.mjs przed --katalog <dir> [--port <port>] [--etykieta <label>] [--repo <root>]
+ *   node scripts/lib/server-guard.mjs po --pid <pid> --port <port> [--cmd <fragment>]
  *
  * Exit codes follow the repo's script contract (`state-tools.mjs`):
  * 0 passed, 2 refused, 4 crashed.
@@ -64,10 +74,12 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  readlinkSync,
   realpathSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
+import net from 'node:net';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -259,15 +271,147 @@ export function problemKatalogu(sciezka, { etykieta = null, repo = REPO } = {}) 
 
 /* ------------------------------- command line ----------------------------- */
 
+/**
+ * Does something accept a TCP connection on this port?
+ *
+ * TCP, not `/api/health` — the same reasoning as `e2e/support/port-probe.ts`:
+ * a hung or half-started server answers no HTTP and still owns the port. What
+ * matters before a boot is occupancy, not identity.
+ */
+export function portZajety(port, host = '127.0.0.1', terminMs = 700) {
+  return new Promise((rozstrzygnij) => {
+    const s = net.connect({ port, host });
+    let odezwal = false;
+    s.setTimeout(terminMs);
+    s.on('connect', () => {
+      odezwal = true;
+      s.destroy();
+    });
+    s.on('timeout', () => s.destroy());
+    s.on('error', () => {});
+    s.on('close', () => rozstrzygnij(odezwal));
+  });
+}
+
+/**
+ * The pid holding a LISTEN socket on `port`, read from `/proc` — the answer
+ * "which of the live processes is it?" that a curl to the port cannot give.
+ *
+ * `null` means it could not be established (no `/proc`, nothing matching).
+ * A caller that needs the owner treats `null` as a refusal, not as a clean
+ * result — a check that cannot run must not report success.
+ */
+export function pidNasluchujacyNaPorcie(port) {
+  if (!existsSync('/proc')) return null;
+  const inody = [];
+  for (const plik of ['/proc/net/tcp', '/proc/net/tcp6']) {
+    let tresc;
+    try {
+      tresc = readFileSync(plik, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const wiersz of tresc.split('\n').slice(1)) {
+      const kolumny = wiersz.trim().split(/\s+/);
+      // local_address, state (0A = LISTEN), inode — the columns /proc documents.
+      if (kolumny.length < 10 || kolumny[3] !== '0A') continue;
+      if (parseInt(kolumny[1].split(':')[1], 16) === port) inody.push(kolumny[9]);
+    }
+  }
+  if (inody.length === 0) return null;
+  for (const wpis of readdirSync('/proc')) {
+    if (!/^\d+$/.test(wpis)) continue;
+    let uchwyty;
+    try {
+      uchwyty = readdirSync(`/proc/${wpis}/fd`);
+    } catch {
+      continue; // another user's process, or one that ended mid-scan
+    }
+    for (const uchwyt of uchwyty) {
+      let cel;
+      try {
+        cel = readlinkSync(`/proc/${wpis}/fd/${uchwyt}`);
+      } catch {
+        continue; // the descriptor closed while reading
+      }
+      const dopasowanie = /^socket:\[(\d+)\]$/.exec(cel);
+      if (dopasowanie && inody.includes(dopasowanie[1])) return Number(wpis);
+    }
+  }
+  return null;
+}
+
+/** The one command line fragment every one of these scripts boots. */
+export const DOMYSLNY_FRAGMENT_CMDLINE = 'apps/server/dist/server.js';
+
+const zywy = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === 'EPERM';
+  }
+};
+
+const cmdline = (pid) => {
+  try {
+    return readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').join(' ');
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Confirms that the process answering on `port` is *ours* — the pid from the
+ * script's own pidfile, running the expected command — not somebody else's
+ * instance that happened to hold the port.
+ *
+ * **The failure this prevents.** `dev-server.sh` used to poll `/api/health`
+ * and report "started" on the first answer. When somebody else's instance
+ * already held the port, the answer was theirs; the script reported success,
+ * wrote a pidfile for a dead process, and the operator believed a backend was
+ * running that did not exist.
+ *
+ * Every condition is checked, not assumed: the pid must be alive, its command
+ * line must name the server this repository boots, and `/proc` must show that
+ * this very pid holds the LISTEN socket on the port. `null` from the owner
+ * question is a refusal — an unconfirmed "ours" is exactly the old defect.
+ */
+export function problemWlasnegoProcesu({ pid, port, fragment = DOMYSLNY_FRAGMENT_CMDLINE }) {
+  const pidN = Number(pid);
+  if (!Number.isInteger(pidN) || pidN <= 0) {
+    return `pidfile zawiera "${pid}", co nie jest numerem procesu.`;
+  }
+  if (!zywy(pidN)) {
+    return `proces ${pidN} z pidfile nie zyje, a port ${port} odpowiada — to nie jest proces ` +
+      'tego skryptu. Zadnego "started" nie bedzie; pidfile nie wskazuje wlasciciela portu.';
+  }
+  const linia = cmdline(pidN);
+  if (linia === null || !linia.includes(fragment)) {
+    return `proces ${pidN} z pidfile nie uruchamia ${fragment} — to nie start tego skryptu.`;
+  }
+  const wlasciciel = pidNasluchujacyNaPorcie(Number(port));
+  if (wlasciciel === null) {
+    return `nie udalo sie potwierdzic w /proc, ze port ${port} trzyma proces ${pidN}. ` +
+      'Potwierdzenie wlasnego procesu musi byc czytelne, nie domniemane.';
+  }
+  if (wlasciciel !== pidN) {
+    return `port ${port} trzyma proces ${wlasciciel}, a pidfile wskazuje ${pidN} — ` +
+      'odpowiada cudza instancja, nie proces uruchomiony przez ten skrypt.';
+  }
+  return null;
+}
+
 const uzycie = () => {
   console.error(
-    'usage: server-guard.mjs przed --katalog <dir> [--etykieta <label>] [--repo <root>]',
+    'usage: server-guard.mjs przed --katalog <dir> [--port <port>] [--etykieta <label>] [--repo <root>]\n' +
+      '       server-guard.mjs po --pid <pid> --port <port> [--cmd <fragment>]',
   );
 };
 
 export async function run(argv) {
   const polecenie = argv[0];
-  if (polecenie !== 'przed') {
+  if (polecenie !== 'przed' && polecenie !== 'po') {
     uzycie();
     return 2;
   }
@@ -275,11 +419,33 @@ export async function run(argv) {
     const i = argv.indexOf(`--${nazwa}`);
     return i >= 0 ? argv[i + 1] : undefined;
   };
+
+  if (polecenie === 'po') {
+    const pid = wartosc('pid');
+    const port = wartosc('port');
+    if (!pid || !port || String(pid).startsWith('--') || String(port).startsWith('--')) {
+      uzycie();
+      return 2;
+    }
+    const problem = problemWlasnegoProcesu({
+      pid,
+      port,
+      fragment: wartosc('cmd') ?? DOMYSLNY_FRAGMENT_CMDLINE,
+    });
+    if (problem) {
+      console.error(`[server-guard] ODMAWIAM: ${problem}`);
+      return 2;
+    }
+    console.log(`[server-guard] ok: port ${port} trzyma wlasny proces ${pid}`);
+    return 0;
+  }
+
   const katalog = wartosc('katalog');
   if (!katalog || katalog.startsWith('--')) {
     uzycie();
     return 2;
   }
+
   const problem = problemKatalogu(katalog, {
     etykieta: wartosc('etykieta') ?? null,
     repo: wartosc('repo') ?? REPO,
@@ -288,6 +454,26 @@ export async function run(argv) {
     console.error(`[server-guard] ODMAWIAM: ${problem}`);
     return 2;
   }
+
+  const surowyPort = wartosc('port');
+  if (surowyPort !== undefined) {
+    const port = Number(surowyPort);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      console.error(`[server-guard] ODMAWIAM: port "${surowyPort}" nie jest numerem portu 1-65535.`);
+      return 2;
+    }
+    if (await portZajety(port)) {
+      const wlasciciel = pidNasluchujacyNaPorcie(port);
+      console.error(
+        `[server-guard] ODMAWIAM: port ${port} jest juz zajety` +
+          (wlasciciel ? ` (pid ${wlasciciel})` : '') +
+          '. Start wbrew temu skonczylby sie podlaczeniem pod cudzy proces i falszywym ' +
+          '"started", jak dawniej. Zatrzymaj TEN proces po jego pid albo wskaz inny port.',
+      );
+      return 2;
+    }
+  }
+
   zapiszZnacznik(katalog);
   console.log(`[server-guard] ok: ${realnaSciezka(resolve(katalog))} bez cech zywych danych`);
   return 0;

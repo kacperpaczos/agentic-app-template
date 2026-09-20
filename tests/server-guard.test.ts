@@ -1,4 +1,5 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { createServer, type Server } from 'node:http';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -59,9 +60,10 @@ interface Wynik {
 
 const przed = (
   katalog: string,
-  opcje: { etykieta?: string; repo?: string } = {},
+  opcje: { port?: string; etykieta?: string; repo?: string } = {},
 ): Wynik => {
   const args = [GUARD, 'przed', '--katalog', katalog];
+  if (opcje.port) args.push('--port', opcje.port);
   if (opcje.etykieta) args.push('--etykieta', opcje.etykieta);
   if (opcje.repo) args.push('--repo', opcje.repo);
   const out = spawnSync(process.execPath, args, { encoding: 'utf8' });
@@ -300,4 +302,164 @@ describe('skrypty powłokowe są spięte ze strażą przed uruchomieniem serwera
     expect(tresc.indexOf('server-guard.mjs przed')).toBe(-1);
     expect(tresc.indexOf('setsid node apps/server/dist/server.js')).toBeGreaterThan(-1);
   });
+
+  for (const skrypt of SKRYPTY) {
+    it(`${skrypt}: sonda portu przed startem, a "started" dopiero po potwierdzeniu pid`, () => {
+      const tresc = readFileSync(resolve(REPO, 'scripts', skrypt), 'utf8');
+      const straz = tresc.indexOf('server-guard.mjs przed --katalog "$DATA" --port "$PORT"');
+      const po = tresc.indexOf('server-guard.mjs po --pid');
+      const zaczelo = tresc.indexOf('echo "started');
+
+      expect(straz, `${skrypt}: sonda portu nie jest spięta ze strażą`).toBeGreaterThan(-1);
+      expect(po, `${skrypt}: brak potwierdzenia własnego procesu`).toBeGreaterThan(-1);
+      expect(zaczelo, `${skrypt}: brak komunikatu started`).toBeGreaterThan(-1);
+      expect(po, 'potwierdzenie pid musi iść przed komunikatem "started"').toBeLessThan(zaczelo);
+    });
+  }
+
+  it('dev-server.sh nie czeka na zdrowie pod stałym adresem 8791', () => {
+    // Dziura 3: przy zajętych 8791 curl trafiał w cudzą instancję, a skrypt
+    // zgłaszał "started" i zostawiał pidfile martwego procesu.
+    const tresc = readFileSync(resolve(REPO, 'scripts', 'dev-server.sh'), 'utf8');
+    expect(tresc).not.toContain('http://127.0.0.1:8791/api/health');
+    expect(tresc).toContain('PORT="${DEV_PORT:-8791}"');
+  });
+});
+
+/* ----------------------- sonda portu i potwierdzenie pid ------------------ */
+
+const zajetePorty: { server: Server; port: number }[] = [];
+const dzieci: ChildProcess[] = [];
+
+const zajmijPort = (): Promise<number> =>
+  new Promise((gotowe) => {
+    const server = createServer(() => {});
+    server.listen(0, '127.0.0.1', () => {
+      const adres = server.address();
+      if (typeof adres === 'string' || adres === null) throw new Error('brak portu');
+      zajetePorty.push({ server, port: adres.port });
+      gotowe(adres.port);
+    });
+  });
+
+/** Wolny port: zajmowany i od razu zwalniany (mała, zwykła szara strefa). */
+const wolnyPort = async (): Promise<number> => {
+  const port = await zajmijPort();
+  const wpis = zajetePorty.pop();
+  if (wpis) await new Promise<void>((done) => wpis.server.close(() => done()));
+  return port;
+};
+
+describe('sonda portu przed startem (dziura 3)', () => {
+  afterAll(async () => {
+    for (const { server } of zajetePorty.splice(0)) {
+      await new Promise<void>((done) => server.close(() => done()));
+    }
+    for (const dziecko of dzieci.splice(0)) dziecko.kill('SIGKILL');
+  });
+
+  it('zajęty port jest odmową z pid właściciela, zanim cokolwiek wystartuje', async () => {
+    const port = await zajmijPort();
+    const out = przed(join(tmpKatalog(), 'swiezy'), { port: String(port) });
+
+    expect(out.status, `stderr: ${out.stderr}`).toBe(2);
+    expect(out.stderr).toContain(`port ${port}`);
+    // Właścicielem nasłuchu jest ten proces testowy — straży udaje się go wskazać.
+    expect(out.stderr).toContain(`pid ${process.pid}`);
+    expect(out.stderr).toContain('Zatrzymaj TEN proces');
+  });
+
+  it('wolny port przepuszcza', async () => {
+    const port = await wolnyPort();
+    const out = przed(join(tmpKatalog(), 'swiezy'), { port: String(port) });
+    expect(out.status, `stderr: ${out.stderr}`).toBe(0);
+  });
+
+  it('port niebędący numerem 1-65535 jest odmową', () => {
+    const out = przed(join(tmpKatalog(), 'swiezy'), { port: 'zero' });
+    expect(out.status).toBe(2);
+    expect(out.stderr).toContain('nie jest numerem portu');
+  });
+
+  it('kontrola przeciwna: bez --port sonda portu nie działa (i nic nie psuje)', () => {
+    // Bez tej kontroli test "zajęty port jest odmową" przechodziłby też na
+    // straży, która odmawia zawsze.
+    const out = przed(join(tmpKatalog(), 'swiezy'));
+    expect(out.status).toBe(0);
+  });
+});
+
+describe('potwierdzenie własnego procesu po starcie (dziura 3)', () => {
+  const TOKEN = 'unikalny-token-serwera-proby';
+
+  /**
+   * „Serwer" proby: proces potomny tego testu, nasłuchujący na zadanym porcie.
+   * Zatrzymywany wyłącznie po pid, wyłącznie proces, który ten test uruchomił.
+   */
+  const nasluchujaceDziecko = (port: number): Promise<number> =>
+    new Promise((gotowe) => {
+      const dziecko = spawn(
+        process.execPath,
+        [
+          '-e',
+          `const net=require('node:net');` +
+            `net.createServer(()=>{}).listen(${port},'127.0.0.1',()=>console.log('GOTOWE'));` +
+            `setInterval(()=>{},1000); // ${TOKEN}`,
+        ],
+        { stdio: ['ignore', 'pipe', 'ignore'] },
+      );
+      dzieci.push(dziecko);
+      dziecko.stdout.on('data', (b: Buffer) => {
+        if (b.toString().includes('GOTOWE')) gotowe(dziecko.pid!);
+      });
+    });
+
+  const po = (pid: number, port: number, cmd = TOKEN): Wynik => {
+    const out = spawnSync(process.execPath, [GUARD, 'po', '--pid', String(pid), '--port', String(port), '--cmd', cmd], {
+      encoding: 'utf8',
+    });
+    return { status: out.status, stdout: out.stdout ?? '', stderr: out.stderr ?? '' };
+  };
+
+  it('odpowiada własny proces: potwierdzenie przechodzi', async () => {
+    const port = await wolnyPort();
+    const pid = await nasluchujaceDziecko(port);
+
+    const out = po(pid, port);
+    expect(out.status, `stderr: ${out.stderr}`).toBe(0);
+    expect(out.stdout).toContain(`proces ${pid}`);
+  }, 20_000);
+
+  it('port trzyma ktoś inny niż pid z pidfile: odmowa zamiast fałszywego "started"', async () => {
+    const port = await wolnyPort();
+    await nasluchujaceDziecko(port);
+    // „Pidfile" wskazuje ten proces testowy — on portu nie trzyma.
+    // Fragment 'node' przechodzi przez kontrolę programu, żeby doszło do pytania
+    // o właściciela portu — o to jest ten przypadek.
+    const out = po(process.pid, port, 'node');
+    expect(out.status).toBe(2);
+    expect(out.stderr).toContain('trzyma proces');
+    expect(out.stderr).toContain('cudza instancja');
+  }, 20_000);
+
+  it('pid z pidfile nie żyje: odmowa', async () => {
+    const port = await wolnyPort();
+    const out = po(2_147_000_000, port);
+    expect(out.status).toBe(2);
+    expect(out.stderr).toContain('nie zyje');
+  }, 20_000);
+
+  it('właściwy pid, ale inny program: odmowa', async () => {
+    const port = await wolnyPort();
+    const pid = await nasluchujaceDziecko(port);
+    const out = po(pid, port, 'calkiem-inny-program.js');
+    expect(out.status).toBe(2);
+    expect(out.stderr).toContain('nie uruchamia');
+  }, 20_000);
+
+  it('brak właściciela portu w /proc jest odmową, nie ciszą', async () => {
+    const port = await wolnyPort();
+    const out = po(process.pid, port);
+    expect(out.status).toBe(2);
+  }, 20_000);
 });
