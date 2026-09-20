@@ -1,0 +1,59 @@
+{
+  "zapisano": "2026-09-20T17:22:22.586Z",
+  "rodzajWykonania": "rzeczywisty model",
+  "wersjaKodu": {
+    "commit": "7335426a145c1a2b860aeb9c1ca824d2aae58e49",
+    "brudneDrzewo": false,
+    "node": "24.19.0",
+    "pakiety": {}
+  },
+  "srodowisko": {
+    "system": "linux 7.2.5-200.fc44.x86_64 x64",
+    "node": "24.19.0",
+    "pnpm": "9.15.9",
+    "cliZewnetrzne": "2.1.278 (Claude Code)",
+    "cliWSdk": {
+      "wersja": "2.1.270",
+      "commit": "97ecbf7abeb4170dcfd26c4d4b397afd9015030e",
+      "dataBudowy": "2026-09-12T18:17:55Z"
+    },
+    "model": null,
+    "pakiety": {
+      "react": "19.3.0",
+      "react-dom": "19.3.0",
+      "typescript": "7.0.2",
+      "vite": "8.3.0",
+      "vitest": "5.0.0",
+      "@playwright/test": "1.63.0",
+      "@openuidev/react-ui": "0.13.10",
+      "@openuidev/react-headless": "0.9.13",
+      "hono": "4.13.7",
+      "drizzle-orm": "0.45.2",
+      "@mastra/core": "1.66.0",
+      "@mastra/claude": "0.3.1",
+      "@anthropic-ai/claude-agent-sdk": "0.3.270",
+      "zod": "4.6.5"
+    }
+  },
+  "zrodlo": "prawdziwy model (subskrypcja Claude) przez @mastra/claude i proces Claude Agent SDK",
+  "pakiet": "BL-03 (Z11)",
+  "przebieg": "2026-09-20T17-22-07-307Z",
+  "kodCommit": "7335426a145c1a2b860aeb9c1ca824d2aae58e49",
+  "spec": "e2e/bl03-model-t15.spec.ts",
+  "przebiegPlanu": "T15",
+  "turyWydaneWTymPliku": 1,
+  "turyWydaneLacznie": 22,
+  "budzet": 25,
+  "kroki": [],
+  "kryteria": [
+    "przygotowanie: blad narzedzia + kod do pamieci"
+  ],
+  "runId": "run_814ae95ccff44a63bb99",
+  "faza": "failed",
+  "rozmowa": "cnv_7eea3cfaaae741309873",
+  "narzedzia": [],
+  "probaBledu": [],
+  "wynik": "niezaliczona",
+  "obserwowanyBlad": "[model_failed] Claude Code returned an error result: Your organization has disabled Claude subscription access for Claude Code - Use an Anthropic API key instead, or ask your admin to enable access (odczytano ze zrzutu ekranu rozmowy po przebiegu; komunikat identyczny z diagnoza poranna 02:26)",
+  "kontekstBlokady": "diag (0 tur) potsierdza poswiadczenie i plan (Claude Max, firstParty), ale blokada dziala na poziomie inferencji; tura wydana na probe zablokowana polityka organizacji"
+}

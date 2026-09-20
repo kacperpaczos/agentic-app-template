@@ -76,12 +76,17 @@ restartu potwierdzone na właściwej warstwie — własnej bazie).
 **187 potwierdzonych / 11 częściowych / 2 niespełnione = 200. 5/12 warstw zamkniętych.**
 Otwarte kryteria (13) i otwarte próby (17/27) — bez zmian wobec porannego raportu:
 
-- **Zablokowane dostępem organizacyjnym** (T14–T17 gotowe, próby generalne 14/14 na stand-inie,
-  kolejność T15→T16→T17, budżet 21/25): L1.6, L6.11, L7.13, L11.4, L11.5, L11.7, L11.11 (ramię
-  sekretów), L11.12, L11.23. Sekwencja tur po przywróceniu dostępu: REPEAT izolacji plikowej
-  ~5–6 tur + T15 (4) + T16/T17 (sufit do podniesienia). REUSE-MATRIX (`docs/evidence/REUSE-MATRIX.md`)
-  dowodzi: 13 dowodów aktualnych (oszczędność 14 tur), 5 do powtórzenia — dokładnie obszar
-  przebudowany przez BL-04.
+- **Zablokowane dostępem organizacyjnym — potwierdzone DWUKROTNIE** (rano 02:26 sondu czystą,
+  wieczorem 19:22 prawdziwą próbą w aplikacji, run `4a63bb99`: `[model_failed] Your organization
+  has disabled Claude subscription access for Claude Code`, nagłówek „błąd płacenia z modelem";
+  `pnpm diag` rozdziela warstwy: poświadczenie valid, plan Claude Max, firstParty — blokada działa
+  na poziomie **inferencji**, nie poświadczenia): L1.6, L6.11, L7.13, L11.4, L11.5, L11.7, L11.11
+  (ramię sekretów), L11.12, L11.23. Rejestr tur: **22/25** — tura 22 wydana na T15 i uczciwie
+  zapisana (proba `17-06-16-992Z`: padła na błędnym założeniu speca, **0 tur**; poprawka speca
+  `e954150` po recenzji; proba `17-22-07-307Z`: 1 tura, blokada org). Pozostałe **3 tury są
+  bezużyteczne do czasu włączenia dostępu przez admina organizacji**; T15 wstrzymane na 1/4 tur.
+  Spece T16/T17 zweryfikowane recenzją pod kątem wady T15 — czyste. REUSE-MATRIX
+  (`docs/evidence/REUSE-MATRIX.md`): 13 dowodów aktualnych (oszczędność 14 tur), 5 do powtórzenia.
 - **Trwale ograniczone** (poranny raport §2a bez zmian): L5.8, L8.10, L8.11, L12.10, ramię
   poświadczeń L11.11. Klasyfikacja końcowa (`out-of-scope`/`library-limit`/`blocked-by-access`)
   pozostaje **decyzją właściciela** — w tej sesji żadnych statusów nie przestawiano.
@@ -107,8 +112,9 @@ plik poświadczeń), sprzężenie strażnika Mastry z brzmieniem 1.66.0.
 
 ## 5. Koszt sesji
 
-- **Tury modelu Claude: 0** (budżet 21/25 nietknięty; ETAP 6 zamrożony do czasu przywrócenia
-  dostępu organizacyjnego; nie powtarzano prób z aktualnymi dowodami — patrz REUSE-MATRIX).
+- **Tury modelu Claude: 1** (rejestr 21/25 → 22/25: tura wydana na T15, zablokowana polityką
+  organizacji na poziomie inferencji; próba uczciwie zapisana, bez powtórki do czasu decyzji
+  admina; pozostałe 3 tury nietknięte).
 - Subagenci: **13** (4 analizy read-only na modelu tanim: mapa macierzy, faktografia Mastry,
   reuse-dowodów, audyt izolacji; 3 implementatorów Sonnet; 4 recenzentów Sonnet; 1 final review
   najmocniejszym modelem). 7 pełnych recenzji pakietowych + 2 re-review + final review.
@@ -136,8 +142,11 @@ pozostają na dysku, scalone i czyste — do usunięcia po decyzji właściciela
 ## 8. Decyzje właściciela (po tej sesji)
 
 1. **Publikacja** — gałąź gotowa do prezentacji; push/tag wyłącznie na Twoje polecenie.
-2. **Dostęp organizacyjny** — po przywróceniu: sekwencja REPEAT izolacji (~5–6 tur) → T15 (4
-   tury, dokładnie reszta budżetu) → T16/T17 (wymaga podniesienia sufitu 25). Przed pierwszą
-   turą: recalibracja wzorców komunikatów (CLI 2.1.277 → 2.1.278).
+2. **Dostęp organizacyjny** — blokada inferencji potwierdzona dwukrotnie (poranny probe + wieczorna
+   próba w aplikacji); wymaga akcji admina organizacji („enable access") albo świadomej zmiany
+   polityki. Po jej zdjęciu: dokończenie T15 (3 tury do 4 zadeklarowanych), potem REPEAT izolacji
+   i T16/T17 — wszystko **poza aktualnym grante 25** (zostały 3 tury), czyli wymagany nowy grant
+   koordynatora z podanym sufitem. Spece gotowe i zrecenzowane; wzorce komunikatów do
+   recalibracji wobec CLI w SDK (2.1.270) przy pierwszym zielonym przebiegu.
 3. **Klasyfikacja odchyleń** — statusy końcowe kryteriów trwale ograniczonych (§3) do akceptacji.
 4. **Sufit grantu** — podniesienie `MODEL_TURN_BUDGET` dla T16/T17, jeśli akceptujesz §2b.
