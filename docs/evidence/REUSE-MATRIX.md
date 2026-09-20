@@ -19,7 +19,7 @@ REPEAT = nieaktualny, wymaga powtórzenia na HEAD.
 
 | dowód | kryteria/próba | commit | przodek HEAD? | zmienione pliki | prawdziwy model? | kompletność | werdykt | oszczędne tury |
 |---|---|---|---|---|---|---|---|---|
-| runs/…00-26-37-453Z/e-relacje.json | L9.4, przebieg E, tura 1 | `49fe1b22` | TAK | brak na domenie (module-procurement, canvas nietknięte); spec zmieniony | TAK (zrodlo) | brak: srodowisko, brudneDrzewo, port (POCHODZENIE 9b0d4842) | REUSE (negatyw; rejestr próby) | 1 |
+| runs/…00-26-37-453Z/e-relacje.json | L9.4, przebieg E, tura 1 | `49fe1b22` | TAK | brak na domenie (module-procurement; services/canvas.ts i contracts nietknięte; agent/tools/canvas.ts +21/−2 w `84cbb2e` — utwardzenie operationId, poza domeną L9.4); spec zmieniony | TAK (zrodlo) | brak: srodowisko, brudneDrzewo, port (POCHODZENIE 9b0d4842) | REUSE (negatyw; rejestr próby) | 1 |
 | runs/…00-29-50-327Z/e-relacje.json | L9.4, tura 2, z danymi narzędzia | `9b0d4842` | TAK | j.w. | TAK | j.w. (POCHODZENIE 1b34e75f) | REUSE (negatyw) | 1 |
 | runs/…00-33-31-539Z/a-kanwa-rekord-nawigacja.json | L3.2, L3.10, L3.13, L6.6, L2.13; A, tury 3–6 | `a481893b` | TAK | services/canvas.ts nie; tools/ui.ts: tylko własny `cffb2f7` | TAK | brak: srodowisko, brudneDrzewo (POCHODZENIE cffb2f7) | REUSE (negatyw) | 4 |
 | runs/…00-39-44-229Z/b-granice-izolacji.json | L11.3/11.4/11.5/11.11/11.9/9.16; B, tura 7 | `902ffce7` | TAK | real-path.ts (+212, przebudowa), permissions.ts, runtime.ts | TAK | brak: srodowisko, brudneDrzewo | REPEAT (kod izolacji przebudowany po próbie) | 0 |
@@ -77,6 +77,7 @@ REPEAT = nieaktualny, wymaga powtórzenia na HEAD.
 2. **REPEAT pokrywa się z dryfem kodu**: wszystkie 5 dowodów do powtórzenia leży dokładnie w obszarze
    przebudowanym po próbach (BL-04 r4–6: `real-path.ts`, `permissions.ts`, 21 załatanych ucieczek) —
    izolacja plikowa L11.4/L11.5/ramię L11.11 i T14. Reszta powierzchni domenowej ma zero zmian od
-   swoich prób.
+   swoich prób (poza utwardzeniem operationId w `agent/tools/canvas.ts` — `84cbb2e`, poza domeną
+   kryteriów objętych reuse).
 3. Redakcja higieniczna (`HIGIENA-REDAKCJA.md`) nie złamała żadnego z 26 zapisów JSON (parsowane
    po redakcji); tura 21 (T14) jest uczciwym dowodem blokady organizacji, nie próbą kryteriów.
