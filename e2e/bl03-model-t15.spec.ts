@@ -111,9 +111,14 @@ test.describe('BL-03 przebieg T15: blad narzedzia, Stop, sygnal, wznowienie po u
     const record: Record<string, unknown> = { kryteria: ['przygotowanie: blad narzedzia + kod do pamieci'] };
     try {
       await openApp(page, BASE);
-      conversationId = new URL(page.url()).searchParams.get('c');
-      expect(conversationId, 'rozmowa nie ma identyfikatora w adresie').toBeTruthy();
-
+      /*
+       * Tozsamosc rozmowy czytana PO pierwszym poleceniu, nie przed: swieza
+       * instancja nie ma zadnej rozmowy, a aplikacja tworzy i wybiera ja
+       * przy pierwszym poleceniu (proba 2026-09-20T17-06-16-992Z: asercja
+       * przed poleceniem obla na otwarciu, zero tur wydanych; wzorzec
+       * zgodny z bl03-model-lifecycle.spec.ts). Polecenia kolejnych tur
+       * tego samego pliku i wznowienie po restarcie ciepia te tozsamosc.
+       */
       const first = await run.command(
         page,
         'To jest kontrolowana proba obslugi bledow narzedzia na mojej instancji testowej. ' +
@@ -123,9 +128,12 @@ test.describe('BL-03 przebieg T15: blad narzedzia, Stop, sygnal, wznowienie po u
           'bede o niego pytal pozniej. Nie uzywaj powloki.',
       );
       const phase = await settled(page, first.runId);
+      conversationId = new URL(page.url()).searchParams.get('c');
+      expect(conversationId, 'rozmowa nie ma identyfikatora w adresie po pierwszym poleceniu').toBeTruthy();
       const events = await backend.runEvents(first.runId);
       record.runId = first.runId;
       record.faza = phase;
+      record.rozmowa = conversationId;
       record.narzedzia = toolNames(events);
 
       const attempts = callsOf(events, 'canvas_add_card');
