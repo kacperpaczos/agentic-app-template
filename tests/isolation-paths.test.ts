@@ -232,6 +232,81 @@ describe('operacje kasujace serwera wobec dowiazania', () => {
   });
 });
 
+/**
+ * Kontrakt rzutu `UnresolvablePathError` (runda 7, punkt 5).
+ *
+ * Kto rzuca i kto co łapie — sprawdzone, nie opisane. Błędne przypisanie
+ * którejś z czterech odpowiedzi sprawia, że odmowa staje się błędem
+ * wewnętrznym (500), cichym przepuszczeniem albo zgubionym przepisaniem.
+ */
+describe('kontrakt UnresolvablePathError', () => {
+  const nierozwiazywalna = (base: string): string => `${base}/nie-ma/../x`;
+
+  it('walker rzuca wlasna klase z powodem i sciezka', async () => {
+    const { UnresolvablePathError, realResolveFrom } = await import(
+      '../packages/platform-server/src/util/real-path.ts'
+    );
+    const base = mkdtempSync(join(tmpdir(), 'kontrakt-'));
+    try {
+      try {
+        realResolveFrom(base, 'nie-ma/../x');
+        expect.unreachable('walker mial rzucic');
+      } catch (err) {
+        expect((err as Error).name).toBe('UnresolvablePathError');
+        expect((err as Error).message).toContain('nie-ma');
+        expect((err as Error).message).toContain('..');
+      }
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it('strażnik zwraca odmowę, nie rzuca — i napis jest jednolity', async () => {
+    const { workspaceConfinementRefusal } = await import(
+      '../packages/platform-server/src/agent/permissions.ts'
+    );
+    const base = mkdtempSync(join(tmpdir(), 'kontrakt-strażnik-'));
+    try {
+      const refusal = workspaceConfinementRefusal('Read', { file_path: 'nie-ma/../x' }, base);
+      expect(refusal).toBeTruthy();
+      expect(refusal).toBe(
+        workspaceConfinementRefusal('Read', { file_path: 'inny-nie-ma/../y' }, base),
+      );
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it('resolveInWorkspace zamienia rzut na sandbox_denied', async () => {
+    const { resolveInWorkspace } = await import('../packages/platform-server/src/agent/sandbox.ts');
+    const base = mkdtempSync(join(tmpdir(), 'kontrakt-resolve-'));
+    try {
+      expect(() => resolveInWorkspace(base, 'nie-ma/../x')).toThrow(/sandbox_denied|Sciezka wychodzi/);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it('resolvedPathInput przy rzucie zwraca null (odmowa zapadnie u straznika)', async () => {
+    const { resolvedPathInput } = await import(
+      '../packages/platform-server/src/agent/permissions.ts'
+    );
+    const base = mkdtempSync(join(tmpdir(), 'kontrakt-input-'));
+    try {
+      const { UnresolvablePathError } = await import(
+        '../packages/platform-server/src/util/real-path.ts'
+      );
+      expect(
+        resolvedPathInput('Read', { file_path: 'nie-ma/../x' }, () => {
+          throw new UnresolvablePathError('nie-ma/../x', '".." po komponencie, ktory nie istnieje');
+        }),
+      ).toBeNull();
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('realResolve — jedna implementacja, dwa jezyki', () => {
   it('rozwiazuje istniejace i nieistniejace sciezki przez dowiazanie', () => {
     const { repo, link, data } = repoWithLink();
@@ -346,6 +421,68 @@ describe('realResolve: dowiazanie rozwiazywane przed ".."', () => {
       rmSync(base, { recursive: true, force: true });
       rmSync(outside, { recursive: true, force: true });
     }
+  });
+
+  /*
+   * Z-DRIFT (runda 7): kształty rozbieżne — te, na których stary algorytm
+   * składający leksykalnie dawał inną odpowiedź niż jądro. Przegląd rundy 6
+   * wytknął, że test równoważności porównywał obie kopie wyłącznie na
+   * ścieżkach, na których obie miały rację — drift między nimi był
+   * niewidoczny. Oba mają teraz rzucać (kontrakt skryptowy: skrypt przerwany,
+   * operacja niewykonana).
+   */
+  describe('ksztalty rozbiezne: oba jezyki odmawiaja, nie składaja leksykalnie', () => {
+    const scriptsMod = async () =>
+      (await import(resolve(import.meta.dirname, '../scripts/lib/state-tools.mjs'))) as {
+        realResolve: (p: string) => string;
+      };
+    const pozaDirs: string[] = [];
+    const poza = (name: string): string => {
+      const dir = mkdtempSync(join(tmpdir(), name));
+      pozaDirs.push(dir);
+      return dir;
+    };
+    afterAll(() => {
+      for (const d of pozaDirs.splice(0)) rmSync(d, { recursive: true, force: true });
+    });
+
+    it('"nie-ma/../x" — leksykalnie wewnątrz, fizycznie poza: oba rzucają', async () => {
+      const scripts = await scriptsMod();
+      const base = poza('rozjazd-');
+      symlinkSync(poza('rozjazd-cel-'), join(base, 'link'));
+      const surowa = `${base}/nie-ma/../link/ofiara`;
+      expect(() => realResolve(surowa)).toThrow();
+      expect(() => scripts.realResolve(surowa)).toThrow();
+    });
+
+    it('zerwane dowiązanie + ".." — oba rzucają', async () => {
+      const scripts = await scriptsMod();
+      const base = poza('rozjazd-zrw-');
+      /* `zerwane` wskazuje katalog, którego nie ma. */
+      symlinkSync(join(base, 'nie-ma-mnie'), join(base, 'zerwane'));
+      const surowa = `${base}/zerwane/../link/ofiara`;
+      expect(() => realResolve(surowa)).toThrow();
+      expect(() => scripts.realResolve(surowa)).toThrow();
+    });
+
+    it('łańcuch readlink: obie wersje wskazują ten sam cel poza drzewem', async () => {
+      const scripts = await scriptsMod();
+      const base = poza('rozjazd-lan-');
+      const cel = poza('rozjazd-lan-cel-');
+      symlinkSync(cel, join(base, 'l2'));
+      symlinkSync(join(base, 'l2'), join(base, 'l1'));
+      const surowa = `${base}/l1/../x.txt`;
+      /*
+       * Jądro: `l1` rozwiązuje się do `<cel>`, `..` wychodzi na jego rodzica,
+       * więc `x.txt` ląduje obok — POZA katalogiem roboczym. Właściwość, o
+       * którą chodzi, jest podwójna: obie implementacje zgodnie wskazują ten
+       * sam plik i ten plik leży poza katalogiem bazowym.
+       */
+      const wynikTs = realResolve(surowa);
+      const wynikMjs = scripts.realResolve(surowa);
+      expect(wynikMjs).toBe(wynikTs);
+      expect(isWithin(wynikTs, realResolve(base))).toBe(false);
+    });
   });
 
   it('kontrakt zachowany: sciezka, ktorej jeszcze nie ma, i zwykla sciezka', () => {

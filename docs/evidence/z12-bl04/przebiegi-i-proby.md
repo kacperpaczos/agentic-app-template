@@ -72,8 +72,11 @@ Procedura: commit najpierw, próba na czystym drzewie, wycofanie **jednej** lini
 
 ### Runda 6 — czwarta iteracja tego samego strażnika
 
-Niezależny przegląd (odrzucenie rundy 4) dał 33 ataki: 21 ucieczek, 12 kontroli. Runda 6 odwróciła
-21 ucieczek w odmowy i zostawiła kontroli zielonymi (A1–A3, A4b, A5, A11b, B3, D2; A6c i A10 —
+Niezależny przegląd (odrzucenie rundy 4) dał 33 ataki: 21 ucieczek, 12 kontroli. Runda 6
+**odwróciła 19 z 21** — pozostałe 2 (A10b, D1) przeniesione jawnie do „znanych kształtów" z
+oświadczeniem, dlaczego nie da się ich zamknąć kodem (poniżej). Liczby rund 4 i 6 **nie są
+porównywalne 1:1** właśnie przez to przeniesienie. Kontroli zostało zielonymi: 12 + 2 udokumentowane
+kształty. Runda 7 dokłada bezpiecznik odcisku dla e2e (niżej). (A1–A3, A4b, A5, A11b, B3, D2; A6c i A10 —
 „atak nie przechodzi"; A10b i D1 — udokumentowane znane kształty, niżej). Wszystkie próby tej rundy
 biegły **na pakiecie ataków recenzenta** (`tests/z12-r4-ataki.test.ts` + `tests/support/attack-standin.ts`
 skopiowane 1:1), z asercjami odwróconymi na odmowy.

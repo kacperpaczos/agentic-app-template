@@ -191,6 +191,9 @@ function patternClimbsUp(pattern: string): boolean {
 }
 function patternEscapeRefusal(toolName: string, pattern: string): string | null {
   if (pattern === '') return `Wzorzec narzedzia ${toolName} jest pusty.`;
+  /* W1 (runda 7): tylda we wzorcu — ta sama zasada co dla ścieżek (A7/A7b). */
+  const tilde = tildeRefusal(pattern);
+  if (tilde) return `Wzorzec narzedzia ${toolName} zawiera tyldę — ${tilde.charAt(0).toLowerCase()}${tilde.slice(1)}`;
   if (pattern.startsWith('/')) {
     return `Wzorzec narzedzia ${toolName} jest sciezka bezwzgledna — wzorce moga wskazywac wylacznie katalog roboczy.`;
   }
@@ -244,7 +247,7 @@ export function directoryWalkRefusal(
     start = realResolve(workspaceDir, typeof rawPath === 'string' && rawPath !== '' ? rawPath : '.');
   } catch (err) {
     if (err instanceof UnresolvablePathError) {
-      return `Narzedzie ${toolName} wskazuje sciezke nierozwiazywalna (${err.reason}). Odmowa.`;
+      return `Narzedzie ${toolName} wskazuje sciezke, ktorej nie da sie jednoznacznie rozwiazac wewnatrz katalogu roboczego. Odmowa.`;
     }
     throw err;
   }
@@ -284,7 +287,7 @@ export function directoryWalkRefusal(
           target = realResolveFrom(root, abs);
         } catch (err) {
           if (err instanceof UnresolvablePathError) {
-            return `Narzedzie ${toolName} wskazuje sciezke nierozwiazywalna (${err.reason}). Odmowa.`;
+            return `Narzedzie ${toolName} wskazuje sciezke, ktorej nie da sie jednoznacznie rozwiazac wewnatrz katalogu roboczego. Odmowa.`;
           }
           throw err;
         }
@@ -557,9 +560,10 @@ export function workspaceConfinementRefusal(
       abs = resolvePath(raw);
     } catch (err) {
       if (err instanceof UnresolvablePathError) {
+        /* W7: komunikat jednolity — bez wyroczni istnienia (powód zdradza, co leży na dysku). */
         return (
           `Narzedzie ${toolName} wskazuje sciezke, ktorej nie da sie jednoznacznie rozwiazac ` +
-          `(${err.reason}). Odmowa bez probowania.`
+          'wewnatrz katalogu roboczego. Odmowa bez probowania.'
         );
       }
       throw err;

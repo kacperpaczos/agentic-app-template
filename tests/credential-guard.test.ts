@@ -52,6 +52,11 @@ let realConfigDir: string | undefined;
 const realConfigDirAtImport = process.env.CLAUDE_CONFIG_DIR;
 const pending: Array<Promise<unknown>> = [];
 let promptSeq = 0;
+/** Katalogi tymczasowe rundy 7 sprzątane po pliku (G21: atrapy, nie logowanie). */
+const pozaDirsW7: string[] = [];
+afterAll(() => {
+  for (const d of pozaDirsW7.splice(0)) rmSync(d, { recursive: true, force: true });
+});
 
 /** A value that exists nowhere else, so finding it anywhere is proof of a leak. */
 const CANARY = 'KANAREK-POSWIADCZENIA-7f3a91c4';
@@ -580,6 +585,62 @@ describe('uruchomienie nie moze odczytac poswiadczenia (symulacja na granicy ada
     expect(decideTool('NarzedzieBezDeklaracji', [])).toBe('consent');
   });
 
+  /* ------------------ W1 / W7: wzorce z tyldą, jednolite odmowy ------------ */
+
+  it('W1 wzorzec Glob z tyldą jest odmawiany, zwykły przechodzi', async () => {
+    const { stand } = await startRun([
+      { kind: 'fileTool', name: 'Glob', input: { path: '$workspace/output', pattern: '~/**' } },
+      { kind: 'fileTool', name: 'Glob', input: { path: '$workspace/output', pattern: '**/*.txt' } },
+      { kind: 'text', text: 'Koniec.' },
+    ]);
+    expect(stand.fileTools.map((f) => f.denied)).toEqual([true, false]);
+  });
+
+  /**
+   * W7 — odmowa nierozwiązywalnej ścieżki jest **jednym napisem**, bez
+   * wyroczni istnienia. Przed tą rundą powód w treści rozróżniał:
+   *   A. `<ws>/nie-ma/../link/sekret.txt` → „".." po komponencie, który nie
+   *      istnieje" (czyli: „link" istnieje poza workspace),
+   *   B. `<ws>/plik-txt/x` → „"plik-txt" nie jest katalogiem…"
+   *      (czyli: taki plik istnieje w workspace).
+   * Treść odmowy nie może być mapą tego, co leży na dysku.
+   */
+  it('W7 odmowa nierozwiązywalnej ścieżki jest jednym napisem dla obu kształtów', async () => {
+    const poza = mkdtempSync(join(tmpdir(), 'w7-poza-'));
+    pozaDirsW7.push(poza);
+
+    /* Kształt A: `..` po nieistniejącym komponencie, dowiązanie poza workspace. */
+    const { stand: standA, events: eventsA } = await startRun([
+      { kind: 'linkIntoWorkspace', from: poza, to: 'w7-link' },
+      { kind: 'fileTool', name: 'Read', input: { file_path: '$workspace/nie-ma/../w7-link/sekret.txt' } },
+      { kind: 'text', text: 'Koniec.' },
+    ]);
+
+    /* Kształt B: plik w miejscu katalogu (ENOTDIR jądra). */
+    const { stand: standB, events: eventsB } = await startRun([
+      { kind: 'writeOutput', path: 'plik-txt', content: 'zwykly plik' },
+      { kind: 'fileTool', name: 'Read', input: { file_path: '$workspace/output/plik-txt/x' } },
+      { kind: 'text', text: 'Koniec.' },
+    ]);
+
+    try {
+      const odmowaA = standA.fileTools[0]?.reason ?? '';
+      const odmowaB = standB.fileTools[0]?.reason ?? '';
+      expect(standA.fileTools[0]?.denied, 'kształt A nie został odmówiony').toBe(true);
+      expect(standB.fileTools[0]?.denied, 'kształt B nie został odmówiony').toBe(true);
+      /* Jedno źródło odmowy: identyczny napis, zero treści o dysku. */
+      expect(odmowaA).toBe(odmowaB);
+      expect(odmowaA).toContain('nie da sie jednoznacznie');
+      expect(odmowaA.includes('nie istnieje'), 'wyrocznia istnienia w odmowie').toBe(false);
+      expect(odmowaA.includes('nie jest katalogiem'), 'wyrocznia typu komponentu w odmowie').toBe(false);
+      expect(answerText(eventsA).includes('nie istnieje')).toBe(false);
+      expect(answerText(eventsB).includes('nie jest katalogiem')).toBe(false);
+    } finally {
+      rmSync(poza, { recursive: true, force: true });
+    }
+  });
+
+  /* ------------- Z7: dowód, że narzędzie otwiera PRZEPISANĄ ścieżkę -------- */
   /* ------------- Z7: dowod, ze narzedzie otwiera PRZEPISANA sciezke -------- */
 
   /**

@@ -23,9 +23,11 @@ import {
   copyFileSync,
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
+  readlinkSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -218,17 +220,39 @@ export function makeArgs(argv, declared) {
  * deepest existing ancestor is resolved and the missing tail appended, so a
  * target that is about to be created is still judged by where it will really be.
  */
+/**
+ * Odmowa rozwiązania ścieżki (runda 6): `..` po komponencie nieistniejącym,
+ * przekroczony limit dowiązań, plik w miejscu katalogu. Kontrakt wersji
+ * skryptowej: rzucanie — skrypt przerwany, operacja niewykonana.
+ */
+export class NierozwiazywalnaSciezka extends Error {
+  constructor(path, reason) {
+    super(`Sciezka ${path} jest nierozwiazywalna: ${reason}`);
+    this.name = 'NierozwiazywalnaSciezka';
+  }
+}
+
 export function realResolve(path) {
   /*
-   * Komponent po komponencie, w kolejności jądra: dowiązanie rozwijane ZANIM
-   * zinterpretowany będzie następny człon, `..` cofa się od ścieżki już
-   * rozwiązanej. Poprzednia wersja zaczynała od `resolve(path)`, czyli zwijała
-   * `..` leksykalnie — a dla `--out .e2e-x/link/../ofiara`, gdzie `link`
-   * wskazuje poza drzewo, odpowiedź leksykalna i `open()` trafiają w różne
-   * miejsca. Te skrypty kasują katalogi, więc różnica nie jest akademicka.
+   * Komponent po komponencie, w kolejności jądra — **runda 6, tryb
+   * fail-closed**. Poprzednia wersja miała flagę `existsSoFar`, która opadała
+   * przy pierwszym członie nierozwiązanym i nigdy nie wracała: od tego miejsca
+   * reszta ścieżki, **łącznie z `..` i dowiązaniami**, składała się
+   * leksykalnie. Dla `--out .e2e-x/nie-ma/../link/ofiara` brało to `link`
+   * bez rozwinięcia i kończyło poza drzewem.
    *
-   * Bliźniak `packages/platform-server/src/util/real-path.ts`; równoważność obu
-   * sprawdza `tests/isolation-paths.test.ts` — także na tym kształcie.
+   * Teraz: istniejący człon jest rozwijany fizycznie (`lstat`/`readlink`),
+   * dowiązanie **zanim** zinterpretowany będzie następny człon (także zerwane —
+   * `O_CREAT` utworzy cel, więc zerwane dowiązanie na końcu to droga zapisu);
+   * komponent nieistniejący kończy rozwijanie fizyczne, a **`..` po nim rzuca
+   * `NierozwiazywalnaSciezka`**. Plik, za którym wciąż są człony, to `ENOTDIR`
+   * jądra — również odmowa.
+   *
+   * Kontrakt wersji skryptowej: **rzucanie**, nie odpowiedź dla modelu. Te
+   * skrypty kasują i nadpisują katalogi, więc odmowa = przerwanie operacji z
+   * czytelnym błędem. Bliźniak TS (`util/real-path.ts`) rzuca tę samą klasę
+   * błędu pod inną nazwą (`UnresolvablePathError`); równoważność obu — łącznie
+   * z kształtami rozbieżnymi — sprawdza `tests/isolation-paths.test.ts`.
    */
   const absolutePath = isAbsolute(path);
   const root = absolutePath ? parse(path).root : '';
@@ -241,26 +265,54 @@ export function realResolve(path) {
     }
   })();
 
-  const rest = absolutePath ? path.slice(root.length) : path;
-  let existsSoFar = true;
+  const queue = (absolutePath ? path.slice(root.length) : path)
+    .split(/[/\\]+/)
+    .filter((part) => part !== '' && part !== '.');
+  let hops = 0;
 
-  for (const part of rest.split(/[/\\]+/)) {
-    if (part === '' || part === '.') continue;
+  while (queue.length > 0) {
+    const part = queue.shift();
     if (part === '..') {
       current = dirname(current);
       continue;
     }
     const next = join(current, part);
-    if (!existsSoFar) {
-      current = next;
+    const st = lstatSync(next, { throwIfNoEntry: false });
+    if (st === undefined) {
+      if (queue.includes('..')) {
+        throw new NierozwiazywalnaSciezka(
+          path,
+          '".." po komponencie, ktory nie istnieje',
+        );
+      }
+      return join(current, part, ...queue);
+    }
+    if (st.isSymbolicLink()) {
+      if (++hops > 40) {
+        throw new NierozwiazywalnaSciezka(path, 'przekroczono limit dowiazan');
+      }
+      const target = readlinkSync(next);
+      if (isAbsolute(target)) {
+        const targetRoot = parse(target).root;
+        queue.unshift(...target.slice(targetRoot.length).split(/[/\\]+/).filter(Boolean));
+        current = targetRoot;
+      } else {
+        queue.unshift(...target.split(/[/\\]+/).filter(Boolean));
+      }
       continue;
     }
-    try {
-      current = realpathSync(next);
-    } catch {
-      existsSoFar = false;
-      current = next;
+    if (st.isDirectory()) {
+      try {
+        current = realpathSync(next);
+      } catch {
+        current = next;
+      }
+      continue;
     }
+    if (queue.length > 0) {
+      throw new NierozwiazywalnaSciezka(path, `"${part}" nie jest katalogiem, a za nim sa czlony`);
+    }
+    return next;
   }
   return current;
 }

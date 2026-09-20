@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AgentRuntime, collectToolEntries, platformTools } from '@platform/server';
 import { createHarness, type Harness } from './helpers.ts';
+import { realResolve } from '../packages/platform-server/src/util/real-path.ts';
 import { dispatchingAgent, newStandInHandle, type Plan, type StandInHandle, type Step } from './support/model-standin.ts';
 
 /**
@@ -170,7 +171,7 @@ describe('most hookow a strumien zdarzen — narzedzia plikowe', () => {
      * workspace krokiem `writeOutput`. Intencja testu — obserwowalność
      * auto-zatwierdzonego wywołania — bez zmian.
      */
-    const { events, stand } = await startRun([
+    const { events, stand, runId: recorded } = await startRun([
       { kind: 'writeOutput', path: 'zwykly.txt', content: 'zwykla tresc robocza' },
       { kind: 'fileTool', name: 'Read', input: { file_path: '$workspace/output/zwykly.txt' } },
       { kind: 'text', text: 'Koniec.' },
@@ -183,9 +184,15 @@ describe('most hookow a strumien zdarzen — narzedzia plikowe', () => {
     const calls = seenCalls(events);
     expect(calls, 'auto-zatwierdzone wywolanie nie trafilo do strumienia zdarzen').toHaveLength(1);
     expect(calls[0]!.name).toBe('Read');
-    /* Runda 6: ścieżka po rozwinięciu `$workspace/` przez zastępnik. */
-    expect(pathOf(calls[0]!), 'strumien nie niesie sciezki, ktorej dotyczylo wywolanie').toContain(
-      '/output/zwykly.txt',
+    /*
+     * Runda 6: ścieżka po rozwinięciu `$workspace/` przez zastępnik. Oczekiwana
+     * wartość liczona `realResolve`-em od katalogu roboczego uruchomienia —
+     * pełne porównanie, nie sufiks (recenzja rundy 6: suffiks przepuszcza
+     * rozjazd „sprawdzono A, otwarto B").
+     */
+    const wsDir = join(h.platform.config.workspacesDir, recorded);
+    expect(pathOf(calls[0]!), 'strumien nie niesie sciezki, ktorej dotyczylo wywolanie').toBe(
+      realResolve(join(wsDir, 'output/zwykly.txt')),
     );
     expect(calls[0]!.ended).toBe(true);
     expect(calls[0]!.result, 'wynik auto-zatwierdzonego wywolania nie trafil do strumienia').toContain(
