@@ -1,8 +1,9 @@
 {
   "meta": {
-    "codeState": "commit 97a7945 galezi bl01-bl02/integracja (Task 1-10: fundament widokow danych, ekrany modulu jako kompozycje, stan widoku w adresie, Widoki agenta z walidacja OpenUI, semantyczny opis ekranu, wskazanie wartosci pola rekordu, akcje rekordu, proby modelowe T25-T27, fala poprawek po przegladzie koncowym). Weryfikacja koordynatora w czystej kopii: pnpm install --frozen-lockfile, pnpm verify exit 0 (32 pliki / 542 testy, z kontrola typow e2e), pnpm test:e2e exit 0 (114 testow, spece modelowe poza domyslnym przebiegiem), pnpm check:module-swap exit 0, start produkcyjny na porcie testowym. Dowody prob modelowych: docs/evidence/bl01-bl02-2026-09-17/.",
-    "date": "2026-09-18",
-    "scope": "ocena po zamknieciu pakietow BL-01 i BL-02. Zmieniono oceny kryteriow, dla ktorych powstal dowod na tym kodzie; pozostale oceny z 2026-09-17 bez zmian. To nadal nie jest odbior wszystkich 200 kryteriow."
+    "codeState": "gałąź domkniecie/integracja po minimalnej bramce GLM: Claude Code / Claude Agent SDK jako harness, GLM/Z.AI jako provider; izolowana sonda SDK i jedna odpowiedź modelu potwierdzone w raporcie domknięcia. Pozostałe oceny zachowują swój dowód i nie są deklaracją pełnego odbioru całego systemu.",
+    "date": "2026-09-20",
+    "scope": "snapshot v0.4: klasyfikacja kryteriów oraz zatwierdzone decyzje architektury. Statusy opisują istniejące dowody na tym kodzie; wersja dokumentacji nie zastępuje odbioru implementacji nowych funkcji produktu.",
+    "classification": "v0.4: kazde kryterium ma pole class: produktowe, jakosciowe albo informacyjne. Produktowe i jakosciowe blokują odbior; informacyjne wymagają uzasadnienia, lecz nie trafiają do backlogu."
   },
   "criteria": {
     "L1.1": {
@@ -17,7 +18,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: instancja audytowa :8795 z dist, /api/health 200 i /api/status; dowód z AgenticApp 2026-09-15, poza szablonem"
-      }
+      },
+      "class": "produktowe"
     },
     "L1.2": {
       "status": "potwierdzone",
@@ -31,7 +33,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: React 19.3.0 i TS 7.0.2 uznane za najnowsze 2026-09-15, instalacja bez ostrzeżeń peer; rejestru npm nie sprawdzano ponownie"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L1.3": {
       "status": "potwierdzone",
@@ -45,7 +48,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: vite build + esbuild, node dist/server.js bez flag, testy przeglądarkowe na buildzie; dowód z AgenticApp"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L1.4": {
       "status": "potwierdzone",
@@ -59,7 +63,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: run 8f8325 z 20 zdarzeniami TEXT_MESSAGE_CONTENT — liczba zdarzeń, nie obserwacja przyrostu w stronie"
-      }
+      },
+      "class": "produktowe"
     },
     "L1.5": {
       "status": "potwierdzone",
@@ -73,7 +78,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: token nie występuje we frontendzie, backendzie, bazie i diagnostyce; kontrola zależy od obecności lokalnego poświadczenia"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L1.6": {
       "status": "czesciowe",
@@ -89,7 +95,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: restart instancji audytowej, 5/5 plików, przerwany run jako failed; brak osieroconych procesów tylko w audycie"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L1.7": {
       "status": "potwierdzone",
@@ -103,7 +110,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: allowlista origin (403), 401 bez sesji, ciasteczko HMAC; token subskrypcji nie jest tokenem dostępu"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L1.8": {
       "status": "potwierdzone",
@@ -113,7 +121,8 @@
       "gap": "—",
       "scenarios": [
         "T19"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L1.9": {
       "status": "potwierdzone",
@@ -123,7 +132,8 @@
       "gap": "—",
       "scenarios": [
         "T19"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L1.10": {
       "status": "potwierdzone",
@@ -133,7 +143,8 @@
       "gap": "—",
       "scenarios": [
         "T19"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L1.11": {
       "status": "potwierdzone",
@@ -143,7 +154,8 @@
       "gap": "—",
       "scenarios": [
         "T19"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L1.12": {
       "status": "potwierdzone",
@@ -153,7 +165,8 @@
       "gap": "—",
       "scenarios": [
         "T01"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L1.13": {
       "status": "potwierdzone",
@@ -163,7 +176,8 @@
       "gap": "—",
       "scenarios": [
         "T01"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L2.1": {
       "status": "potwierdzone",
@@ -175,7 +189,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "kod: 10 komponentów kart ze schematami Zod i rendererami; rejestracja w katalogu OpenUI nie była osobno sprawdzana"
-      }
+      },
+      "class": "produktowe"
     },
     "L2.2": {
       "status": "potwierdzone",
@@ -189,7 +204,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg i test: chat-drawer.spec 6/6 przy 1680 i 1120 px po naprawie D-1, z kontrolą siły testu"
-      }
+      },
+      "class": "produktowe"
     },
     "L2.3": {
       "status": "potwierdzone",
@@ -203,7 +219,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: session-restore.spec (6) i session-restore.test (11); dawne brzmienie „rozmowę lub przestrzeń”, obecne wymaga obu"
-      }
+      },
+      "class": "produktowe"
     },
     "L2.4": {
       "status": "potwierdzone",
@@ -217,7 +234,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: raw-probe-canvas.log — karty zmieniane bez nowych tras; rozszerzone 2026-09-16 o nawigację agenta"
-      }
+      },
+      "class": "produktowe"
     },
     "L2.5": {
       "status": "potwierdzone",
@@ -231,7 +249,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: nawigacja klawiaturą, etykiety pól, globalne :focus-visible; widoczność fokusu nie była asertowana"
-      }
+      },
+      "class": "produktowe"
     },
     "L2.6": {
       "status": "potwierdzone",
@@ -246,7 +265,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: access-context.spec (access-denied) i live-artifacts; ładowanie i pusty stan bez testu GUI"
-      }
+      },
+      "class": "produktowe"
     },
     "L2.7": {
       "status": "potwierdzone",
@@ -256,7 +276,8 @@
       "gap": "—",
       "scenarios": [
         "T03"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L2.8": {
       "status": "potwierdzone",
@@ -267,7 +288,8 @@
       "scenarios": [
         "T03",
         "T12"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L2.9": {
       "status": "potwierdzone",
@@ -277,7 +299,8 @@
       "gap": "—",
       "scenarios": [
         "T02"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L2.10": {
       "status": "potwierdzone",
@@ -287,7 +310,8 @@
       "gap": "—",
       "scenarios": [
         "T02"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L2.11": {
       "status": "potwierdzone",
@@ -298,7 +322,8 @@
       "scenarios": [
         "T03",
         "T12"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L2.12": {
       "status": "potwierdzone",
@@ -308,7 +333,8 @@
       "gap": "Zmiana rozmiaru karty jest mozliwa wylacznie wskaznikiem — uchwyty gotowej kontrolki NodeResizer nie sa osiagalne z klawiatury.",
       "scenarios": [
         "T02"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L2.13": {
       "status": "potwierdzone",
@@ -318,7 +344,8 @@
       "gap": "—",
       "scenarios": [
         "T23"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L2.14": {
       "status": "potwierdzone",
@@ -328,7 +355,8 @@
       "gap": "Galezie dla paneli aria-expanded/aria-controls i zakladek role=\"tab\" sa w kodzie, ale nie maja testu — aplikacja nie ma dzis takiej zwinietej sekcji, a suite nie ma srodowiska DOM do testu jednostkowego. Zasloniecie elementu przez element plywajacy nadal nie jest wykrywane: sprawdzane sa przyciecie przodkow i wlasne pudelko elementu, nie trafienie w punkt.",
       "scenarios": [
         "T23"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L2.15": {
       "status": "potwierdzone",
@@ -338,7 +366,8 @@
       "gap": "—",
       "scenarios": [
         "T23"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L2.16": {
       "status": "potwierdzone",
@@ -348,7 +377,8 @@
       "gap": "—",
       "scenarios": [
         "T25"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L2.17": {
       "status": "potwierdzone",
@@ -358,7 +388,8 @@
       "gap": "—",
       "scenarios": [
         "T26"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L3.1": {
       "status": "potwierdzone",
@@ -372,7 +403,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: raw-probe-canvas.log — układ domyślny i agenta przez ComponentCatalog.validate()"
-      }
+      },
+      "class": "produktowe"
     },
     "L3.2": {
       "status": "potwierdzone",
@@ -386,7 +418,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: audyt 2026-09-15 — add (hist.), update, move, remove przez model; raw-probe-canvas.log spoza szablonu"
-      }
+      },
+      "class": "produktowe"
     },
     "L3.3": {
       "status": "potwierdzone",
@@ -401,7 +434,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: contracts.test.ts — nieznany komponent i złe props odrzucone w backendzie; karty openui nie były oceniane"
-      }
+      },
+      "class": "produktowe"
     },
     "L3.4": {
       "status": "potwierdzone",
@@ -415,7 +449,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: konflikt kompozycji zostawia poprzednią wersję; częściowa odpowiedź modelu nie była badana"
-      }
+      },
+      "class": "produktowe"
     },
     "L3.5": {
       "status": "potwierdzone",
@@ -429,7 +464,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: stan widoku karty przeżywa zmianę ekranu; zmiana kompozycji przez agenta nie była badana"
-      }
+      },
+      "class": "produktowe"
     },
     "L3.6": {
       "status": "potwierdzone",
@@ -443,7 +479,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: karty, pozycje i widok po przeładowaniu i restarcie backendu instancji audytowej"
-      }
+      },
+      "class": "produktowe"
     },
     "L3.7": {
       "status": "potwierdzone",
@@ -457,7 +494,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: props niosą referencje, kwoty na ekranie zgodne z backendem (17-playwright.txt)"
-      }
+      },
+      "class": "produktowe"
     },
     "L3.8": {
       "status": "potwierdzone",
@@ -467,7 +505,8 @@
       "gap": "—",
       "scenarios": [
         "T07"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L3.9": {
       "status": "potwierdzone",
@@ -477,7 +516,8 @@
       "gap": "—",
       "scenarios": [
         "T07"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L3.10": {
       "status": "potwierdzone",
@@ -487,7 +527,8 @@
       "gap": "—",
       "scenarios": [
         "T07"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L3.11": {
       "status": "potwierdzone",
@@ -497,7 +538,8 @@
       "gap": "Tekst wypowiedziany PRZED wywolaniem narzedzia nie trafia do banki odpowiedzi: gotowy czat (@openuidev/react-ui 0.13.10) uznaje za odpowiedz wylacznie ostatni segment tury, a wczesniejsze wklada jako kroki osi „Behind the scenes”. Zmierzone, nie domniemane: w trakcie tury proza jest w panelu widoczna (i to podwojnie — razem z paskiem podgladu), po zakonczeniu tury os jest zwinieta i jej kroki nie istnieja w DOM, ale sa o jedno klikniecie i sa w historii. Przypiete dwukierunkowo: e2e/chat-history.spec.ts (po turze) i e2e/run-events.spec.ts „proza w turze z narzedziem…” (w trakcie). Zapisane jako jawnie niespelnione wymaganie przy L5.15 (BL-08 zamkniety) i opisane w docs/NEW-APPLICATION.md §7.",
       "scenarios": [
         "T04"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L3.12": {
       "status": "potwierdzone",
@@ -508,7 +550,8 @@
       "scenarios": [
         "T04",
         "T07"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L3.13": {
       "status": "potwierdzone",
@@ -519,7 +562,8 @@
       "scenarios": [
         "T07",
         "T27"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L3.14": {
       "status": "potwierdzone",
@@ -529,7 +573,8 @@
       "gap": "—",
       "scenarios": [
         "T27"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L3.15": {
       "status": "potwierdzone",
@@ -539,7 +584,8 @@
       "gap": "—",
       "scenarios": [
         "T27"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L3.16": {
       "status": "potwierdzone",
@@ -549,7 +595,8 @@
       "gap": "—",
       "scenarios": [
         "T27"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L3.17": {
       "status": "potwierdzone",
@@ -559,7 +606,8 @@
       "gap": "—",
       "scenarios": [
         "T27"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L3.18": {
       "status": "potwierdzone",
@@ -569,7 +617,8 @@
       "gap": "—",
       "scenarios": [
         "T27"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L4.1": {
       "status": "potwierdzone",
@@ -584,7 +633,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: zrzuty 12/14-chat-*.png; AgentInterface 0.13.10 z restStorage na własnym backendzie, bez płatnej usługi"
-      }
+      },
+      "class": "produktowe"
     },
     "L4.2": {
       "status": "potwierdzone",
@@ -599,7 +649,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: 17-playwright chat.spec; usuwanie przez menu wiersza w UI z kontrolą wyniku w backendzie"
-      }
+      },
+      "class": "produktowe"
     },
     "L4.3": {
       "status": "potwierdzone",
@@ -613,7 +664,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: tytuł wyprowadzany lokalnie z pierwszej wiadomości, zero wywołań modelu; zmiana tytułu nie była sprawdzana"
-      }
+      },
+      "class": "produktowe"
     },
     "L4.4": {
       "status": "potwierdzone",
@@ -628,7 +680,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg + testy: ta sama rozmowa, tytuł i historia narzędzi po reload i restarcie; stare rozmowy odtwarzane backfillem"
-      }
+      },
+      "class": "produktowe"
     },
     "L4.5": {
       "status": "potwierdzone",
@@ -643,7 +696,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg raw-probe-conc2.log: dwa polecenia w jednej rozmowie (ALFA/BETA) bez mieszania; bez testu GUI"
-      }
+      },
+      "class": "produktowe"
     },
     "L4.6": {
       "status": "potwierdzone",
@@ -658,7 +712,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg raw-probe-conc2.log: 3 wiadomości użytkownika przy dwóch równoległych poleceniach; powtórzony POST nie badany"
-      }
+      },
+      "class": "produktowe"
     },
     "L4.7": {
       "status": "potwierdzone",
@@ -672,7 +727,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test 17-playwright: kaskada wiadomości i uruchomień, artefakty odłączane; test bez artefaktu, aktywne zadanie niebadane"
-      }
+      },
+      "class": "produktowe"
     },
     "L4.8": {
       "status": "potwierdzone",
@@ -684,7 +740,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "kod: CHAT_CAPABILITIES, /api/status i Ustawienia oznaczają edycję, rozgałęzianie i przywracanie jako niedostępne"
-      }
+      },
+      "class": "produktowe"
     },
     "L4.9": {
       "status": "potwierdzone",
@@ -694,7 +751,8 @@
       "gap": "",
       "scenarios": [
         "T04"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L4.10": {
       "status": "potwierdzone",
@@ -704,7 +762,8 @@
       "gap": "—",
       "scenarios": [
         "T04"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L4.11": {
       "status": "potwierdzone",
@@ -714,7 +773,8 @@
       "gap": "",
       "scenarios": [
         "T06"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L4.12": {
       "status": "potwierdzone",
@@ -724,7 +784,8 @@
       "gap": "—",
       "scenarios": [
         "T06"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L4.13": {
       "status": "potwierdzone",
@@ -734,7 +795,8 @@
       "gap": "",
       "scenarios": [
         "T06"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L4.14": {
       "status": "potwierdzone",
@@ -744,7 +806,8 @@
       "gap": "—",
       "scenarios": [
         "T06"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L4.15": {
       "status": "potwierdzone",
@@ -755,7 +818,8 @@
       "scenarios": [
         "T04",
         "T06"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L5.1": {
       "status": "potwierdzone",
@@ -769,7 +833,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: streaming.spec (3) + 22-strumien-model.json, 75 długości na modelu; detektor z kontrolą negatywną"
-      }
+      },
+      "class": "produktowe"
     },
     "L5.2": {
       "status": "potwierdzone",
@@ -784,7 +849,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: agui-stream (15) + tool-activity; fazy ze zdarzeń, osobny queued; anulowanie tylko w teście reduktora"
-      }
+      },
+      "class": "produktowe"
     },
     "L5.3": {
       "status": "potwierdzone",
@@ -798,7 +864,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg + tool-activity: wywołanie i wynik sparowane po toolCallId i widoczne; bez korelacji z fazą wykonania"
-      }
+      },
+      "class": "produktowe"
     },
     "L5.4": {
       "status": "potwierdzone",
@@ -812,7 +879,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: unieważnienia właściwych kluczy (agui-stream, live-artifacts); renderowanie artefaktu w czacie bez testu"
-      }
+      },
+      "class": "produktowe"
     },
     "L5.5": {
       "status": "potwierdzone",
@@ -826,7 +894,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg 2026-09-16 (files-agent, ui-navigation): zgoda i odmowa wracają do wykonania; odmowa w szablonie bez testu"
-      }
+      },
+      "class": "produktowe"
     },
     "L5.6": {
       "status": "potwierdzone",
@@ -842,7 +911,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test runtime.test.ts: odtworzenie od numeru sekwencyjnego bez powielania; skutki chronione idempotencją"
-      }
+      },
+      "class": "produktowe"
     },
     "L5.7": {
       "status": "potwierdzone",
@@ -856,14 +926,15 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg raw-probe-stop.log: dokładnie jeden status końcowy, po anulowaniu 80 → 80 zdarzeń"
-      }
+      },
+      "class": "produktowe"
     },
     "L5.8": {
-      "status": "informacyjne",
-      "evidence": "model",
+      "status": "czesciowe",
+      "evidence": "test",
       "origin": "szablon",
-      "proof": "Prawdziwy model przez @mastra/claude i most hookow w runtime.ts: e2e/bl03-model-lifecycle.spec.ts „blad narzedzia przechodzi przez adapter do rozmowy, z trescia argumentow\" (tura 12, dowod docs/evidence/z11-bl03/runs/2026-09-19T00-57-37-949Z/c-blad-narzedzia.json) — hook PostToolUseFailure rzeczywistego adaptera oznacza wywolanie jako blad, niesie prawdziwy komunikat walidacji (nie dosłowne „null\", co bylo zaobserwowana wada), a TOOL_CALL_ARGS niesie rzeczywiste argumenty wywolania. Pozostale mapowania sprawdzone wczesniej na prawdziwym modelu (e2e/agent-ui.spec.ts) i opisane w docs/NEW-APPLICATION.md §7 oraz w naglowku runtime.ts.",
-      "gap": "Trzecia sciezka z opisu braku — blad strumienia modelu (chunk error prowadzacy do RUN_ERROR z klasyfikacja) — pozostaje SYMULACJA (tests/run-lifecycle.test.ts). Nie da sie jej wywolac na zadanie bez prawdziwej awarii adaptera albo wyczerpania limitu subskrypcji, a limitu nie wolno udawac. Swiadoma decyzja koordynatora: zamykamy te polowe, ktora zaobserwowano, i nazywamy druga wprost. KLASYFIKACJA WŁAŚCICIELA 2026-09-20: kryterium proceduralne/niewywoływalne w tej konfiguracji — przeniesione do statusu „informacyjne / poza bramką odbioru”. Uzasadnienie powyżej pozostaje zapisane; kryterium nie blokuje zamknięcia warstwy i nie należy do pakietu backlogu.",
+      "proof": "Rzeczywisty przebieg historyczny potwierdza mapowanie błędu narzędzia przez adapter do rozmowy. Regresja `tests/run-lifecycle.test.ts` sprawdza deterministycznie, że kontrolowany błąd strumienia kończy wykonanie pojedynczym `RUN_ERROR` i zapisuje przyczynę. Ten dowód nie potwierdza jeszcze zachowania rzeczywistego adaptera Claude Code / Claude Agent SDK z providerem GLM podczas awarii strumienia.",
+      "gap": "Awaria strumienia aktualnego providera GLM prowadząca przez rzeczywisty adapter do `RUN_ERROR` nie ma jeszcze izolowanego dowodu na kodzie szablonu. Symulacja chroni regresję, ale nie zastępuje obserwacji prawdziwego adaptera. To jest wymóg jakościowy i pozostaje w BL-03; nie jest kryterium informacyjnym.",
       "scenarios": [
         "T05",
         "T06"
@@ -871,7 +942,9 @@
       "historical": {
         "status": "potwierdzone",
         "note": "kod: analiza processStreamedMessage 0.9.13; 9 zdarzeń obsługiwanych, CUSTOM i STEP_* ignorowane, udokumentowane"
-      }
+      },
+      "class": "jakosciowe",
+      "backlog": "BL-03"
     },
     "L5.9": {
       "status": "potwierdzone",
@@ -881,7 +954,8 @@
       "gap": "—",
       "scenarios": [
         "T05"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L5.10": {
       "status": "potwierdzone",
@@ -891,7 +965,8 @@
       "gap": "—",
       "scenarios": [
         "T05"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L5.11": {
       "status": "potwierdzone",
@@ -901,7 +976,8 @@
       "gap": "",
       "scenarios": [
         "T06"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L5.12": {
       "status": "potwierdzone",
@@ -912,7 +988,8 @@
       "scenarios": [
         "T07",
         "T22"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L5.13": {
       "status": "potwierdzone",
@@ -923,7 +1000,8 @@
       "scenarios": [
         "T05",
         "T06"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L5.14": {
       "status": "potwierdzone",
@@ -934,7 +1012,8 @@
       "scenarios": [
         "T16",
         "T22"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L5.15": {
       "status": "potwierdzone",
@@ -944,7 +1023,8 @@
       "gap": "Jawnie niespelnione i przypiete testem: w turze Z NARZEDZIEM to samo zdanie jest w trakcie na ekranie dwa razy (os biblioteki + pasek podgladu), a proza sprzed narzedzia nie trafia po turze do banki odpowiedzi. Nieobchodzone swiadomie — usuniecie paska zostawia resztkowa duble po stronie samej biblioteki (zmierzone w probie T8: 0/2), zabiera jedyny podglad strumienia w turach z narzedziem i uniewaznia platne dowody L5.1/L5.9 (e2e/agent-ui.spec.ts czyta ten pasek); podmiana Messages jest wykluczona przez AGENTS.md. Opis: docs/NEW-APPLICATION.md §7.",
       "scenarios": [
         "T05"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L5.16": {
       "status": "potwierdzone",
@@ -954,7 +1034,8 @@
       "gap": "—",
       "scenarios": [
         "T23"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L5.17": {
       "status": "potwierdzone",
@@ -965,7 +1046,8 @@
       "scenarios": [
         "T22",
         "T16"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L6.1": {
       "status": "potwierdzone",
@@ -980,7 +1062,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "kod: schemat obejmuje rozmowę, przestrzeń, zasób, zaznaczenie, filtry, viewport i szkice; wypełnienie filtrów niebadane"
-      }
+      },
+      "class": "produktowe"
     },
     "L6.2": {
       "status": "potwierdzone",
@@ -994,7 +1077,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg hist. FEEDBACK #21: kontekst czytany przy wysłaniu, zaznaczona pozycja trafia do właściwego rekordu"
-      }
+      },
+      "class": "produktowe"
     },
     "L6.3": {
       "status": "potwierdzone",
@@ -1008,7 +1092,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg raw-probe-canvas.log: model wywołał get_context; nie badano, czy zwraca kontekst nowszy niż start"
-      }
+      },
+      "class": "produktowe"
     },
     "L6.4": {
       "status": "potwierdzone",
@@ -1023,7 +1108,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test contracts + 04-probes-api: brak pola właściciela, identyfikator z ciała daje 403"
-      }
+      },
+      "class": "produktowe"
     },
     "L6.5": {
       "status": "potwierdzone",
@@ -1037,7 +1123,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg raw-probe-draft.log: model podał wartość zapisaną (5) i odnotował szkic; sonda poza regresją"
-      }
+      },
+      "class": "produktowe"
     },
     "L6.6": {
       "status": "potwierdzone",
@@ -1051,7 +1138,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg hist. FEEDBACK #21 i raw-probe-canvas.log: polecenie o wskazanym elemencie trafia we właściwy rekord"
-      }
+      },
+      "class": "produktowe"
     },
     "L6.7": {
       "status": "potwierdzone",
@@ -1065,7 +1153,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "kod: limit w list_offers i search; prompt bez danych biznesowych poza opisem zasobu"
-      }
+      },
+      "class": "produktowe"
     },
     "L6.8": {
       "status": "potwierdzone",
@@ -1075,7 +1164,8 @@
       "gap": "—",
       "scenarios": [
         "T08"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L6.9": {
       "status": "potwierdzone",
@@ -1085,7 +1175,8 @@
       "gap": "—",
       "scenarios": [
         "T08"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L6.10": {
       "status": "potwierdzone",
@@ -1095,7 +1186,8 @@
       "gap": "—",
       "scenarios": [
         "T08"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L6.11": {
       "status": "czesciowe",
@@ -1107,7 +1199,8 @@
       "scenarios": [
         "T09",
         "T12"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L6.12": {
       "status": "potwierdzone",
@@ -1118,7 +1211,8 @@
       "scenarios": [
         "T12",
         "T22"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L6.13": {
       "status": "potwierdzone",
@@ -1128,7 +1222,8 @@
       "gap": "—",
       "scenarios": [
         "T23"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L6.14": {
       "status": "potwierdzone",
@@ -1139,7 +1234,8 @@
       "scenarios": [
         "T22",
         "T27"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L6.15": {
       "status": "potwierdzone",
@@ -1150,7 +1246,8 @@
       "scenarios": [
         "T25",
         "T26"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L6.16": {
       "status": "potwierdzone",
@@ -1160,7 +1257,8 @@
       "gap": "—",
       "scenarios": [
         "T25"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L6.17": {
       "status": "potwierdzone",
@@ -1171,7 +1269,8 @@
       "scenarios": [
         "T26",
         "T25"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L7.1": {
       "status": "potwierdzone",
@@ -1183,7 +1282,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: wszystkie przebiegi audytu AgenticApp przez mastra.getAgent; query() z SDK tylko w diagnostyce"
-      }
+      },
+      "class": "produktowe"
     },
     "L7.2": {
       "status": "potwierdzone",
@@ -1197,7 +1297,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: nagłówki X-Run-Id/X-Conversation-Id i run_events instancji audytowej AgenticApp"
-      }
+      },
+      "class": "produktowe"
     },
     "L7.3": {
       "status": "potwierdzone",
@@ -1212,7 +1313,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: raw-probe-stop.log i run 6c9c63 (server_sigterm) w AgenticApp; sonda poza regresją"
-      }
+      },
+      "class": "produktowe"
     },
     "L7.4": {
       "status": "potwierdzone",
@@ -1226,7 +1328,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: sonda raw-probe-conc2.log w AgenticApp (rozłączne okna); pierwsza wersja sondy myliła start z zakolejkowaniem"
-      }
+      },
+      "class": "produktowe"
     },
     "L7.5": {
       "status": "potwierdzone",
@@ -1238,7 +1341,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: contracts.test.ts „…ta sama reguła”; narzędzia MCP jako nakładki na te same serwisy co HTTP"
-      }
+      },
+      "class": "produktowe"
     },
     "L7.6": {
       "status": "potwierdzone",
@@ -1250,7 +1354,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "kod: FEEDBACK.md §6 (rejestr własnych adapterów), dziś w archiwum szablonu"
-      }
+      },
+      "class": "produktowe"
     },
     "L7.7": {
       "status": "potwierdzone",
@@ -1262,7 +1367,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "kod: tylko @mastra/core i @mastra/claude; zwykły proces Node, bez Factory/AgentController/hostingu"
-      }
+      },
+      "class": "produktowe"
     },
     "L7.8": {
       "status": "potwierdzone",
@@ -1272,7 +1378,8 @@
       "gap": "—",
       "scenarios": [
         "T10"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L7.9": {
       "status": "potwierdzone",
@@ -1283,7 +1390,8 @@
       "scenarios": [
         "T10",
         "T22"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L7.10": {
       "status": "potwierdzone",
@@ -1294,7 +1402,8 @@
       "scenarios": [
         "T10",
         "T16"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L7.11": {
       "status": "potwierdzone",
@@ -1302,7 +1411,8 @@
       "origin": "szablon",
       "proof": "Prawdziwa sesja Claude Agent SDK, odpytana wylacznie zadaniami sterujacymi — zero tur modelu (apps/server/src/cli/diag-agent.ts, log docs/evidence/z11-bl03/sesja-sdk/diag-*.txt): serwer MCP „app\" laczy sie i oglasza wszystkie 33 zadeklarowane narzedzia, zero brakujacych i zero nadmiarowych, brak obcych serwerow MCP. Diagnostyka konczy sie kodem != 0 przy rozjezdzie. Proba zdolnosci wykrycia T4 (--proba-niezgodnego-schematu): serwer z jednym narzedziem na z.record() melduje sie jako connected z ZEREM narzedzi i BEZ bledu, diag konczy sie kodem 1 — cicha utrata jest realna i wykrywalna tylko tym porownaniem. Reprodukcja w procesie: tests/mcp-published-schema.test.ts.",
       "gap": "—",
-      "scenarios": []
+      "scenarios": [],
+      "class": "produktowe"
     },
     "L7.12": {
       "status": "potwierdzone",
@@ -1310,7 +1420,8 @@
       "origin": "szablon",
       "proof": "runtime.ts: komentarz klasy i hookCallback (SessionStart, PreToolUse, PostToolUse, PostToolUseFailure, Stop) przekazywany w sdkOptions jednego wywołania agent.stream/resumeStream; w ścieżce wykonania nie ma drugiego query(). Luka uzasadniająca most potwierdzona w zainstalowanym @mastra/claude 0.3.1: runClaudeAsMastraStream emituje tylko delty tekstu, wywołania narzędzi trafiają do telemetrii, session_id nie jest udostępniany. e2e/agent-ui.spec.ts pokazuje zdarzenia narzędzi z mostu w jednym uruchomieniu na modelu.",
       "gap": "—",
-      "scenarios": []
+      "scenarios": [],
+      "class": "produktowe"
     },
     "L7.13": {
       "status": "czesciowe",
@@ -1321,7 +1432,8 @@
       "backlog": "BL-07",
       "scenarios": [
         "T16"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L8.1": {
       "status": "potwierdzone",
@@ -1336,13 +1448,15 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: raw-probe-canvas.log (ToolSearch + 4 narzędzia MCP) w AgenticApp"
-      }
+      },
+      "class": "jakosciowe",
+      "note_v04": "Dowód zachowany z istniejącego wdrożenia; wymaganie v0.4 nie zmienia jego semantyki. Pełna ścieżka GLM jest oceniana w L12.6."
     },
     "L8.2": {
       "status": "potwierdzone",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "Tryb potwierdzony przez sam SDK, nie przez stala w kodzie: scripts/probe-sdk-session.ts otwiera sesje Claude Agent SDK, ktorej strumien wejsciowy nie emituje wiadomosci, i zadaje zadanie sterujace accountInfo() — bez tury modelu. Zapis w docs/evidence/z12-bl04/sesja-sdk.json: state=subscription, apiKeySource=null, apiProvider=firstParty, subscriptionType=\"Claude Max\", limity planu dostepne. tests/sdk-session-evidence.test.ts (6 testow) pilnuje, ze zapis jest rozstrzygajacy, nie niesie danych konta i pochodzi z wersji SDK, adaptera i CLI zainstalowanych w tym drzewie. W UI: e2e/auth-limits.spec.ts pokazuje trzy rozne stany sekcji \"Sesja SDK\" w Ustawieniach (subskrypcja / klucz API / niesprawdzalne) i sprawdza, ze zadna odpowiedz nie wprowadza sekretu na strone; po udanym przebiegu pasek stanu ma data-auth-confirmed=true, a przed nim false. Tura modelu w tym lancuchu pochodzi z WCZESNIEJSZEGO przebiegu (e2e/agent-ui.spec.ts, e2e/files-agent.spec.ts) i NIE zostala powtorzona na tym drzewie; nowe w tym pakiecie jest to — nowy jest dowod, ze sesja idzie przez OAuth subskrypcji. Tokena nie ujawnia zadna z tych sciezek (tests/runtime.test.ts, tests/durability.test.ts).",
+      "proof": "Rzeczywiste wywołanie Claude Agent SDK w trybie GLM: `scripts/probe-sdk-session.ts` otwiera izolowaną sesję z `APP_MODEL_PROVIDER=glm`; zapis `docs/evidence/z12-bl04/sesja-sdk-glm.json` wskazuje GLM/Z.AI, endpoint i model, stan sesji `other`, brak subskrypcji Claude oraz brak limitów planu. `tests/provider-mode.test.ts` sprawdza fail-closed wymagane zmienne, przekazanie wyłącznie originu endpointu do statusu i brak sekretu w odpowiedzi; `tests/sdk-session-evidence.test.ts` pilnuje zgodności zapisu z wersjami SDK. Dowód sesji potwierdza konfigurację providera, nie zastępuje pełnej tury modelu (L12.6).",
       "gap": "—",
       "scenarios": [
         "T17"
@@ -1350,13 +1464,14 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: /api/status instancji audytowej AgenticApp — mode=subscription, plan=max, bez tokena"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L8.3": {
       "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "Trzy przebiegi tej samej sondy w docs/evidence/z12-bl04/sesja-sdk.json, kazdy rzeczywistym wywolaniem SDK bez tury modelu: (1) srodowisko aplikacji => subscription; (2) ANTHROPIC_API_KEY ustawiony w procesie NADRZEDNYM, polityka wlaczona => nadal subscription, bo subscriptionOnlyEnv usuwa klucz; (3) ten sam klucz przy applyPolicy:false => api_key, apiKeySource=ANTHROPIC_API_KEY, brak planu, rate_limits_available=false. Trzeci przebieg jest kontrola: bez niego dwie identyczne odpowiedzi moglyby znaczyc, ze sonda nie widzi roznicy. tests/sdk-session-evidence.test.ts asertuje cala trojke i wiaze ja z wersjami z lockfile. Polityka srodowiska dalej sprawdzana w tests/auth.test.ts i tests/durability.test.ts; nowe jest to, ze jej skutek jest OBSERWOWANY po stronie SDK, a nie zakladany. Sesja na kluczu API czyni aplikacje niezdatna (authIsUsable=false) i ma wlasny, czerwony stan w Ustawieniach oraz na pasku stanu.",
+      "proof": "`tests/provider-mode.test.ts` sprawdza, że w trybie GLM `subscriptionOnlyEnv` przepuszcza wyłącznie `ANTHROPIC_BASE_URL` i `ANTHROPIC_AUTH_TOKEN`, usuwa `ANTHROPIC_API_KEY`, Bedrock, Vertex i zmienne mostka OAuth, a `probeAuth()` nie odczytuje katalogu poświadczeń OAuth. Rzeczywista sonda SDK w `docs/evidence/z12-bl04/sesja-sdk-glm.json` ma stan `other` bez planu/subskrypcji; kontrola z nieoczyszczonym środowiskiem wykazuje odmienny stan `api_key`.",
       "gap": "—",
       "scenarios": [
         "T17"
@@ -1364,7 +1479,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "symulacja: 03-probes-auth.txt — klucz wykryty, oznaczony jako odrzucony i usuwany z procesu potomnego"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L8.4": {
       "status": "potwierdzone",
@@ -1379,7 +1495,9 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: pnpm diag (hist.) 21 narzędzi; wyniki używane przez model w przebiegach audytu AgenticApp"
-      }
+      },
+      "class": "jakosciowe",
+      "note_v04": "Dowód zachowany z istniejącego wdrożenia; wymaganie v0.4 nie zmienia jego semantyki. Pełna ścieżka GLM jest oceniana w L12.6."
     },
     "L8.5": {
       "status": "potwierdzone",
@@ -1393,13 +1511,15 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: FEEDBACK #19 (hist.) i raw-probe-stop.log w AgenticApp; wznowienie po restarcie i po anulowaniu"
-      }
+      },
+      "class": "jakosciowe",
+      "note_v04": "Dowód zachowany z istniejącego wdrożenia; wymaganie v0.4 nie zmienia jego semantyki. Pełna ścieżka GLM jest oceniana w L12.6."
     },
     "L8.6": {
       "status": "potwierdzone",
       "evidence": "symulacja",
       "origin": "szablon",
-      "proof": "e2e/auth-limits.spec.ts (13 testow, port 8798, katalog .e2e-scripted-auth, stand-in na granicy ModelAgentLike — SYMULACJA): limit uzycia, odwolane logowanie, odmowa odnowienia i zerwane polaczenie przechodza przez runtime do czatu (data-phase=failed + kod bledu w run-error), do paska stanu (data-auth-state) i do Ustawien (auth-access-state, auth-remedy — porada rozna dla kazdego stanu). W kazdym przypadku tekst sprzed awarii zostaje na ekranie, kompozytor jest znow aktywny, a poswiadczenie lokalne dalej ma stan valid. Koniec uruchomienia uniewaznia zapytanie o status (packages/platform-ui/src/chat/runEvents.ts), wiec stan zmienia sie bez przeladowania. tests/run-lifecycle.test.ts dalej pilnuje dokladnie jednego stanu koncowego. Proba wykrycia: wycofanie uniewaznienia statusu => test oblewa na asercji paska stanu (linia 168).",
+      "proof": "`e2e/auth-limits.spec.ts` prowadzi kontrolowane błędy adaptera do czatu, paska stanu i Ustawień bez utraty tekstu lub blokady kompozytora. W trybie GLM `packages/platform-ui/src/shell/SettingsPage.tsx` i `tests/provider-mode.test.ts` opisują błąd jako błąd endpointu GLM, a nie OAuth; wymagania konfiguracji GLM są fail-closed. To jest sprawdzenie kontrolowanych błędów, nie sztuczne wyczerpanie rzeczywistego limitu (L8.11 jest informacyjne).",
       "gap": "—",
       "scenarios": [
         "T17"
@@ -1407,7 +1527,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: auth.test.ts i tool-activity.spec (limit w UI); symulacja, rzeczywiste wygaśnięcie i limit niewywołane"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L8.7": {
       "status": "potwierdzone",
@@ -1421,13 +1542,15 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: probeAuth i /api/status; wykonawca zaznaczył, że nie przeszukano logów serwera ani artefaktów"
-      }
+      },
+      "class": "jakosciowe",
+      "note_v04": "Dowód zachowany z istniejącego wdrożenia; wymaganie v0.4 nie zmienia jego semantyki. Pełna ścieżka GLM jest oceniana w L12.6."
     },
     "L8.8": {
       "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "docs/evidence/z12-bl04/sesja-sdk.json zapisuje w jednym rekordzie: wersje Claude CLI (2.1.277), @anthropic-ai/claude-agent-sdk (0.3.270), @mastra/claude (0.3.1), @mastra/core (1.66.0), commit — oraz sposob logowania odczytany z SESJI (accountInfo), a nie zalozony ze srodowiska. tests/sdk-session-evidence.test.ts oblewa, gdy ktorakolwiek z tych wersji rozjedzie sie z zainstalowana, i podaje polecenie ponownego wziecia sondy; dzieki temu zapisany fakt nie przezywa kodu, ktorego dotyczy. Rzeczywiste tury na tych wersjach pozostaja w e2e/agent-ui.spec.ts i e2e/files-agent.spec.ts (poza domyslnym przebiegiem). Wersje wyswietla takze /api/status.",
+      "proof": "`docs/evidence/z12-bl04/sesja-sdk-glm.json` zapisuje rzeczywiste wywołanie SDK w trybie GLM wraz z wersjami CLI, Claude Agent SDK, adaptera Mastry i core oraz identyfikatorem commitu. `tests/sdk-session-evidence.test.ts` wiąże dowód z zainstalowanymi wersjami i odrzuca rozjazd. Jest to dowód konfiguracji GLM na tej ścieżce; pełny GUI→narzędzie→UI przez GLM pozostaje osobnym kryterium L12.6.",
       "gap": "—",
       "scenarios": [
         "T17"
@@ -1435,37 +1558,41 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: FEEDBACK #15/#18/#23 (hist.) i 02-versions.txt; trzy niezgodności znalezione i obsłużone w AgenticApp"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L8.9": {
       "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "Cztery odrebne informacje zamiast trzech: sposob logowania (polityka), poswiadczenie lokalne, ostatni potwierdzony dostep i — nowa — sesja SDK. authIsConfirmed (packages/platform-contracts) oddziela \"warto sprobowac\" od \"wywolanie sie udalo\": pasek stanu jest zielony WYLACZNIE po potwierdzonym wywolaniu, a przy unverified ma kropke neutralna, przy failed ostrzegawcza — wczesniej obecnosc pliku malowala go na zielono. isAccessRelevantFailure przestaje zapisywac jako blad dostepu to, co dostepu nie dotyczy (odmowa sandboxa, utracony transkrypt, wlasny limit czasu uruchomienia), wiec proces-globalny stan nie jest juz zamazywany przez cudzy blad. Dowody: tests/auth.test.ts (33 testy, m.in. \"obecnosc pliku sama w sobie nie jest potwierdzonym dostepem\") i e2e/auth-limits.spec.ts (miniony termin w pliku + dostep verified na dwoch osobnych wierszach). Proby wykrycia: authIsConfirmed=authIsUsable => 2 testy oblewaja; isAccessRelevantFailure bez sandboxa i timeoutu => 2 testy oblewaja.",
+      "proof": "Stan `method=glm`, wybrany provider, stan konfiguracji oraz ostatni potwierdzony dostęp są oddzielnymi polami kontraktu i interfejsu. `tests/provider-mode.test.ts` sprawdza osobno `authIsUsable` i `authIsConfirmed` dla GLM, a `/api/status` ujawnia wyłącznie origin endpointu oraz nazwę modelu. `docs/evidence/z12-bl04/sesja-sdk-glm.json` pokazuje, że obecność tokenu endpointu nie jest subskrypcją ani potwierdzeniem tury modelu.",
       "gap": "—",
       "scenarios": [
         "T17"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L8.10": {
       "status": "informacyjne",
       "evidence": "symulacja",
       "origin": "szablon",
-      "proof": "Miniony termin nie blokuje uruchomienia i nie jest werdyktem: e2e/auth-limits.spec.ts ustawia expiresAt w przeszlosci (kanarek w tymczasowym CLAUDE_CONFIG_DIR), przebieg konczy sie powodzeniem, a Ustawienia pokazuja JEDNOCZESNIE poswiadczenie \"stale\" i dostep \"verified\" — dwa fakty w dwoch wierszach. Odrzucone odnowienie jest teraz potwierdzone RZECZYWISTYM PRZEBIEGIEM, nie symulacja: scripts/probe-refresh-refused.ts kieruje prawdziwy Claude Agent SDK na kopie poswiadczenia z celowo zepsutymi oboma tokenami i zapisuje, co SDK naprawde odpowiada (docs/evidence/z12-bl04/refresh-refused-*.json): \"Claude Code returned an error result: Failed to authenticate: OAuth session expired and could not be refreshed\" — inaczej niz zakladany dotad \"OAuth token refresh failed: invalid_grant\". Aplikacja klasyfikuje to jako refresh_refused, konczy uruchomienie kodem unauthenticated i pokazuje stan oraz porade w Ustawieniach. Przebieg nie wydal tury subskrypcji (nie przechodzi uwierzytelnienia, wiec nie dociera do modelu) i nie tknal logowania uzytkownika — odciski obu tokenow przed i po sa w zapisie. tests/auth.test.ts trzyma potwierdzony komunikat jako korpus klasyfikatora, tests/sdk-session-evidence.test.ts wiaze zapis z wersja CLI.",
-      "gap": "SWIADOMIE POZA ZAKRESEM, nie brak dowodu. Skuteczne odswiezenie nie zostalo zaobserwowane i nie da sie go zaobserwowac BEZPIECZNIE w tej konfiguracji. Powod jest ustaleniem z tego pakietu: w bundlu CLI 2.1.277 zapis odswiezonego poswiadczenia jest compare-and-swap po refreshTokenie (odswiezenie WYMIENIA zestaw tokenow), a przy odmowie CLI KASUJE poswiadczenie na dysku — co obie proby graniczne potwierdzily obserwacyjnie. Proba \"skutecznego odswiezenia na kopii\" zostawilaby wiec w pliku uzytkownika refresh token poprzedniej generacji, a przy jego najblizszym uzyciu CLI wyczyscilo by mu logowanie — szkoda ujawniajaca sie kilka godzin pozniej, dlugo po tym, jak ktokolwiek powiazalby ja z ta praca. Proba byla autoryzowana i NIE zostala wykonana. Domkniecie wymaga konta testowego odrebnego od konta uzytkownika. Tansza droga posrednia: biernie porownac skrot refresh tokena przed i po rutynowym odswiezeniu sesji uzytkownika (zero tur, zero ryzyka) — jesli rotacji nie ma, proba na kopii staje sie bezpieczna; opis w docs/evidence/z12-bl04/przebiegi-i-proby.md. KLASYFIKACJA WŁAŚCICIELA 2026-09-20: kryterium proceduralne/niewywoływalne w tej konfiguracji — przeniesione do statusu „informacyjne / poza bramką odbioru”. Uzasadnienie powyżej pozostaje zapisane; kryterium nie blokuje zamknięcia warstwy i nie należy do pakietu backlogu.",
+      "proof": "Tryb GLM jest fail-closed: `tests/provider-mode.test.ts` odrzuca brak, pustą wartość i niepoprawny endpoint `ANTHROPIC_BASE_URL` lub `ANTHROPIC_AUTH_TOKEN`; potwierdza też, że tryb GLM przekazuje wyłącznie token endpointu do harnessu, bez odczytu OAuth użytkownika. `e2e/auth-limits.spec.ts` prowadzi kontrolowany błąd dostępu od granicy adaptera do czatu, paska stanu i Ustawień oraz sprawdza komunikat wskazujący token i endpoint GLM, a nie OAuth. Jest to test konfiguracji i symulacji błędu, nie rzeczywiste unieważnienie klucza GLM.",
+      "gap": "Rzeczywiste unieważnienie lub rotacja klucza GLM wymaga osobnego, rozporządzalnego konta testowego. Nie wolno wywoływać go na kluczu właściciela, bo skutkiem może być przerwanie pracy aplikacji. Punkt pozostaje informacyjny: opisuje granicę dowodu, nie brak funkcji fail-closed ani widocznej obsługi błędu.",
       "scenarios": [
         "T17"
-      ]
+      ],
+      "class": "informacyjne"
     },
     "L8.11": {
       "status": "informacyjne",
       "evidence": "symulacja",
       "origin": "szablon",
-      "proof": "Brak proby z mutacja przed limitem zostal uzupelniony: e2e/auth-limits.spec.ts \"limit po mutacji\" wykonuje procurement_save_comparison przez prawdziwy handler (operationId mintowany na przebieg, wiec powtorka daloby DRUGI artefakt, a nie replay), po czym scenariusz zglasza limit. Asercje: dokladnie jeden artefakt, wywolanie narzedzia i tekst sprzed awarii zostaja w rozmowie i po przeladowaniu, po odczekaniu 6 s nadal jeden artefakt i dokladnie jedno uruchomienie o statusie failed. Rozroznienie czterech przypadkow ma cztery rozne stany dostepu w UI, a blad narzedzia nadal konczy przebieg powodzeniem (e2e/tool-activity.spec.ts). CZESC klasyfikatora jest juz potwierdzona na rzeczywistych komunikatach SDK 0.3.270: dwie proby graniczne uwierzytelnienia (docs/evidence/z12-bl04/refresh-refused-*.json, revoked-*.json) daja tekst \"Failed to authenticate: OAuth session expired and could not be refreshed\", ktory aplikacja odroznia od limitu i od bledu sieci; korpus jest w tests/auth.test.ts. Zadna z prob nie wydala tury subskrypcji ani nie tknela logowania uzytkownika.",
-      "gap": "Dwa z czterech przypadkow opieraja sie na niepotwierdzonych podciagach: (1) komunikatu przy WYCZERPANYM limicie nikt nie widzial — takiego przebiegu nie da sie wywolac na zadanie, a symulowany limit nie jest limitem wyczerpanym (sonda sesji czyta rzeczywiste wykorzystanie okien planu, czyli ODCZYT, nie wyczerpanie); (2) \"socket hang up\" dla bledu sieci pozostaje zalozony. Ta polowa trzyma kryterium otwarte niezaleznie od wszystkiego innego. OSOBNO, i wezej niz w pierwszej wersji tego opisu: proby fazy 2 pokazaly, ze PRZY POSWIADCZENIU Z NIEPRAWIDLOWYM REFRESH TOKENEM SDK 0.3.270 podaje ten sam tekst niezaleznie od tego, czy access token wygasl. To NIE jest dowod, ze SDK myli odwolane logowanie z odmowa odnowienia: oba tryby proby zapisuja tak samo nieprawidlowy refresh token i roznia sie WYLACZNIE wartoscia expiresAt, wiec oba koncza tym samym zdarzeniem — odnowieniem, ktore nie moglo sie udac, a identyczny tekst jest spodziewanym skutkiem takiego ustawienia. Prawdziwe odwolanie (poprawny refresh token odrzucony po stronie serwera) nie zostalo wytworzone, bo wymagaloby konta testowego; czy da sie je odroznic — POZOSTAJE NIEZNANE. KLASYFIKACJA WŁAŚCICIELA 2026-09-20: kryterium proceduralne/niewywoływalne w tej konfiguracji — przeniesione do statusu „informacyjne / poza bramką odbioru”. Uzasadnienie powyżej pozostaje zapisane; kryterium nie blokuje zamknięcia warstwy i nie należy do pakietu backlogu.",
+      "proof": "`e2e/auth-limits.spec.ts` symuluje limit po trwałej mutacji: powstaje dokładnie jeden artefakt, historia i tekst sprzed awarii pozostają po przeładowaniu, a wykonanie kończy się `rate_limited` bez samoczynnej powtórki. Ten sam zestaw rozdziela w UI limit, odmowę dostępu endpointu GLM, błąd sieci i błąd narzędzia. `tests/diagnostics.test.ts` sprawdza klasyfikację komunikatu limitu. Symulacja jest oznaczona jako symulacja i nie udaje faktycznego wyczerpania limitu GLM.",
+      "gap": "Rzeczywiste wyczerpanie limitu GLM nie jest wywoływane na żądanie, ponieważ spala płatny limit właściciela i nie daje stabilnego punktu startowego. Do takiego dowodu potrzebne jest odrębne konto testowe z kontrolowanym limitem. Punkt pozostaje informacyjny; realna funkcja zachowania historii i braku powtórki mutacji jest pokryta testem jakościowym.",
       "scenarios": [
         "T17"
-      ]
+      ],
+      "class": "informacyjne"
     },
     "L8.12": {
       "status": "potwierdzone",
@@ -1475,7 +1602,9 @@
       "gap": "—",
       "scenarios": [
         "T17"
-      ]
+      ],
+      "class": "jakosciowe",
+      "note_v04": "Dowód zachowany z istniejącego wdrożenia; wymaganie v0.4 nie zmienia jego semantyki. Pełna ścieżka GLM jest oceniana w L12.6."
     },
     "L8.13": {
       "status": "potwierdzone",
@@ -1485,17 +1614,20 @@
       "gap": "—",
       "scenarios": [
         "T17"
-      ]
+      ],
+      "class": "jakosciowe",
+      "note_v04": "Dowód zachowany z istniejącego wdrożenia; wymaganie v0.4 nie zmienia jego semantyki. Pełna ścieżka GLM jest oceniana w L12.6."
     },
     "L8.14": {
       "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "Trzy rzeczy, kazda sprawdzalna. (1) Opis zgodny z kodem: README.md (sekcja Konfiguracja) i komentarz packages/platform-server/src/agent/auth.ts mowia teraz wprost, ze CALY plik poswiadczen jest parsowany, wiec accessToken i refreshToken PRZECHODZA PRZEZ PAMIEC PROCESU, a kopiowane sa wylacznie subscriptionType i expiresAt; poprzednie zdanie (\"wczytuje z pliku tylko te dwie informacje\") opisywalo inny program. (2) Tokeny nie trafiaja do logu regresji: asercje zmieniono z expect(x).not.toContain(token) na expect(x.includes(token), '<opis>').toBe(false) w tests/runtime.test.ts i tests/durability.test.ts oraz w skanie e2e — przy oblaniu Vitest wypisuje true/false i komunikat, nigdy wartosci tokena. (3) Testy negatywne nie niszcza logowania uzytkownika: pracuja na syntetycznym poswiadczeniu w katalogu tymczasowym wskazanym przez CLAUDE_CONFIG_DIR, a tests/credential-guard.test.ts mierzy to — bierze rozmiar i czas modyfikacji prawdziwego pliku przed suita i porownuje w afterAll. Proba wykrycia: test dotykajacy prawdziwego pliku => hook oblewa, kod wyjscia 1.",
+      "proof": "W trybie GLM `probeAuth()` nie odczytuje ani nie wykonuje `stat` na katalogu OAuth: kontrolują to `tests/provider-mode.test.ts` i `tests/credential-guard.test.ts` z izolowanym `CLAUDE_CONFIG_DIR`. Token endpointu jest przepuszczany tylko do procesu harnessu, a status pokazuje wyłącznie origin endpointu; testy sekretów sprawdzają, że token nie trafia do UI, logów, artefaktów ani raportów. Historyczny opis parsowania pliku OAuth dotyczył ścieżki subskrypcyjnej i nie jest opisem trybu GLM.",
       "gap": "—",
       "scenarios": [
         "T17"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L9.1": {
       "status": "potwierdzone",
@@ -1509,7 +1641,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "kod: schemat 8 tabel pc_* i shared/index.ts"
-      }
+      },
+      "class": "produktowe"
     },
     "L9.2": {
       "status": "potwierdzone",
@@ -1523,7 +1656,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: contracts.test.ts — wspólne schematy i serwis dla update_offer_item; endpoint wag kryteriów nieoceniony"
-      }
+      },
+      "class": "produktowe"
     },
     "L9.3": {
       "status": "potwierdzone",
@@ -1537,7 +1671,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: contracts.test.ts i 04-probes-api.txt; 13 kodów błędów mapowanych na statusy HTTP"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L9.4": {
       "status": "potwierdzone",
@@ -1552,7 +1687,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: FEEDBACK #21 (hist.) pozycja → oferta → dostawca → załącznik → wiersz pliku"
-      }
+      },
+      "class": "produktowe"
     },
     "L9.5": {
       "status": "potwierdzone",
@@ -1566,7 +1702,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "sonda: 04-probes-api.txt (OWNER-*) — 403 dla drugiego właściciela; listy przestrzeni, plików i artefaktów rozłączne"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L9.6": {
       "status": "potwierdzone",
@@ -1581,7 +1718,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "sonda: 04-probes-api.txt (CONFLICT-*) — nieaktualna wersja daje 409 bez nadpisania"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L9.7": {
       "status": "potwierdzone",
@@ -1595,7 +1733,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "sonda: 04-probes-api.txt — 8 równoległych żądań z jednym operationId, jeden przyrost wersji; poza regresją"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L9.8": {
       "status": "potwierdzone",
@@ -1609,7 +1748,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: durability.test.ts — przerwany zapis artefaktu i odrzucona zmiana pozycji; pozostałe zapisy wieloetapowe nieocenione"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L9.9": {
       "status": "potwierdzone",
@@ -1623,7 +1763,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: contracts.test.ts, pnpm test 69/69 w stanie historycznym"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L9.10": {
       "status": "potwierdzone",
@@ -1633,7 +1774,8 @@
       "gap": "—",
       "scenarios": [
         "T20"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L9.11": {
       "status": "potwierdzone",
@@ -1643,7 +1785,8 @@
       "gap": "—",
       "scenarios": [
         "T20"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L9.12": {
       "status": "potwierdzone",
@@ -1653,7 +1796,8 @@
       "gap": "—",
       "scenarios": [
         "T20"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L9.13": {
       "status": "potwierdzone",
@@ -1663,7 +1807,8 @@
       "gap": "—",
       "scenarios": [
         "T09"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L9.14": {
       "status": "potwierdzone",
@@ -1673,7 +1818,8 @@
       "gap": "—",
       "scenarios": [
         "T10"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L9.15": {
       "status": "potwierdzone",
@@ -1683,7 +1829,8 @@
       "gap": "—",
       "scenarios": [
         "T11"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L9.16": {
       "status": "potwierdzone",
@@ -1693,7 +1840,8 @@
       "gap": "—",
       "scenarios": [
         "T09"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L10.1": {
       "status": "potwierdzone",
@@ -1708,7 +1856,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "analiza kodu: tabela własności w FEEDBACK §4 i check-boundaries.mjs, który sprawdza granicę modułów, a nie własność danych"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L10.2": {
       "status": "potwierdzone",
@@ -1723,7 +1872,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: kopia i próba migracji na danych AgenticApp sprzed platform-0003, potem migracja za zgodą; dowody poza repozytorium"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L10.3": {
       "status": "potwierdzone",
@@ -1737,7 +1887,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: tabela conversations instancji audytowej (claude_session_id i owner_id)"
-      }
+      },
+      "class": "produktowe"
     },
     "L10.4": {
       "status": "potwierdzone",
@@ -1753,7 +1904,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: restart instancji audytowej AgenticApp"
-      }
+      },
+      "class": "produktowe"
     },
     "L10.5": {
       "status": "potwierdzone",
@@ -1767,7 +1919,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: FEEDBACK #21 (hist.) i 08-probes-browser.txt; dowody poza repozytorium"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L10.6": {
       "status": "potwierdzone",
@@ -1782,7 +1935,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "analiza kodu: klucze qk.* w queries.ts; bez pomiaru liczby żądań"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L10.7": {
       "status": "potwierdzone",
@@ -1795,7 +1949,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: access-context.test.ts (8) i e2e; e2e po przełączeniu przeładowuje stronę przez page.goto"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L10.8": {
       "status": "potwierdzone",
@@ -1810,7 +1965,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: contracts.test.ts; klucz (artifact_id, version), tytuł zwykłą kolumną"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L10.9": {
       "status": "potwierdzone",
@@ -1824,7 +1980,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: restart instancji audytowej z sumą sha przed i po; bez testu GUI podglądu i pełnego widoku"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L10.10": {
       "status": "potwierdzone",
@@ -1838,7 +1995,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: live-artifacts.test.ts (9); snapshot i live po zmianie źródła i po restarcie"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L10.11": {
       "status": "potwierdzone",
@@ -1847,7 +2005,8 @@
       "proof": "e2e/access-switch.spec.ts \"opozniony strumien poprzedniego wlasciciela nie dociera do nastepnego\" (test GUI bez modelu, symulacja): uruchomienie pierwszej tozsamosci jeszcze strumieniuje (odpowiedz rosnie miedzy dwoma pomiarami), przelaczenie nastepuje w tej samej karcie, a przez kolejne 4 sekundy — gdy scenariusz nadal emituje — na ekranie nie pojawia sie ani pasek zadania, ani strumien, ani zaden fragment odpowiedzi poprzedniej tozsamosci. tests/access-switch.test.ts: accessFetch przerywa zadanie w locie i odrzuca odpowiedz po epoce (wiaze restStorage watkow i upload pliku), a straznik epoki w platformAdapter porzuca strumien — zdarzenia wyslane po przelaczeniu nie trafiaja ani do reduktora, ani do czatu. tests/access-context.test.ts (8 testow): cache, przerwanie, epoka, klucze.",
       "scenarios": [
         "T12"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L10.12": {
       "status": "potwierdzone",
@@ -1858,7 +2017,8 @@
       "scenarios": [
         "T13",
         "T26"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L10.13": {
       "status": "potwierdzone",
@@ -1869,7 +2029,8 @@
       "scenarios": [
         "T12",
         "T13"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L10.14": {
       "status": "potwierdzone",
@@ -1878,7 +2039,8 @@
       "proof": "e2e/artifact-views.spec.ts \"snapshot i live po zmianie zrodla z interfejsu: otwarty widok live sie odswieza\" (test GUI bez modelu, symulacja): przy otwartym podgladzie artefaktu live uzytkownik przechodzi klikaniem (bez przeladowania) na canvas sprawy, wpisuje nowa ilosc w formularzu pozycji i zapisuje; ten sam, nieodmontowany podglad zmienia odcisk stanu zrodla i sumy przy niezmienionej wersji definicji, a snapshot zapisany przez ten sam przebieg ma nadal identyczna tresc. \"po restarcie backendu...\" sprawdza obie sciezki przez HTTP po rzeczywistym restarcie procesu: snapshot bajt w bajt, live fresh z niepustym wynikiem. tests/live-artifacts.test.ts: snapshot zamraza, live liczy od nowa (takze po ponownym otwarciu bazy). tests/agui-stream.test.ts: data_changed uniewaznia klucz artifact.",
       "scenarios": [
         "T13"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L10.15": {
       "status": "potwierdzone",
@@ -1888,7 +2050,8 @@
       "gap": "sourceFingerprint to skrot rekordow zwroconych przez zarejestrowany odczyt, nie monotoniczna wersja rekordow: odpowiada na pytanie \"ten sam stan zrodla czy inny\", nie porzadkuje stanow i nie wskazuje, ktory jest nowszy. Odczyt bez zadeklarowanego deskryptora wyniku ma skrot z calej koperty, wiec wlasny znacznik czasu w wyniku takiego odczytu zmienialby go przy kazdym czytaniu.",
       "scenarios": [
         "T13"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L10.16": {
       "status": "potwierdzone",
@@ -1899,7 +2062,8 @@
       "backlog": null,
       "scenarios": [
         "T18"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L10.17": {
       "status": "potwierdzone",
@@ -1910,7 +2074,8 @@
       "backlog": null,
       "scenarios": [
         "T18"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L10.18": {
       "status": "potwierdzone",
@@ -1921,7 +2086,8 @@
       "backlog": null,
       "scenarios": [
         "T18"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L10.19": {
       "status": "potwierdzone",
@@ -1932,7 +2098,8 @@
       "backlog": null,
       "scenarios": [
         "T18"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L11.1": {
       "status": "potwierdzone",
@@ -1947,7 +2114,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: files-agent.spec (prawdziwy model) i file-analysis.test (10); rozszerzenie z 2026-09-16"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L11.2": {
       "status": "potwierdzone",
@@ -1961,7 +2129,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: runtime.test.ts; sanitizeFilename, limit 8 MB, allowlista typów, resolveInWorkspace"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L11.3": {
       "status": "potwierdzone",
@@ -1975,7 +2144,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg (hist.) FEEDBACK #24/#25: sieć odrzucona, data/app.db niewidoczna; nie powtórzony w audycie ani w szablonie"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L11.4": {
       "status": "niespelnione",
@@ -1990,7 +2160,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg (hist.) FEEDBACK #17/#23: narzędzia plikowe w workspace, powłoka przez canUseTool; nie powtórzony w szablonie"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L11.5": {
       "status": "czesciowe",
@@ -2005,14 +2176,15 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg (hist.) FEEDBACK #25: katalog danych niewidoczny dla procesu sandboxu; nie powtórzony w szablonie"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L11.6": {
-      "status": "potwierdzone",
+      "status": "czesciowe",
       "evidence": "gui",
       "origin": "szablon",
       "proof": "e2e/background-tasks.spec.ts „przelaczenie rozmowy i przeladowanie nie anuluja zadania” (skryptowany serwer): po przejściu do nowej rozmowy i przeładowaniu zadanie w backendzie ma status queued lub running, lista zadań w tle jest widoczna bez przejęcia widoku. tests/runtime.test.ts „zadanie ma trwaly status i powiazanie z rozmowa”; tests/background-runs.test.ts „przerwanie odczytu strumienia nie zatrzymuje pracy” i „lista aktywnych zadan obejmuje wszystkie rozmowy wlasciciela i tylko jego” (symulacja). Nie obejmuje: zwinięcia panelu czatu bez przeładowania (sprawdzone są przeładowanie i zmiana rozmowy).",
-      "gap": "—",
+      "gap": "Istniejąca lista aktywnych przebiegów nie dowodzi pełnego globalnego centrum zadań v0.4: postępu, narzędzi, plików wejściowych, artefaktów, błędów oraz akcji otwarcia, anulowania i ponowienia niezależnie od rozmowy. Wymaga implementacji kontraktu zadania i testu GUI.",
       "scenarios": [
         "T22",
         "T16"
@@ -2020,7 +2192,9 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: background-tasks.spec (5) i background-runs.test (10) po naprawie mapowania abort na /cancel"
-      }
+      },
+      "class": "produktowe",
+      "backlog": "BL-13"
     },
     "L11.7": {
       "status": "czesciowe",
@@ -2035,7 +2209,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: raw-probe-stop.log (potomkowie 0/1/0, potwierdzenie 3 ms); dowód poza repozytorium, nie powtórzony w szablonie"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L11.8": {
       "status": "potwierdzone",
@@ -2049,7 +2224,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: run 6c9c63 failed/server_sigterm w instancji audytowej"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L11.9": {
       "status": "potwierdzone",
@@ -2063,7 +2239,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: files-agent.spec (zgoda na modelu) i FEEDBACK #23 (hist.) dla odmowy i pojedynczego wykonania"
-      }
+      },
+      "class": "produktowe"
     },
     "L11.10": {
       "status": "potwierdzone",
@@ -2077,7 +2254,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg (hist.) FEEDBACK #20 i restart instancji audytowej: plik artefaktu pobieralny po dispose workspace"
-      }
+      },
+      "class": "produktowe"
     },
     "L11.11": {
       "status": "niespelnione",
@@ -2088,18 +2266,20 @@
       "backlog": "BL-03",
       "scenarios": [
         "T14"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L11.12": {
       "status": "czesciowe",
       "evidence": "test",
       "origin": "szablon",
       "proof": "Macierz uprawnień jest jawna i ma trzy kategorie (packages/platform-server/src/agent/permissions.ts): automatyczne (narzędzia MCP aplikacji + Read/Write/Edit/Glob/Grep), wymagające decyzji (Bash i wszystko nierozpoznane) oraz ZABRONIONE (WebFetch, WebSearch) — te ostatnie trafiają do disallowedTools SDK i są dodatkowo odrzucane przez bramkę bez pytania użytkownika. tests/consent.test.ts: „trzy kategorie sa rozlaczne i kazda ma tresc”, „decyduje o narzedziu po nazwie, a nieznane trafia do pytania”, „uruchomienie przekazuje SDK reguly zgodne z macierza” (disallowedTools = kategoria zabroniona; żadne narzędzie z kategorii „decyzja” nie jest w allowedTools, bo wpis tam omija canUseTool), „narzedzie zabronione jest odrzucone bez pytania uzytkownika” (brak zdarzenia prośby o zgodę i brak skutku). e2e/consent-runs.spec.ts: Bash realnie przechodzi przez bramkę w GUI, a odmowa nie wykonuje operacji. tests/runtime.test.ts: autoAllowBashIfSandboxed=false. Kolejność mechanizmów opisana w README („Zgody: co jest automatyczne…”) i docs/NEW-APPLICATION.md §7.",
-      "gap": "Kolejność mechanizmów SDK (allowedTools zatwierdza przed canUseTool; klasyfikator SDK auto-zatwierdza część poleceń powłoki) to zachowanie cudzego kodu i można je zaobserwować tylko na turze modelu — w szablonie nie ma takiej próby. Macierz jest więc zbudowana jako obrona w dwóch miejscach (reguła SDK + odmowa w bramce), a nie jako dowód kolejności.",
-      "backlog": "BL-09",
+      "gap": "Obecna trzykategoryjna polityka narzędzi nie realizuje trzech wybieranych przez użytkownika trybów ręcznego, nadzorowanego i pełnej automatyzacji, nie pokazuje ich w centrum zadań i nie dowodzi, że model nie może eskalować trybu. Wymaga implementacji oraz testów kontraktowych i GUI.",
+      "backlog": "BL-13",
       "scenarios": [
         "T15"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L11.13": {
       "status": "potwierdzone",
@@ -2109,7 +2289,8 @@
       "gap": "—",
       "scenarios": [
         "T15"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L11.14": {
       "status": "potwierdzone",
@@ -2118,7 +2299,8 @@
       "proof": "e2e/measurements.spec.ts „zatrzymanie z interfejsu: potwierdzenie, koniec strumienia i koniec procesow to trzy momenty” (serwer scenariuszowy, build produkcyjny): Stop klikniety w przegladarce mierzony jako trzy osobne momenty — odpowiedz POST /api/runs/:id/cancel, faza koncowa pokazana w karcie (zdarzenie konca ze strumienia AG-UI) i zakonczenie procesow uruchomienia (katalog workspace zniknal z dysku, uruchomienie zniklo z /api/runs/active); w momencie potwierdzenia workspace jeszcze istnieje — asertowane, wiec rozdzielenie nie jest zalozeniem. Brak dalszych mutacji sprawdzony na domenie: anulowany scenariusz mial za strumieniem prawdziwy zapis (procurement_set_criteria_weights), ktory sie nie wykonal — kryteria sprawy identyczne, zero zdarzen platform.data_changed, dziennik zdarzen nie rosnie. Kolejka po Stop: kolejne polecenie w tej samej rozmowie konczy sie statusem succeeded, anulowane zostaje cancelled. tests/measurements.test.ts (symulacja) mierzy to samo w backendzie na 3 probkach, z prawdziwym procesem potomnym zwiazanym z sygnalem przerwania: w momencie potwierdzenia proces jeszcze zyje, przed koncem uruchomienia jest zakonczony; uruchomienie zakolejkowane za anulowanym wykonuje sie poprawnie. Pomiary w docs/evidence/z3-bl05/pomiary-stop-runda3.json i pomiary-przegladarka.json (warunki, wersja kodu, liczba probek). Nie obejmuje: zakonczenia procesu potomnego samego Claude Agent SDK — proces w probie jest jego stand-inem na granicy adaptera, bez grantu tur modelu.",
       "scenarios": [
         "T16"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L11.15": {
       "status": "potwierdzone",
@@ -2129,7 +2311,8 @@
       "scenarios": [
         "T22",
         "T16"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L11.16": {
       "status": "potwierdzone",
@@ -2139,7 +2322,8 @@
       "gap": "—",
       "scenarios": [
         "T14"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L11.17": {
       "status": "potwierdzone",
@@ -2149,7 +2333,8 @@
       "gap": "—",
       "scenarios": [
         "T22"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L11.18": {
       "status": "potwierdzone",
@@ -2159,18 +2344,21 @@
       "gap": "—",
       "scenarios": [
         "T22"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L11.19": {
-      "status": "potwierdzone",
+      "status": "czesciowe",
       "evidence": "gui",
       "origin": "szablon",
       "proof": "Status awaiting_consent jest zapisywany w agent_runs (RunRegistry.markAwaitingConsent / markConsentAnswered), więc /api/runs/active zgłasza go klientowi, który nie ogląda tej rozmowy; jest też anulowalny i nie może być nadpisany przez spóźnioną odpowiedź. e2e/consent-runs.spec.ts „zadanie z nieogladanej rozmowy sygnalizuje, ze czeka na decyzje”: po przejściu do innej rozmowy prośba znika z panelu, a lista zadań w tle pokazuje przy rozmowie fazę awaiting_consent (atrybut, nie brzmienie); po przeładowaniu ten sam status przychodzi z backendu; powrót do rozmowy pokazuje prośbę i pozwala ją rozstrzygnąć. „brak odpowiedzi przy zamknietym panelu konczy sie odmowa, nie zgoda” (instancja z APP_CONSENT_TIMEOUT_MS=4000): karta zamknięta w trakcie oczekiwania, po wygaśnięciu uruchomienie kończy się, a operacja NIE została wykonana. tests/consent.test.ts: te same właściwości w backendzie.",
-      "gap": "—",
+      "gap": "Obecny sygnał `awaiting_consent` przy rozmowie nie realizuje wymaganego formularza w centrum zadań, trwałej plakietki uwagi i jednorazowego nieinwazyjnego toastu z przejściem do zadania. Wymaga implementacji i testu między rozmowami.",
       "scenarios": [
         "T22",
         "T15"
-      ]
+      ],
+      "class": "produktowe",
+      "backlog": "BL-13"
     },
     "L11.20": {
       "status": "potwierdzone",
@@ -2180,7 +2368,8 @@
       "gap": "—",
       "scenarios": [
         "T24"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L11.21": {
       "status": "potwierdzone",
@@ -2190,7 +2379,8 @@
       "gap": "—",
       "scenarios": [
         "T24"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L11.22": {
       "status": "potwierdzone",
@@ -2200,7 +2390,8 @@
       "gap": "—",
       "scenarios": [
         "T24"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L11.23": {
       "status": "czesciowe",
@@ -2211,7 +2402,8 @@
       "backlog": "BL-09",
       "scenarios": [
         "T24"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L11.24": {
       "status": "potwierdzone",
@@ -2222,7 +2414,8 @@
       "scenarios": [
         "T24",
         "T14"
-      ]
+      ],
+      "class": "produktowe"
     },
     "L12.1": {
       "status": "potwierdzone",
@@ -2235,7 +2428,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: baza instancji audytowej (conversations, agent_runs, run_events, artifacts); bez testu w repozytorium"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L12.2": {
       "status": "potwierdzone",
@@ -2248,7 +2442,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: contracts.test.ts i raw-probe-stop.log; brak testu rozróżnienia błędu modelu od integracji i sandboxu"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L12.3": {
       "status": "potwierdzone",
@@ -2261,7 +2456,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: run-lifecycle (13) i 20-pomiary.json; anulowanie mierzone na scenariuszu bez procesu modelu"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L12.4": {
       "status": "potwierdzone",
@@ -2273,7 +2469,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: contracts.test.ts (pnpm test 69/69 w AgenticApp)"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L12.5": {
       "status": "potwierdzone",
@@ -2288,14 +2485,15 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: 46 testów e2e w AgenticApp; bez testu otwarcia artefaktu w przeglądarce"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L12.6": {
-      "status": "potwierdzone",
+      "status": "czesciowe",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "e2e/agent-ui.spec.ts „polecenie → narzedzie → mutacja → canvas → strumien → trwalosc” i e2e/files-agent.spec.ts na prawdziwym modelu subskrypcyjnym: polecenie w GUI, AgentRuntime przez Mastra (ClaudeSDKAgent z @mastra/claude) i Claude Agent SDK, zdarzenia AG-UI z /api/agui/run parsowane przez agUIAdapter OpenUI, narzędzie mcp__app__, przyrost tekstu w stronie, karta na canvasie. Zmienne płatnego API usuwane z procesu agenta (tests/durability.test.ts „srodowisko przekazywane agentowi nie niesie zmiennych platnego dostepu”, tests/auth.test.ts). Stand-iny oznaczone osobno: e2e/support/scripted-server.ts, opisy suit „scenariusz zamiast modelu”, symulacje w tests/run-lifecycle.test.ts i tests/background-runs.test.ts. Zastrzeżenia: AG-UI kodowane własnym kodem (bez @ag-ui/mastra); status zależy od przejścia obu suit z modelem w regresji.",
-      "gap": "—",
+      "proof": "Historyczne przebiegi `e2e/agent-ui.spec.ts` i `e2e/files-agent.spec.ts` potwierdzają pełny tor UI → SDK → Mastra → AG-UI → OpenUI dla wcześniejszego providera subskrypcyjnego. Dla GLM istnieje rzeczywista izolowana sonda SDK oraz jedna tura dymna, opisane w `docs/RAPORT-DOMKNIECIA-PLATFORMY.md` i `docs/evidence/z12-bl04/sesja-sdk-glm.json`; sama sonda nie wysyła polecenia modelowi. Mocki/stand-iny są oznaczone w e2e/support i testach runtime.",
+      "gap": "v0.4 wymaga rzeczywistej, izolowanej ścieżki GLM od GUI przez Claude Agent SDK, Mastrę, AG-UI i OpenUI z widocznym wynikiem oraz oznaczoną kopertą dowodu. Historyczny przebieg subskrypcyjny nie potwierdza nowego providera.",
       "scenarios": [
         "T05",
         "T21"
@@ -2303,7 +2501,9 @@
       "historical": {
         "status": "potwierdzone",
         "note": "przebieg: przebiegi audytu na modelu; AG-UI jako własne kodowanie zdarzeń, bez @ag-ui/mastra"
-      }
+      },
+      "class": "jakosciowe",
+      "backlog": "BL-13"
     },
     "L12.7": {
       "status": "potwierdzone",
@@ -2315,7 +2515,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "analiza kodu: RAPORT-STANU-PLATFORMY.md w AgenticApp; rejestr adapterów tylko w archiwalnym FEEDBACK §6"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L12.8": {
       "status": "potwierdzone",
@@ -2329,7 +2530,8 @@
       "historical": {
         "status": "potwierdzone",
         "note": "test: observability.test.ts i docs/observability.md; zgodność Langfuse z tą wersją Mastry niesprawdzona"
-      }
+      },
+      "class": "jakosciowe"
     },
     "L12.9": {
       "status": "potwierdzone",
@@ -2337,7 +2539,8 @@
       "origin": "szablon",
       "proof": "scripts/acceptance-matrix.mjs w pnpm verify (pnpm check:acceptance): kryteria i próby czytane z docs/ARCHITECTURE.md; sprawdza kolejność i unikalność identyfikatorów, 12 warstw / 200 kryteriów / 27 prób, braki i nadmiar ocen, zgodność próby z warstwą, opis braku i pakiet dla otwartych kryteriów, zakaz „potwierdzone” bez dowodu z szablonu; sumy, zamknięte warstwy i backlog są wyliczane; --check wykrywa dryf docs/ACCEPTANCE.md i docs/BACKLOG.md (także zmianę brzmienia wymagań). Kontrole negatywne: docs/evidence/template-consolidation/kontrole-negatywne-macierzy.txt. Nie obejmuje: zmiana brzmienia kryterium wymusza ponowne wygenerowanie, ale nie ponowną ocenę.",
       "gap": "—",
-      "scenarios": []
+      "scenarios": [],
+      "class": "jakosciowe"
     },
     "L12.10": {
       "status": "informacyjne",
@@ -2347,7 +2550,8 @@
       "gap": "44 dowody zapisane przed koperta (docs/evidence/POCHODZENIE.json) maja commit, wytworce i rodzaj wykonania w rejestrze, ale nie maja zapisu SRODOWISKA przebiegu i nie da sie go odtworzyc — pole czegoBrakujeWPliku mowi to wprost przy kazdym z nich. Dopisanie im srodowiska byloby zmysleniem, a regeneracja nalezy do pakietow, ktore te dowody wytworzyly. KLASYFIKACJA WŁAŚCICIELA 2026-09-20: kryterium proceduralne/niewywoływalne w tej konfiguracji — przeniesione do statusu „informacyjne / poza bramką odbioru”. Uzasadnienie powyżej pozostaje zapisane; kryterium nie blokuje zamknięcia warstwy i nie należy do pakietu backlogu.",
       "scenarios": [
         "T19"
-      ]
+      ],
+      "class": "informacyjne"
     },
     "L12.11": {
       "status": "potwierdzone",
@@ -2357,7 +2561,8 @@
       "gap": "—",
       "scenarios": [
         "T05"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L12.12": {
       "status": "potwierdzone",
@@ -2369,7 +2574,8 @@
         "T05",
         "T19",
         "T21"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L12.13": {
       "status": "potwierdzone",
@@ -2379,7 +2585,8 @@
       "scenarios": [
         "T21",
         "T05"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L12.14": {
       "status": "potwierdzone",
@@ -2387,7 +2594,8 @@
       "origin": "szablon",
       "proof": "docs/CONSOLIDATION-REPORT.md §5.1 (czysty klon bf83bb6: pnpm verify = 1 i pnpm test:e2e = 1, przyczyna i poprawka w 7d6bd78, surowe logi w docs/evidence/template-consolidation/przebieg-1-bf83bb6-nieudany/), §5.3 (trzy nieudane próby wymiany modułu przed udaną: dwa błędy skryptu i rzeczywista wada typowanych tras), §5.2 (kontener: nieudany dostęp z hosta z kontrolą środowiska); FEEDBACK.md T1. playwright.config.ts ma retries 0, więc niestabilność nie jest maskowana ponowieniem; przebieg 2 nie miał ponowień. Aktualizacja 2026-09-17 (docs/CONSOLIDATION-UPDATE-2026-09-17.md): pierwsze uruchomienie sondy ui_filter nie wystartowało (config sondy poza pakietem ESM — błąd narzędzia próby, log 09-sonda-ui-filter-model-proba1-blad-configu.txt), drugie przeszło; w regresji d142b85 brak oblań i ponowień.",
       "gap": "—",
-      "scenarios": []
+      "scenarios": [],
+      "class": "jakosciowe"
     },
     "L12.15": {
       "status": "potwierdzone",
@@ -2395,7 +2603,8 @@
       "origin": "szablon",
       "proof": "docs/ADAPTERY.md ma tabele deklaracji widocznych dla uzytkownika: kazde zdanie, ktore README albo ekran mowi o dzialaniu, ma wskazany dowod i STAN. tests/adapters-register.test.ts sprawdza, ze kazda deklaracja wskazuje istniejacy plik dowodu i nazywa swoj stan, oraz pilnuje dwoch konkretnych zdan z opisu braku: wiersz o odcieciu sieci musi byc oznaczony jako „tylko konfiguracja” z odniesieniem do L11.3, a ekran Ustawien musi mowic o konfiguracji sandboxa, nie o skutku. Poprawione opisy: SettingsPage.tsx nie twierdzi juz, ze siec jest odcieta, tylko ze jest tak skonfigurowana i ze skutecznosc nie ma jeszcze proby z uruchomienia; README nie obiecuje „zamkniecia panelu” (powloka renderuje ChatPanel bezwarunkowo — takiej akcji nie ma) i nie wymienia juz jako brakow trzech rzeczy, ktore powstaly w BL-01/BL-02 (opis ekranu, wskazanie wartosci pola, przestrzen Widokow agenta, sortowanie rozmowa). Zalaczniki JPEG, CSV i tekst maja dowod (e2e/sandbox-files.spec.ts). AGENTS.md i scripts/acceptance-matrix.mjs nadal nie pozwalaja zaliczyc kryterium przez przeniesienie go do ograniczen: kazde otwarte kryterium musi miec opis braku i pakiet backlogu.",
       "gap": "—",
-      "scenarios": []
+      "scenarios": [],
+      "class": "jakosciowe"
     },
     "L12.16": {
       "status": "potwierdzone",
@@ -2405,7 +2614,8 @@
       "gap": "—",
       "scenarios": [
         "T21"
-      ]
+      ],
+      "class": "jakosciowe"
     },
     "L12.17": {
       "status": "potwierdzone",
@@ -2413,7 +2623,8 @@
       "origin": "szablon",
       "proof": "docs/CONSOLIDATION-REPORT.md §0 i §6 rozdzielają: stan implementacji (macierz, braki implementacji), odbiór w izolacji (regresja w czystej kopii na portach testowych i efemerycznych, §5) oraz migrację na danych użytkownika — niewykonaną w tej fazie (§6.4, §7); README „Stan: bazowa wersja robocza”; docs/odzyskiwanie-stanu.md oddziela próbę na kopii od uruchomienia na danych.",
       "gap": "—",
-      "scenarios": []
+      "scenarios": [],
+      "class": "jakosciowe"
     }
   },
   "scenarios": {
@@ -2833,6 +3044,12 @@
       "title": "Domena, backend i cache",
       "summary": "Braki w warstwach 6, 7, 9 i 10 niepasujące do innych pakietów: współbieżność, atomowość, konflikty, kontekst podczas długiego wykonania, cache.",
       "done": "kryteria pakietu mają test kontraktu lub test GUI w regresji szablonu, z próbami negatywnymi."
+    },
+    {
+      "id": "BL-13",
+      "title": "v0.4 — centrum zadań, tryby zgód i pełna ścieżka GLM",
+      "summary": "Decyzje v0.4 wzmacniają istniejące funkcje: wymagają globalnego centrum zadań, wyboru i egzekwowania trzech trybów zgód oraz pełnego, izolowanego dowodu GUI przez aktualnego providera GLM. Dotychczasowe listy przebiegów, polityka narzędzi i dowód subskrypcyjny są częściową bazą, nie zamknięciem tych wymagań.",
+      "done": "L11.6, L11.12 i L11.19 mają wdrożony kontrakt backend–UI oraz testy kontraktowe i GUI. L12.6 ma izolowany dowód pełnej ścieżki GLM/Z.AI → Claude Code / Claude Agent SDK → Mastra → AG-UI → OpenUI z oznaczoną wersją, środowiskiem i providerem."
     }
   ]
 }

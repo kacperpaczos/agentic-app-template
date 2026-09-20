@@ -109,7 +109,7 @@ const ocenyZ = (wpisy: Record<string, Record<string, unknown>>): Record<string, 
   criteria: Object.fromEntries(
     Object.entries(wpisy).map(([id, w]) => [
       id,
-      { status: 'potwierdzone', evidence: 'test', origin: 'szablon', proof: 'dowód', gap: '—', scenarios: [], ...w },
+      { status: 'potwierdzone', class: 'produktowe', evidence: 'test', origin: 'szablon', proof: 'dowód', gap: '—', scenarios: [], ...w },
     ]),
   ),
   scenarios: {},
@@ -213,7 +213,7 @@ describe('rdzeń macierzy: kontrola negatywna na fixture\'ach', () => {
       KANON,
       ocenyZ({
         'L1.1': {},
-        'L1.2': { status: 'informacyjne', gap: 'proceduralne/niewywoływalne — klasyfikacja właściciela 2026-09-20' },
+        'L1.2': { status: 'informacyjne', class: 'informacyjne', gap: 'proceduralne/niewywoływalne — klasyfikacja właściciela 2026-09-20' },
         'L2.1': {},
       }),
     );
@@ -230,7 +230,7 @@ describe('rdzeń macierzy: kontrola negatywna na fixture\'ach', () => {
       KANON,
       ocenyZ({
         'L1.1': {},
-        'L1.2': { status: 'informacyjne', gap: '—' },
+        'L1.2': { status: 'informacyjne', class: 'informacyjne', gap: '—' },
         'L2.1': {},
       }),
     );
@@ -241,11 +241,17 @@ describe('rdzeń macierzy: kontrola negatywna na fixture\'ach', () => {
       KANON,
       ocenyZ({
         'L1.1': {},
-        'L1.2': { status: 'informacyjne', gap: 'uzasadnienie', backlog: 'BL-01' },
+        'L1.2': { status: 'informacyjne', class: 'informacyjne', gap: 'uzasadnienie', backlog: 'BL-01' },
         'L2.1': {},
       }),
     );
     expect(zBacklogiem.problems).toContain('L1.2: kryterium „informacyjne” nie może mieć pakietu backlogu (BL-01)');
+
+    const bezKlasy = wylicz(
+      KANON,
+      { ...ocenyZ({ 'L1.1': {}, 'L1.2': {}, 'L2.1': {} }), criteria: { 'L1.1': { status: 'potwierdzone', evidence: 'test', origin: 'szablon', proof: 'dowód', gap: '—', scenarios: [] }, 'L1.2': { status: 'potwierdzone', class: 'produktowe', evidence: 'test', origin: 'szablon', proof: 'dowód', gap: '—', scenarios: [] }, 'L2.1': { status: 'potwierdzone', class: 'produktowe', evidence: 'test', origin: 'szablon', proof: 'dowód', gap: '—', scenarios: [] } } },
+    );
+    expect(bezKlasy.problems).toContain('L1.1: brak lub nieznana klasa wymogu "—"');
   });
 
   it('3. duplikat identyfikatora oblewa w kanonie i w archiwum', () => {

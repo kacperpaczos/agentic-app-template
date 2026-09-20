@@ -1,7 +1,7 @@
 # Projekt techniczny aplikacji agentowej full stack
 
-> **Obowiązująca specyfikacja platformy v0.4** (12 warstw, 200 kryteriów, 27 prób odbiorowych).
-> Jest to pełny snapshot v0.3 z zatwierdzonymi decyzjami opisanymi w `versions/v0.4/CHANGES-FROM-v0.3.md`; identyfikatory kryteriów i pozostała treść specyfikacji są zachowane.
+> **Obowiązująca specyfikacja platformy** (wersja z 2026-09-16: 12 warstw, 200 kryteriów, 27 prób odbiorowych).
+> Treść jest wierną kopią zaakceptowanego projektu; jedyna zmiana to usunięcie pustej linii, która rozcinała tabelę prób między T21 i T22.
 > Pola odbioru pozostają celowo niezaznaczone. Stan realizacji każdego kryterium: [`ACCEPTANCE.md`](ACCEPTANCE.md) (generowany z tego pliku przez `scripts/acceptance-matrix.mjs`); otwarte prace: [`BACKLOG.md`](BACKLOG.md).
 > Poprzednia wersja (95 kryteriów), wobec której oceniano aplikację źródłową: [`archive/agenticapp-2026-09/stack-agentowy-ustalenia-i-materialy-95-kryteriow.md`](archive/agenticapp-2026-09/stack-agentowy-ustalenia-i-materialy-95-kryteriow.md).
 
@@ -11,7 +11,7 @@ System jest lokalną aplikacją webową, w której interfejs, dane biznesowe i a
 
 Projekt określa architekturę, technologie, kontrakty integracyjne i wymagania odbiorowe. Jest niezależny od domeny biznesowej. Nie definiuje encji produktu, struktury repozytorium, kolejności prac ani harmonogramu. Kryteria odbioru opisują wynik wdrożenia, a nie zadania wykonawcze.
 
-Zakres obejmuje lokalny frontend i backend, trwałe dane, historię rozmów, artefakty, dynamiczny UI i wykonanie agenta. Claude Code / Claude Agent SDK działa jako harness, a GLM/Z.AI jest providerem modelu przez endpoint zgodny z Anthropic. W tym trybie aplikacja nie używa OAuth ani subskrypcji Anthropic użytkownika. Praca offline, PWA, synchronizacja wielu urządzeń i infrastruktura publicznego SaaS pozostają poza zakresem.
+Zakres obejmuje lokalny frontend i backend, trwałe dane, historię rozmów, artefakty, dynamiczny UI i wykonanie agenta. Claude działa jako usługa zewnętrzna rozliczana w ramach subskrypcji użytkownika. Praca offline, PWA, synchronizacja wielu urządzeń i infrastruktura publicznego SaaS pozostają poza zakresem.
 
 
 ## Status i zastosowanie dokumentu
@@ -27,7 +27,7 @@ Dwa tryby użycia są rozróżnione:
 - **Nowe wdrożenie:** sprawdzenie najnowszych stabilnych React i TypeScript oraz zgodnego zestawu pozostałych zależności; zapis faktycznych wersji i dowodów.
 - **Odtworzenie odebranego wdrożenia:** użycie jego lockfile, wersji Node i CLI/SDK, konfiguracji oraz zgodnego schematu danych. Aktualizacja zależności jest zmianą wymagającą regresji, a nie częścią bezwarunkowego odtworzenia.
 
-Odtwarzalność nie oznacza identycznych odpowiedzi modelu. Wymagane są zgodne kontrakty, zachowanie produktu, reguły domenowe i rezultaty odbioru. Dostęp do modelu wymaga ważnej konfiguracji GLM/Z.AI dostarczonej procesowi serwera. Dokładny wygląd i tekst odpowiedzi mogą się różnić.
+Odtwarzalność nie oznacza identycznych odpowiedzi modelu. Wymagane są zgodne kontrakty, zachowanie produktu, reguły domenowe i rezultaty odbioru. Dostęp do modelu wymaga działającej subskrypcji użytkownika. Dokładny wygląd i tekst odpowiedzi mogą się różnić.
 
 ## Architektura logiczna
 
@@ -36,7 +36,7 @@ flowchart TB
     UI[React + TypeScript\nOpenUI + TanStack Router/Query]
     HTTP[Backend Node.js + Hono]
     MAS[Mastra Framework]
-    SDK[Claude Code / Claude Agent SDK\nharness; provider GLM/Z.AI]
+    SDK[Claude Agent SDK\nsubskrypcja Claude]
     MCP[MCP: funkcje aplikacji]
     DOM[Serwisy domenowe\nwalidacja i uprawnienia]
     DB[(SQLite + Drizzle)]
@@ -74,7 +74,7 @@ AG-UI i MCP pełnią odrębne role. AG-UI przenosi zdarzenia pomiędzy aplikacj�
 | Czat | OpenUI Agent Interface | Gotowa obsługa prezentacji rozmów i artefaktów, uruchamiana z własnym backendem. |
 | Backend | Node.js LTS, TypeScript, Hono | Jeden język kontraktów oraz obsługa endpointów i strumieni współpracujących z Mastrą. Długotrwały proces odpowiedni dla sesji SDK i strumieni. |
 | Orkiestracja | Mastra Framework | Wspólna obsługa agentów, workflowów, integracji i diagnostyki. |
-| Harness | Claude Code / Claude Agent SDK + adapter `@mastra/claude` | Rzeczywista pętla wykonania, sesje, narzędzia i kontrola uprawnień; provider modelu jest konfigurowany osobno. |
+| Harness | Claude Agent SDK + adapter `@mastra/claude` | Rzeczywista pętla wykonania Claude, sesje, narzędzia i kontrola uprawnień. |
 | Dostęp do funkcji | MCP | Typowany i opisany interfejs narzędzi nad serwisami domenowymi. |
 | Walidacja kontraktów | Zod | Walidacja danych w runtime i współdzielenie typów TypeScript. |
 | Dane trwałe | SQLite + Drizzle ORM | Lokalna relacyjna baza bez osobnego serwera, z transakcjami i migracjami. |
@@ -181,9 +181,7 @@ Polecenie prezentacyjne jest związane z rozmową, wykonaniem i docelową sesją
 
 Zadanie należy do backendu i rozmowy, nie do aktualnie zamontowanego panelu. Przełączenie rozmowy lub przestrzeni, zamknięcie panelu, odświeżenie i rozłączenie klienta nie oznaczają Stop. Zadanie działa dalej, dopóki backend jest uruchomiony, a wynik trafia do pierwotnej rozmowy. Jawne Stop anuluje wskazane wykonanie. Nie jest wymagane działanie po zatrzymaniu procesu backendu; taki przypadek podlega kontraktowi restartu i odzyskiwania.
 
-Centrum zadań jest obowiązkowym, globalnym widokiem operacyjnym. Pokazuje zadania ze wszystkich rozmów wraz z intencją, statusem, postępem, użytymi narzędziami, wejściowymi plikami, wynikowymi artefaktami, błędami oraz akcjami otwarcia rozmowy lub wyniku, anulowania i ponowienia. Czat pozostaje miejscem rozmowy oraz wydawania poleceń i może pokazywać skrócony stan zadania, ale nie jest właścicielem jego wykonania ani jedynym miejscem jego obsługi.
-
-Zadanie w tle nie przejmuje aktywnego widoku innej rozmowy. Gdy wymaga danych lub zgody użytkownika, przechodzi do stanu oczekiwania na decyzję i udostępnia ustrukturyzowany formularz w centrum zadań. Źródłowa rozmowa zachowuje zapis zdarzenia, lecz nie musi pozostawać otwarta. Niezależnie od aktywnej rozmowy aplikacja pokazuje trwałą plakietkę liczby zadań wymagających uwagi przy centrum zadań oraz jednorazowy, nieprzełączający kontekstu komunikat z przejściem do właściwego zadania. Polecenie nawigacyjne wykonane w tle zostaje odłożone lub pokazane jako dostępna akcja, zamiast samoczynnie zmieniać bieżącą przestrzeń. Odłączenie obserwatora strumienia jest rozróżnione od anulowania pracy.
+Zadanie w tle nie przejmuje aktywnego widoku innej rozmowy. Wynik lub oczekiwanie na zgodę są sygnalizowane przy właściwej rozmowie; użytkownik może do niej wrócić. Polecenie nawigacyjne wykonane w tle zostaje odłożone lub pokazane jako dostępna akcja, zamiast samoczynnie zmieniać bieżącą przestrzeń. Odłączenie obserwatora strumienia jest rozróżnione od anulowania pracy.
 
 ### Semantyczny interfejs i przestrzeń prezentacyjna agenta
 
@@ -191,9 +189,7 @@ Robocze widoki aplikacji są kompozycjami OpenUI z zarejestrowanych komponentów
 
 Polecenie „pokaż tę wartość” obejmuje odnalezienie rekordu i pola, odczyt wartości z backendu, rozpoznanie widoku, otwarcie właściwej przestrzeni i sekcji oraz wskazanie rzeczywistej wartości. Jeśli filtr lub paginacja ją ukrywa, agent może jawnie dostosować prezentację i przewinąć do celu. Nie zastępuje tego opisem słownym ani nie zmienia danych biznesowych. Niejednoznaczny cel wymaga rozstrzygnięcia, a brak celu lub dostępu daje jawny wynik.
 
-Aplikacja ma obowiązkową, osobną i widoczną w nawigacji przestrzeń „Widoki agenta” związaną z rozmową. Agent sam dobiera tam formę prezentacji do intencji: tabelę, wykres, podsumowanie, porównanie lub ich połączenie. Użytkownik nie musi podawać nazwy komponentu. Swoboda dotyczy kompozycji z katalogu, nie generowania i wykonywania dowolnego kodu. Gdy katalog nie pozwala pokazać wyniku, agent ujawnia ograniczenie.
-
-Moduł domenowy może dodatkowo zdefiniować dla konkretnego widoku listę dopuszczonych miejsc i komponentów, które agent może eksperymentalnie dodać do bieżącej kompozycji użytkownika. Każda pozycja listy określa typ komponentu, schemat właściwości, dozwolone powiązania danych i granice aktualizacji. Poza tą listą agent nie zmienia widoku użytkownika; nie zastępuje też elementów stałych ani nie wykonuje dowolnego kodu. Dodany komponent jest widocznie oznaczony jako wynik pracy agenta, powiązany z rozmową i podlega tym samym zasadom trwałości oraz odświeżania co widoki agenta.
+Aplikacja ma osobną, widoczną w nawigacji przestrzeń „Widoki agenta” albo równoważny obszar centralnego canvasu związany z rozmową. Agent sam dobiera tam formę prezentacji do intencji: tabelę, wykres, podsumowanie, porównanie lub ich połączenie. Użytkownik nie musi podawać nazwy komponentu. Swoboda dotyczy kompozycji z katalogu, nie generowania i wykonywania dowolnego kodu. Gdy katalog nie pozwala pokazać wyniku, agent ujawnia ograniczenie.
 
 Wygenerowany widok jest pełnoprawnym, interaktywnym widokiem aplikacji: korzysta z tego samego źródła danych, filtrów i dozwolonych operacji co widoki domyślne. Można go dalej modyfikować rozmową, zapisać i ponownie otworzyć. Aktualizacja backendu odświeża prezentację; nie ma drugiej bazy danych w treści modelu. Działanie z tła nie przełącza samowolnie aktywnej przestrzeni użytkownika.
 
@@ -209,13 +205,7 @@ Artefakt wynikowy ma podgląd odpowiedni do typu, metadane pochodzenia i możliw
 
 ## Warstwy systemu i warunki odbioru
 
-### Klasy wymagań i bramka odbioru
-
-Każde kryterium w macierzy ma klasę **produktową**, **jakościową** albo **informacyjną / proceduralną**. Produktowe opisują widoczny rezultat dla użytkownika. Jakościowe chronią bezpieczeństwo, trwałość, poprawność mutacji, izolację testów i obserwowalność konieczną do zaufania temu rezultatowi. Obie klasy blokują odbiór.
-
-Kryterium informacyjne / proceduralne dokumentuje ograniczenie, którego nie można rozsądnie wywołać na żądanie bez ryzyka dla danych, poświadczeń albo kosztu — przykładowo wymuszone wygaśnięcie poświadczenia, rzeczywiste wyczerpanie limitu lub odtworzenie nieistniejącego już środowiska. Pozostaje z uzasadnieniem, lecz nie blokuje odbioru, nie zamyka warstwy jako otwarte i nie należy do backlogu. Symulacja takiego przypadku nadal może być wymagana jako test jakościowy, ale nie jest przedstawiana jako rzeczywisty przebieg.
-
-Warstwa jest zamknięta, gdy wszystkie jej kryteria produktowe i jakościowe są spełnione i mają dowód z działającego systemu lub właściwego testu kontraktu. Punkt zablokowany, pominięty lub potwierdzony wyłącznie dokumentacją pozostawia warstwę otwartą. Kryteria warunkowe odnoszą się tylko do jawnie opisanej funkcji opcjonalnej. Zamknięcie wszystkich warstw wymaga dodatkowo potwierdzenia przepływów między nimi.
+Warstwa jest zamknięta, gdy wszystkie jej kryteria są spełnione i mają dowód z działającego systemu lub właściwego testu kontraktu. Punkt zablokowany, pominięty lub potwierdzony wyłącznie dokumentacją pozostawia warstwę otwartą. Kryteria warunkowe odnoszą się tylko do jawnie opisanej funkcji opcjonalnej. Zamknięcie wszystkich warstw wymaga dodatkowo potwierdzenia przepływów między nimi.
 
 ### 1. Runtime i środowisko full stack
 
@@ -347,7 +337,7 @@ Strumień tekstu, hooki narzędzi i zdarzenia domeny mogą mieć różne źród�
 - [ ] **L5.5** Pytanie lub prośba o decyzję dociera do interfejsu, a odpowiedź wraca do właściwego wykonania.
 - [ ] **L5.6** Rozłączenie i ponowne połączenie nie powielają zdarzeń ani skutków operacji.
 - [ ] **L5.7** Każde wykonanie ma jeden rozstrzygający status końcowy; UI nie pozostaje bezterminowo w stanie ładowania po błędzie.
-- [ ] **L5.8** Pokrycie zdarzeń zostało sprawdzone z rzeczywistym adapterem harnessu Claude Code / Claude Agent SDK przy aktualnym providerze, a brakujące mapowania są jawnie opisane.
+- [ ] **L5.8** Pokrycie zdarzeń zostało sprawdzone z rzeczywistym adapterem Claude, a brakujące mapowania są jawnie opisane.
 - [ ] **L5.9** Przyrost tekstu ma co najmniej dwa różne obserwowane stany przed zakończeniem wykonania; treść dopiero po końcu, podpowiedź i echo polecenia nie zaliczają testu.
 - [ ] **L5.10** Podgląd strumienia jest związany z rozmową i wykonaniem, a po zakończeniu ustępuje właściwej wiadomości bez utraty lub podwojenia odpowiedzi.
 - [ ] **L5.11** Zgodność AG-UI jest sprawdzana dla schematów i zachowania potrzebnych zdarzeń, nie tylko ich nazw lub obecności pakietu.
@@ -416,34 +406,34 @@ Jedna sesja Claude nie jest uruchamiana równolegle bez obsługi takiego trybu. 
 
 Źródła: [SDK agents](https://mastra.ai/docs/connections/sdk-agents), [Hono](https://mastra.ai/reference/server/hono-adapter).
 
-### 8. Harness Claude Code i provider GLM
+### 8. Harness i uwierzytelnienie Claude
 
-**Cel:** rzeczywisty runtime Claude Code / Claude Agent SDK jako harness z GLM/Z.AI jako providerem modelu. **Technologie:** Claude Agent SDK, `@mastra/claude`, endpoint zgodny z Anthropic.
+**Cel:** rzeczywisty runtime Claude używający wyłącznie subskrypcji. **Technologie:** Claude Agent SDK, `@mastra/claude`.
 
-**Odpowiedzialność warstwy.** Harness wykonuje sesje, narzędzia i kontrolę uprawnień przez oficjalny SDK i adapter Mastry. Provider GLM jest wybierany jawnie konfiguracją procesu; wymaga endpointu i tokenu przekazanych wyłącznie do tego procesu. Tryb GLM nie czyta pliku poświadczeń OAuth użytkownika, nie używa jego subskrypcji Anthropic i nie ma automatycznego fallbacku do Anthropic, gatewaya ani innego płatnego providera. Brak lub niepoprawność konfiguracji kończy start albo wykonanie czytelnym błędem, nie cichą zmianą providera.
+**Odpowiedzialność warstwy.** Zainstalowany i zalogowany runtime Claude wykonuje zadania przez oficjalny SDK i adapter Mastry. Dostępność subskrypcji i zasady dostawcy są zależnością zewnętrzną, sprawdzaną dla docelowego wdrożenia. Aplikacja nie zastępuje niedostępnej subskrypcji płatnym API.
 
-Diagnostyka rozdziela wybrany harness, providera modelu, stan konfiguracji oraz ostatni potwierdzony dostęp, bez ujawniania sekretów. Aplikacja nie implementuje własnego odświeżania tokenów GLM ani nie materializuje OAuth Anthropic dla metadanych w trybie GLM.
+Diagnostyka rozdziela sposób logowania, stan lokalnych metadanych i ostatni potwierdzony dostęp. Data wygaśnięcia tokena dostępu nie przesądza o niemożności odświeżenia przez SDK. Aplikacja nie implementuje własnego odświeżania tokenów. Jeżeli odczytuje plik poświadczeń dla metadanych, opisuje to wprost; parsowanie całego pliku oznacza również przejściowy odczyt tokenów do pamięci procesu, nawet jeśli nie są zwracane.
 
 **Kryteria odbioru:**
 
 - [ ] **L8.1** Wykonanie korzysta z pętli i narzędzi Claude SDK, a nie wyłącznie modelu Claude w routerze LLM.
-- [ ] **L8.2** Tryb GLM wymaga jawnej konfiguracji endpointu i tokenu, przekazuje ją wyłącznie do procesu harnessu oraz potwierdza wybranego providera bez ujawniania sekretu.
-- [ ] **L8.3** OAuth i subskrypcja Anthropic użytkownika, klucz API Anthropic oraz automatyczny fallback do innego providera nie są aktywną ścieżką wykonania w trybie GLM.
+- [ ] **L8.2** Działa uwierzytelnienie subskrypcyjne, z potwierdzeniem trybu bez ujawniania tokena.
+- [ ] **L8.3** Klucz API Anthropic, gateway i automatyczny fallback płatnego API nie są aktywną ścieżką wykonania.
 - [ ] **L8.4** Narzędzia MCP są dostępne w SDK i prawdziwe wywołanie zwraca wynik do dalszej pracy agenta.
 - [ ] **L8.5** Sesja jest kontynuowana przez jej właściwy identyfikator, bez powielania historii.
-- [ ] **L8.6** Błąd konfiguracji lub dostępu do GLM daje czytelny błąd oraz zachowuje stan pracy; nie jest przedstawiany jako błąd OAuth Anthropic.
+- [ ] **L8.6** Wygaśnięcie uwierzytelnienia i wyczerpanie limitu dają czytelny błąd oraz zachowują stan pracy.
 - [ ] **L8.7** Poświadczenia pozostają poza frontendem, artefaktami i logami.
-- [ ] **L8.8** Zgodność konkretnej wersji SDK, adaptera i konfiguracji GLM została sprawdzona rzeczywistym wywołaniem.
-- [ ] **L8.9** Harness, provider, stan konfiguracji i ostatni potwierdzony dostęp są odrębnymi informacjami; obecność pliku lub zmiennej środowiskowej nie oznacza zdrowego połączenia.
-- [ ] **L8.10** Zmiana lub brak tokenu GLM daje jawne zachowanie błędu bez automatycznego przejścia do OAuth Anthropic; scenariusze niewywoływalne bez konta testowego są informacyjne.
-- [ ] **L8.11** Limit GLM jest odróżniany od błędu konfiguracji, sieci i narzędzia; zachowuje historię i nie powoduje automatycznej powtórki mutacji. Niewywoływalne scenariusze rzeczywistego limitu są informacyjne.
-- [ ] **L8.12** Kontrolowane błędy konfiguracji i limitu GLM są sprawdzone na granicy adaptera aż do widocznego UI; symulacja nie jest opisana jako rzeczywisty limit.
+- [ ] **L8.8** Zgodność konkretnej wersji SDK, adaptera i sposobu logowania została sprawdzona rzeczywistym wywołaniem.
+- [ ] **L8.9** Sposób logowania, stan metadanych i ostatni potwierdzony dostęp są odrębnymi informacjami; obecność pliku nie oznacza zdrowego połączenia.
+- [ ] **L8.10** Przeterminowany access token nie blokuje automatycznie możliwości odświeżenia przez SDK; skuteczne i odrzucone odświeżenie mają sprawdzone zachowanie.
+- [ ] **L8.11** Limit użycia jest odróżniany od odwołanego logowania, błędu sieci i błędu narzędzia; zachowuje historię i nie powoduje automatycznej powtórki mutacji.
+- [ ] **L8.12** Kontrolowane błędy uwierzytelnienia i limitu są sprawdzone na granicy adaptera aż do widocznego UI; symulacja nie jest opisana jako rzeczywiste wyczerpanie limitu.
 - [ ] **L8.13** Brak sekretów jest sprawdzony w adekwatnych logach, odpowiedziach HTTP, trwałych danych, artefaktach i buildzie frontendu; dwa endpointy nie stanowią dowodu dla wszystkich powierzchni.
-- [ ] **L8.14** Opis obsługi poświadczeń GLM jest zgodny z kodem; tokeny nie są kopiowane do raportu lub śladów testów, a testy negatywne nie odczytują ani nie zmieniają OAuth użytkownika.
+- [ ] **L8.14** Opis odczytu poświadczeń jest zgodny z kodem; tokeny nie są kopiowane do raportu lub śladów testów, a testy negatywne nie niszczą logowania użytkownika.
 
-Ścieżkę techniczną uzasadnia przekazywanie opcji SDK przez adapter oraz zgodny z Anthropic endpoint GLM/Z.AI. Potwierdzenie dokumentacyjne nie jest jeszcze odbiorem wdrożenia; wymaga rzeczywistego, izolowanego przebiegu z oznaczonym providerem.
+Ścieżkę techniczną uzasadnia przekazywanie opcji SDK przez adapter oraz oficjalny mechanizm tokena subskrypcyjnego Claude. Potwierdzenie dokumentacyjne nie jest jeszcze odbiorem wdrożenia. MiniMax przez klucz API pozostaje osobnym opcjonalnym wariantem; jego działanie nie zalicza tej warstwy.
 
-Źródła: [adapter Claude](https://github.com/mastra-ai/mastra/blob/main/agent-sdks/claude/src/index.ts), [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview), [Z.AI API](https://docs.z.ai/).
+Źródła: [adapter Claude](https://github.com/mastra-ai/mastra/blob/main/agent-sdks/claude/src/index.ts), [uwierzytelnienie](https://code.claude.com/docs/en/authentication), [subskrypcja i SDK](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan).
 
 ### 9. Model domeny i funkcje backendu
 
@@ -516,7 +506,7 @@ Adapter Claude nie zapewnia automatycznie pamięci Mastry. Zapis rozmów i mapow
 
 **Odpowiedzialność warstwy.** Workspace jest przestrzenią pracy, sandbox ograniczeniem dostępu, a worktree tylko odseparowanym checkoutem kodu. Żadne z tych pojęć nie zastępuje pozostałych. Ochrona obejmuje narzędzia plikowe, powłokę, sieć i procesy potomne.
 
-Dopuszczenie narzędzia w konfiguracji SDK może ominąć późniejszą bramkę interaktywnej zgody. Aplikacja udostępnia trzy wybierane przez użytkownika tryby pracy. **Ręczny** wymaga decyzji przed każdą akcją inicjowaną przez agenta. **Nadzorowany** jest domyślny: agent sam odczytuje dane, nawiguje, filtruje i używa dozwolonych komponentów widoku, lecz pyta przed trwałą mutacją domenową, usunięciem zasobu lub skutkiem poza aplikacją. **Pełna automatyzacja** nie pyta przy poszczególnych akcjach, ale nadal respektuje uprawnienia backendu, sandbox, zakazy narzędzi i trwały rejestr wykonania. Tryb jest przypisany do wykonania, widoczny w centrum zadań i nie może zostać podniesiony przez model. Reguły dostępu backendu obowiązują niezależnie od zgody modelowej. Stop oznacza zakończenie wykonania, nie tylko zamknięcie połączenia HTTP lub zmianę ikony. Zerwane połączenie, zamknięty panel i jawne anulowanie mają opisane, odrębne skutki.
+Dopuszczenie narzędzia w konfiguracji SDK może ominąć późniejszą bramkę interaktywnej zgody. Macierz uprawnień rozróżnia operacje automatycznie dozwolone, wymagające decyzji i zabronione. Reguły dostępu backendu obowiązują niezależnie od zgody modelowej. Stop oznacza zakończenie wykonania, nie tylko zamknięcie połączenia HTTP lub zmianę ikony. Zerwane połączenie, zamknięty panel i jawne anulowanie mają opisane, odrębne skutki.
 
 **Kryteria odbioru:**
 
@@ -525,20 +515,20 @@ Dopuszczenie narzędzia w konfiguracji SDK może ominąć późniejszą bramkę 
 - [ ] **L11.3** Izolacja jest aktywna na docelowym systemie; kontrolowane próby niedozwolonego odczytu, zapisu i dostępu do sieci są odrzucane.
 - [ ] **L11.4** Sandbox poleceń i uprawnienia narzędzi plikowych obejmują wszystkie udostępnione sposoby dostępu, a nie tylko powłokę.
 - [ ] **L11.5** Narzędzia nie mają niejawnego dostępu do bazy domenowej pozwalającego ominąć MCP i serwisy backendu.
-- [ ] **L11.6** Zadanie ma trwały status i powiązanie z rozmową; globalne centrum zadań pokazuje jego postęp, wejścia, wyniki i akcje niezależnie od zamknięcia panelu lub przełączenia rozmowy.
+- [ ] **L11.6** Zadanie ma trwały status i powiązanie z rozmową; zamknięcie panelu nie usuwa informacji o pracy.
 - [ ] **L11.7** Stop dociera do wykonania i jego procesów potomnych; pomiar czasu anulowania znajduje się w odbiorze.
 - [ ] **L11.8** Restart rozróżnia zadanie zakończone od przerwanego; wznowienie nie udaje kontynuacji utraconego procesu.
 - [ ] **L11.9** Wymagane pytania i zgody pojawiają się w aplikacji; odmowa nie wykonuje operacji, zgoda nie wykonuje jej podwójnie.
 - [ ] **L11.10** Opublikowane wyniki pozostają trwałe po sprzątnięciu plików tymczasowych.
 - [ ] **L11.11** Próby izolacji obejmują zarówno narzędzia powłoki, jak i plikowe; obejście jednej ścieżki przez drugą nie zapewnia dostępu do bazy lub sekretów.
-- [ ] **L11.12** Tryby ręczny, nadzorowany i pełnej automatyzacji mają odrębne, sprawdzone zachowanie zgód; model nie podnosi trybu samodzielnie, a lista allowedTools nie jest traktowana jako gwarancja wywołania bramki zgody.
+- [ ] **L11.12** Polityka automatycznych zgód i pytań odpowiada faktycznej kolejności mechanizmów SDK; lista allowedTools nie jest traktowana jako gwarancja wywołania bramki zgody.
 - [ ] **L11.13** Zgoda i odmowa są przypisane do konkretnego wykonania; ponowiona odpowiedź nie wykonuje operacji drugi raz.
 - [ ] **L11.14** Pomiar Stop rozdziela potwierdzenie żądania, zakończenie strumienia i procesów; po zakończeniu nie występują dalsze mutacje, a kolejka działa.
 - [ ] **L11.15** Zamknięcie panelu i utrata sieci odłączają obserwację, a zadanie kontynuuje na backendzie; wyłącznie jawne anulowanie lub udokumentowany warunek zakończenia zatrzymuje wykonanie.
 - [ ] **L11.16** Pliki wynikowe są opublikowane atomowo do trwałego magazynu przed sprzątaniem workspace; zerwane zadanie nie publikuje niekompletnego artefaktu jako gotowego.
 - [ ] **L11.17** Po przejściu z rozmowy A do B zadanie A nadal działa i zapisuje wynik w A; w B można prowadzić niezależną rozmowę bez mieszania rezultatów.
 - [ ] **L11.18** Po odświeżeniu lub ponownym połączeniu klient odzyskuje status i wynik zadania bez uruchamiania go drugi raz; backend pracuje także bez otwartego panelu.
-- [ ] **L11.19** Wykonanie w tle wymagające decyzji ma ustrukturyzowany formularz w centrum zadań, zapis zdarzenia w źródłowej rozmowie, trwałą plakietkę uwagi i jednorazowy komunikat z przejściem do zadania; brak otwartego panelu nie oznacza automatycznej zgody ani niewidocznego oczekiwania.
+- [ ] **L11.19** Wykonanie w tle wymagające decyzji ma widoczny sygnał przy swojej rozmowie; brak otwartego panelu nie oznacza automatycznej zgody ani niewidocznego oczekiwania.
 - [ ] **L11.20** PNG/JPEG, XLSX, CSV i tekst można dołączyć do polecenia, odczytać przez właściwe narzędzie oraz powiązać z odpowiedzią; nieobsługiwany format jest jasno odrzucony.
 - [ ] **L11.21** Próba na obrazie potwierdza odczyt jego rzeczywistej treści; znajomość nazwy, MIME lub rozmiaru nie zalicza analizy.
 - [ ] **L11.22** Próba XLSX potwierdza odczyt wielu arkuszy i typów komórek, wykonaną zmianę oraz poprawny plik wynikowy; oryginał pozostaje nienaruszony.
@@ -562,7 +552,7 @@ Odbiór wymaga adekwatnych dowodów. Testy deterministyczne pokrywają kolejnoś
 - [ ] **L12.3** Zmierzone są czas pierwszej odpowiedzi, wykonania, odświeżenia po mutacji i anulowania, z podaniem warunków pomiaru.
 - [ ] **L12.4** Testy kontraktów obejmują walidację, konflikty, powtórzenia i kontrolę dostępu.
 - [ ] **L12.5** Testy przeglądarkowe obejmują dynamiczny UI, rozmowy, narzędzia, artefakty i wznowienie.
-- [ ] **L12.6** Rzeczywista ścieżka GLM/Z.AI → Claude Code / Claude Agent SDK → Mastra → AG-UI → OpenUI została potwierdzona; mocki są oznaczone osobno.
+- [ ] **L12.6** Rzeczywista ścieżka subskrypcja Claude → SDK → Mastra → AG-UI → OpenUI została potwierdzona; mocki są oznaczone osobno.
 - [ ] **L12.7** Opis odbioru wskazuje wersje, dowody, nieudane próby, brakujące możliwości i własne adaptery.
 - [ ] **L12.8** System działa bez Langfuse; możliwość eksportu i ewentualne ograniczenia kompatybilności są udokumentowane.
 - [ ] **L12.9** Kryteria mają unikalne identyfikatory; liczby i statusy warstw są liczone z aktualnej macierzy, ze sprawdzeniem braków, duplikatów i zmiany wymagań.
@@ -630,8 +620,7 @@ Zamknięcie warstw musi odpowiadać działaniu produktu jako całości. Bramka p
 | Pole oceny kryterium | Wymagana treść |
 |---|---|
 | Identyfikator i wymaganie | identyfikator Lx.y i wierna treść z tej specyfikacji |
-| Klasa wymogu | produktowe / jakościowe / informacyjne / proceduralne; tylko produktowe i jakościowe blokują odbiór |
-| Status | potwierdzone / częściowe / niespełnione / niesprawdzone / informacyjne poza bramką |
+| Status | potwierdzone / częściowe / niespełnione / niesprawdzone |
 | Rodzaj dowodu | rzeczywisty model / test GUI bez modelu / test kontraktu lub logiki / symulacja / analiza kodu |
 | Zakres | co dokładnie wykonano i czego dowód nie obejmuje |
 | Odniesienie | plik testu, wynik przebiegu i dowód, powiązane ze stanem kodu |
@@ -653,7 +642,7 @@ Projekt nie narzuca potwierdzania każdego etapu pracy. Sposób autoryzacji uruc
 
 - Zgodność Mastra–AG-UI–OpenUI z Claude SDK wymaga weryfikacji całego zestawu zdarzeń, nie tylko tekstu.
 - Sesje Claude i historia aplikacji mają odrębne mechanizmy trwałości; ich mapowanie jest elementem integracji.
-- GLM/Z.AI i jego zasady dostępu są zależnością zewnętrzną. Brak dostępu nie powoduje automatycznego przejścia do OAuth, subskrypcji ani API Anthropic.
+- Subskrypcja i zasady uwierzytelnienia są zależnością zewnętrzną. Brak dostępu nie powoduje automatycznego przejścia na API Anthropic.
 - Sandbox ma ograniczenia platformowe; katalog pracy i lista narzędzi nie stanowią samodzielnie izolacji procesu.
 - Najnowsze wersje React i TypeScript mogą ujawnić niezgodności zależności. Takie ograniczenia muszą być jawne w odbiorze.
 - Projekt nie deklaruje kompletnego zestawu gotowych adapterów. Zakres własnej integracji jest wynikiem wdrożenia i weryfikacji.
@@ -666,7 +655,7 @@ Projekt nie narzuca potwierdzania każdego etapu pracy. Sposób autoryzacji uruc
 - Nie wymaga automatycznych kopii, synchronizacji między urządzeniami, PWA ani pracy offline. Kopia lokalna nie chroni przed awarią całego dysku.
 - Nie gwarantuje przenoszenia transkryptów Claude między instalacjami. Utrata transkryptu wymaga jawnej obsługi; zachowana historia UI nie jest dowodem zachowanej pamięci modelu.
 - Nie wymaga wiadomości edytowalnych, forków rozmów ani kosza, jeżeli wdrożenie jawnie określa je jako niedostępne i nie pokazuje pozornych kontrolek.
-- Nie obejmuje wyboru alternatywnego harnessu ani zastąpienia OpenUI. Inny provider modelu wymaga osobnej decyzji i dowodu; nie zastępuje GLM w v0.4 po cichu.
+- Nie obejmuje wyboru alternatywnego harnessu ani zastąpienia OpenUI. MiniMax pozostaje wariantem rozszerzenia, a nie zamiennikiem dowodu działania wymaganej ścieżki Claude.
 - Nie gwarantuje, że wybrany zestaw bibliotek pozostanie zgodny po aktualizacji. Wymaga wykrycia i opisania różnic oraz ponownego sprawdzenia zmienionych połączeń.
 
 ## Źródła dodatkowe do kontraktów integracyjnych
@@ -678,8 +667,7 @@ Projekt nie narzuca potwierdzania każdego etapu pracy. Sposób autoryzacji uruc
 - [React Flow — dokumentacja](https://reactflow.dev/learn)
 - [AG-UI — specyfikacja](https://docs.ag-ui.com/)
 - [TanStack Router — parametry wyszukiwania](https://tanstack.com/router/latest/docs/framework/react/guide/search-params)
-- [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)
-- [Z.AI API](https://docs.z.ai/)
+- [Claude Code — błędy uwierzytelnienia i limitów](https://code.claude.com/docs/en/errors)
 - [SQLite — WAL](https://www.sqlite.org/wal.html)
 - [SQLite — kopie zapasowe](https://www.sqlite.org/backup.html)
 - [Playwright — serwer aplikacji](https://playwright.dev/docs/test-webserver)

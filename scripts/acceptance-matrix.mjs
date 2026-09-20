@@ -22,6 +22,7 @@ import {
   EVIDENCE,
   OPEN,
   ORIGIN,
+  REQUIREMENT_CLASS,
   STATUS,
   evaluateMatrix,
   parseAssessment,
@@ -50,6 +51,7 @@ const A = ev.A;
 const S = ev.S;
 const backlog = ev.backlog;
 const counts = ev.counts;
+const classCounts = ev.classCounts;
 const evidenceCounts = ev.evidenceCounts;
 const originCounts = ev.originCounts;
 const histCounts = ev.histCounts;
@@ -69,8 +71,8 @@ m.push('');
 m.push('> Plik generowany przez `node scripts/acceptance-matrix.mjs` z `docs/ARCHITECTURE.md` (wymagania) i');
 m.push('> `docs/acceptance/assessment.json` (oceny). Nie edytuj ręcznie — `pnpm check:acceptance` wykrywa dryf.');
 m.push('');
-m.push(`**Stan kodu ocenianego:** ${esc(meta.codeState)}  `);
-m.push(`**Data oceny:** ${esc(meta.date)}  `);
+m.push(`**Stan kodu ocenianego:** ${esc(meta.codeState)}`);
+m.push(`**Data oceny:** ${esc(meta.date)}`);
 m.push(`**Charakter:** ${esc(meta.scope)}`);
 m.push('');
 m.push('## Podsumowanie (wyliczone)');
@@ -81,6 +83,13 @@ m.push('| Stan w szablonie | Liczba |');
 m.push('|---|---|');
 for (const k of Object.keys(STATUS)) m.push(`| ${STATUS[k]} | ${counts[k] ?? 0} |`);
 m.push(`| **Razem** | **${total}** |`);
+m.push('');
+m.push('| Klasa wymogu | Liczba | Czy blokuje odbiór |');
+m.push('|---|---:|---|');
+for (const [k, label] of Object.entries(REQUIREMENT_CLASS)) {
+  m.push(`| ${label} | ${classCounts[k] ?? 0} | ${k === 'informacyjne' ? 'nie' : 'tak'} |`);
+}
+m.push(`| **Razem** | **${total}** | — |`);
 m.push('');
 m.push('| Rodzaj dowodu | Liczba |');
 m.push('|---|---|');
@@ -140,12 +149,12 @@ for (const l of perLayer) {
   m.push('');
   m.push(`### Warstwa ${l.num} — ${l.title}`);
   m.push('');
-  m.push('| ID | Wymaganie (ze specyfikacji) | Stan w szablonie | Rodzaj dowodu | Zakres i odniesienie | Brak | Backlog | Próby | Ocena historyczna AgenticApp |');
-  m.push('|---|---|---|---|---|---|---|---|---|');
+  m.push('| ID | Wymaganie (ze specyfikacji) | Klasa wymogu | Stan w szablonie | Rodzaj dowodu | Zakres i odniesienie | Brak | Backlog | Próby | Ocena historyczna AgenticApp |');
+  m.push('|---|---|---|---|---|---|---|---|---|---|');
   for (const c of l.items) {
     const a = A[c.id] ?? {};
     const hist = a.historical ? `${STATUS[a.historical.status] ?? a.historical.status}${a.historical.note ? ` — ${a.historical.note}` : ''}` : 'brak oceny (kryterium spoza 95)';
-    m.push(`| **${c.id}** | ${esc(c.text)} | **${esc(STATUS[a.status] ?? a.status)}** | ${esc(EVIDENCE[a.evidence] ?? a.evidence)} (${esc(ORIGIN[a.origin] ?? a.origin)}) | ${esc(a.proof)} | ${esc(a.gap)} | ${esc(a.backlog ?? '—')} | ${esc((a.scenarios ?? []).join(', ') || '—')} | ${esc(hist)} |`);
+    m.push(`| **${c.id}** | ${esc(c.text)} | ${esc(REQUIREMENT_CLASS[a.class] ?? a.class)} | **${esc(STATUS[a.status] ?? a.status)}** | ${esc(EVIDENCE[a.evidence] ?? a.evidence)} (${esc(ORIGIN[a.origin] ?? a.origin)}) | ${esc(a.proof)} | ${esc(a.gap)} | ${esc(a.backlog ?? '—')} | ${esc((a.scenarios ?? []).join(', ') || '—')} | ${esc(hist)} |`);
   }
 }
 m.push('');
@@ -182,6 +191,7 @@ const backlogText = b.join('\n');
 const summary = [
   `kryteria: ${total}, warstwy: ${layers.length}, próby: ${scenarios.size}`,
   `stan w szablonie: ${Object.keys(STATUS).map((k) => `${STATUS[k]}=${counts[k] ?? 0}`).join(', ')}`,
+  `klasy wymagań: ${Object.keys(REQUIREMENT_CLASS).map((k) => `${REQUIREMENT_CLASS[k]}=${classCounts[k] ?? 0}`).join(', ')}`,
   `warstwy zamknięte: ${closed.length}/${layers.length}`,
   `pakiety backlogu: ${backlog.size}`,
   problems.length ? `PROBLEMY (${problems.length}):\n  - ${problems.join('\n  - ')}` : 'spójność: OK',

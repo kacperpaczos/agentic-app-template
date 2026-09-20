@@ -1,13 +1,3 @@
-# Status wersji dokumentacji
-
-Obowiązującą dokumentacją do przeglądu jest [v0.4](versions/v0.4/README.md).
-Wersja [v0.3](versions/v0.3/ARCHITECTURE.md) pozostaje niezmiennym punktem odniesienia.
-Niniejszy dokument opisuje historyczną konsolidację źródeł; jego redakcja i
-uproszczenie są osobnym zadaniem, więc nie należy go traktować jako drugiej
-specyfikacji architektury.
-
----
-
 # Mapa dokumentacji — rozliczenie przed konsolidacją szablonu
 
 ## Po co ta mapa

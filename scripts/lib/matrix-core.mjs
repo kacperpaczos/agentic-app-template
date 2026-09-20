@@ -50,6 +50,17 @@ export const STATUS = Object.freeze({
   informacyjne: 'informacyjne / poza bramką odbioru',
 });
 export const OPEN = new Set(['czesciowe', 'niespelnione', 'niesprawdzone']);
+
+/**
+ * Primary acceptance purpose of a criterion. The class is separate from
+ * implementation layer, evidence type and current status: a product or quality
+ * criterion blocks acceptance while an informational/procedural one does not.
+ */
+export const REQUIREMENT_CLASS = Object.freeze({
+  produktowe: 'produktowe',
+  jakosciowe: 'jakościowe',
+  informacyjne: 'informacyjne / proceduralne',
+});
 export const EVIDENCE = Object.freeze({
   model: 'rzeczywisty model',
   gui: 'test GUI bez modelu',
@@ -150,6 +161,7 @@ export function evaluateMatrix({ layers, criteria, scenarios }, data, opts = {})
   for (const id of Object.keys(A)) if (!criteria.has(id)) problems.push(`ocena ${id} bez kryterium w specyfikacji`);
 
   const counts = Object.fromEntries(Object.keys(STATUS).map((k) => [k, 0]));
+  const classCounts = Object.fromEntries(Object.keys(REQUIREMENT_CLASS).map((k) => [k, 0]));
   const evidenceCounts = {};
   const originCounts = {};
   const histCounts = {};
@@ -162,6 +174,9 @@ export function evaluateMatrix({ layers, criteria, scenarios }, data, opts = {})
       continue;
     }
     if (!STATUS[a.status]) problems.push(`${id}: nieznany status "${a.status}"`);
+    if (!REQUIREMENT_CLASS[a.class]) problems.push(`${id}: brak lub nieznana klasa wymogu "${a.class ?? '—'}"`);
+    if (a.status === 'informacyjne' && a.class !== 'informacyjne') problems.push(`${id}: status „informacyjne” wymaga klasy „informacyjne”`);
+    if (a.class === 'informacyjne' && a.status !== 'informacyjne') problems.push(`${id}: klasa „informacyjne” wymaga statusu „informacyjne”`);
     if (!EVIDENCE[a.evidence]) problems.push(`${id}: nieznany rodzaj dowodu "${a.evidence}"`);
     if (!ORIGIN[a.origin]) problems.push(`${id}: nieznane pochodzenie dowodu "${a.origin}"`);
     if (a.status === 'potwierdzone' && a.origin !== 'szablon') {
@@ -194,6 +209,7 @@ export function evaluateMatrix({ layers, criteria, scenarios }, data, opts = {})
       }
     }
     counts[a.status] = (counts[a.status] ?? 0) + 1;
+    classCounts[a.class] = (classCounts[a.class] ?? 0) + 1;
     evidenceCounts[a.evidence] = (evidenceCounts[a.evidence] ?? 0) + 1;
     originCounts[a.origin] = (originCounts[a.origin] ?? 0) + 1;
     const h = a.historical?.status ?? 'brak-oceny';
@@ -259,6 +275,7 @@ export function evaluateMatrix({ layers, criteria, scenarios }, data, opts = {})
     S,
     backlog,
     counts,
+    classCounts,
     openCriteria: [...OPEN].reduce((sum, k) => sum + (counts[k] ?? 0), 0),
     evidenceCounts,
     originCounts,
