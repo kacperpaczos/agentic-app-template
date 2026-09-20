@@ -830,3 +830,48 @@ bieg weryfikacji poszedł na starym drzewie; `sed` z separatorem `|` i alternacj
 poszedł w „unknown option to s", a potem zjadał zamykający cudzysłów JSON. Lekcja wspólna:
 operacje mutujące prowadzić z kontrolą poprawności w tej samej komendzie (`JSON.parse` po każdej
 redakcji; potwierdzenie HEAD przed pomiarem), nie po fakcie.
+
+## T8 — 2026-09-20 — Bramki macierzy: jeden kanon (200), archiwum 95 oddzielone i powiązane krosówką
+
+**Problem.** `pnpm check:acceptance` liczył 200 kryteriów z kanonu (`docs/ARCHITECTURE.md` +
+`docs/acceptance/assessment.json`), a `pnpm check:matrix` — 95 z archiwalnego `FEEDBACK.md`. Oba
+były zielone i nic ich nie wiązało: zniknięcie kryterium z kanonu zmniejszyłoby tylko sumę w drugiej
+arytmetyce, a stary albo ręcznie ruszany raport pochodny nikt nie wykryłby. `pnpm check:closure`
+failował przy tym po cichu (komunikaty na stdout, a `package.json` kierował je do `/dev/null`), a
+martwy duplikat `audit-matrix.mjs` udawał drugą niezależną kontrolę, będąc kopią tych samych ocen
+zaszytych w kodzie.
+
+**Zmiana.** Wspólny rdzeń `scripts/lib/matrix-core.mjs` (parsowanie + stałe `EXPECTED` 12/200/27 i
+`EXPECTED_ARCHIVE` 12/95 + sumy) dla obu bramek; `check:matrix` przepięty na kanon (ta sama nazwa
+polecenia), z twardą stałą, kros-kontrolą 95↔200 i porównaniem z wygenerowanymi
+`docs/ACCEPTANCE.md`/`docs/BACKLOG.md`; oceny archiwalne 95 przeniesione verbatim z kodu do
+`docs/archive/agenticapp-2026-09/oceny-95.json`, `check:closure` czyta z pliku i pisze problemy na
+STDERR; `audit-matrix.mjs` usunięty. Regresja bramek: `tests/matrix-gates.test.ts` (fixture'y, zero
+mutacji plików repo).
+
+**Decyzje.**
+- Statusów archiwalnych **nie mapuję** na statusy bieżące: pola `historical` w ocenach to werdykt po
+  domknięciu AgenticApp (95 × „potwierdzone”), a tabele archiwalnego `FEEDBACK.md` to wcześniejszy
+  snapshot z innym słownikiem (ZAL-R/ZAL-T/CZĘŚĆ/KOD). Kros-kontrola łączy więc wyłącznie liczbę
+  (dokładnie 95) i identyfikatory (dokładny zbiór, w obie strony); mapowanie statusów byłoby
+  zgadywaniem, a zgadywana kontrola robi fałszywe alarmy.
+- `check:matrix` nie sprawdza istnienia plików dowodowych prób — to zostało w `check:acceptance`,
+  żeby jedna odpowiedzialność była w jednym miejscu (i nie dublować komunikatów w `verify`).
+- Render `docs/ACCEPTANCE.md`/`docs/BACKLOG.md` i wyjście `closure-matrix.mjs` pozostają identyczne
+  bajt w bajt (porównane z baseline sprzed zmian) — `check:acceptance` przeszedł bez regeneracji
+  plików, nagłówki raportów pochodnych bez fałszywego dryfu.
+- `docs/archive/README.md` i `docs/DOCUMENTATION-MAP.md` mówią wprost: `check:closure` kontroluje
+  archiwum 95, `check:matrix` — macierz bieżącą; zapisy w raportach historycznych (FEEDBACK T1,
+  CONSOLIDATION-REPORT) zostają bez zmian, bo opisują swój moment.
+
+**Kontrole negatywne** (kopie w katalogu tymczasowym + testy): usunięte kryterium ze specyfikacji
+kanonu (kod 1: pozycje, liczba, osierocona ocena, backlog, dryf raportu); zmiana statusu oceny bez
+regeneracji (kod 1); zmyślona liczba w raporcie pochodnym (kod 1); usunięte pole `historical` (kod
+1: 94 zamiast 95); brak oceny w archiwum 95 (kod 1, komunikat widoczny mimo `> /dev/null`);
+usunięte kryterium ze specyfikacji archiwalnej (kod 1).
+
+**Otwarte.** W `FEEDBACK.md` dwa wpisy noszą numer T2 (2026-09-17 i 2026-09-18); historii nie
+przenumerowuję, bo dziennik jest zapisem przebiegu — zgłaszam jako zauważoną niespójność
+numeracji. Kuriozum pomocnicze: archiwalny `FEEDBACK.md` podaje „Razem 95”, a jego własne
+podsumowanie per status (50+33+10+2=95) się zgadza — przed konsolidacją dryfował (raportował 91),
+co naprawiono już w AgenticApp (wpis #29 archiwum).

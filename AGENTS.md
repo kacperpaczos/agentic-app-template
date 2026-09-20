@@ -96,7 +96,7 @@ Rodzaj dowodu nie jest statusem. W raporcie i w `assessment.json` rozróżniaj: 
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm verify          # granica, macierz 200, macierze historyczne, typy (pakiety + e2e), build, testy
+pnpm verify          # granica, macierz 200 (check:acceptance + check:matrix), archiwum 95 (check:closure), typy (pakiety + e2e), build, testy
 pnpm test:e2e        # przeglądarka na istniejącym buildzie produkcyjnym (po verify/build — inaczej testuje stary bundle);
                      # BEZ testów z prawdziwym modelem — nie zużywa ani jednej tury subskrypcji
 pnpm test:e2e:model  # tylko testy z prawdziwym modelem BL-01/BL-02; koszt: 11 tur subskrypcji na przebieg
@@ -170,6 +170,9 @@ bez sekretów i danych prywatnych.
 - `FEEDBACK.md` — dziennik: co zmieniono, dlaczego, jakie problemy znaleziono (także własne
   pomyłki), co zostało otwarte.
 - `docs/acceptance/assessment.json` → `pnpm acceptance:render` — aktualizacja ocen kryteriów i
-  backlogu; `pnpm check:acceptance` pilnuje, żeby sumy i pliki nie rozjechały się z ocenami.
+  backlogu; `pnpm check:acceptance` pilnuje, żeby sumy i pliki nie rozjechały się z ocenami, a
+  `pnpm check:matrix` wylicza te same liczby z kanonu (`docs/ARCHITECTURE.md` + oceny, twarda stała
+  200/12/27), wiąże pola `historical` z archiwum 95 i wykrywa raport pochodny, który jest stary albo
+  ruszany ręcznie. Kontrola samego archiwum 95 to `pnpm check:closure`.
 - Raport końcowy oddziela: ukończenie implementacji, odbiór w izolacji i ewentualne uruchomienie z
   migracją na danych użytkownika (L12.17).
