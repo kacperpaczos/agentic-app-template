@@ -253,6 +253,19 @@ export function realResolve(path) {
    * czytelnym błędem. Bliźniak TS (`util/real-path.ts`) rzuca tę samą klasę
    * błędu pod inną nazwą (`UnresolvablePathError`); równoważność obu — łącznie
    * z kształtami rozbieżnymi — sprawdza `tests/isolation-paths.test.ts`.
+   *
+   * **Klasyfikacja rzutu to AWARIA (exit 4), nie odmowa (exit 2)** — świadome
+   * rozstrzygnięcie: skrypt nie potrafi ustalić, GDZIE taka ścieżka naprawdę
+   * leży, więc nie może uczciwie „odmówić" jej użycia (odmowa sugeruje
+   * zrozumienie prośby). Dlatego `NierozwiazywalnaSciezka` celowo NIE
+   * dziedziczy po `Refusal` — `runScript` klasifikuje ją jako awarię z
+   * czytelnym komunikatem. Nie „poprawiać" tego bez decyzji.
+   *
+   * **Ograniczenie pokrycia:** `backup-state.mjs` normalizuje `--out`
+   * leksykalnie (`resolve(...)`) zanim trafi ono tutaj, więc kształt Z1
+   * („człon nieistniejący + `..` + dowiązanie") nie dociera do walkera z tego
+   * wejścia — pełne pokrycie jest na `synthetic-state.mjs` (potwierdzone żywo
+   * w przeglądzie rundy 6).
    */
   const absolutePath = isAbsolute(path);
   const root = absolutePath ? parse(path).root : '';

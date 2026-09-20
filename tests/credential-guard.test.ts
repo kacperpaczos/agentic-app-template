@@ -597,8 +597,10 @@ describe('uruchomienie nie moze odczytac poswiadczenia (symulacja na granicy ada
   });
 
   /**
-   * W7 — odmowa nierozwiązywalnej ścieżki jest **jednym napisem**, bez
-   * wyroczni istnienia. Przed tą rundą powód w treści rozróżniał:
+   * W7 — **napis** odmowy jest jednolity: bez wyroczni o nazwach i typach
+   * komponentów. Uczciwie: klasa odmowy (`UnresolvablePathError` kontra „poza
+   * katalogiem roboczym") nadal rozróżnia powód — tego tu nie zmieniamy.
+   * Przed tą rundą napis rozróżniał:
    *   A. `<ws>/nie-ma/../link/sekret.txt` → „".." po komponencie, który nie
    *      istnieje" (czyli: „link" istnieje poza workspace),
    *   B. `<ws>/plik-txt/x` → „"plik-txt" nie jest katalogiem…"
@@ -631,8 +633,8 @@ describe('uruchomienie nie moze odczytac poswiadczenia (symulacja na granicy ada
       /* Jedno źródło odmowy: identyczny napis, zero treści o dysku. */
       expect(odmowaA).toBe(odmowaB);
       expect(odmowaA).toContain('nie da sie jednoznacznie');
-      expect(odmowaA.includes('nie istnieje'), 'wyrocznia istnienia w odmowie').toBe(false);
-      expect(odmowaA.includes('nie jest katalogiem'), 'wyrocznia typu komponentu w odmowie').toBe(false);
+      expect(odmowaA.includes('nie istnieje'), 'napis odmowy zdradza: komponent nie istnieje').toBe(false);
+      expect(odmowaA.includes('nie jest katalogiem'), 'napis odmowy zdradza typ komponentu').toBe(false);
       expect(answerText(eventsA).includes('nie istnieje')).toBe(false);
       expect(answerText(eventsB).includes('nie jest katalogiem')).toBe(false);
     } finally {

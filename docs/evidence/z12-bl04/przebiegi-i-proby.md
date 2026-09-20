@@ -109,6 +109,23 @@ refresh token — ~8 h od poprzedniej (10:40 → 18:40 → 02:36), zawsze tuż p
 dostępu. Kadencja potwierdzona trzema pomiarami. Strażnik e2e przeszedł z odciskiem zgodnym w swoim
 oknie, więc rotacja zaszła poza pomiarem żadnego przebiegu.
 
+**Runda 8 (mikro, po rerecenzji rundy 6):**
+
+- **Z-DRIFT** — walker `.mjs` portowany do algorytmu rundy 6: `..` po komponencie nieistniejącym
+  **rzuca `NierozwiazywalnaSciezka`**, zerwane dowiązania rozwijane przez `readlink` (bo `O_CREAT`
+  utworzy cel). Kontrakt skryptowy nazwany: **rzut klasyfikowany jako AWARIA (exit 4), nie odmowa
+  (exit 2)** — skrypt nie potrafi ustalić, gdzie taka ścieżka leży, więc nie może uczciwie
+  „odmówić"; klasa celowo nie dziedziczy po `Refusal`. Testy równoważności rozszerzone o kształty
+  rozbieżne (`nie-ma/../x`, zerwane + `..`, łańcuch readlink — obie wersje zgodnie wskazują poza
+  katalog). Próba negatywna: stary `.mjs` → 2 oblewania.
+  **Ograniczenie pokrycia:** `backup-state.mjs` normalizuje `--out` leksykalnie zanim trafi do
+  walkera — kształt Z1 nie dociera do niego z tego wejścia; pełne pokrycie na `synthetic-state`.
+- **W1** — tylda we wzorcu Glob/Grep odmawiana (sama zasada co dla ścieżek, A7/A7b). Próba:
+  wycofana → `expected [false, false] to deeply equal [true, false]`.
+- **W7** — napis odmowy jednolity; uczciwie: **klasa** odmowy nadal rozróżnia powód
+  (`UnresolvablePathError` kontra „poza katalogiem roboczym"), brak wyroczni dotyczy nazw i typów.
+  Próba: powrót powodu w komunikacie → `expected '…' to be '…'`.
+
 **Próba procesowa (wykrywanie, na ATRAPIE):** `CLAUDE_CONFIG_DIR` całego przebiegu skierowany na
 katalog tymczasowy z fałszywym poświadczeniem + tymczasowy spec piszący do tej atrapy →
 `globalTeardown` podnosi błąd `[bezpiecznik e2e] plik poswiadczen uzytkownika … ZMIENIL SIE w trakcie

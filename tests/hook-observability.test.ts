@@ -226,7 +226,7 @@ describe('most hookow a strumien zdarzen — narzedzia plikowe', () => {
 
   it('wywolanie zakonczone bledem jest w strumieniu, oznaczone jako blad', async () => {
     /* Runda 6: nieistniejący plik WEWNĄTRZ workspace — dozwolony kształt. */
-    const { events, stand } = await startRun([
+    const { events, stand, runId: runIdBlad } = await startRun([
       { kind: 'fileTool', name: 'Read', input: { file_path: '$workspace/output/nie-ma-takiego.txt' } },
       { kind: 'text', text: 'Koniec.' },
     ]);
@@ -237,8 +237,15 @@ describe('most hookow a strumien zdarzen — narzedzia plikowe', () => {
     const calls = seenCalls(events);
     expect(calls, 'wywolanie zakonczone bledem nie trafilo do strumienia zdarzen').toHaveLength(1);
     expect(calls[0]!.name).toBe('Read');
-    // Runda 6: ścieżka w asercji jest tą z kroku (zastępnik rozwija `$workspace/`).
-    expect(pathOf(calls[0]!)).toContain('/output/nie-ma-takiego.txt');
+    /*
+     * W-3 (runda 8): pełna równość — oczekiwana ścieżka liczona `realResolve`-em
+     * od katalogu roboczego uruchomienia, nie sufiks. Krok `writeOutput`
+     * tworzy katalog `output/`, plik celowo nie — decyzja o dozwolonym
+     * kształcie należy do strażnika, nie do asercji.
+     */
+    expect(pathOf(calls[0]!)).toBe(
+      realResolve(join(h.platform.config.workspacesDir, runIdBlad, 'output/nie-ma-takiego.txt')),
+    );
     expect(calls[0]!.isError, 'blad narzedzia nie zostal oznaczony w strumieniu').toBe(true);
     expect(calls[0]!.result).toContain('ENOENT');
   });

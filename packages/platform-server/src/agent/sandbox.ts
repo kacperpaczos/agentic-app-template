@@ -110,7 +110,10 @@ export function resolveInWorkspace(workspaceDir: string, relative: string): stri
     // Z1 — `..` po komponencie nieistniejącym jest nierozwiązywalne; dokładnie
     // kształt A6 z przeglądu zewnętrznego. Fail-closed: odmowa.
     if (err instanceof UnresolvablePathError) {
-      /* W7: bez szczegolu rozrozniajacego istnienie sciezki (wyrocznia). */
+      /*
+       * W7: szczegół przyczyny **usunięty** z odpowiedzi HTTP (uczciwie: klasa
+       * `UnresolvablePathError` nadal ją zna wewnętrznie; tu nie wychodzi).
+       */
       throw new AppError('sandbox_denied', 'Sciezka wychodzi poza workspace uruchomienia.', {
         requested: relative,
       });

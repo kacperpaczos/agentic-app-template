@@ -560,7 +560,13 @@ export function workspaceConfinementRefusal(
       abs = resolvePath(raw);
     } catch (err) {
       if (err instanceof UnresolvablePathError) {
-        /* W7: komunikat jednolity — bez wyroczni istnienia (powód zdradza, co leży na dysku). */
+        /*
+         * W7: **napis** odmowy jednolity — bez wyroczni o nazwach i typach
+         * komponentów. Uczciwie: klasa odmowy (`UnresolvablePathError` kontra
+         * „poza katalogiem roboczym") nadal rozróżnia **powód** — tego tu nie
+         * zmieniamy, bo dla strażnika agenta to dwie różne podpowiedzi dla
+         * modelu; brak wyroczni dotyczy wyłącznie treści komunikatu.
+         */
         return (
           `Narzedzie ${toolName} wskazuje sciezke, ktorej nie da sie jednoznacznie rozwiazac ` +
           'wewnatrz katalogu roboczego. Odmowa bez probowania.'
