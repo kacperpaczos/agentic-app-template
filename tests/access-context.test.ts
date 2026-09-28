@@ -1,10 +1,11 @@
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryObserver } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AccessContextChanged,
   accessEpoch,
   accessScope,
   api,
+  apiGet,
   qk,
   resetAccessContext,
   setAccessContext,
@@ -168,4 +169,36 @@ describe('opozniona odpowiedz nie przywraca cudzych danych', () => {
     await expect(settled).resolves.toEqual({ ok: 1 });
     expect(accessScope()).toBe('local-user');
   });
+  it('przelaczenie usuwa z cache takze zapytanie w locie, nie tylko dane wstawione recznie', async () => {
+    const qc = new QueryClient();
+    setAccessContext(qc, 'local-user');
+
+    const { release } = deferredFetch({ suppliers: [{ id: 'wiersz-dla-local-user' }] });
+    const queryKey = qk.module('/procurement/suppliers');
+    const observer = new QueryObserver(qc, {
+      queryKey,
+      queryFn: () => apiGet<{ suppliers: Array<{ id: string }> }>('/api/m/procurement/suppliers'),
+      retry: false,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    // Zadanie na serio wystartowalo i jest w locie.
+    await vi.waitFor(() => expect(observer.getCurrentResult().fetchStatus).toBe('fetching'));
+    expect(qc.getQueryCache().getAll()).toHaveLength(1);
+
+    setAccessContext(qc, 'other-user');
+    // Po przelaczeniu nie zostaje z poprzedniej tozsamosci ani jeden wpis cache —
+    // takze ten w trakcie pobierania.
+    expect(qc.getQueryCache().getAll(), 'wpis zapytania w locie przezyl przelaczenie').toHaveLength(
+      0,
+    );
+
+    release();
+    await vi.waitFor(() => expect(observer.getCurrentResult().fetchStatus).toBe('idle'));
+    // Odpowiedz, ktora mimo wszystko dobiegla, nie odtworzyla wpisu.
+    expect(qc.getQueryCache().getAll()).toHaveLength(0);
+    expect(qc.getQueryData(queryKey)).toBeUndefined();
+
+    unsubscribe();
+  });
+
 });
