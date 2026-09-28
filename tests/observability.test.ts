@@ -1,6 +1,6 @@
+import { setTimeout as sleep } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '@mastra/core';
-import { InMemoryStore } from '@mastra/core/storage';
 
 /**
  * The export seam for telemetry — what is actually true about it.
@@ -17,24 +17,58 @@ import { InMemoryStore } from '@mastra/core/storage';
  * exporter object is rejected, and a proper instance requires the separate
  * `@mastra/observability` package, which this project does not install.
  *
- * `storage: new InMemoryStore()` in every instance below is the same conscious
- * limitation as in production (`packages/platform-server/src/agent/runtime.ts`):
- * without it @mastra/core 1.66.0 warns about the storage fallback on every
- * construction, and the incidental warning used to leak into this file's
- * logger mock. Storage is dead weight here — this file tests the telemetry
- * seam, nothing is ever read back — so explicit in-memory keeps the decision
- * visible and the logs clean (docs/observability.md, FEEDBACK.md T10).
+ * The same standard applies to "running without telemetry": the first test once
+ * asserted only `toBeTruthy()`. It now measures the no-export state through the
+ * public `mastra.observability` entrypoint (no registered instance, no exporter,
+ * a no-op trace lookup) and through a nagging logger that records every call.
  */
 describe('punkt wpiecia telemetrii', () => {
-  it('bez konfiguracji telemetrii aplikacja dziala i nic nie wysyla', () => {
-    expect(new Mastra({ agents: {}, storage: new InMemoryStore() })).toBeTruthy();
+  it('bez konfiguracji telemetrii nie ma zarejestrowanego eksportera i nic nie jest wysylane', async () => {
+    /*
+     * Dokladnie taka konstrukcja, jaka wykonuje `agent/runtime.ts`: `new Mastra`
+     * bez `observability`. „Nic nie wysyla” jest tu zmierzone, nie zalozone:
+     *  1. publiczny punkt wejscia `mastra.observability` musi byc no-op — zadna
+     *     instancja/eksporter nie jest zarejestrowana, wiec nie MA dokad wysylac;
+     *  2. naganny logger (wzor testu nizej) zbiera wszystkie wywolania i zadne
+     *     z nich nie zapowiada eksportu telemetrii — wplywaja wylacznie znane
+     *     ostrzezenia konfiguracyjne (in-memory storage, brak adaptora).
+     * Obiekty `expect(...).toBeTruthy()` nie wystarcza: konstrukcja „nie rzuca”
+     * nawet gdy telemetria jest zle wpisana (test nizej).
+     */
+    const calls: Array<{ level: string; text: string }> = [];
+    const record = (level: string) => (...args: unknown[]) =>
+      calls.push({ level, text: args.map((a) => String(a)).join(' ') });
+    const mastra = new Mastra({
+      agents: {},
+      logger: {
+        warn: record('warn'),
+        info: record('info'),
+        error: record('error'),
+        debug: record('debug'),
+        trackException: record('trackException'),
+      } as never,
+    });
+
+    // 1) Stan eksportu: brak instancji domyslnej i jakiejkolwiek innej.
+    expect(mastra.observability.getDefaultInstance()).toBeUndefined();
+    expect(mastra.observability.listInstances().size).toBe(0);
+    expect(mastra.observability.hasInstance('default')).toBe(false);
+    // getRecordedTrace jest opcjonalne w typie entrypointu — brak metody tez by tu padl.
+    await expect(mastra.observability.getRecordedTrace?.({ traceId: 'probe' })).resolves.toBeNull();
+
+    // 2) Logger zyje (dowolna aktywnosc dochodzi), a mimo to zadna wiadomosc
+    //    nie zapowiada eksportu; bledy i wyjatki telemetrii — zero.
+    await sleep(0); // ostrzezenie o storage idzie z mikrozadania
+    const joined = calls.map((c) => c.text).join(' | ');
+    expect(joined).toMatch(/in-memory store/); // kolektor nie jest gluchy
+    expect(joined).not.toMatch(/exporter|serviceName|OTLP|telemetry/i);
+    expect(calls.filter((c) => c.level === 'error' || c.level === 'trackException')).toEqual([]);
   });
 
   it('surowy obiekt eksportera jest odrzucany, a obserwowalnosc wylaczana', () => {
     const warn = vi.fn();
     const mastra = new Mastra({
       agents: {},
-      storage: new InMemoryStore(),
       logger: { warn, info: vi.fn(), error: vi.fn(), debug: vi.fn(), trackException: vi.fn() } as never,
       observability: { name: 'test-exporter' } as never,
     });
