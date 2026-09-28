@@ -49,8 +49,15 @@ describe('decideRestore', () => {
   });
 
   it('nadanie identyfikatora przez backend podmienia wpis historii', () => {
-    // First run of a new conversation: the chat gains an id for the exchange
-    // already on screen. Pushing here would put an empty chat behind Back.
+    /*
+     * Pierwsza synchronizacja rozmowy, która już jest na ekranie. Ta sama trójka
+     * (null, id, null) powstaje z dwóch różnych działań użytkownika: backend
+     * nadaje id w trakcie pierwszego uruchomienia nowej rozmowy, a czat sam
+     * wybiera rozmowę z listy (albo przez "nowa rozmowa"), zanim cokolwiek
+     * trafiło do adresu. Oba przypadki dają to samo rozstrzygnięcie: zapis do
+     * adresu przez PODMIANĘ wpisu, bo to nie jest nawigacja — push postawiłby
+     * pusty czat za Wsteczem, a brak zapisu zgubiłby wybór przy przeładowaniu.
+     */
     expect(
       decideRestore(input({ urlThreadId: null, selectedThreadId: 'cnv_nowy', lastSynced: null })),
     ).toEqual({ action: 'publish', threadId: 'cnv_nowy', replace: true });
@@ -83,12 +90,24 @@ describe('decideRestore', () => {
     ).toEqual({ action: 'select', threadId: 'cnv_1' });
   });
 
-  it('wybor dokonany przez sam czat trafia do adresu bez wpisu historii', () => {
-    // Not a navigation, but it must still be recorded — otherwise a reload
-    // would not come back to it.
+  it('utrata parametru w adresie po synchronizacji oznacza nowa rozmowe, a nie bezczynnosc', () => {
+    /*
+     * Gałąź, którą pomyłka "null to po prostu stan początkowy" zamienia w
+     * bezczynność: oba identyfikatory są puste, ale PO synchronizacji — adres
+     * już żył z parametrem i go stracił (Wstecz na wpis sprzed rozmowy,
+     * usunięcie parametru). To jest wtedy realne polecenie "pokaż stan nowej
+     * rozmowy", a nie domyślne nic-nie-rób.
+     */
     expect(
-      decideRestore(input({ urlThreadId: null, selectedThreadId: 'cnv_1', lastSynced: null })),
-    ).toEqual({ action: 'publish', threadId: 'cnv_1', replace: true });
+      decideRestore(input({ urlThreadId: null, selectedThreadId: null, lastSynced: 'cnv_1' })),
+    ).toEqual({ action: 'new' });
+    /*
+     * Kontrast, który odróżnia to od stanu początkowego: przed jakąkolwiek
+     * synchronizacją ta sama para (null, null) znaczy tylko "nic się jeszcze
+     * nie stało" — brak parametru jest wtedy stanem wyjściowym, a nie zmianą,
+     * i nie wolno z niego robić przejścia do nowej rozmowy.
+     */
+    expect(decideRestore(input({}))).toEqual({ action: 'idle' });
   });
 });
 
