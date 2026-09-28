@@ -24,52 +24,78 @@ type Step =
   | { kind: 'wait'; ms: number }
   | { kind: 'throw'; message: string };
 
-/** A stand-in agent that replays a script against the runtime's own hooks. */
-function scriptedAgent(script: Step[], sessionId = 'sess_test'): ModelAgentLike {
-  const play = async (options: any) => {
-    const hooks = options?.sdkOptions?.hooks ?? {};
-    const fire = async (event: string, payload: Record<string, unknown>) => {
-      for (const group of hooks[event] ?? []) {
-        for (const hook of group.hooks ?? []) await hook({ hook_event_name: event, ...payload });
-      }
-    };
-    await fire('SessionStart', { session_id: sessionId });
-
-    const chunks: Array<Record<string, unknown>> = [];
-    let toolSeq = 0;
-    for (const step of script) {
-      if (step.kind === 'wait') {
-        await new Promise((r) => setTimeout(r, step.ms));
-      } else if (step.kind === 'text') {
-        chunks.push({ type: 'text-delta', payload: { text: step.text } });
-      } else if (step.kind === 'throw') {
-        chunks.push({ type: 'error', payload: { error: new Error(step.message) } });
-      } else {
-        toolSeq += 1;
-        const id = `tu_${toolSeq}`;
-        await fire('PreToolUse', { tool_use_id: id, tool_name: step.name, tool_input: step.input });
-        if (step.error !== undefined) {
-          await fire('PostToolUseFailure', { tool_use_id: id, error: step.error });
-        } else {
-          await fire('PostToolUse', { tool_use_id: id, tool_response: step.result ?? 'ok' });
-        }
-      }
+/**
+ * A stand-in agent that replays a script against the runtime's own hooks.
+ *
+ * Kolejność jest wierna prawdziwemu SDK: kroki są odtwarzane w chwili, w którą
+ * runtime je konsumuje, a hooki (`PreToolUse` i pozostale) odpalają sie wtedy,
+ * gdy skrypt do nich dochodzi — czyli REALNIE MIEDZY deltami tekstu. Wczesna
+ * wersja tej symulacji budowala cala liste chunkow i odpalala wszystkie hooki
+ * PRZED zwroceniem strumienia, wiec deklarowany przeplot (tekst, narzedzie,
+ * tekst) nie istnial dla runtime'u: zdarzenia narzedzia trafialy do dziennika
+ * przed pierwsza delta, odwrotnie niz mialo w opisie skryptu.
+ */
+function playScript(script: Step[], options: any, sessionId: string) {
+  const hooks = options?.sdkOptions?.hooks ?? {};
+  const fire = async (event: string, payload: Record<string, unknown>) => {
+    for (const group of hooks[event] ?? []) {
+      for (const hook of group.hooks ?? []) await hook({ hook_event_name: event, ...payload });
     }
-    await fire('Stop', { session_id: sessionId });
-
-    return {
-      async *[Symbol.asyncIterator]() {
-        /* not used */
-      },
-      fullStream: (async function* () {
-        for (const c of chunks) yield c;
-      })(),
-    } as { fullStream: AsyncIterable<unknown> };
   };
 
   return {
+    async *[Symbol.asyncIterator]() {
+      /* not used */
+    },
+    fullStream: (async function* () {
+      await fire('SessionStart', { session_id: sessionId });
+      let toolSeq = 0;
+      for (const step of script) {
+        if (step.kind === 'wait') {
+          await new Promise((r) => setTimeout(r, step.ms));
+        } else if (step.kind === 'text') {
+          yield { type: 'text-delta', payload: { text: step.text } };
+        } else if (step.kind === 'throw') {
+          yield { type: 'error', payload: { error: new Error(step.message) } };
+        } else {
+          toolSeq += 1;
+          const id = `tu_${toolSeq}`;
+          await fire('PreToolUse', { tool_use_id: id, tool_name: step.name, tool_input: step.input });
+          if (step.error !== undefined) {
+            await fire('PostToolUseFailure', { tool_use_id: id, error: step.error });
+          } else {
+            await fire('PostToolUse', { tool_use_id: id, tool_response: step.result ?? 'ok' });
+          }
+        }
+      }
+      await fire('Stop', { session_id: sessionId });
+    })(),
+  } as { fullStream: AsyncIterable<unknown> };
+}
+
+/** Stand-in o jednym skrypcie, niezależnym od treści polecenia. */
+function scriptedAgent(script: Step[], sessionId = 'sess_test'): ModelAgentLike {
+  const play = async (options: any) => playScript(script, options, sessionId);
+  return {
     stream: (_prompt, options) => play(options),
     resumeStream: (_input, options) => play(options),
+  };
+}
+
+/**
+ * Stand-in dobierający skrypt po treści polecenia.
+ *
+ * Kolejkowanie per rozmowa siedzi w jednej instancji `AgentRuntime`, więc dwa
+ * uruchomienia tej samej rozmowy muszą przejść przez JEDEN runtime — a mają
+ * mieć różne tempo, żeby czas oczekiwania w kolejce dało się odróżnić od czasu
+ * własnego wykonania.
+ */
+function scriptedAgentByPrompt(scripts: Record<string, Step[]>, sessionId = 'sess_test'): ModelAgentLike {
+  return {
+    stream: (prompt, options) =>
+      Promise.resolve(playScript(scripts[prompt] ?? [], options, sessionId)),
+    resumeStream: (input, options) =>
+      Promise.resolve(playScript(scripts[input.message] ?? [], options, sessionId)),
   };
 }
 
@@ -131,6 +157,24 @@ describe('pomiar pierwszego tekstu nie zalezy od kolejnosci narzedzi (symulacja)
       { kind: 'text', text: 'Gotowe.' },
     ]);
     expect(r.run().firstTokenMs).toBeGreaterThan(0);
+    /*
+     * Przeplot jest teraz rzeczywisty, więc kolejność w dzienniku zdarzeń mówi
+     * to samo co skrypt: pierwsza treść preceduje narzędzie (hook odpala się
+     * dopiero, gdy skrypt do niego dochodzi — między deltami), a tekst wraca
+     * po narzędziu. Wcześniej wszystkie hooki odpalały się przed konsumpcją
+     * strumienia i zdarzenia narzędzia wyprzedzały deklarowany pierwszy tekst.
+     */
+    const types = r.events.map((e) => String(e.type));
+    expect(types.indexOf('TEXT_MESSAGE_START')).toBeGreaterThan(-1);
+    expect(
+      types.indexOf('TOOL_CALL_START'),
+      'narzedzie ma dotrzec do dziennika PO pierwszej delcie tekstu',
+    ).toBeGreaterThan(types.indexOf('TEXT_MESSAGE_CONTENT'));
+    const contentAfterTool = types.indexOf(
+      'TEXT_MESSAGE_CONTENT',
+      types.indexOf('TOOL_CALL_START') + 1,
+    );
+    expect(contentAfterTool, 'tekst ma wrocic po narzedziu').toBeGreaterThan(-1);
   });
 
   it('odpowiedz bez tekstu — brak czasu pierwszego tekstu jest poprawny, nie podstawiony', async () => {
@@ -149,7 +193,59 @@ describe('pomiar pierwszego tekstu nie zalezy od kolejnosci narzedzi (symulacja)
     expect(run.queuedMs).toBeGreaterThanOrEqual(0);
     expect(run.firstTokenMs!).toBeLessThanOrEqual(run.durationMs!);
     expect(Date.parse(run.startedAt)).toBeGreaterThanOrEqual(Date.parse(run.enqueuedAt));
-  });
+
+    /*
+     * Scenariusz, w którym kolejność naprawdę działa: dwa uruchomienia TEJ SAMEJ
+     * rozmowy przez jeden runtime. Pierwsze trzyma kolejkę rozmowy (Runtime
+     * serializuje je, bo dzielą sesję Claude), więc drugie ma realny, mierzalny
+     * czas oczekiwania — i dopiero tu porównanie obu wielkości coś dowodzi.
+     */
+    const runtime = new AgentRuntime(
+      h.platform.services,
+      scriptedAgentByPrompt({
+        pierwsze: [{ kind: 'wait', ms: 400 }, { kind: 'text', text: 'pierwsze' }],
+        drugie: [{ kind: 'wait', ms: 15 }, { kind: 'text', text: 'drugie' }],
+      }),
+    );
+    const conv = h.platform.services.conversations.create({
+      ownerId: h.ownerId,
+      firstMessage: { content: 'kolejka' },
+    });
+    const appContext = {
+      conversationId: conv.id, spaceId: null, resource: null,
+      selection: [], filters: {}, viewport: null, drafts: [], ui: null,
+    };
+    const first = await runtime.start({
+      ownerId: h.ownerId, conversationId: conv.id, prompt: 'pierwsze', appContext,
+    });
+    const second = await runtime.start({
+      ownerId: h.ownerId, conversationId: conv.id, prompt: 'drugie', appContext,
+    });
+
+    // Drugie jest przyjęte, ale wykonanie jeszcze nie ruszyło.
+    expect(h.platform.services.runs.get(second.runId, h.ownerId).status).toBe('queued');
+
+    await Promise.all([first.done, second.done]);
+
+    const b = h.platform.services.runs.get(second.runId, h.ownerId);
+    // Oczekiwanie było realne, nie ułamkiem milisekundy.
+    expect(b.queuedMs, 'drugie uruchomienie mialo czekac w kolejce').toBeGreaterThan(100);
+    expect(Date.parse(b.startedAt)).toBeGreaterThan(Date.parse(b.enqueuedAt));
+    /*
+     * Pierwszy token liczony od WŁASNEGO startu wykonania: skrypt „drugie"
+     * mówi dopiero po ~15 ms, więc firstTokenMs musi być o rząd wielkości
+     * mniejszy od czasu spędzonego w kolejce. Gdyby metryka liczona była od
+     * zakolejkowania, wynik byłby >= queuedMs.
+     */
+    expect(b.firstTokenMs, 'pierwszy token ma byc zarejestrowany').toBeGreaterThan(0);
+    expect(b.firstTokenMs!, 'firstTokenMs liczony od zakolejkowania, nie od startu wykonania').toBeLessThan(
+      b.queuedMs!,
+    );
+    // Pierwsze uruchomienie nie dźwiga czasu drugiego.
+    const a = h.platform.services.runs.get(first.runId, h.ownerId);
+    expect(a.status).toBe('succeeded');
+    expect(a.firstTokenMs!).toBeLessThanOrEqual(a.durationMs!);
+  }, 20_000);
 });
 
 describe('aktywnosc narzedzi trafia do historii rozmowy', () => {
