@@ -11,8 +11,16 @@ import {
   type UiCommand,
   type ViewFilterPredicate,
 } from '@platform/contracts';
-import { AgentRuntime, buildUiTargetCatalog, platformTools, RunEventStream } from '@platform/server';
-import { createHarness, type Harness } from './helpers.ts';
+import {
+  AgentRuntime,
+  buildUiTargetCatalog,
+  newId,
+  nowIso,
+  platformTools,
+  RunEventStream,
+} from '@platform/server';
+import type { Supplier } from '@module/procurement/shared';
+import { createHarness, login, type Harness } from './helpers.ts';
 
 /**
  * Narrowing a view instead of retyping rows into the conversation.
@@ -498,25 +506,70 @@ describe('zawezony link nie omija uprawnien', () => {
    * narrows *their* data and can never surface a row they could not otherwise
    * see.
    */
-  it('warunki tylko odsiewaja wiersze, ktore odbiorca i tak widzi', () => {
-    const mine = h.service.listSuppliers(h.ownerId);
-    const theirs = h.service.listSuppliers(h.otherOwnerId);
-
-    // The second identity has no suppliers of its own in this fixture...
-    expect(mine.length).toBeGreaterThan(0);
-    expect(theirs).toEqual([]);
-
-    const predicates = filterFromSearch({ country: 'PL' }, ['country']);
-    const filteredMine = mine.filter((r) => rowMatchesFilter(r, predicates));
-    const filteredTheirs = theirs.filter((r) => rowMatchesFilter(r, predicates));
+  it('warunki tylko odsiewaja wiersze, ktore odbiorca i tak widzi', async () => {
+    /*
+     * Fixture: the second identity owns rows of its own — including rows that
+     * match the very same predicate. Without them every "nothing leaked" check
+     * below would be vacuously true: an empty response cannot leak, no matter
+     * how badly the scoping is broken.
+     */
+    const addSupplierForOtherOwner = (name: string, country: string) =>
+      h.service.repo.insertSupplier({
+        id: newId('pcs'),
+        ownerId: h.otherOwnerId,
+        name,
+        taxId: '0000000000',
+        country,
+        contactEmail: 'cudza-tozsamosc@example.com',
+        createdAt: nowIso(),
+      });
+    // Pasuje do tego samego warunku, ktorym zawezamy — tak, by przeciek zakresu
+    // byl widoczny w zawezonym wyniku, a nie tylko w pelnej liscie.
+    addSupplierForOtherOwner('Cudza Polska Sp. z o.o.', 'PL');
+    addSupplierForOtherOwner('Cudzy Nord OY', 'FI');
 
     /*
-     * ...so the same narrowed address shows them nothing. The filter cannot add
-     * rows, only take them away: every filtered row was already in the owner's
-     * own response.
+     * Prawieta droga widoku: serwer zwraca liste ograniczona do wlasciciela
+     * (`GET /api/m/procurement/suppliers` -> `listSuppliers(req.ownerId)`), a
+     * zawezenie z adresu dotyka wylacznie tej odpowiedzi po stronie klienta
+     * (`useModuleData` -> `rowMatchesFilter`). Liczby do potwierdzenia widoku
+     * pochodza z tego zawezenia; wiersze drugiej tozsamosci nie wchodza do gry
+     * wcale, bo serwer ich pierwszej tozsamosci nie dal.
      */
-    expect(filteredTheirs).toEqual([]);
-    expect(filteredMine.length).toBeGreaterThan(0);
-    expect(filteredMine.every((r) => mine.includes(r))).toBe(true);
+    const list = async (userId: string): Promise<Supplier[]> => {
+      const cookie = await login(h.platform.app, userId);
+      const res = await h.platform.app.request('/api/m/procurement/suppliers', {
+        headers: { cookie },
+      });
+      expect(res.status).toBe(200);
+      return ((await res.json()) as { suppliers: Supplier[] }).suppliers;
+    };
+    const mine = await list(h.ownerId);
+    const theirs = await list(h.otherOwnerId);
+
+    expect(mine.length).toBeGreaterThan(0);
+    // Odpowiedz drugiej tozsamosci istnieje i jest jej wlasna — nie pusta.
+    expect(theirs.length).toBeGreaterThan(0);
+
+    const predicates = filterFromSearch({ country: 'PL' }, ['country']);
+    const narrowed = (rows: Supplier[]) => rows.filter((r) => rowMatchesFilter(r, predicates));
+
+    // Zawezenie realnie zaweza: cos odpada, a wynik nie jest pusty — po obu
+    // stronach. Bez tego dalsze asercje moglyby przechodzic próżniowo.
+    expect(narrowed(mine).length).toBeGreaterThan(0);
+    expect(narrowed(mine).length).toBeLessThan(mine.length);
+    expect(narrowed(theirs).length).toBeGreaterThan(0);
+
+    /*
+     * Decydujace: zakresy, ktore serwer dal obu tozsamosciom, sa rozlaczne.
+     * Ten sam zawezony link otwarty przez druga tozsamosc moze wiec pokazac
+     * wylacznie jej wiersze — zawezenie zabiera wiersze z JEJ odpowiedzi i
+     * nigdy nie dorzuci wiersza pierwszej tozsamosci, bo zadnego takiego nie
+     * dostalo. Gdyby lista serwera przestala byc ograniczana do wlasciciela,
+     * obie odpowiedzi zaczelyby sie nakladac i ten test pada.
+     */
+    const mineIds = new Set(mine.map((r) => r.id));
+    const overlap = theirs.filter((r) => mineIds.has(r.id));
+    expect(overlap, 'odpowiedzi obu tozsamosci nachodza na siebie').toEqual([]);
   });
 });
