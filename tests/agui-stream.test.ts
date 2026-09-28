@@ -398,4 +398,27 @@ describe('zdarzenia platformy trafiaja do wlasciwych odbiorcow', () => {
     expect(seen).toHaveLength(2);
     expect(invalidated(qc)).toHaveLength(0);
   });
+  it('powiazanie sesji innej rozmowy nie dotyka biezacej', async () => {
+    qc.setQueryData(['conversation', 'local-user', CONV], {});
+    qc.setQueryData(['conversation', 'local-user', 'cnv_inna'], {});
+    await drain(
+      [
+        runStarted,
+        {
+          type: AGUI_EVENTS.CUSTOM,
+          name: PLATFORM_CUSTOM_EVENTS.sessionBound,
+          value: { sessionId: 'sess_2', conversationId: 'cnv_inna' },
+        },
+      ],
+      qc,
+    );
+    expect(invalidated(qc)).toContainEqual(['conversation', 'local-user', 'cnv_inna']);
+    // Negatywnie: sesja doszła do skutku gdzie indziej — lista wiadomości rozmowy,
+    // którą użytkownik ma otwartą, nie ma powodu się odświeżać.
+    expect(invalidated(qc), 'sesja innej rozmowy nie moze uniewaznic biezacej').not.toContainEqual([
+      'conversation',
+      'local-user',
+      CONV,
+    ]);
+  });
 });
