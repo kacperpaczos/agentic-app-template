@@ -186,7 +186,8 @@ async function runScript(
   srodowisko: Record<string, string> = {},
 ): Promise<{ status: number | null; stdout: string; stderr: string }> {
   const child = spawn(process.execPath, [RUN_AGENT, 'cokolwiek', '--space', 's1'], {
-    env: { ...process.env, ...srodowisko, APP_BASE: base },
+    env: { ...process.env, ...srodowisko, APP_BASE: base, // test kontroluje wlasne srodowisko: kolor nie moze zalezec od sesji wywolujacej (FORCE_COLOR z hosta zmienial to, co asercja widzi w stderr)
+      FORCE_COLOR: '0', }
   });
   let stdout = '';
   let stderr = '';
