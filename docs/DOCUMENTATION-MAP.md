@@ -117,3 +117,5 @@ kanon, jedno liczenie**, archiwum jako osobny, jawnie nazwany świat.
 | `scripts/closure-matrix.mjs` (`check:closure`) | kontrola ARCHIWUM: specyfikacja 95 + oceny z `oceny-95.json` (przeniesione verbatim z kodu) + stała 95; problemy na STDERR (wcześniej `check:closure` failował po cichu, bo stdout szedł do `/dev/null`) |
 | `scripts/audit-matrix.mjs` | usunięty: martwy duplikat ocen `A`, nikt go nie wywoływał |
 | `tests/matrix-gates.test.ts` (nowy) | regresja bramek na rdzeniu z fixture'ami: usunięte kryterium, zmiana statusu, duplikat, rozjazd stałych, zmyślony raport pochodny — każda kontrola z asercją „za co oblewa”; plus smoke trzech bramek na drzewie |
+
+- `FEEDBACK.md` §A28 — audyt jakości testów 2026-09-28 i konsolidacja z AgenticApp (wnioski, odrzucenia, rejestry procesu: /home/paczos/Documents/agentic-konsolidacja-20260928/).
