@@ -1,0 +1,35 @@
+### Podsumowanie macierzy
+
+Liczby wyliczone ze skryptu `scripts/audit-matrix.mjs`; wymagania czytane wprost z `stack-agentowy-ustalenia-i-materialy.md`.
+
+**Kryteriów: 95** (7+6+7+8+8+7+7+8+9+10+10+8). Zgadza się z liczbą z poprzedniej macierzy — dokument nie zmienił się od 2026-09-14.
+
+| Stan | Liczba |
+|---|---|
+| potwierdzone | 84 |
+| częściowe | 10 |
+| niespełnione | 1 |
+| niesprawdzone | 0 |
+| **Razem** | **95** |
+
+| Rodzaj dowodu | Liczba |
+|---|---|
+| rzeczywisty przebieg | 51 |
+| test automatyczny bez modelu | 28 |
+| analiza kodu | 14 |
+| symulacja | 2 |
+
+**Warstwy zamknięte — 6 z 12:** L1, L3, L6, L7, L9, L11
+
+**Warstwy otwarte — 6 z 12**, z identyfikatorami blokujących kryteriów:
+
+| Warstwa | Kryteria blokujące |
+|---|---|
+| L2 — Komponenty i nawigacja frontendowa | L2.2 (częściowe), L2.6 (częściowe) |
+| L4 — Czat i zarządzanie rozmowami | L4.4 (częściowe) |
+| L5 — Komunikacja i zdarzenia | L5.2 (częściowe), L5.3 (częściowe), L5.4 (częściowe) |
+| L8 — Harness i uwierzytelnienie Claude | L8.6 (niespełnione) |
+| L10 — Trwałość, cache i artefakty | L10.7 (częściowe), L10.10 (częściowe) |
+| L12 — Obserwowalność i odbiór integracji | L12.3 (częściowe), L12.5 (częściowe) |
+
+**Kontrola spójności:** brak brakujących i zduplikowanych identyfikatorów; każde kryterium dokumentu ma dokładnie jedną ocenę.

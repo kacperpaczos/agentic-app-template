@@ -1,0 +1,157 @@
+{
+  "base": "http://127.0.0.1:8788",
+  "at": "2026-09-16T08:08:24.311Z",
+  "spoczynek": {
+    "panel": {
+      "x": 1120,
+      "y": 0,
+      "w": 560,
+      "h": 1000
+    },
+    "thread": {
+      "x": 1121,
+      "y": 64,
+      "w": 559,
+      "h": 936
+    },
+    "composer": {
+      "x": 1121,
+      "y": 878,
+      "w": 559,
+      "h": 122
+    },
+    "attachButton": {
+      "x": 1146,
+      "y": 943,
+      "w": 28,
+      "h": 28
+    },
+    "submitButton": {
+      "x": 1627,
+      "y": 943,
+      "w": 28,
+      "h": 28
+    },
+    "containerChildren": [
+      "div.openui-agent-sidebar-container__overlay [559x936]",
+      "div.openui-agent-sidebar-container [294x936]",
+      "div.openui-agent-thread-container [559x936]"
+    ],
+    "attachInsideActionBar": true,
+    "tabs": [
+      "Rozmowa (aktywna)",
+      "Artefakty"
+    ]
+  },
+  "zZalacznikiem": {
+    "panel": {
+      "x": 1120,
+      "y": 0,
+      "w": 560,
+      "h": 1000
+    },
+    "thread": {
+      "x": 1121,
+      "y": 64,
+      "w": 559,
+      "h": 936
+    },
+    "composer": {
+      "x": 1121,
+      "y": 856,
+      "w": 559,
+      "h": 144
+    },
+    "attachButton": {
+      "x": 1146,
+      "y": 943,
+      "w": 28,
+      "h": 28
+    },
+    "submitButton": {
+      "x": 1627,
+      "y": 943,
+      "w": 28,
+      "h": 28
+    },
+    "containerChildren": [
+      "div.openui-agent-sidebar-container__overlay [559x936]",
+      "div.openui-agent-sidebar-container [294x936]",
+      "div.openui-agent-thread-container [559x936]"
+    ],
+    "attachInsideActionBar": true,
+    "tabs": [
+      "Rozmowa (aktywna)",
+      "Artefakty"
+    ]
+  },
+  "zakladkaArtefakty": {
+    "panel": {
+      "x": 1120,
+      "y": 0,
+      "w": 560,
+      "h": 1000
+    },
+    "thread": {
+      "x": 1121,
+      "y": 34,
+      "w": 559,
+      "h": 966
+    },
+    "composer": null,
+    "attachButton": null,
+    "submitButton": null,
+    "containerChildren": [
+      "div.openui-agent-sidebar-container__overlay [559x966]",
+      "div.openui-agent-sidebar-container [294x966]",
+      "div.openui-agent-thread-container [559x966]"
+    ],
+    "attachInsideActionBar": false,
+    "tabs": [
+      "Rozmowa",
+      "Artefakty (aktywna)"
+    ]
+  },
+  "powrotDoRozmowy": {
+    "panel": {
+      "x": 1120,
+      "y": 0,
+      "w": 560,
+      "h": 1000
+    },
+    "thread": {
+      "x": 1121,
+      "y": 64,
+      "w": 559,
+      "h": 936
+    },
+    "composer": {
+      "x": 1121,
+      "y": 856,
+      "w": 559,
+      "h": 144
+    },
+    "attachButton": {
+      "x": 1146,
+      "y": 943,
+      "w": 28,
+      "h": 28
+    },
+    "submitButton": {
+      "x": 1627,
+      "y": 943,
+      "w": 28,
+      "h": 28
+    },
+    "containerChildren": [
+      "div.openui-agent-sidebar-container__overlay [559x936]",
+      "div.openui-agent-sidebar-container [294x936]",
+      "div.openui-agent-thread-container [559x936]"
+    ],
+    "attachInsideActionBar": true,
+    "tabs": [
+      "Rozmowa (aktywna)",
+      "Artefakty"
+    ]
+  }
+}

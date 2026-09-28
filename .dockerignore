@@ -1,0 +1,41 @@
+# Co NIE wchodzi do kontekstu budowania.
+#
+# To jest połowa znaczenia słowa „czysty" w `docker build --no-cache`: bez tego
+# pliku obraz dostałby `node_modules` i `dist` z hosta i zbudowałby się częściowo
+# ze stanu katalogu roboczego zamiast ze źródeł.
+
+# Zależności i artefakty — odtwarzane w obrazie z pnpm-lock.yaml
+node_modules
+**/node_modules
+dist
+**/dist
+.vite
+**/.vite
+
+# Stan aplikacji — nigdy nie jest częścią obrazu
+data
+backups
+
+# Katalogi testowe (własne bazy suit przeglądarkowych)
+.e2e-data
+.e2e-scripted*
+test-results
+
+# Dowody i raporty — ważne w repozytorium, bezużyteczne w obrazie (12 MB)
+docs/evidence
+playwright-report
+
+# Sam Docker
+Dockerfile
+.dockerignore
+compose.yaml
+
+# Środowisko i sekrety — nie mogą trafić do warstwy obrazu
+.env
+.env.*
+*.secret
+
+# Śmieci narzędziowe
+.DS_Store
+*.log
+.claude

@@ -1,0 +1,186 @@
+{
+  "base": "http://127.0.0.1:8796",
+  "at": "2026-09-15T11:24:20.056Z",
+  "viewports": {
+    "szeroki": {
+      "viewport": {
+        "name": "szeroki",
+        "width": 1680,
+        "height": 1000
+      },
+      "closed": {
+        "panel": {
+          "x": 1120,
+          "w": 560,
+          "h": 1000
+        },
+        "sidebar": {
+          "x": 827,
+          "w": 294,
+          "h": 970
+        },
+        "sidebarLeft": "-294px",
+        "sidebarInsidePanel": false,
+        "thread": {
+          "x": 1121,
+          "w": 559,
+          "h": 970
+        },
+        "composer": {
+          "x": 1146,
+          "w": 509,
+          "h": 24
+        },
+        "threadListVisible": false,
+        "overlap": true
+      },
+      "openerCount": 1,
+      "openerVisible": true,
+      "open": {
+        "panel": {
+          "x": 1120,
+          "w": 560,
+          "h": 1000
+        },
+        "sidebar": {
+          "x": 1121,
+          "w": 294,
+          "h": 970
+        },
+        "sidebarLeft": "0px",
+        "sidebarInsidePanel": true,
+        "thread": {
+          "x": 1121,
+          "w": 559,
+          "h": 970
+        },
+        "composer": {
+          "x": 1146,
+          "w": 509,
+          "h": 24
+        },
+        "threadListVisible": true,
+        "overlap": true
+      },
+      "closerCount": 1,
+      "closerVisible": true,
+      "closerFocusable": true,
+      "afterKeyboardClose": {
+        "panel": {
+          "x": 1120,
+          "w": 560,
+          "h": 1000
+        },
+        "sidebar": {
+          "x": 827,
+          "w": 294,
+          "h": 970
+        },
+        "sidebarLeft": "-294px",
+        "sidebarInsidePanel": false,
+        "thread": {
+          "x": 1121,
+          "w": 559,
+          "h": 970
+        },
+        "composer": {
+          "x": 1146,
+          "w": 509,
+          "h": 24
+        },
+        "threadListVisible": false,
+        "overlap": true
+      }
+    },
+    "waski": {
+      "viewport": {
+        "name": "waski",
+        "width": 1120,
+        "height": 900
+      },
+      "closed": {
+        "panel": {
+          "x": 560,
+          "w": 560,
+          "h": 900
+        },
+        "sidebar": {
+          "x": 267,
+          "w": 294,
+          "h": 870
+        },
+        "sidebarLeft": "-294px",
+        "sidebarInsidePanel": false,
+        "thread": {
+          "x": 561,
+          "w": 559,
+          "h": 870
+        },
+        "composer": {
+          "x": 586,
+          "w": 509,
+          "h": 24
+        },
+        "threadListVisible": false,
+        "overlap": true
+      },
+      "openerCount": 1,
+      "openerVisible": true,
+      "open": {
+        "panel": {
+          "x": 560,
+          "w": 560,
+          "h": 900
+        },
+        "sidebar": {
+          "x": 561,
+          "w": 294,
+          "h": 870
+        },
+        "sidebarLeft": "0px",
+        "sidebarInsidePanel": true,
+        "thread": {
+          "x": 561,
+          "w": 559,
+          "h": 870
+        },
+        "composer": {
+          "x": 586,
+          "w": 509,
+          "h": 24
+        },
+        "threadListVisible": true,
+        "overlap": true
+      },
+      "closerCount": 1,
+      "closerVisible": true,
+      "closerFocusable": true,
+      "afterKeyboardClose": {
+        "panel": {
+          "x": 560,
+          "w": 560,
+          "h": 900
+        },
+        "sidebar": {
+          "x": 267,
+          "w": 294,
+          "h": 870
+        },
+        "sidebarLeft": "-294px",
+        "sidebarInsidePanel": false,
+        "thread": {
+          "x": 561,
+          "w": 559,
+          "h": 870
+        },
+        "composer": {
+          "x": 586,
+          "w": 509,
+          "h": 24
+        },
+        "threadListVisible": false,
+        "overlap": true
+      }
+    }
+  }
+}

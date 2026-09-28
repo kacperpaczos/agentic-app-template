@@ -1,0 +1,10 @@
+### TypeScript
+### 2026-09-15T20:06:23+02:00
+### $ pnpm typecheck
+
+
+> agentic-stack@0.1.0 typecheck /home/paczos/Documents/AgenticApp
+> tsc -p tsconfig.json --noEmit
+
+
+### kod wyjscia: 0

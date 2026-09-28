@@ -1,0 +1,81 @@
+### Postawienie aplikacji od zera — bez cache, wylacznie ze zrodel
+### 2026-09-15T21:36:40+02:00
+
+Zgoda: „chce miec calkowicie czysta bez cache appke z samego kodu,
+       mozesz wypelnic danymi osobno, postaw to zupelnie na swiezo,
+       nawet docker bez cache" (2026-09-15).
+
+## Zabezpieczenie przed czyszczeniem
+
+  backups/data-2026-09-15              stan PRZED migracja (31 rozmow, 42 wiadomosci)
+  backups/data-2026-09-15-po-migracji  stan PO migracji  (31 rozmow, 76 wiadomosci)
+
+  Obie zweryfikowane ponownym odczytem (sumy SHA-256, census tabel, integrity_check).
+
+## Usuniete
+
+  node_modules (root + 8 pakietow)      1,1 GB
+  apps/web/dist, apps/server/dist        14 MB
+  data/                                 492 kB  (zabezpieczone dwiema kopiami)
+  .e2e-data, .e2e-scripted*             5,5 MB
+  test-results/
+
+  NIE usuwano: zrodel, pnpm-lock.yaml, dokumentow, docs/evidence/, backups/,
+  globalnego magazynu pnpm (wspolny z innymi projektami uzytkownika).
+
+## Odtworzenie na hoscie
+
+  pnpm install --frozen-lockfile   8,6 s, exit 0
+  pnpm build                       exit 0 (vite 1,80 s + esbuild 52 ms)
+  pnpm migrate                     swieza baza, 3 migracje, 0 rozmow, integrity ok
+  pnpm verify                      exit 0 — 212 testow / 18 plikow, macierz 95
+
+## Obraz Docker bez cache
+
+  docker build --no-cache --pull -t agenticapp:czysty .
+
+  Dowod bezcache'owosci z logu budowania:
+    Progress: resolved 544, reused 0, downloaded 544, added 544, done
+    → zaden pakiet nie pochodzi z lokalnego magazynu, wszystko pobrane od nowa
+
+  better-sqlite3 skompilowany ze zrodel w obrazie (node-gyp, brak gotowego
+  artefaktu dla node 24 na tej platformie) — stad python3/make/g++ w etapie
+  budujacym i ich brak w obrazie koncowym.
+
+  Wynik: agenticapp:czysty
+    CONTENT SIZE  614 MB   — warstwy obrazu, czyli to, co sie przenosi
+    DISK USAGE   2,75 GB   — zajetosc na dysku po rozpakowaniu, razem z
+                             warstwami etapu budujacego trzymanymi przez buildkit
+
+## Sprawdzenie kontenera
+
+  docker run -d -p 8790:8791 -v agenticapp-test-data:/data agenticapp:czysty
+
+  /api/health                 {"ok":true,"instanceLabel":null}
+  frontend                    serwowany z /app/web (obraz)
+  moduly / narzedzia          procurement / 30
+  metoda uwierzytelnienia     subscription
+  poswiadczenie               absent   ← brak ~/.claude w kontenerze
+  klucz API                   brak     ← ZADNEGO cichego przejscia na API
+  baza                        /data/app.db, 3 migracje, 0 rozmow
+  uzytkownik procesu          node (nie root)
+
+  To potwierdza dokumentowane ograniczenie: agent w kontenerze nie wykona
+  polecenia bez zamontowania ~/.claude, a polityka wylacznie subskrypcyjna
+  pozostaje egzekwowana — brak poswiadczenia NIE powoduje siegniecia po API.
+
+## Efekt uboczny do wiadomosci
+
+Budowanie z --no-cache NIE uzywa cache, ale nadal go ZAPISUJE. Po tej pracy
+`docker system df` pokazuje 9,75 GB build cache (8,86 GB do odzyskania).
+Czesc pochodzi z innych obrazow uzytkownika (caddy, n8niframe, playwright),
+wiec nie czyszcze tego samodzielnie. Do odzyskania miejsca:
+
+  docker builder prune            # sam cache budowania
+  docker builder prune -a         # agresywniej
+  docker image prune              # obrazy bez tagow
+
+## Stan koncowy
+
+  host   http://localhost:8791  — swieza, pusta baza (0 rozmow, 0 spraw, 0 plikow)
+  obraz  agenticapp:czysty      — gotowy, kontener testowy usuniety

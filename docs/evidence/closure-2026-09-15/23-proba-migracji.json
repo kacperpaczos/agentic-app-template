@@ -1,0 +1,78 @@
+{
+  "at": "2026-09-15T17:45:45.550Z",
+  "backup": "/home/paczos/Documents/AgenticApp/backups/data-2026-09-15",
+  "workdir": "/tmp/agentic-rehearsal-Hz013l",
+  "migrationsBefore": [
+    "platform-0001-init",
+    "procurement-0001-init"
+  ],
+  "migrationsAfter": [
+    "platform-0001-init",
+    "platform-0002-run-measurement-points",
+    "procurement-0001-init"
+  ],
+  "countsBefore": {
+    "agent_runs": 11,
+    "app_settings": 0,
+    "artifact_versions": 0,
+    "artifacts": 0,
+    "canvas_cards": 18,
+    "canvas_spaces": 14,
+    "conversations": 31,
+    "files": 9,
+    "idempotency_keys": 4,
+    "messages": 42,
+    "pc_attachments": 4,
+    "pc_cases": 1,
+    "pc_criteria": 3,
+    "pc_offer_items": 16,
+    "pc_offers": 4,
+    "pc_provenance": 15,
+    "pc_requirements": 4,
+    "pc_suppliers": 4,
+    "run_events": 432,
+    "schema_migrations": 2,
+    "users": 2
+  },
+  "countsAfter": {
+    "agent_runs": 11,
+    "app_settings": 0,
+    "artifact_versions": 0,
+    "artifacts": 0,
+    "canvas_cards": 18,
+    "canvas_spaces": 14,
+    "conversations": 31,
+    "files": 9,
+    "idempotency_keys": 4,
+    "messages": 76,
+    "pc_attachments": 4,
+    "pc_cases": 1,
+    "pc_criteria": 3,
+    "pc_offer_items": 16,
+    "pc_offers": 4,
+    "pc_provenance": 15,
+    "pc_requirements": 4,
+    "pc_suppliers": 4,
+    "run_events": 432,
+    "schema_migrations": 3,
+    "users": 2
+  },
+  "expectedChanges": [
+    "agent_runs: 11 → 11 wierszy (platform-0002 dodaje kolumne enqueued_at i wypelnia ja z started_at)",
+    "messages: 42 → 76 wierszy (odtworzenie aktywnosci narzedzi zastepuje pojedyncza wiadomosc asystenta pelna tura)",
+    "schema_migrations: 2 → 3 wierszy (migracja dopisuje swoj wpis)"
+  ],
+  "preserved": {
+    "rozmowy": 31,
+    "wiadomosciUzytkownika": 31,
+    "kartyCanvasu": 18,
+    "pliki": 9,
+    "artefakty": 0
+  },
+  "secondBootChangedNothing": true,
+  "problems": [],
+  "bootOutput": [
+    "[platform] odtworzono aktywnosc narzedzi: 11 uruchomien, 45 wiadomosci",
+    ""
+  ]
+}

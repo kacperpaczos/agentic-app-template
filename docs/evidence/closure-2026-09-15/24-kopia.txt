@@ -1,0 +1,63 @@
+### Kopia stanu lokalnego — co zostalo dotkniete, a co nie
+### 2026-09-15T19:49:08+02:00
+
+## Dane: nietkniete
+
+Sumy SHA-256 PRZED wykonaniem kopii:
+  405f399a6cf7b30496604cc02b673c0a9b01191239826152327f1131f6cb612f  data/app.db
+  e2937d0f638e108ad89b59e6c3dd107beb97046efc259a6791f7fb8701d42385  data/app.db-wal
+  99c7df7e7a0985105f04899f9b91f58a4b92842d0bde3e2dd5167658f2b4f274  data/app.db-shm
+
+Sumy SHA-256 TERAZ:
+  405f399a6cf7b30496604cc02b673c0a9b01191239826152327f1131f6cb612f  data/app.db
+  e2937d0f638e108ad89b59e6c3dd107beb97046efc259a6791f7fb8701d42385  data/app.db-wal
+  9e1cf29b5f6031953a4ae18e9ae2ecde5d6017c2cb977bbafe7857de46c605d5  data/app.db-shm
+
+app.db i app.db-wal — identyczne bajt w bajt. Caly stan zatwierdzony jest
+w tych dwoch plikach i nie zostal zmieniony.
+
+## app.db-shm: zmieniony, i przez co
+
+Suma app.db-shm jest inna. Przyczyna nie jest kopia: bezposrednio po jej
+wykonaniu (19:44) wszystkie trzy sumy byly identyczne ze stanem wejsciowym.
+Plik zmienil sie o 19:48, gdy uruchomilem polecenie weryfikujace z
+docs/odzyskiwanie-stanu.md — ono otwiera baze w trybie READONLY.
+
+SQLite przebudowuje -shm (indeks pamieci wspoldzielonej dla WAL) nawet przy
+otwarciu tylko do odczytu. -shm nie zawiera zatwierdzonych danych; jest
+odtwarzalny z -wal i mozna go usunac, gdy zaden proces nie trzyma bazy.
+
+Wniosek, ktory z tego wyplywa dla projektu skryptu: scripts/backup-state.mjs
+nie otwiera zrodla jako bazy w zadnym trybie — kopiuje bajty. Gdyby otwieral,
+nawet readonly, zmienialby plik w katalogu danych uzytkownika.
+
+## Dlaczego kopia samego app.db bylaby niekompletna
+
+      397312  data/app.db  (mtime 2026-09-14 15:05:50.479022623 +0200)
+     4120032  data/app.db-wal  (mtime 2026-09-15 12:45:37.814142931 +0200)
+       32768  data/app.db-shm  (mtime 2026-09-15 19:48:21.480878982 +0200)
+
+  app.db ma 397 kB i date 14 wrzesnia; app.db-wal ma 4,1 MB i date 15 wrzesnia.
+  Wiekszosc zatwierdzonej pracy jest w logu WAL, nie w pliku glownym.
+
+## Stan danych uzytkownika (odczyt z KOPII, nie ze zrodla)
+
+Migracje zastosowane:
+  platform-0001-init  2026-09-14T10:53:50.673Z
+  procurement-0001-init  2026-09-14T10:53:50.674Z
+
+Wiersze:
+  conversations   31
+  messages        42
+  agent_runs      11
+  run_events      432
+  canvas_spaces   14
+  canvas_cards    18
+  artifacts       0
+  files           9
+
+integrity_check kopii: ok
+
+platform-0002-run-measurement-points NIE jest zastosowana w danych
+uzytkownika. Zostanie zastosowana przy pierwszym uruchomieniu nowego builda.
+Proba na kopii: docs/evidence/closure-2026-09-15/23-proba-migracji.json

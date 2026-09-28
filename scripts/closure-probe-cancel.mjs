@@ -1,0 +1,30 @@
+/* DIAGNOSTIC (closure) — what the composer button does while a run is open. */
+import { chromium } from '@playwright/test';
+const BASE = 'http://127.0.0.1:8798';
+const b = await chromium.launch();
+const p = await b.newPage({ viewport: { width: 1680, height: 1000 } });
+const reqs = [];
+p.on('request', (r) => { if (r.url().includes('/api/')) reqs.push(`${r.method()} ${r.url().replace(BASE,'')}`); });
+await p.goto(`${BASE}/`);
+await p.evaluate(() => fetch('/api/auth/session', { method: 'POST', credentials: 'include', headers: {'content-type':'application/json'}, body: '{}' }));
+await p.goto(`${BASE}/`);
+await p.waitForSelector('.openui-agent-thread-composer__input');
+await p.locator('.openui-agent-thread-composer__input').fill('Opowiadaj dlugo.');
+const btn = p.locator('.pf-chat .openui-agent-thread-composer__submit-button').first();
+console.log('przed wyslaniem aria-label:', await btn.getAttribute('aria-label'));
+await btn.click();
+await p.waitForTimeout(2500);
+console.log('w trakcie aria-label:', await btn.getAttribute('aria-label'));
+console.log('faza:', await p.getByTestId('run-state').getAttribute('data-phase'));
+reqs.length = 0;
+await btn.click();
+await p.waitForTimeout(2500);
+console.log('zadania po kliknieciu:', JSON.stringify(reqs));
+console.log('faza po:', await p.getByTestId('run-state').getAttribute('data-phase'));
+const st = await p.evaluate(async () => {
+  const { threads } = await (await fetch('/api/threads/get', { credentials: 'include' })).json();
+  const { runs } = await (await fetch(`/api/conversations/${threads[0].id}/runs`, { credentials: 'include' })).json();
+  return runs.map((r) => `${r.id.slice(-6)}:${r.status}`);
+});
+console.log('uruchomienia:', JSON.stringify(st));
+await b.close();

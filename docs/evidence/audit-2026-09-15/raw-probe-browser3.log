@@ -1,0 +1,10 @@
+PROBE RUN-zakonczony                 OK  status=succeeded dur=24934 ms firstToken=null ms
+PROBE STRUMIEN-wywolania-narzedzi    OK  TOOL_CALL_START: ToolSearch, mcp__app__procurement_compare_offers, mcp__app__procurement_save_comparison
+PROBE CHAT-aktywnosc-narzedzi-w-DOM  GAP BRAK elementu narzedzia w DOM czatu mimo wywolan w strumieniu
+PROBE CHAT-odpowiedz-koncowa-widoczna GAP yt wspolbieznosci Wykonaj dokladnie trzy operacje na canvasie, uzywajac narzedz… Agent aplikacji Porownaj oferty Wykres kosztow Skad ta cena
+PROBE CHAT-brak-pozornego-oczekiwania OK  brak wskaznika trwajacego wykonania po zakonczeniu
+PROBE ARTEFAKT-utworzony             OK  przed=1 po=2 nowe=procurement.comparison/Zestawienie porównawcze of
+PROBE ARTEFAKT-widoczny-na-ekranie   OK  ekran Pliki i raporty zawiera "Zestawienie porównawcze ofert "
+PROBE UI-brak-bledow-konsoli         OK  brak
+
+zapisano 8 wynikow

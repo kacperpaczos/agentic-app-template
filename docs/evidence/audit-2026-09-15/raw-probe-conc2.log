@@ -1,0 +1,14 @@
+
+PROBE CONC-jedna-rozmowa-izolacja OK  A="ALFA." B="BETA." uruchomien=2 rozstrzygnietych=2
+----------------------------------------------------------------------------------------------------
+
+PROBE CONC-jedna-rozmowa-kolejka OK  okna wykonania: f39794 konczy 10:27:41.687, f2b738 zaczyna 10:27:41.687 — brak nakladania
+----------------------------------------------------------------------------------------------------
+
+PROBE CONC-brak-duplikatow-wiadomosci OK  wiadomosci uzytkownika=3 (1 zalozycielska + 2 polecenia), lacznie=5, 24886 ms
+----------------------------------------------------------------------------------------------------
+
+PROBE CONC-rozne-rozmowy         OK  osobne rozmowy 6a85d8 / 7daa8f, lacznie 38825 ms
+----------------------------------------------------------------------------------------------------
+
+zapisano 4 wynikow

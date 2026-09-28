@@ -1,0 +1,14 @@
+
+PROBE CANVAS-update              OK  spec={"markdown":"PO AUDYCIE"} specVersion=2
+----------------------------------------------------------------------------------------------------
+
+PROBE CANVAS-move                OK  geometry=40,40 geometryVersion=2
+----------------------------------------------------------------------------------------------------
+
+PROBE CANVAS-remove              OK  karta usunieta
+----------------------------------------------------------------------------------------------------
+
+PROBE CTX-get_context            OK  wywolane narzedzia: ToolSearch, mcp__app__get_context, mcp__app__canvas_update_card, mcp__app__canvas_move_card, mcp__app__canvas_remove_card
+----------------------------------------------------------------------------------------------------
+
+zapisano 4 wynikow

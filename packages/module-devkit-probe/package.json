@@ -1,0 +1,12 @@
+{
+  "name": "@module/devkit-probe",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { "./server": "./src/server/index.ts" },
+  "dependencies": {
+    "@platform/contracts": "workspace:*",
+    "@platform/server": "workspace:*",
+    "zod": "4.6.5"
+  }
+}

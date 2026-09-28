@@ -1,0 +1,21 @@
+node_modules/
+dist/
+data/
+.turbo/
+*.tsbuildinfo
+
+# Cache narzędzi testowych
+.vitest/
+test-results/
+playwright-report/
+
+# Katalogi danych suit przeglądarkowych (własne bazy, własne porty)
+.e2e-data/
+.e2e-scripted*/
+
+# Kopie stanu lokalnego — zawierają PRAWDZIWE dane użytkownika (rozmowy,
+# kompozycje, pliki). Nie mogą trafić do repozytorium ani do obrazu.
+backups/
+
+.env
+.env.*

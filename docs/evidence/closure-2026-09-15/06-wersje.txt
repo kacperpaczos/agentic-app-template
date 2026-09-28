@@ -1,0 +1,36 @@
+### Wersje zaleznosci (przypiecia z manifestow obszaru roboczego)
+### 2026-09-15T20:06:39+02:00
+
+@anthropic-ai/claude-agent-sdk       0.3.270      w magazynie
+@hono/node-server                    1.19.7       w magazynie
+@mastra/claude                       0.3.1        w magazynie
+@mastra/core                         1.66.0       w magazynie
+@openuidev/react-headless            0.9.13       w magazynie
+@openuidev/react-lang                0.2.15       w magazynie
+@openuidev/react-ui                  0.13.10      w magazynie
+@playwright/test                     1.63.0       w magazynie
+@tailwindcss/vite                    4.3.3        w magazynie
+@tanstack/react-query                5.102.8      w magazynie
+@tanstack/react-router               1.170.36     w magazynie
+@types/better-sqlite3                7.6.13       w magazynie
+@types/node                          24.10.2      w magazynie
+@types/react                         19.3.0       w magazynie
+@types/react-dom                     19.3.0       w magazynie
+@vitejs/plugin-react                 6.1.1        w magazynie
+@xyflow/react                        12.11.6      w magazynie
+better-sqlite3                       13.0.3       w magazynie
+clsx                                 2.1.1        w magazynie
+concurrently                         9.2.1        w magazynie
+drizzle-orm                          0.45.2       w magazynie
+esbuild                              0.27.3       w magazynie
+hono                                 4.13.7       w magazynie
+react                                19.3.0       w magazynie
+react-dom                            19.3.0       w magazynie
+tailwindcss                          4.3.3        w magazynie
+typescript                           7.0.2        w magazynie
+vite                                 8.3.0        w magazynie
+vitest                               5.0.0        w magazynie
+zod                                  4.6.5        w magazynie
+zustand                              4.5.7        w magazynie
+
+node                                 v24.19.0

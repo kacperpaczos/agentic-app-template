@@ -1,0 +1,104 @@
+### Migracja danych uzytkownika — wykonana za zgoda
+### 2026-09-15T20:28:05+02:00
+
+Zgoda: wiadomosc uzytkownika „Ok, zrob migracja…" (2026-09-15).
+Kopia przed migracja: backups/data-2026-09-15 (sprawdzona ponownym odczytem).
+
+## Stan przed
+{
+  "conversations": 31,
+  "messages": 42,
+  "agent_runs": 11,
+  "run_events": 432,
+  "canvas_spaces": 14,
+  "canvas_cards": 18,
+  "artifacts": 0,
+  "files": 9,
+  "migracje": [
+    "platform-0001-init",
+    "procurement-0001-init"
+  ],
+  "wiadomosciRol": [
+    {
+      "role": "assistant",
+      "n": 11
+    },
+    {
+      "role": "user",
+      "n": 31
+    }
+  ],
+  "integrity": "ok"
+}
+
+## Polecenie
+$ pnpm migrate
+  [platform] odtworzono aktywnosc narzedzi: 11 uruchomien, 45 wiadomosci
+  [migrate] zastosowane migracje (3): platform-0001-init,
+            platform-0002-run-measurement-points, procurement-0001-init
+
+## Stan po
+{
+  "conversations": 31,
+  "messages": 76,
+  "agent_runs": 11,
+  "run_events": 432,
+  "canvas_spaces": 14,
+  "canvas_cards": 18,
+  "artifacts": 0,
+  "files": 9,
+  "migracje": [
+    "platform-0001-init",
+    "platform-0002-run-measurement-points",
+    "procurement-0001-init"
+  ],
+  "wiadomosciRol": [
+    {
+      "role": "assistant",
+      "n": 23
+    },
+    {
+      "role": "tool",
+      "n": 22
+    },
+    {
+      "role": "user",
+      "n": 31
+    }
+  ],
+  "enqueuedWypelnione": 11,
+  "integrity": "ok"
+}
+
+## Zgodnosc z proba na kopii (23-proba-migracji.json)
+
+  pozycja                proba    rzeczywistosc   zgodne
+  rozmowy                31→31    31→31           tak
+  wiadomosci             42→76    42→76           tak
+  uruchomienia           11→11    11→11           tak
+  zdarzenia uruchomien   432→432  432→432         tak
+  karty canvasu          18→18    18→18           tak
+  pliki                  9→9      9→9             tak
+
+Proba przewidziala wynik dokladnie, w tym liczbe 76.
+
+## Zachowanie danych — porownanie z kopia po tozsamosci
+
+  Odciski SHA-256 wierszy widocznych dla uzytkownika, kopia (przed) vs data/ (po):
+    rozmowy        958adb690d291a9c = 958adb690d291a9c   IDENTYCZNE
+    wiad. uzytkow. 05cce4f56452827a = 05cce4f56452827a   IDENTYCZNE
+    karty canvasu  a983b4fb1c62c9c9 = a983b4fb1c62c9c9   IDENTYCZNE
+    pliki          92f383705fb605bc = 92f383705fb605bc   IDENTYCZNE
+    przestrzenie   518271e4a42d95eb = 518271e4a42d95eb   IDENTYCZNE
+
+  Zmienilo sie tylko to, co mialo: wiadomosci asystenta 11 → 23 i wiadomosci
+  narzedzi 0 → 22 (odtworzona aktywnosc narzedzi z zachowanych run_events),
+  oraz enqueued_at wypelnione dla 11 z 11 uruchomien.
+
+## Idempotencja na prawdziwych danych
+
+$ pnpm migrate   # po raz drugi
+  brak komunikatu o odtwarzaniu aktywnosci (pominiete)
+  Wszystkie 21 tabel identyczne — powtorna migracja nie zmienila ani jednego wiersza.
+
+## integrity_check: ok

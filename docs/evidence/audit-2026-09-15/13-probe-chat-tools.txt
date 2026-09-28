@@ -1,0 +1,8 @@
+szuflada rozmow otwarta na starcie: true
+run: succeeded dur=21763 ms
+strumien TOOL_CALL_START: ToolSearch, mcp__app__procurement_compare_offers
+DOM czatu — element narzedzia: NIE
+DOM czatu — znacznik odpowiedzi "ZNACZNIK-NARZEDZIOWY": NIE
+DOM czatu — dlugosc tekstu: 742 znakow
+DOM czatu — klasy zawierajace "tool": brak
+ostatnie 200 znakow tekstu czatu: ci Odpowiedz dokladnie: GAMMA Odpowiedz dokladnie: DELTA Audyt wspolbieznosci Wykonaj dokladnie trzy operacje na canvasie, uzywajac narzedz… Agent aplikacji Porownaj oferty Wykres kosztow Skad ta cena

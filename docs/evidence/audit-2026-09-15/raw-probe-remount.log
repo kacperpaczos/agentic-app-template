@@ -1,0 +1,10 @@
+WIADOMOSC 1 (nowa rozmowa)
+  backend: run=succeeded, wiadomosci=2, odpowiedz zawiera znacznik=true
+  DOM czatu zawiera znacznik=true
+WIADOMOSC 2 (ta sama rozmowa)
+  backend: wiadomosci=2, odpowiedz zawiera znacznik=false
+  DOM czatu zawiera znacznik=true
+PO PRZELADOWANIU
+  DOM zawiera znacznik 1=true  znacznik 2=true
+
+WERDYKT: hipoteza niepotwierdzona

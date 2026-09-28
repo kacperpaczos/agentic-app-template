@@ -1,0 +1,133 @@
+### Rozszerzenie: pliki, praca w tle, sterowanie interfejsem
+### 2026-09-16
+###
+### Trzy rezultaty zamawiajacego. Pelny opis: RAPORT-DOMKNIECIA-PLATFORMY.md §4c.
+
+## Stan wejsciowy i wyjsciowy
+
+  testy jednostkowe   212 → 252   (18 → 21 plikow)
+  testy przegladarkowe 46 → 59    (9 → 12 plikow)
+  tury na modelu        1 → 3     (agent-ui + dwie w files-agent)
+
+## Bramka koncowa (2026-09-16)
+
+  pnpm verify        exit 0 — 252 testy / 21 plikow, typecheck 0, macierz 95
+  pnpm test:e2e      59/59, 4,7 min, w tym trzy tury na prawdziwym modelu
+  pomiary            odswiezenie po mutacji 167 ms; anulowanie 928 ms (cancelled)
+  strumien (scenariusze)  text-only=TAK, burst-at-end=NIE, tool-only-silent=NIE
+  strumien (model)   50 roznych dlugosci, 73 → 541 znakow w fazie running
+
+## Rezultat 1 — pliki i artefakty
+
+Dodane:
+  - typ XLSX w dozwolonych mediach; .xlsm i .xls swiadomie NIE
+  - exceljs 4.4.0 jako zaleznosc @platform/server, podlinkowana do
+    node_modules workspace uruchomienia przez kuratorowana liste
+  - files_publish_version — wynik jako nowa wersja, oryginal nietkniety
+  - migracja platform-0003-file-versions (derived_from_file_id, version)
+  - FILE_ANALYSIS w kontraktach — jawny zakres i ograniczenia, ten sam
+    tekst w prompcie agenta i w interfejsie
+  - pasek zalacznikow nad gotowym kompozytorem (upload + wskazanie wgranego)
+
+Dowod odbioru przez GUI, prawdziwy model (e2e/files-agent.spec.ts):
+
+  obraz            trzy pasy nazwane poprawnie I W KOLEJNOSCI, mimo nazwy
+                   pliku "dokument-tekstowy.png"
+  skoroszyt        suma 5300 wyprowadzona z komorek (ilosc x cena),
+                   nie z nazw arkuszy
+  wykonanie        agent zapisal skrypt do workspace i uruchomil go
+                   PO ZGODZIE uzytkownika
+  wynik            otwiera sie, arkusz "Podsumowanie" z Razem/5300,
+                   arkusze Pozycje/Metryka/Pusty zachowane
+  oryginal         IDENTYCZNY BAJT W BAJT z tym, co wgrano
+  po powrocie      plik wersji nadal na liscie i pobieralny
+
+Granica sandboxa sprawdzona z obu stron (tests/file-analysis.test.ts):
+  - exceljs da sie zaimportowac z katalogu workspace
+  - better-sqlite3, @anthropic-ai/claude-agent-sdk i hono — NIE
+
+## Rezultat 2 — niezalezne zadania w tle
+
+ZNALEZIONA WADA (po stronie klienta, nie backendu):
+  abort strumienia czatu byl przekazywany na /cancel, a biblioteka wywoluje
+  ten abort z selectThread → cancelMessage. Czyli PRZELACZENIE ROZMOWY
+  anulowalo zadanie. Tak samo przeladowanie strony.
+
+Naprawa:
+  - abort nie decyduje o niczym; anulowanie to jawne dzialanie na nazwanym
+    uruchomieniu (przycisk w pasku stanu i w liscie zadan)
+  - GET /api/runs/:id/stream?from=<seq> — ponowne podlaczenie od kursora
+  - stan wykonania per rozmowa (mapa), nie jeden rekord globalny
+  - wskaznik zadan w tle w pasku stanu
+
+Dowod (e2e/background-tasks.spec.ts, 5/5):
+  przelaczenie rozmowy i przeladowanie nie anuluja; praca w B nie miesza sie
+  z A; powrot pokazuje wynik bez ponownego uruchomienia; Stop konczy wskazane;
+  zadanie z innej rozmowy da sie zatrzymac z listy
+
+KONTROLA SILY TESTU:
+  Mutacja: przywrocenie mapowania abort→/cancel w chatWiring.ts
+  Wynik:   ✘ "przelaczenie rozmowy i przeladowanie nie anuluja zadania"
+           1 failed — test wychwytuje regresje
+
+## Rezultat 3 — agent poruszajacy sie po aplikacji
+
+PUNKT WYJSCIA (pokazany przez uzytkownika w dzialajacej aplikacji):
+  na "przelacz na pliki" agent wywolal procurement_list_cases i canvas_catalog,
+  a potem powiedzial, ze trzeba najpierw utworzyc sprawe zakupowa, zeby
+  zobaczyc zakladke "Pliki i raporty". To NIEPRAWDA — to ekran platformy,
+  w nawigacji zawsze. Agent nie mial narzedzia ani listy widokow, wiec
+  improwizowal, a improwizacja byla falszywa.
+
+Dodane:
+  - kuratorowany katalog celow: PLATFORM_UI_TARGETS + wklad modulow
+  - ui_catalog (co istnieje) i ui_navigate (wykonaj)
+  - ui_navigate NIE rozstrzyga sie, dopoki klient nie odesle wyniku na
+    POST /api/runs/:id/ui-ack; brak potwierdzenia = executed=false (no_client)
+  - osobne powody odmowy: unknown_target, not_present, forbidden,
+    inactive_conversation, no_client
+  - brak czasownika "ustaw" — pokazanie ustawienia niczego nie zmienia
+  - idempotencja po commandId: odtworzony strumien nie skacze drugi raz
+
+Dowod (e2e/ui-navigation.spec.ts, 5/5):
+  otwarcie /files z widocznym ekranem; podswietlenie data-ui-highlight na
+  sekcji ustawien przy niezmienionym /api/status; Wstecz/Dalej po nawigacji
+  agenta; nieznany cel → executed=false unknown_target i widok bez zmiany;
+  zadanie w tle nie przenosi ekranu, odmowa inactive_conversation trafia do
+  historii wlasciwej rozmowy
+
+## Skutek uboczny wykryty przez istniejacy test pomiarowy
+
+Usuniecie mapowania abort→/cancel sprawilo, ze przycisk stop w gotowym
+kompozytorze przestal anulowac przebieg — zatrzymywal tylko widok. Wychwycil to
+e2e/measurements.spec.ts ("czas anulowania"), ktory klika wlasnie ta kontrolke.
+
+To bylo pogorszenie dla uzytkownika, nie tylko dla testu. Naprawa NIE polega na
+przywroceniu mapowania sygnalu (ten nadal nie odroznia zatrzymania od zmiany
+rozmowy), tylko na rozpoznaniu jednoznacznego zdarzenia: klikniecia w kontrolke
+wysylania w chwili, gdy ta rozmowa ma wykonanie w locie. Biblioteka zamienia
+wtedy role przycisku na "zatrzymaj", wiec klikniecie nie znaczy nic innego.
+
+Sprawdzone: po naprawie przechodzi i pomiar anulowania, i test "przelaczenie
+rozmowy i przeladowanie nie anuluja zadania" — czyli stary blad nie wrocil.
+
+## Wada znaleziona przy okazji: podwojony tekst odpowiedzi
+
+Po wprowadzeniu listy zadan w tle jeden przebieg mial DWOCH konsumentow
+zdarzen: strumien z POST /api/agui/run (parsowany przez gotowy czat) oraz
+ponowne podlaczenie otwarte przez synchronizacje zadan w tle. Oba stosowaly
+te same TEXT_MESSAGE_CONTENT, a reduktor doklada delty — wiec tekst
+odpowiedzi sie PODWAJAL: 107 znakow odpowiedzi mierzone jako 214.
+
+Skutek byl gorszy niz kosmetyczny: scenariusz "cala odpowiedz jednym
+kawalkiem na koncu" wychodzil FALSZYWIE jako strumieniowanie (107 → 214
+wyglada jak przyrost). Czyli kontrola negatywna detektora przestala dzialac.
+
+Naprawa: jeden konsument na przebieg — sciezka wysylania "zajmuje" przebieg,
+ponowne podlaczenie pomija zajete. Test jednostkowy pilnuje obu polowek:
+ze podlaczenie w tle jest pomijane, i ze dwukrotne zastosowanie tego samego
+zdarzenia faktycznie podwaja tekst (czyli dlaczego to ma znaczenie).
+
+Wykryte przez: e2e/streaming.spec.ts — kontrola negatywna oblala.
+To ten sam test, ktory w poprzedniej turze powstal po to, zeby asercja
+strumieniowania nie zdegenerowala sie do "odpowiedz dotarla".

@@ -1,0 +1,153 @@
+# Kontrole projektowe — audyt 2026-09-15
+
+$ node --version && pnpm --version
+v24.19.0
+9.15.9
+
+$ pnpm check:boundaries
+
+> agentic-stack@0.1.0 check:boundaries /home/paczos/Documents/AgenticApp
+> node scripts/check-boundaries.mjs
+
+Granica platforma-domena zachowana:
+  - zaden pakiet @platform/* nie deklaruje zaleznosci od @module/*
+  - zaden plik platformy nie importuje z @module/*
+  - zaden plik platformy nie uzywa slownika domenowego (12 pojec)
+  - modul biznesowy zalezy od platformy (kierunek prawidlowy)
+exit=0
+
+$ pnpm check:matrix
+
+> agentic-stack@0.1.0 check:matrix /home/paczos/Documents/AgenticApp
+> node scripts/matrix-summary.mjs --check
+
+kryteriow: 95
+  ZAL-R   50
+  ZAL-T   33
+  CZĘŚĆ   10
+  KOD     2
+warstwy zamkniete (3/12): 2, 4, 9
+warstwy otwarte  (9/12):
+  L1: L1.2 CZĘŚĆ
+  L3: L3.2 CZĘŚĆ
+  L5: L5.2 CZĘŚĆ, L5.4 CZĘŚĆ
+  L6: L6.3 KOD, L6.5 CZĘŚĆ
+  L7: L7.4 CZĘŚĆ
+  L8: L8.6 KOD
+  L10: L10.7 CZĘŚĆ
+  L11: L11.7 CZĘŚĆ
+  L12: L12.3 CZĘŚĆ, L12.5 CZĘŚĆ
+
+Podsumowanie macierzy zgodne z tabelami.
+exit=0
+
+$ pnpm typecheck
+
+> agentic-stack@0.1.0 typecheck /home/paczos/Documents/AgenticApp
+> tsc -p tsconfig.json --noEmit
+
+exit=0
+
+$ pnpm test
+
+> agentic-stack@0.1.0 test /home/paczos/Documents/AgenticApp
+> vitest run
+
+
+ RUN  v5.0.0 /home/paczos/Documents/AgenticApp
+
+stderr | tests/runtime.test.ts > workspace i sandbox
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/platform-boundary.test.ts > platforma dziala bez modulu zakupowego > startuje z pustym rejestrem modulow
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/mcp-schema.test.ts > zgodnosc schematow narzedzi MCP > wszystkie realne narzedzia aplikacji przechodza kontrole
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/contracts.test.ts > kontrakty: walidacja, uprawnienia, konflikty, powtorzenia
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+ ✓ tests/mcp-schema.test.ts (10 tests) 127ms
+stderr | tests/platform-boundary.test.ts > platforma dziala bez modulu zakupowego > bez modulu serwuje pusty stan zamiast bledu
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/runtime.test.ts > limity plikow
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/domain-comparison.test.ts > dane demonstracyjne maja sprawdzalne wartosci
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/runtime.test.ts > rejestr uruchomien i cykl zycia zadania
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+ ✓ tests/domain-comparison.test.ts (11 tests) 170ms
+stderr | tests/runtime.test.ts > strumien zdarzen AG-UI
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/platform-boundary.test.ts > platforma dziala bez modulu zakupowego > bez modulu nie ma tabel domenowych zakupowych
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/runtime.test.ts > kopia i odtworzenie trwalego stanu lokalnego > skopiowany katalog danych otwiera sie z kompletnym stanem
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/platform-boundary.test.ts > platforma dziala bez modulu zakupowego > przyjmuje dowolny modul testowy: migracja, narzedzie, trasa, komponent
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/runtime.test.ts > kopia i odtworzenie trwalego stanu lokalnego > skopiowany katalog danych otwiera sie z kompletnym stanem
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/platform-boundary.test.ts > platforma dziala bez modulu zakupowego > domyslna kompozycja modulu testowego jest walidowana tym samym katalogiem
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+ ✓ tests/platform-boundary.test.ts (5 tests) 209ms
+stderr | tests/contracts.test.ts > kontrakty: walidacja, uprawnienia, konflikty, powtorzenia > plik przetrwa restart procesu backendu
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+ ✓ tests/contracts.test.ts (21 tests) 209ms
+stderr | tests/runtime.test.ts > token subskrypcji nie wycieka z aplikacji > rzeczywista wartosc tokena nie wystepuje w odpowiedzi /api/status
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+ ✓ tests/runtime.test.ts (22 tests) 234ms
+
+ Test Files  5 passed (5)
+      Tests  69 passed (69)
+   Start at  12:21:31
+   Duration  1.58s (import 72%, transform 14%, tests 14%)
+
+exit=0
+
+$ pnpm build
+
+> agentic-stack@0.1.0 build /home/paczos/Documents/AgenticApp
+> pnpm --filter @app/web build && pnpm --filter @app/server build
+
+
+> @app/web@0.1.0 build /home/paczos/Documents/AgenticApp/apps/web
+> vite build
+
+vite v8.3.0 building client environment for production...
+transforming...
+✓ 5101 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                     0.42 kB │ gzip:   0.29 kB
+dist/assets/index-ODT19-iN.css    244.20 kB │ gzip:  30.51 kB
+dist/assets/index-D1sk7wow.js   2,653.82 kB │ gzip: 778.27 kB │ map: 10,039.02 kB
+
+✓ built in 1.08s
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+> @app/server@0.1.0 build /home/paczos/Documents/AgenticApp/apps/server
+> node build.mjs
+
+
+  dist/server.js      166.8kb
+  dist/server.js.map  341.4kb
+
+⚡ Done in 26ms
+exit=0

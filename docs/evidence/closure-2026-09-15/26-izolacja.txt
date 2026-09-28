@@ -1,0 +1,41 @@
+### Izolacja testow — odmowy przy niezgodnej konfiguracji
+### 2026-09-15T19:58:38+02:00
+
+## 1. APP_BASE_URL wskazujacy instancje uzytkownika (port 8791)
+$ APP_BASE_URL=http://127.0.0.1:8791 pnpm exec playwright test
+TestIsolationError: [izolacja testow] adres bazowy testow (APP_BASE_URL): http://127.0.0.1:8791 wskazuje port 8791, a instancja testowa dziala na 8799. Testy musialyby wyslac zadania do cudzej instancji.
+Zadna operacja nie zostala wykonana. Testy nie moga uzywac instancji ani danych uzytkownika.
+    at assertTestBaseUrl (file:///home/paczos/Documents/AgenticApp/e2e/support/isolation.ts:122:11)
+    at resolveTestInstance (file:///home/paczos/Documents/AgenticApp/e2e/support/isolation.ts:166:19)
+    at file:///home/paczos/Documents/AgenticApp/playwright.config.ts:17:18
+
+## 2. APP_E2E_PORT rowny domyslnemu portowi aplikacji
+$ APP_E2E_PORT=8791 pnpm exec playwright test
+TestIsolationError: [izolacja testow] port instancji testowej (APP_E2E_PORT): 8791 to domyslny port aplikacji — tam moze dzialac instancja uzytkownika.
+Zadna operacja nie zostala wykonana. Testy nie moga uzywac instancji ani danych uzytkownika.
+    at assertTestPort (file:///home/paczos/Documents/AgenticApp/e2e/support/isolation.ts:64:11)
+    at resolveTestInstance (file:///home/paczos/Documents/AgenticApp/e2e/support/isolation.ts:157:16)
+    at file:///home/paczos/Documents/AgenticApp/playwright.config.ts:17:18
+
+## 3. Serwer oznaczony jako testowy, wskazany na katalog danych aplikacji
+$ APP_INSTANCE_LABEL=agenticapp-test APP_DATA_DIR=<repo>/data PORT=8799 node apps/server/dist/server.js
+Error: [izolacja testow] Instancja oznaczona jako testowa (APP_INSTANCE_LABEL=agenticapp-test) nie moze wystartowac z ta konfiguracja:
+  - katalog danych /home/paczos/Documents/AgenticApp/data to domyslny katalog aplikacji
+  - katalog danych /home/paczos/Documents/AgenticApp/data nie nazywa sie jak katalog testowy (wymagany prefiks ".e2e" w nazwie katalogu)
+Ustaw PORT w zakresie 8792-8799 oraz APP_DATA_DIR na katalog o nazwie zaczynajacej sie od ".e2e". Zadna operacja nie zostala wykonana.
+
+## 4. Serwer oznaczony jako testowy na domyslnym porcie aplikacji
+$ APP_INSTANCE_LABEL=agenticapp-test APP_DATA_DIR=<repo>/.e2e-probe PORT=8791 node apps/server/dist/server.js
+Error: [izolacja testow] Instancja oznaczona jako testowa (APP_INSTANCE_LABEL=agenticapp-test) nie moze wystartowac z ta konfiguracja:
+  - port 8791 jest poza zakresem zarezerwowanym dla testow (8792-8799)
+Ustaw PORT w zakresie 8792-8799 oraz APP_DATA_DIR na katalog o nazwie zaczynajacej sie od ".e2e". Zadna operacja nie zostala wykonana.
+
+## 5. Katalog .e2e-probe nie zostal utworzony (odmowa poprzedza mkdir)
+  potwierdzone: brak katalogu .e2e-probe
+
+## 6. Instancja bez etykiety testowej nie jest ograniczana (produkcja bez zmian)
+  tests/isolation.test.ts → „nieoznaczona instancja nie jest ograniczana”
+
+## 7. Kontrola w czasie dzialania: /api/health podaje etykiete
+  globalSetup: [e2e] potwierdzono instancje testowa pod http://127.0.0.1:8799
+  e2e/support/fixtures.ts odrzuca odpowiedz bez instanceLabel=agenticapp-test

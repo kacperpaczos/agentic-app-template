@@ -1,0 +1,208 @@
+### Testy jednostkowe i integracyjne (vitest)
+### 2026-09-15T20:06:25+02:00
+### $ pnpm test
+
+
+> agentic-stack@0.1.0 test /home/paczos/Documents/AgenticApp
+> vitest run
+
+
+ RUN  v5.0.0 /home/paczos/Documents/AgenticApp
+
+stderr | tests/run-lifecycle.test.ts > pomiar pierwszego tekstu nie zalezy od kolejnosci narzedzi (symulacja) > narzedzie przed tekstem — czas pierwszego tekstu jest zapisany
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > pomiar pierwszego tekstu nie zalezy od kolejnosci narzedzi (symulacja) > narzedzie przed tekstem — czas pierwszego tekstu jest zapisany
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/runtime.test.ts > workspace i sandbox
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/live-artifacts.test.ts
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/durability.test.ts
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/contracts.test.ts > kontrakty: walidacja, uprawnienia, konflikty, powtorzenia
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stdout | tests/migration.test.ts > migracja istniejacej bazy > zachowuje rozmowy, wiadomosci uzytkownika, kompozycje i dane domenowe
+[platform] odtworzono aktywnosc narzedzi: 1 uruchomien, 3 wiadomosci
+
+stderr | tests/migration.test.ts > migracja istniejacej bazy > zachowuje rozmowy, wiadomosci uzytkownika, kompozycje i dane domenowe
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > pomiar pierwszego tekstu nie zalezy od kolejnosci narzedzi (symulacja) > tekst przed narzedziem — czas pierwszego tekstu jest zapisany
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/runtime.test.ts > limity plikow
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > pomiar pierwszego tekstu nie zalezy od kolejnosci narzedzi (symulacja) > tekst przed narzedziem — czas pierwszego tekstu jest zapisany
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/live-artifacts.test.ts > trwalosc po restarcie > snapshot zachowuje liczby, live liczy od nowa po ponownym otwarciu bazy
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+ ✓ tests/live-artifacts.test.ts (9 tests) 175ms
+stderr | tests/runtime.test.ts > rejestr uruchomien i cykl zycia zadania
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stdout | tests/migration.test.ts > migracja istniejacej bazy > powtorne uruchomienie nie dubluje danych
+[platform] odtworzono aktywnosc narzedzi: 1 uruchomien, 3 wiadomosci
+
+stderr | tests/migration.test.ts > migracja istniejacej bazy > powtorne uruchomienie nie dubluje danych
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/migration.test.ts > migracja istniejacej bazy > uruchomienie bez zachowanych zdarzen zostawia stara wiadomosc nietknieta
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > pomiar pierwszego tekstu nie zalezy od kolejnosci narzedzi (symulacja) > odpowiedz bez tekstu — brak czasu pierwszego tekstu jest poprawny, nie podstawiony
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/migration.test.ts > migracja istniejacej bazy > migracja na pustym katalogu tworzy kompletny schemat
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > pomiar pierwszego tekstu nie zalezy od kolejnosci narzedzi (symulacja) > odpowiedz bez tekstu — brak czasu pierwszego tekstu jest poprawny, nie podstawiony
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+ ✓ tests/migration.test.ts (4 tests) 189ms
+stderr | tests/run-lifecycle.test.ts > pomiar pierwszego tekstu nie zalezy od kolejnosci narzedzi (symulacja) > czas pierwszego tekstu liczy sie od startu wykonania, nie od zakolejkowania
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > pomiar pierwszego tekstu nie zalezy od kolejnosci narzedzi (symulacja) > czas pierwszego tekstu liczy sie od startu wykonania, nie od zakolejkowania
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/runtime.test.ts > strumien zdarzen AG-UI
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > aktywnosc narzedzi trafia do historii rozmowy > wywolanie, argumenty i wynik sa zapisane w wiadomosciach
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > aktywnosc narzedzi trafia do historii rozmowy > wywolanie, argumenty i wynik sa zapisane w wiadomosciach
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > aktywnosc narzedzi trafia do historii rozmowy > blad narzedzia jest zapisany jako blad, nie jako wynik
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > aktywnosc narzedzi trafia do historii rozmowy > blad narzedzia jest zapisany jako blad, nie jako wynik
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/runtime.test.ts > kopia i odtworzenie trwalego stanu lokalnego > skopiowany katalog danych otwiera sie z kompletnym stanem
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > aktywnosc narzedzi trafia do historii rozmowy > historia przezywa restart backendu
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/contracts.test.ts > kontrakty: walidacja, uprawnienia, konflikty, powtorzenia > plik przetrwa restart procesu backendu
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > aktywnosc narzedzi trafia do historii rozmowy > historia przezywa restart backendu
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+ ✓ tests/contracts.test.ts (21 tests) 329ms
+stderr | tests/runtime.test.ts > kopia i odtworzenie trwalego stanu lokalnego > skopiowany katalog danych otwiera sie z kompletnym stanem
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > aktywnosc narzedzi trafia do historii rozmowy > historia przezywa restart backendu
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > aktywnosc narzedzi trafia do historii rozmowy > odtworzenie historii nie uruchamia narzedzi ponownie ani nie dubluje wiadomosci
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > aktywnosc narzedzi trafia do historii rozmowy > odtworzenie historii nie uruchamia narzedzi ponownie ani nie dubluje wiadomosci
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > odczyt strumienia zdarzen > czytelnik podlaczony po zamknieciu strumienia dostaje wszystko i konczy
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > odczyt strumienia zdarzen > czytelnik podlaczony po zamknieciu strumienia dostaje wszystko i konczy
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > odczyt strumienia zdarzen > odtworzenie od numeru sekwencji zwraca tylko nowsze zdarzenia
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > odczyt strumienia zdarzen > odtworzenie od numeru sekwencji zwraca tylko nowsze zdarzenia
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > stany koncowe > blad modelu konczy sie dokladnie jednym stanem koncowym i zapisuje przyczyne
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > stany koncowe > blad modelu konczy sie dokladnie jednym stanem koncowym i zapisuje przyczyne
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > stany koncowe > sukces konczy sie dokladnie jednym stanem koncowym
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > stany koncowe > sukces konczy sie dokladnie jednym stanem koncowym
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/runtime.test.ts > token subskrypcji nie wycieka z aplikacji > rzeczywista wartosc tokena nie wystepuje w odpowiedzi /api/status
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > stany koncowe > sesja Claude zostaje powiazana nawet gdy uruchomienie nie uzywa narzedzi
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/run-lifecycle.test.ts > stany koncowe > sesja Claude zostaje powiazana nawet gdy uruchomienie nie uzywa narzedzi
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+ ✓ tests/run-lifecycle.test.ts (13 tests) 552ms
+ ✓ tests/runtime.test.ts (24 tests) 591ms
+ ✓ tests/auth.test.ts (19 tests) 604ms
+stderr | tests/observability.test.ts > punkt wpiecia telemetrii > bez konfiguracji telemetrii aplikacja dziala i nic nie wysyla
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/mcp-schema.test.ts > zgodnosc schematow narzedzi MCP > wszystkie realne narzedzia aplikacji przechodza kontrole
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+ ✓ tests/observability.test.ts (4 tests) 202ms
+ ✓ tests/mcp-schema.test.ts (10 tests) 350ms
+   ✓ zgodnosc schematow narzedzi MCP (6)
+     ✓ wszystkie realne narzedzia aplikacji przechodza kontrole 308ms
+ ✓ tests/isolation.test.ts (18 tests) 14ms
+stderr | tests/platform-boundary.test.ts > platforma dziala bez modulu zakupowego > startuje z pustym rejestrem modulow
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/domain-comparison.test.ts > dane demonstracyjne maja sprawdzalne wartosci
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+ ✓ tests/domain-comparison.test.ts (11 tests) 195ms
+stderr | tests/platform-boundary.test.ts > platforma dziala bez modulu zakupowego > bez modulu serwuje pusty stan zamiast bledu
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/platform-boundary.test.ts > platforma dziala bez modulu zakupowego > bez modulu nie ma tabel domenowych zakupowych
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/platform-boundary.test.ts > platforma dziala bez modulu zakupowego > przyjmuje dowolny modul testowy: migracja, narzedzie, trasa, komponent
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+stderr | tests/platform-boundary.test.ts > platforma dziala bez modulu zakupowego > domyslna kompozycja modulu testowego jest walidowana tym samym katalogiem
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+ ✓ tests/platform-boundary.test.ts (5 tests) 202ms
+ ✓ tests/session-restore.test.ts (11 tests) 11ms
+stderr | tests/session.test.ts
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+ ✓ tests/session.test.ts (5 tests) 75ms
+ ✓ tests/stream-verdict.test.ts (13 tests) 19ms
+stderr | tests/durability.test.ts > przerwana operacja wieloetapowa nie zostawia polowicznego stanu > kopia bazy otwiera sie z tym samym stanem, ktory zglosil backend
+No `storage` configured on Mastra — falling back to an in-memory store. In-memory storage is not durable: all data is lost on restart, and it is not safe for production. Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare). See https://mastra.ai/docs/storage
+
+ ✓ tests/durability.test.ts (10 tests) 4516ms
+   ✓ sekrety nie wyciekaja poza proces SDK (6)
+     ✓ diagnostyka uruchomieniowa nie wypisuje tokena 4340ms
+ ✓ tests/projection.test.ts (12 tests) 15ms
+ ✓ tests/access-context.test.ts (8 tests) 51ms
+ ✓ tests/agui-stream.test.ts (15 tests) 54ms
+
+ Test Files  18 passed (18)
+      Tests  212 passed (212)
+   Start at  20:06:26
+   Duration  10.03s (import 76%, tests 17%, transform 8%)
+
+
+### kod wyjscia: 0

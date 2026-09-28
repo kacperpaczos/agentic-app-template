@@ -1,0 +1,6 @@
+PROBE OWNER-cross-read           OK  canvas-space=403 module-case=403 module-comparison=403
+PROBE OWNER-listy-rozlaczne      OK  B widzi 0 przestrzeni, brak przestrzeni A
+PROBE OWNER-pliki-rozlaczne      OK  A=5 plikow, B=0
+PROBE OWNER-artefakty-rozlaczne  OK  A=0, B=0
+PROBE IDEMPOTENCY-8-rownoleglych OK  8 zadan z tym samym operationId: 8 odpowiedzi 200, wersja pozycji 1→2 (przyrost 1), ilosc=5
+PROBE CONFLICT-nieaktualna-wersja OK  status=409 code=conflict

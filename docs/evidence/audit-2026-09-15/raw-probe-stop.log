@@ -1,0 +1,20 @@
+
+PROBE STOP-potwierdzenie         OK  cancelled=true ack=3 ms
+----------------------------------------------------------------------------------------------------
+
+PROBE STOP-status-koncowy        OK  status=cancelled errorCode=cancelled czas do zamkniecia strumienia=2010 ms
+----------------------------------------------------------------------------------------------------
+
+PROBE STOP-strumien-rozstrzygniety OK  ostatnie zdarzenia: TEXT_MESSAGE_END → CUSTOM → RUN_ERROR
+----------------------------------------------------------------------------------------------------
+
+PROBE STOP-brak-osieroconych-procesow OK  dzieci serwera przed=0 w trakcie=1 po=0 osierocone=brak
+----------------------------------------------------------------------------------------------------
+
+PROBE STOP-brak-pozniejszych-zapisow OK  zdarzen po anulowaniu: 80 → 80
+----------------------------------------------------------------------------------------------------
+
+PROBE STOP-kolejka-odblokowana   GAP nastepne polecenie w tej samej rozmowie: "Potrzebuję więcej szczegółów -"
+----------------------------------------------------------------------------------------------------
+
+zapisano 6 wynikow

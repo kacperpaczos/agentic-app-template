@@ -1,0 +1,38 @@
+### Build produkcyjny
+### 2026-09-15T20:06:36+02:00
+### $ pnpm build
+
+
+> agentic-stack@0.1.0 build /home/paczos/Documents/AgenticApp
+> pnpm --filter @app/web build && pnpm --filter @app/server build
+
+
+> @app/web@0.1.0 build /home/paczos/Documents/AgenticApp/apps/web
+> vite build
+
+vite v8.3.0 building client environment for production...
+transforming...
+✓ 5109 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                     0.42 kB │ gzip:   0.29 kB
+dist/assets/index-f9cfcCqW.css    245.42 kB │ gzip:  30.79 kB
+dist/assets/index-DkuOvDkZ.js   2,666.38 kB │ gzip: 782.38 kB │ map: 10,108.84 kB
+
+✓ built in 1.28s
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+> @app/server@0.1.0 build /home/paczos/Documents/AgenticApp/apps/server
+> node build.mjs
+
+
+  dist/server.js      192.7kb
+  dist/server.js.map  402.4kb
+
+⚡ Done in 26ms
+
+### kod wyjscia: 0

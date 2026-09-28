@@ -1,0 +1,6 @@
+PROBE AUTH-brak-pliku        OK  mode=unauthenticated credentialsPresent=false
+PROBE AUTH-wazny             OK  mode=subscription plan=max
+PROBE AUTH-wygasly           GAP mode=subscription mimo expiresAt w przeszlosci (2026-09-15T09:23:42.377Z) — status klamie
+PROBE AUTH-klucz-wykryty     OK  apiKeyDetected=true policy=refused
+PROBE AUTH-klucz-usuniety    OK  usuniete=ANTHROPIC_API_KEY,CLAUDECODE
+PROBE AUTH-brak-tokena-w-statusie OK  wartosc tokena nie wystepuje w wyniku probeAuth

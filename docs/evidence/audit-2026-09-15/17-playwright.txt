@@ -1,0 +1,62 @@
+npm warn Unknown project config "auto-install-peers". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown project config "strict-peer-dependencies". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+Running 22 tests using 1 worker
+
+[1/22] [chromium] › e2e/agent-ui.spec.ts:52:3 › pelna sciezka uzytkownika z prawdziwym modelem › polecenie w czacie → karta na canvasie → odpowiedz → przetrwanie przeladowania
+  1) [chromium] › e2e/agent-ui.spec.ts:52:3 › pelna sciezka uzytkownika z prawdziwym modelem › polecenie w czacie → karta na canvasie → odpowiedz → przetrwanie przeladowania 
+
+    Error: expect(received).toBeGreaterThan(expected)
+
+    Matcher error: received value must be a number or bigint
+
+    Received has value: null
+
+      117 |
+      118 |     const { runs } = await (await request.get(`/api/conversations/${conv.id}/runs`)).json();
+    > 119 |     expect(runs[0].firstTokenMs).toBeGreaterThan(0);
+          |                                  ^
+      120 |     expect(runs[0].claudeSessionId).toBeTruthy();
+      121 |
+      122 |     const { events } = await (await request.get(`/api/runs/${runs[0].id}/events`)).json();
+        at /home/paczos/Documents/AgenticApp/e2e/agent-ui.spec.ts:119:34
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/agent-ui-pelna-sciezka-uzy-ad78d-→-przetrwanie-przeladowania-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/agent-ui-pelna-sciezka-uzy-ad78d-→-przetrwanie-przeladowania-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/agent-ui-pelna-sciezka-uzy-ad78d-→-przetrwanie-przeladowania-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/agent-ui-pelna-sciezka-uzy-ad78d-→-przetrwanie-przeladowania-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[2/22] [chromium] › e2e/app.spec.ts:28:3 › powloka aplikacji › lewa nawigacja, canvas i czat wspolistnieja
+[3/22] [chromium] › e2e/app.spec.ts:36:3 › powloka aplikacji › hamburger zwija i rozwija menu
+[4/22] [chromium] › e2e/app.spec.ts:46:3 › powloka aplikacji › menu jest obslugiwalne z klawiatury i ma widoczny fokus
+[5/22] [chromium] › e2e/app.spec.ts:55:3 › powloka aplikacji › nawigacja Wstecz/Dalej przywraca wlasciwy widok
+[6/22] [chromium] › e2e/app.spec.ts:67:3 › powloka aplikacji › ustawienia pokazuja tryb subskrypcji i nie ujawniaja sekretow
+[7/22] [chromium] › e2e/app.spec.ts:81:3 › canvas i kompozycja › otwarcie sprawy tworzy uzyteczna przestrzen domyslna
+[8/22] [chromium] › e2e/app.spec.ts:92:3 › canvas i kompozycja › tabela porownawcza pokazuje wartosci z backendu i przyczyny wykluczen
+[9/22] [chromium] › e2e/app.spec.ts:109:3 › canvas i kompozycja › brakujace dane sa oznaczone jako brakujace
+[10/22] [chromium] › e2e/app.spec.ts:123:3 › canvas i kompozycja › przesuniecie karty jest trwale i nie zmienia jej tresci
+[11/22] [chromium] › e2e/app.spec.ts:173:3 › canvas i kompozycja › zmiana widoku karty przezywa przejscie miedzy ekranami
+[12/22] [chromium] › e2e/app.spec.ts:213:3 › dane i pliki › pochodzenie ceny prowadzi do pliku zrodlowego
+[13/22] [chromium] › e2e/app.spec.ts:221:3 › dane i pliki › pliki zrodlowe sa do pobrania
+[14/22] [chromium] › e2e/app.spec.ts:227:3 › dane i pliki › odrzucony typ pliku daje czytelny blad
+[15/22] [chromium] › e2e/app.spec.ts:237:3 › dane i pliki › wgranie poprawnego pliku dziala
+[16/22] [chromium] › e2e/chat.spec.ts:21:3 › rozmowy › rozmowa dostaje sensowny tytul z pierwszej wiadomosci
+[17/22] [chromium] › e2e/chat.spec.ts:27:3 › rozmowy › lista rozmow, przelaczanie i usuwanie
+[18/22] [chromium] › e2e/chat.spec.ts:64:3 › rozmowy › przelaczenie rozmowy nie miesza wiadomosci
+[19/22] [chromium] › e2e/chat.spec.ts:74:3 › rozmowy › usuniecie rozmowy odlacza artefakty zamiast je kasowac
+[20/22] [chromium] › e2e/chat.spec.ts:84:3 › rozmowy › czat pokazuje, do jakiego zasobu odnosi sie rozmowa
+[21/22] [chromium] › e2e/chat.spec.ts:91:3 › rozmowy › zaznaczenie karty trafia do kontekstu rozmowy
+[22/22] [chromium] › e2e/chat.spec.ts:122:3 › adaptacja do mniejszych ekranow › na waskim ekranie menu jest zwiniete, a czat nadal dostepny
+  1 failed
+    [chromium] › e2e/agent-ui.spec.ts:52:3 › pelna sciezka uzytkownika z prawdziwym modelem › polecenie w czacie → karta na canvasie → odpowiedz → przetrwanie przeladowania 
+  21 passed (38.6s)

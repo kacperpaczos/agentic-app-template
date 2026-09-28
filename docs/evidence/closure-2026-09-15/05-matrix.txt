@@ -1,0 +1,35 @@
+### Macierz odbioru
+### 2026-09-15T20:06:39+02:00
+### $ node scripts/closure-matrix.mjs --summary
+
+### Podsumowanie macierzy
+
+Liczby wyliczone ze skryptu `scripts/closure-matrix.mjs`; wymagania czytane wprost z `stack-agentowy-ustalenia-i-materialy.md`.
+
+**Kryteriów: 95** (7+6+7+8+8+7+7+8+9+10+10+8). Dokument wymagań nie zmienił się, więc liczba jest ta sama co w audycie z 2026-09-15.
+
+| Stan | Liczba |
+|---|---|
+| potwierdzone | 95 |
+| częściowe | 0 |
+| niespełnione | 0 |
+| niesprawdzone | 0 |
+| **Razem** | **95** |
+
+| Rodzaj dowodu | Liczba |
+|---|---|
+| rzeczywisty przebieg | 49 |
+| test automatyczny bez modelu | 34 |
+| analiza kodu | 11 |
+| symulacja | 1 |
+
+**Warstwy zamknięte — 12 z 12:** L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12
+
+**Warstwy otwarte — 0 z 12**, z identyfikatorami blokujących kryteriów:
+
+| Warstwa | Kryteria blokujące |
+|---|---|
+
+**Kontrola spójności:** brak brakujących i zduplikowanych identyfikatorów; każde kryterium dokumentu ma dokładnie jedną ocenę.
+
+### kod wyjscia: 0

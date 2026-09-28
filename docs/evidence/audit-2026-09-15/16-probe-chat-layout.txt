@@ -1,0 +1,23 @@
+
+--- stan po wejsciu przez /cases (szuflada widoczna: true) ---
+  panel      x=1120 y=0 w=560 h=1000
+  body       x=1121 y=30 w=559 h=970
+  container  x=1121 y=30 w=559 h=970
+  sidebar    x=1121 y=30 w=260 h=970
+  thread     x=1121 y=30 w=559 h=970
+  composer   x=1146 y=911 w=509 h=24
+  widoczne przyciski: New chat | Artefakty | Uzyj narzedzia pro | Thread actions | Odpowiedz dokladni | Thread actions | Odpowiedz dokladni | Thread actions | Porownaj oferty dl | Thread actions | Porownaj oferty dl | Thread actions | Porownaj oferty dl | Thread actions | Policz powoli od 1 | Thread actions | Odpowiedz dokladni | Thread actions | Odpowiedz dokladni | Thread actions | Audyt wspolbieznos | Thread actions | Odpowiedz dokladni | Thread actions | Odpowiedz dokladni | Thread actions | Audyt wspolbieznos | Thread actions | Wykonaj dokladnie  | Thread actions | Open sidebar | New chat | Porownaj oferty | Wykres kosztow | Skad ta cena | Send message
+
+kontrolka zamykajaca szuflade: NIE ZNALEZIONA
+
+--- po probie zamkniecia (szuflada widoczna: true) ---
+  panel      x=1120 y=0 w=560 h=1000
+  body       x=1121 y=30 w=559 h=970
+  container  x=1121 y=30 w=559 h=970
+  sidebar    x=1121 y=30 w=260 h=970
+  thread     x=1121 y=30 w=559 h=970
+  composer   x=1146 y=911 w=509 h=24
+  widoczne przyciski: New chat | Artefakty | Uzyj narzedzia pro | Thread actions | Odpowiedz dokladni | Thread actions | Odpowiedz dokladni | Thread actions | Porownaj oferty dl | Thread actions | Porownaj oferty dl | Thread actions | Porownaj oferty dl | Thread actions | Policz powoli od 1 | Thread actions | Odpowiedz dokladni | Thread actions | Odpowiedz dokladni | Thread actions | Audyt wspolbieznos | Thread actions | Odpowiedz dokladni | Thread actions | Odpowiedz dokladni | Thread actions | Audyt wspolbieznos | Thread actions | Wykonaj dokladnie  | Thread actions | Open sidebar | New chat | Porownaj oferty | Wykres kosztow | Skad ta cena | Send message
+
+WNIOSEK: watek miesci sie w panelu czatu przy otwartej szufladzie
+kompozytor wystaje poza panel o -25 px

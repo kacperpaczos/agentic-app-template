@@ -1,0 +1,15 @@
+### Granica platforma–domena
+### 2026-09-15T20:06:36+02:00
+### $ pnpm check:boundaries
+
+
+> agentic-stack@0.1.0 check:boundaries /home/paczos/Documents/AgenticApp
+> node scripts/check-boundaries.mjs
+
+Granica platforma-domena zachowana:
+  - zaden pakiet @platform/* nie deklaruje zaleznosci od @module/*
+  - zaden plik platformy nie importuje z @module/*
+  - zaden plik platformy nie uzywa slownika domenowego (12 pojec)
+  - modul biznesowy zalezy od platformy (kierunek prawidlowy)
+
+### kod wyjscia: 0

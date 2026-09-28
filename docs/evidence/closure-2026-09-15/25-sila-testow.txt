@@ -1,0 +1,67 @@
+### Kontrola sily testow — rezultaty 1-4 (2026-09-15)
+###
+### Kazda naprawa zostala celowo cofniela, testy uruchomione, a nastepnie
+### naprawa przywrocona. Test, ktory po cofnieciu naprawy nadal przechodzi,
+### nie dowodzi niczego o tej naprawie.
+
+## 1. Przywracanie kontekstu rozmowy
+
+Mutacja: usunieto <ConversationSync /> z ChatPanel.tsx
+Polecenie: pnpm exec playwright test e2e/session-restore.spec.ts
+
+  ✘ po przeladowaniu ta sama rozmowa, jej historia i przestrzen pracy (3.5s)
+  1 failed
+
+Test oblewa natychmiast po cofnieciu naprawy. Bez mutacji: 6/6 przechodzi.
+
+## 2. Wykrywanie braku strumieniowania
+
+Mutacja: w judgeStream wylaczono trzy reguly — minimum dwoch probek,
+minimum dwoch roznych dlugosci oraz warunek „widziano tresc niepelna”.
+Polecenie: pnpm exec playwright test e2e/streaming.spec.ts
+
+  ✓ tekst dociera fragmentami i jest widoczny przed koncem wykonania (4.0s)
+  ✘ cala odpowiedz naraz na koncu jest rozpoznana jako brak strumieniowania (4.5s)
+  1 failed  1 passed
+
+To jest dokladnie ta wlasciwosc, o ktora chodzi: oslabiony detektor nadal
+zalicza przebieg strumieniowy (test 1 przechodzi), ale przestaje odrozniac
+go od odpowiedzi dostarczonej jednym kawalkiem na koncu (test 2 oblewa).
+Kontrola negatywna jest wiec jedynym testem, ktory pilnuje, zeby asercja
+strumieniowania nie zdegenerowala sie do „odpowiedz dotarla”.
+
+## 3. Idempotencja odtwarzania aktywnosci narzedzi
+
+Mutacja: w backfillToolActivity usunieto pominiecie uruchomien, ktore maja
+juz zrzutowana projekcje (`if (projected) continue`).
+Polecenie: pnpm vitest run tests/migration.test.ts
+
+  ✓ zachowuje rozmowy, wiadomosci uzytkownika, kompozycje i dane domenowe
+  × powtorne uruchomienie nie dubluje danych
+  ✓ uruchomienie bez zachowanych zdarzen zostawia stara wiadomosc nietknieta
+  ✓ migracja na pustym katalogu tworzy kompletny schemat
+  1 failed | 3 passed
+
+Uwaga: test zachowania danych (pierwszy) przechodzi mimo mutacji. Dublowanie
+danych nie jest utrata danych i nie wykrywa go zaden test zachowania —
+wykrywa je wylacznie porownanie stanu po drugim uruchomieniu.
+
+## 4. Guard izolacji w serwerze
+
+Mutacja: assertTestInstanceIsIsolated zwraca natychmiast (guard wylaczony).
+Polecenie: pnpm vitest run tests/isolation.test.ts
+
+  FAIL oznaczona instancja nie wstanie na domyslnym porcie
+  FAIL oznaczona instancja nie wstanie na katalogu danych aplikacji
+  FAIL loadConfig odrzuca oznaczona instancje przed utworzeniem katalogu
+  3 failed | 15 passed
+
+Pozostale 15 testow to warstwa harnessu (playwright.config.ts), ktora jest
+niezalezna od guardu w serwerze — i odwrotnie. Taki byl cel: kazda z trzech
+warstw wykrywa to, czego nie wykryja pozostale.
+
+## Stan po przywroceniu
+
+  grep -c MUTACJA w czterech zmienianych plikach: 0, 0, 0, 0
+  pnpm build: ok
+  pnpm vitest run: 18 plikow, 212 testow, wszystkie przeszly
