@@ -737,4 +737,43 @@ describe('L4.13 — identyfikatory narzedzi nie koliduja miedzy wykonaniami', ()
     const again = (await asJson(`/api/threads/get/${run.conversationId}`)).body as any[];
     expect(again).toEqual(first);
   });
+
+  it('usuniecie rozmowy odlacza artefakty zamiast je kasowac', async () => {
+    /*
+     * Port z audytu 2026-09-28 (AgenticApp fd0b4ae; falsyfikacja: zmiana
+     * ON DELETE SET NULL -> ON DELETE CASCADE w migracji tabeli artifacts
+     * powoduje fail). Realny incydent: klucz obcy artifacts.conversation_id
+     * kasowal artefakty razem z rozmowa — trwale wyniki pracy agenta.
+     * Wersja platformowa: artefakt tworzy serwis (E2E wymaga tury modelowej,
+     * co rozliczone osobno), asercje na detach + przetrwanie.
+     */
+    const conv = h.platform.services.conversations.create({
+      ownerId: h.ownerId,
+      firstMessage: { content: 'rozmowa z artefaktem kontrolnym' },
+    });
+    const { meta } = h.platform.services.artifacts.create({
+      ownerId: h.ownerId,
+      conversationId: conv.id,
+      kind: 'report',
+      mode: 'snapshot',
+      title: 'Artefakt kontrolny',
+      rendererType: 'platform.json',
+      content: { tresc: 'tresc kontrolna' },
+    });
+
+    const del = h.platform.services.conversations.delete(conv.id, h.ownerId);
+    // Odpowiedzialna raportacja: „odlaczono”, a nie „usunieto”.
+    expect(del.detachedArtifacts, 'serwer nie raportuje odlaczenia artefaktu').toBe(1);
+
+    const po = h.platform.services.artifacts.list(h.ownerId);
+    const odlaczony = po.find((a: { id: string }) => a.id === meta.id);
+    expect(odlaczony, 'artefakt zniknal razem z rozmowa, a mial zostac odpiety').toBeTruthy();
+    expect(odlaczony!.threadId ?? null).toBeNull();
+    // Przetrwanie treści: wiersz wersji artefaktu też zostaje (usunięcie
+    // rozmowy nie detyczy tabeli artifact_versions).
+    const versions = h.platform.db.$client
+      .prepare('SELECT COUNT(*) AS n FROM artifact_versions WHERE artifact_id = ?')
+      .get(meta.id) as { n: number };
+    expect(versions.n, 'wersje artefaktu zniknely razem z rozmowa').toBeGreaterThan(0);
+  });
 });
