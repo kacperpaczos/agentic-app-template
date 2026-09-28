@@ -430,4 +430,21 @@ describe('komunikaty potwierdzone na rzeczywistej awarii SDK 0.3.270', () => {
     expect(classifyAccessFailure('HTTP 401 Unauthorized')).toBe('revoked');
     expect(classifyAccessFailure('credentials revoked, please run /login')).toBe('revoked');
   });
+
+  it('plik bez klucza claudeAiOauth to "absent", nie zdrowe poswiadczenie', () => {
+    // Port z audytu 2026-09-28 (AgenticApp fd0b4ae): obecny plik, pusty obiekt
+    // oauth — to "brak poświadczenia", a nie zdrowa subskrypcja.
+    for (const content of [{}, { notatki: 'inna tresc, brak oauth' }]) {
+      const dir = mkCreds(content);
+      const s = probeAuth(env(dir));
+      expect(s.credential).toMatchObject({
+        present: false,
+        state: 'absent',
+        subscriptionType: null,
+        expiresAt: null,
+      });
+      // A credential reported absent cannot make the application usable.
+      expect(authIsUsable(s)).toBe(false);
+    }
+  });
 });
