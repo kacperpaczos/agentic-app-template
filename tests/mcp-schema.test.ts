@@ -110,3 +110,48 @@ describe('zod .default() w schemacie narzedzia MCP', () => {
     expect(() => assertMcpCompatibleShape('probe', { limit: z.number().optional() })).not.toThrow();
   });
 });
+
+describe('wewnetrzne typy zod, na ktorych opiera sie straznik MCP', () => {
+  /*
+   * `assertMcpCompatibleShape` klasyfikuje schematy po `_zod.def.type` (z
+   * fallbackiem na legacy `_def.typeName`). To umowa z WERSJĄ zoda z lockfile:
+   * upgrade, który przemianuje typy (np. 'record' -> 'records') albo przeniesie
+   * `def`, sprawi, że strażnik zacznie milczeć i `z.record()` znów cicho
+   * usunie cały serwer MCP z sesji (FEEDBACK #15). Ten canary wykrywa taką
+   * zmianę jawnie — zanim trafi do produkcji.
+   */
+
+  const defOf = (schema: unknown): Record<string, unknown> | undefined =>
+    (schema as { _zod?: { def?: Record<string, unknown> } })._zod?.def;
+
+  it('realne typy zoda nosza nazwy, ktore walk rozpoznaje', () => {
+    expect(defOf(z.record(z.string(), z.unknown()))?.type).toBe('record');
+    expect(defOf(z.map(z.string(), z.unknown()))?.type).toBe('map');
+    expect(defOf(z.string().default('x'))?.type).toBe('default');
+    expect(defOf(z.string().prefault('x'))?.type).toBe('prefault');
+    expect(defOf(z.string().optional())?.type).toBe('optional');
+    expect(defOf(z.string().nullable())?.type).toBe('nullable');
+  });
+
+  it('walk podaza za kluczami def, po ktorych rekursja dociera do zagniezdzen', () => {
+    // record: klucz i wartosc to osobne schematy; wartosc musi byc odwiedzana,
+    // inaczej z.record(z.string(), z.record(...)) przemknalby niezauwazony.
+    expect(Object.keys(defOf(z.record(z.string(), z.unknown()))!)).toEqual(
+      expect.arrayContaining(['keyType', 'valueType']),
+    );
+    expect(Object.keys(defOf(z.array(z.string()))!)).toContain('element');
+    expect(Object.keys(defOf(z.object({ a: z.string() }))!)).toContain('shape');
+  });
+
+  it('te nazwy naprawde uruchamiaja odrzucenie w publicznym strazniku', () => {
+    // z.map() ma ta sama wade co z.record() (brak konwersji na JSON Schema),
+    // a .prefault() czyta sie modelowi jak .default() — obie galezie musza
+    // zostac osiagalne przez realne nazwy typow, nie tylko te najczestsze.
+    expect(() =>
+      assertMcpCompatibleShape('canary', { f: z.map(z.string(), z.unknown()) }),
+    ).toThrowError(/z\.map/);
+    expect(() => assertMcpCompatibleShape('canary', { f: z.string().prefault('x') })).toThrowError(
+      /\.default\(\)/,
+    );
+  });
+});
