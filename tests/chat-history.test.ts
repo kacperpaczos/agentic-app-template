@@ -768,7 +768,7 @@ describe('L4.13 — identyfikatory narzedzi nie koliduja miedzy wykonaniami', ()
     const po = h.platform.services.artifacts.list(h.ownerId);
     const odlaczony = po.find((a: { id: string }) => a.id === meta.id);
     expect(odlaczony, 'artefakt zniknal razem z rozmowa, a mial zostac odpiety').toBeTruthy();
-    expect(odlaczony!.threadId ?? null).toBeNull();
+    expect(odlaczony!.conversationId ?? null).toBeNull();
     // Przetrwanie treści: wiersz wersji artefaktu też zostaje (usunięcie
     // rozmowy nie detyczy tabeli artifact_versions).
     const versions = h.platform.db.$client
