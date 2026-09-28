@@ -1,0 +1,197 @@
+{
+  "zapisano": "2026-09-25T19:44:32.495Z",
+  "kodCommit": "4cf6b332414afbae62acae972c7d5e62a4039331",
+  "rodzajWykonania": "rzeczywisty model",
+  "srodowisko": {
+    "system": "linux 7.2.5-200.fc44.x86_64 x64",
+    "node": "24.19.0",
+    "pnpm": "9.15.9",
+    "cliZewnetrzne": "2.1.278 (Claude Code)",
+    "cliWSdk": {
+      "wersja": "2.1.270",
+      "commit": "97ecbf7abeb4170dcfd26c4d4b397afd9015030e",
+      "dataBudowy": "2026-09-12T18:17:55Z"
+    },
+    "model": "glm-5.3-flash[1m]",
+    "pakiety": {
+      "react": "19.3.0",
+      "react-dom": "19.3.0",
+      "typescript": "7.0.2",
+      "vite": "8.3.0",
+      "vitest": "5.0.0",
+      "@playwright/test": "1.63.0",
+      "@openuidev/react-ui": "0.13.10",
+      "@openuidev/react-headless": "0.9.13",
+      "hono": "4.13.7",
+      "drizzle-orm": "0.45.2",
+      "@mastra/core": "1.66.0",
+      "@mastra/claude": "0.3.1",
+      "@anthropic-ai/claude-agent-sdk": "0.3.270",
+      "zod": "4.6.5"
+    }
+  },
+  "zrodlo": "model GLM/Z.AI przez kompatybilny endpoint Anthropic; Claude Agent SDK jako harness; subskrypcja Claude nieuzywana; instancja testowa suity przegladarkowej",
+  "model": "glm-5.3-flash[1m]",
+  "spec": "e2e/bl01-bl02-model.spec.ts",
+  "przebieg": "2026-09-25T19-40-05-968Z",
+  "proba": "T27",
+  "kryteria": [
+    "L3.14",
+    "L3.15",
+    "L3.16",
+    "L3.17",
+    "L3.18"
+  ],
+  "werdykt": "zaliczona",
+  "przebiegi": [
+    {
+      "runId": "run_1a0b698a800d4b59ad77",
+      "polecenie": "Zestaw mi w widokach agenta pozycje ofert ze sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa.",
+      "status": "succeeded",
+      "czasMs": 45585,
+      "pierwszyTekstMs": 28639,
+      "wKolejceMs": 1,
+      "narzedzia": [
+        "procurement_search",
+        "agent_view_create",
+        "ui_state"
+      ]
+    },
+    {
+      "runId": "run_e7cdb6097e2a4c848154",
+      "polecenie": "Dodaj do tego wykres cen jednostkowych tych pozycji.",
+      "status": "succeeded",
+      "czasMs": 62776,
+      "pierwszyTekstMs": 35654,
+      "wKolejceMs": 2,
+      "narzedzia": [
+        "agent_view_update",
+        "ui_state",
+        "procurement_get_case",
+        "agent_view_update",
+        "ui_state"
+      ]
+    },
+    {
+      "runId": "run_a6c4aa073e684dbf8345",
+      "polecenie": "Zawez zestawienie i wykres do pozycji w PLN.",
+      "status": "succeeded",
+      "czasMs": 25478,
+      "pierwszyTekstMs": 24030,
+      "wKolejceMs": 2,
+      "narzedzia": [
+        "agent_view_update",
+        "ui_state"
+      ]
+    }
+  ],
+  "scenariusz": "T27 — uzytkownik nazywa sprawe jej kodem; polecenie wyslane z przestrzeni „Widoki agenta” (scenariusz, ktory przed Task 9 oblal dwukrotnie)",
+  "rozmowa": "cnv_7d5520cc8b53492caf55",
+  "odpowiedziNarzedzia": {
+    "zestawienie": [
+      {
+        "rendered": false,
+        "maZdanieReadBack": true,
+        "warnings": []
+      }
+    ],
+    "odczytalEkranPoZapisie": true,
+    "wykres": {
+      "zapisy": [
+        {
+          "rendered": false,
+          "unchanged": false,
+          "warnings": [
+            "unit_from_record"
+          ]
+        },
+        {
+          "rendered": false,
+          "unchanged": false,
+          "warnings": [
+            "unit_from_record"
+          ]
+        }
+      ],
+      "odczytalEkranPoZapisie": true
+    },
+    "zmianaZakresu": {
+      "zapisy": [
+        {
+          "rendered": false,
+          "unchanged": false,
+          "warnings": [
+            "unit_from_record"
+          ]
+        }
+      ],
+      "odczytalEkranPoZapisie": true
+    }
+  },
+  "zestawienie": {
+    "kartyZTegoWykonania": [
+      "crd_90c26c25a4b7411da85f"
+    ],
+    "kompozycja": [
+      {
+        "id": "crd_90c26c25a4b7411da85f",
+        "title": "Pozycje ofert — PC-2026-01",
+        "spec": {
+          "kind": "openui",
+          "source": "root = Stack([opis, tabela])\nopis = TextContent(\"Pozycje ofert sprawy PC-2026-01: dostawca, nazwa pozycji i cena jednostkowa. Ceny pochodza z backendu (money_minor).\")\ntabela = DataTable({operation: \"procurement.case_offer_items\", input: {caseId: \"pcs_71fadd6c196142eaa9ed\"}}, [\"supplierName\", \"name\", \"unitPriceMinor\", \"currency\"], \"Pozycje ofert — PC-2026-01\", 25)"
+        }
+      }
+    ],
+    "zrodloInstancji": {
+      "operation": "procurement.case_offer_items",
+      "input": {
+        "caseId": "pcs_71fadd6c196142eaa9ed"
+      }
+    },
+    "stanInstancji": "ready",
+    "bladInstancji": null,
+    "wierszy": 16,
+    "wersjaKompozycji": 1,
+    "operacja": "procurement.case_offer_items"
+  },
+  "wykres": {
+    "kartaWykresu": "crd_90c26c25a4b7411da85f",
+    "nowaKarta": false,
+    "operacja": "procurement.case_offer_items",
+    "serie": [
+      "unitPriceMinor"
+    ],
+    "stanPoDodaniu": "ready",
+    "bladPoDodaniu": null,
+    "odczytalEkranPoZapisie": true,
+    "sciezka": "narysowany od razu (model sam zawezil serie do jednej jednostki)",
+    "stanPoZmianieZakresu": "ready"
+  },
+  "zmianaZakresu": {
+    "waluty": [
+      "PLN"
+    ],
+    "wierszy": 12,
+    "wersjaKompozycji": 4
+  },
+  "mutacja": {
+    "gdzie": "akcja rekordu w widoku agenta",
+    "rekord": "pci_60a56f00dec7456cbef2",
+    "nowaWartosc": "7777,50 PLN",
+    "widokOdswiezonyBezPrzeladowania": true
+  },
+  "poPrzeladowaniu": {
+    "karty": [
+      "crd_90c26c25a4b7411da85f"
+    ],
+    "wartosciZgodneZBackendem": true
+  },
+  "poPowrocieDoRozmowy": {
+    "karty": [
+      "crd_90c26c25a4b7411da85f"
+    ],
+    "bezPrzeladowaniaOdOstatniego": true,
+    "wartosciZgodneZBackendem": true
+  },
+  "turyModeluWydaneLacznie": 8
+}

@@ -1,0 +1,151 @@
+{
+  "zapisano": "2026-09-25T19:42:05.332Z",
+  "kodCommit": "4cf6b332414afbae62acae972c7d5e62a4039331",
+  "rodzajWykonania": "rzeczywisty model",
+  "srodowisko": {
+    "system": "linux 7.2.5-200.fc44.x86_64 x64",
+    "node": "24.19.0",
+    "pnpm": "9.15.9",
+    "cliZewnetrzne": "2.1.278 (Claude Code)",
+    "cliWSdk": {
+      "wersja": "2.1.270",
+      "commit": "97ecbf7abeb4170dcfd26c4d4b397afd9015030e",
+      "dataBudowy": "2026-09-12T18:17:55Z"
+    },
+    "model": "glm-5.3-flash[1m]",
+    "pakiety": {
+      "react": "19.3.0",
+      "react-dom": "19.3.0",
+      "typescript": "7.0.2",
+      "vite": "8.3.0",
+      "vitest": "5.0.0",
+      "@playwright/test": "1.63.0",
+      "@openuidev/react-ui": "0.13.10",
+      "@openuidev/react-headless": "0.9.13",
+      "hono": "4.13.7",
+      "drizzle-orm": "0.45.2",
+      "@mastra/core": "1.66.0",
+      "@mastra/claude": "0.3.1",
+      "@anthropic-ai/claude-agent-sdk": "0.3.270",
+      "zod": "4.6.5"
+    }
+  },
+  "zrodlo": "model GLM/Z.AI przez kompatybilny endpoint Anthropic; Claude Agent SDK jako harness; subskrypcja Claude nieuzywana; instancja testowa suity przegladarkowej",
+  "model": "glm-5.3-flash[1m]",
+  "spec": "e2e/bl01-bl02-model.spec.ts",
+  "przebieg": "2026-09-25T19-40-05-968Z",
+  "proba": "T26",
+  "kryteria": [
+    "L2.17",
+    "L6.17"
+  ],
+  "werdykt": "zaliczona",
+  "przebiegi": [
+    {
+      "runId": "run_ca26e13c20104253a08a",
+      "polecenie": "Pokaz tylko polskich dostawcow, posortowanych po nazwie od Z do A.",
+      "status": "succeeded",
+      "czasMs": 40137,
+      "pierwszyTekstMs": 36696,
+      "wKolejceMs": 8,
+      "narzedzia": [
+        "ui_filter",
+        "ui_sort",
+        "ui_state"
+      ]
+    },
+    {
+      "runId": "run_9ea13d09585747529d62",
+      "polecenie": "Ktory dostawca jest teraz na pierwszym miejscu tej listy i jaki ma NIP?",
+      "status": "succeeded",
+      "czasMs": 34132,
+      "pierwszyTekstMs": 33792,
+      "wKolejceMs": 1,
+      "narzedzia": [
+        "ui_state",
+        "ui_show_value",
+        "ui_show_value"
+      ]
+    },
+    {
+      "runId": "run_d3bdb52f828d4ed39670",
+      "polecenie": "Usun zawezenie i pokaz z powrotem wszystkich dostawcow.",
+      "status": "succeeded",
+      "czasMs": 25008,
+      "pierwszyTekstMs": 24706,
+      "wKolejceMs": 2,
+      "narzedzia": [
+        "ui_filter",
+        "ui_state"
+      ]
+    }
+  ],
+  "zawezenieISortowanie": {
+    "adres": [
+      [
+        "country",
+        "PL"
+      ],
+      [
+        "sort",
+        "-name"
+      ]
+    ],
+    "wiersze": [
+      "MediaPro Systemy",
+      "Konferencje24",
+      "AV Technika Sp. z o.o."
+    ],
+    "daneBackendu": "identyczne przed i po",
+    "proByZawezenia": [
+      {
+        "url": "/data?c=cnv_f149740bc96e47bd988f&country=PL",
+        "cleared": false,
+        "filtered": {
+          "matched": 3,
+          "total": 4
+        }
+      }
+    ],
+    "proByPorzadku": [
+      {
+        "sorted": {
+          "field": "name",
+          "direction": "desc"
+        },
+        "cleared": false
+      }
+    ]
+  },
+  "kontekstDrugiegoPolecenia": {
+    "predicates": [
+      {
+        "field": "country",
+        "op": "eq",
+        "value": "PL"
+      }
+    ],
+    "sort": {
+      "field": "name",
+      "direction": "desc"
+    },
+    "page": {
+      "index": 1,
+      "size": 10,
+      "count": 1
+    },
+    "matched": 3,
+    "total": 4
+  },
+  "detektorT25wDrugiejTurze": [],
+  "pelnyZakres": {
+    "adres": [
+      [
+        "sort",
+        "-name"
+      ]
+    ],
+    "wiersze": 4
+  },
+  "turyModeluWydaneLacznie": 5
+}
