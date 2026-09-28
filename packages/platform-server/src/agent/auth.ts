@@ -249,3 +249,24 @@ export function scrubbedEnvKeys(env: NodeJS.ProcessEnv = process.env): string[] 
       (k.startsWith('CLAUDE_CODE_') && !HARNESS_KEEP.has(k)),
   );
 }
+
+/**
+ * The agent's child environment for one configured platform.
+ *
+ * Builds on `subscriptionOnlyEnv` — inheritance from the process environment
+ * stays scrubbed either way — and adds the one sanctioned exception: when the
+ * operator configured a provider file (`APP_PROVIDER_CONFIG`), the gateway
+ * address and its credential are injected from that file, not inherited from
+ * anywhere. Without a provider this is byte-for-byte `subscriptionOnlyEnv`.
+ */
+export function agentEnv(
+  provider: { baseUrl: string; authToken: string } | null,
+  env: NodeJS.ProcessEnv = process.env,
+): Record<string, string> {
+  const out = subscriptionOnlyEnv(env);
+  if (provider) {
+    out.ANTHROPIC_BASE_URL = provider.baseUrl;
+    out.ANTHROPIC_AUTH_TOKEN = provider.authToken;
+  }
+  return out;
+}

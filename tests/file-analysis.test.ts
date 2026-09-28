@@ -1,11 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FILE_ANALYSIS, AppError } from '@platform/contracts';
 import { analysisToolkit, createRunWorkspace } from '@platform/server';
-import { createHarness, type Harness } from './helpers.ts';
+import { createHarness, login, type Harness } from './helpers.ts';
 
 /**
  * Analysing an attached file — the parts that must be true regardless of what
@@ -145,12 +145,13 @@ describe('odczyt skoroszytu obejmuje arkusze i typy komorek', () => {
      * The property the whole "formulas are not recalculated" limit rests on:
      * the cell carries the formula *and* the value the spreadsheet last wrote,
      * as two separate fields. Reporting the second as the first would be
-     * presenting a stale number as a calculation.
+     * presenting a stale number as a calculation. The exact object shape is
+     * pinned: a cell that came back as a bare (recalculated) number, or as any
+     * other wrapper, fails here rather than passing as "truthy".
      */
     const computed = prices.getCell('D2').value as { formula: string; result: number };
-    expect(computed.formula).toBe('B2*C2');
-    expect(computed.result).toBe(2505);
-    expect(computed).not.toBe(2505);
+    // 10 szt. x 250,50 = 2 505 — recznie, niezaleznie od biblioteki.
+    expect(computed).toEqual({ formula: 'B2*C2', result: 10 * 250.5 });
 
     const meta = wb.getWorksheet('Metryka')!;
     expect(meta.getCell('B1').value).toBeInstanceOf(Date);
@@ -180,11 +181,20 @@ describe('odczyt skoroszytu obejmuje arkusze i typy komorek', () => {
     expect(FILE_ANALYSIS.spreadsheet.limits.join(' ')).toMatch(/NIE sa przeliczane/);
   });
 
-  it('uszkodzony plik konczy sie bledem, nie zmyslona trescia', async () => {
+  it('exceljs: uszkodzony plik konczy sie bledem biblioteki, nie zmyslona trescia', async () => {
+    /*
+     * Kontrakt BIBLIOTEKI, nazwany uczciwie: w tej aplikacji nie ma serwisu, ktory
+     * parsowalby XLSX po stronie platformy — analiza to skrypt pisany przez model
+     * i wykonywany w workspace uruchomienia (patrz describe powyzej), wiec
+     * zachowanie exceljs wobec smieci to sciezka produkcyjna. Uczciwosc testu
+     * polega na tym, ze asercjonujemy realny blad biblioteki: XLSX to archiwum
+     * ZIP, wiec smiec konczy sie bledem „end of central directory”, a nie
+     * pustym skoroszytem do dalszej „analizy”.
+     */
     const wb = new ExcelJS.Workbook();
     await expect(
       wb.xlsx.load(Buffer.from('to nie jest skoroszyt') as unknown as ArrayBuffer),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/zip/i);
   });
 });
 
@@ -295,7 +305,13 @@ describe('modyfikacja pliku zostawia oryginal nietkniety', () => {
     ]);
   });
 
-  it('oba pliki sa osobno pobieralne po zakonczeniu uruchomienia', async () => {
+  it('oba pliki sa osobno pobieralne przez API, a obcy wlasciciel nie', async () => {
+    /*
+     * Pobieralnosc sprawdzana tak, jak robi to przegladarka: endpointem
+     * `/api/files/:id/content`, nie po ukladzie katalogow na dysku (sufiks
+     * rel_path to detal implementacji magazynu). Wersja i oryginal to dwa
+     * niezalezne pobrania; sesja innego uzytkownika dostaje 403.
+     */
     const original = h.platform.services.files.store({
       ownerId: h.ownerId, filename: 'a.xlsx', mediaType: XLSX_MEDIA, bytes: await makeWorkbook(),
     });
@@ -303,10 +319,21 @@ describe('modyfikacja pliku zostawia oryginal nietkniety', () => {
       ownerId: h.ownerId, originalFileId: original.id, bytes: Buffer.from(await makeWorkbook()),
     });
 
-    for (const id of [original.id, version.id]) {
-      const path = resolve(h.platform.config.filesDir, `${id}.xlsx`);
-      expect(existsSync(path), `brak pliku na dysku dla ${id}`).toBe(true);
-      expect(readFileSync(path).byteLength).toBeGreaterThan(0);
+    const cookie = await login(h.platform.app, h.ownerId);
+    const otherCookie = await login(h.platform.app, h.otherOwnerId);
+
+    for (const file of [original, version]) {
+      const res = await h.platform.app.request(`/api/files/${file.id}/content`, {
+        headers: { cookie },
+      });
+      expect(res.status, `pobranie ${file.filename} (wersja ${file.version})`).toBe(200);
+      expect(res.headers.get('content-type')).toBe(XLSX_MEDIA);
+      expect((await res.arrayBuffer()).byteLength).toBeGreaterThan(0);
     }
+
+    const foreign = await h.platform.app.request(`/api/files/${original.id}/content`, {
+      headers: { cookie: otherCookie },
+    });
+    expect(foreign.status).toBe(403);
   });
 });

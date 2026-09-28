@@ -83,6 +83,13 @@ export function buildMcpServer(input: BuildInput): {
           };
         }
       },
+      /*
+       * `alwaysLoad` keeps a tool in the prompt instead of behind tool search.
+       * See `ModuleToolDefinition.alwaysLoad` for the turn that made this
+       * necessary: the model could not navigate because the navigation tool was
+       * deferred, and no amount of instruction fixes a tool that is not there.
+       */
+      def.alwaysLoad ? { alwaysLoad: true } : undefined,
     );
   });
 

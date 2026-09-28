@@ -114,56 +114,28 @@ test.describe('aktywnosc narzedzi w czacie (scenariusz zamiast modelu)', () => {
   });
 
   /*
-   * Incremental text is asserted on a turn with no tool call, because that is
-   * where the ready-made chat streams it into the assistant message.
+   * Streamingu nie sprawdza tu osobny test, chociaz kiedyś był: „tekst
+   * odpowiedzi przyrasta w wiadomosci asystenta przed koncem wykonania”
+   * pollował stronę z Node — odczyt fazy wykonania i odczyt tekstu to dwa
+   * osobne round-tripy, a run mógł się zamknąć między nimi. Sondujący wzorzec
+   * streamProbe.ts nazywa ten wyścig po imieniu: ta sama odpowiedź dostała dwa
+   * przeciwne werdykty w dwóch uruchomieniach. Pokrycie i tak było zdublowane —
+   * „tekst dociera fragmentami i jest widoczny przed koncem wykonania” w
+   * streaming.spec.ts biegnie po tym samym scenariuszu `text-only`, tej samej
+   * komendzie i tych samych elementach (`streaming-answer` /
+   * `assistant-message`), tylko obserwowanych z wnętrza strony
+   * (MutationObserver), a do tego z kontrolami ujemnymi, które dowodzą, że
+   * asercja potrafi paść. Ten plik zostawia strumieniowanie tam, a u siebie
+   * sprawdza to, czego streaming.spec nie widzi: narzędzia, ich wyniki i
+   * błędy — na żywo i po restarcie.
    *
-   * When a turn *does* call a tool, `InterleavedTurn` withholds the answer
-   * bubble until the turn resolves (`answer = !turnLive || hasLangSyntax(...)`)
-   * and streams the prose into the tool timeline instead. That is the library's
-   * behaviour, not a defect, and it is why the previous streaming assertion —
-   * which waited for text in a tool turn — could only ever see the finished
-   * answer, and passed on a starter chip label instead.
+   * Dla porządku: przyrost tekstu asertuje się w turze BEZ wywołania narzędzia,
+   * bo tam gotowy czat strumieniuje odpowiedź do wiadomości asystenta. W turze
+   * z narzędziem `InterleavedTurn` wstrzymuje bąbel odpowiedzi do zamknięcia
+   * tury i prowadzi prozę w osi czasu narzędzi — to zachowanie biblioteki, nie
+   * defekt, i przyczyna, dla której dawniejsza asercja strumieniowania w turze
+   * narzędziowej mogła zobaczyć wyłącznie gotową odpowiedź.
    */
-  test('tekst odpowiedzi przyrasta w wiadomosci asystenta przed koncem wykonania', async ({ page }) => {
-    await scripted.start('text-only');
-    await openApp(page);
-    await sendCommand(page, 'Opowiedz cos w czterech zdaniach.');
-
-    /*
-     * While the turn is open the answer lives in the chat's live preview; when
-     * the turn resolves the ready-made thread commits it as an assistant
-     * message. Both are read, so the test follows the text across that handover
-     * instead of assuming which element holds it at a given instant.
-     */
-    const answerText = () =>
-      page.evaluate(() =>
-        [
-          ...document.querySelectorAll('[data-testid="streaming-answer"]'),
-          ...document.querySelectorAll('[data-testid="assistant-message"]'),
-        ]
-          .map((n) => n.textContent ?? '')
-          .join(''),
-      );
-
-    const samples: number[] = [];
-    let sawWhileRunning = false;
-    const deadline = Date.now() + 60_000;
-    while (Date.now() < deadline) {
-      const phase = await page.getByTestId('run-state').getAttribute('data-phase');
-      const text = await answerText();
-      if (text.includes('Pierwsze zdanie')) {
-        samples.push(text.length);
-        if (phase === 'queued' || phase === 'running') sawWhileRunning = true;
-      }
-      if (phase === 'succeeded' || phase === 'failed') break;
-      await page.waitForTimeout(25);
-    }
-
-    expect(sawWhileRunning, 'tresc pojawila sie dopiero po zakonczeniu — to nie jest streaming').toBe(true);
-    expect(samples.length, 'nie zaobserwowano odpowiedzi w trakcie wykonania').toBeGreaterThan(1);
-    expect(Math.max(...samples), 'tresc nie przyrastala').toBeGreaterThan(Math.min(...samples));
-    await expect(page.getByTestId('assistant-message')).toContainText('Czwarte zdanie odpowiedzi.');
-  });
 
   test('aktywnosc przezywa przeladowanie, przelaczenie rozmowy i restart backendu', async ({ page }) => {
     await scripted.start('tool-then-text');

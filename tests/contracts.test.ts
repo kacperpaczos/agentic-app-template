@@ -80,12 +80,24 @@ describe('kontrakty: walidacja, uprawnienia, konflikty, powtorzenia', () => {
   });
 
   it('identyfikator wlasciciela z ciala zadania nie daje dostepu', async () => {
-    // The body claims to be the owner; the cookie says otherwise. The cookie wins.
-    const res = await h.platform.app.request(`/api/m/procurement/cases/${caseId}`, {
+    /*
+     * Scenariusz z nazwy testu: zapis z CIALEM zadania, ktore podsuwa wlasciciela.
+     * PATCH pozycji oferty przyjmuje cialo, wiec „obcy” dokleja do niego
+     * ownerId prawdziwego wlasciciela; sesja (cookie) mówi co innego i to sesja
+     * wygrywa — serwer czyta wlasciciela z sesji, nie z ciala. Wersja rekordu
+     * nie rusza sie: odmowa nastepuje przed jakimkolwiek zapisem.
+     */
+    const { item } = firstItem();
+    const res = await h.platform.app.request(`/api/m/procurement/items/${item.id}`, {
+      method: 'PATCH',
       headers: { cookie: otherCookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ ownerId: h.ownerId, quantity: 1 }),
     });
     expect(res.status).toBe(403);
     expect((await res.json()).error.code).toBe('forbidden');
+    const after = h.service.repo.getItem(item.id, h.ownerId).item;
+    expect(after.version).toBe(item.version);
+    expect(after.quantityMilli).toBe(item.quantityMilli);
   });
 
   it('bez sesji aplikacji zwraca 401', async () => {

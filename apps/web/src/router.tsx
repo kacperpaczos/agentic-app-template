@@ -37,11 +37,28 @@ import { CaseDetailPage, CasesPage, DataPage, ItemProvenancePage } from '@module
  * legitimate thing to find in a pasted or stale URL, and it is handled on screen
  * (`ConversationSync` shows a notice) rather than by refusing to render.
  */
-const sessionSearch = (raw: Record<string, unknown>): { c?: string; s?: string } => {
-  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
-  const c = str(raw.c);
-  const s = str(raw.s);
-  return { ...(c ? { c } : {}), ...(s ? { s } : {}) };
+const sessionSearch = (raw: Record<string, unknown>): Record<string, string> => {
+  const out: Record<string, string> = {};
+  /*
+   * Every string parameter is kept, not only `c` and `s`.
+   *
+   * View narrowings live in the address as one parameter per field
+   * (`/data?country=PL`), which is what makes a narrowed view survive a reload,
+   * come back with Back, and mean the same thing in a link somebody pastes.
+   * This validator used to drop every key it did not name, so those parameters
+   * were stripped before any screen could read them.
+   *
+   * Which of them is a filter is not decided here: the view's own declaration
+   * says which fields it accepts (`UiTarget.filter`), and anything else in the
+   * address is left alone rather than turned into a filter on a property that
+   * does not exist. Permissive on purpose — a stale or hand-edited URL is a
+   * legitimate thing to find, and it is handled on screen, not by refusing to
+   * render.
+   */
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === 'string' && value.trim()) out[key] = value.trim();
+  }
+  return out;
 };
 
 const rootRoute = createRootRoute({
@@ -55,6 +72,13 @@ const rootRoute = createRootRoute({
    * The router's own middleware is used rather than passing `search` at every
    * call site, so a link added later (including one inside a business module,
    * which knows nothing about this) keeps the session by default.
+   */
+  /*
+   * Only the session identifiers are retained. A narrowing deliberately is not:
+   * it belongs to the view it was made for, and carrying `country=PL` onto the
+   * next screen would hide rows there that nobody asked to hide. Leaving a
+   * filtered view therefore drops the filter, and Back brings it back — which is
+   * what the address bar is for.
    */
   search: { middlewares: [retainSearchParams(['c', 's'])] },
   component: () => (

@@ -11,7 +11,7 @@ import {
   type UiCommandResult,
 } from '@platform/contracts';
 import type { PlatformServices } from '../services/index.ts';
-import { classifyAccessFailure, recordVerification, subscriptionOnlyEnv } from './auth.ts';
+import { agentEnv, classifyAccessFailure, recordVerification } from './auth.ts';
 import { RunEventStream } from './events.ts';
 import { newId } from '../util/id.ts';
 import { ConversationProjection, type ProjectedMessage } from './projection.ts';
@@ -136,7 +136,9 @@ export class AgentRuntime {
         // SDK isolation: the developer's own ~/.claude settings, MCP servers and
         // CLAUDE.md files must not leak into the application's agent.
         settingSources: [],
-        env: subscriptionOnlyEnv(),
+        // Subscription-only by default; with an `APP_PROVIDER_CONFIG` file the
+        // gateway address and credential come from that file (see `agentEnv`).
+        env: agentEnv(services.config.provider),
         // Required for incremental text. `@mastra/claude`'s `getTextDelta` reads
         // only `stream_event` messages; without this flag the SDK sends whole
         // assistant messages and the adapter emits the entire answer as a single
@@ -436,6 +438,9 @@ export class AgentRuntime {
             conversationId: args.conversationId,
             targetId: command.targetId,
             spaceId: command.spaceId ?? null,
+            // `undefined` and `null` differ here: the first leaves any narrowing
+            // in place, the second is an explicit "show everything again".
+            ...(command.filter !== undefined ? { filter: command.filter } : {}),
             reason: command.reason,
           },
           stream,

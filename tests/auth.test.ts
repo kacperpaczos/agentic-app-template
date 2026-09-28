@@ -58,6 +58,29 @@ describe('metadane lokalnego poswiadczenia', () => {
     expect(s.credential).toMatchObject({ present: true, state: 'valid', subscriptionType: 'max' });
   });
 
+  /*
+   * Edge case: the file exists but carries no `claudeAiOauth` key at all (an
+   * empty object, or a file with other content). Presence of a file is not
+   * evidence of a login: the honest reading of "no oauth object inside" is
+   * `absent`, never `valid`. Reported as absent, it also makes the application
+   * honestly not-yet-usable instead of sending the user into a run that the
+   * SDK can only end with a login error.
+   */
+  it('plik bez klucza claudeAiOauth to "absent", nie zdrowe poswiadczenie', () => {
+    for (const content of [{}, { notatki: 'inna tresc, brak oauth' }]) {
+      const dir = mkCreds(content);
+      const s = probeAuth(env(dir));
+      expect(s.credential).toMatchObject({
+        present: false,
+        state: 'absent',
+        subscriptionType: null,
+        expiresAt: null,
+      });
+      // A credential reported absent cannot make the application usable.
+      expect(authIsUsable(s)).toBe(false);
+    }
+  });
+
   /* This is the defect the audit found: an expired credential reported as a
      healthy subscription. */
   it('plik z terminem w przeszlosci jest "stale", a nie zdrowa subskrypcja', () => {

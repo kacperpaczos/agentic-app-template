@@ -1,10 +1,11 @@
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryObserver } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AccessContextChanged,
   accessEpoch,
   accessScope,
   api,
+  apiGet,
   qk,
   resetAccessContext,
   setAccessContext,
@@ -167,5 +168,50 @@ describe('opozniona odpowiedz nie przywraca cudzych danych', () => {
     release();
     await expect(settled).resolves.toEqual({ ok: 1 });
     expect(accessScope()).toBe('local-user');
+  });
+
+  /*
+   * Realna sciezka zapisu cache: `useModuleData` buduje dokladnie te kompozycje
+   * (klucz `qk.module` + `apiGet`), a `useQuery` jest powloka nad QueryObserver —
+   * zapis wyniku przebiega przez ten sam rdzen react-query.
+   *
+   * Uwaga z falsyfikacji: sam test "dane A nie laduja w cache" NIE jest w stanie
+   * wykryc usuniecia kontroli epoki w `api()`, bo `setAccessContext` dysponuje
+   * druga, niezalezna obrona (`cancelQueries` + `clear`), ktora anuluje zadanie
+   * zanim odpowiedz zdazy cokolwiek zapisac. Dlatego ten test pinuje WLASNIE to
+   * sprzatanie: zadanie w locie nie przezywa przelaczenia jako wpis cache —
+   * jego usuniecie jest falsyfikowalne pojedyncza, realistyczna usterka
+   * (przelaczenie przestaje sprzatac zadania w locie).
+   */
+  it('przelaczenie usuwa z cache takze zapytanie w locie, nie tylko dane wstawione recznie', async () => {
+    const qc = new QueryClient();
+    setAccessContext(qc, 'local-user');
+
+    const { release } = deferredFetch({ suppliers: [{ id: 'wiersz-dla-local-user' }] });
+    const queryKey = qk.module('/procurement/suppliers');
+    const observer = new QueryObserver(qc, {
+      queryKey,
+      queryFn: () => apiGet<{ suppliers: Array<{ id: string }> }>('/api/m/procurement/suppliers'),
+      retry: false,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    // Zadanie na serio wystartowalo i jest w locie.
+    await vi.waitFor(() => expect(observer.getCurrentResult().fetchStatus).toBe('fetching'));
+    expect(qc.getQueryCache().getAll()).toHaveLength(1);
+
+    setAccessContext(qc, 'other-user');
+    // Po przelaczeniu nie zostaje z poprzedniej tozsamosci ani jeden wpis cache —
+    // takze ten w trakcie pobierania.
+    expect(qc.getQueryCache().getAll(), 'wpis zapytania w locie przezyl przelaczenie').toHaveLength(
+      0,
+    );
+
+    release();
+    await vi.waitFor(() => expect(observer.getCurrentResult().fetchStatus).toBe('idle'));
+    // Odpowiedz, ktora mimo wszystko dobiegla, nie odtworzyla wpisu.
+    expect(qc.getQueryCache().getAll()).toHaveLength(0);
+    expect(qc.getQueryData(queryKey)).toBeUndefined();
+
+    unsubscribe();
   });
 });

@@ -339,6 +339,15 @@ describe('zdarzenia platformy trafiaja do wlasciwych odbiorcow', () => {
     qc.setQueryData(['canvas', 'local-user', 'space', 'sp_inna'], { cards: [] });
     await drain([runStarted, canvasChanged], qc);
     expect(invalidated(qc)).toContainEqual(key);
+    // Negatywnie: inwalidacja celuje w przestrzen ze zdarzenia, a nie w cały
+    // canvas — karta innej przestrzeni pozostaje ważna i nie pobiera się w kółko
+    // przy każdej edycji gdziekolwiek.
+    expect(invalidated(qc), 'inwalidacja przestrzeni nie moze objac innej przestrzeni').not.toContainEqual([
+      'canvas',
+      'local-user',
+      'space',
+      'sp_inna',
+    ]);
   });
 
   it('zmiana danych uniewaznia odczyty modulu, canvas i otwarte artefakty', async () => {
@@ -387,6 +396,30 @@ describe('zdarzenia platformy trafiaja do wlasciwych odbiorcow', () => {
       qc,
     );
     expect(invalidated(qc)).toContainEqual(['conversation', 'local-user', CONV]);
+  });
+
+  it('powiazanie sesji innej rozmowy nie dotyka biezacej', async () => {
+    qc.setQueryData(['conversation', 'local-user', CONV], {});
+    qc.setQueryData(['conversation', 'local-user', 'cnv_inna'], {});
+    await drain(
+      [
+        runStarted,
+        {
+          type: AGUI_EVENTS.CUSTOM,
+          name: PLATFORM_CUSTOM_EVENTS.sessionBound,
+          value: { sessionId: 'sess_2', conversationId: 'cnv_inna' },
+        },
+      ],
+      qc,
+    );
+    expect(invalidated(qc)).toContainEqual(['conversation', 'local-user', 'cnv_inna']);
+    // Negatywnie: sesja doszła do skutku gdzie indziej — lista wiadomości rozmowy,
+    // którą użytkownik ma otwartą, nie ma powodu się odświeżać.
+    expect(invalidated(qc), 'sesja innej rozmowy nie moze uniewaznic biezacej').not.toContainEqual([
+      'conversation',
+      'local-user',
+      CONV,
+    ]);
   });
 
   it('nieznane zdarzenie CUSTOM jest przepuszczane bez skutkow ubocznych', async () => {

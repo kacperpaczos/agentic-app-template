@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { resolveTestInstance } from './isolation.ts';
+import { recordInstanceIdentity, resolveTestInstance } from './isolation.ts';
 
 /**
  * Prepares the browser suite's database and then starts the production server
@@ -40,6 +40,21 @@ for (const script of ['migrate', 'seed']) {
 }
 
 for (const [key, value] of Object.entries(instance.env)) process.env[key] = value;
+
+/*
+ * Tozsamosc tej instancji, zapisana zanim cokolwiek zacznie odpowiadac na
+ * porcie: port, katalog danych, pid tego procesu (serwer wstaje tutaj, w tym
+ * samym procesie, przez import bundla). Kontrola etykiety w /api/health
+ * przestala rozdziac instancje testowe, kiedy instalacja zaczela ich uzywac
+ * kilka naraz — plik `instance-<port>.json` jest tym, co rozroznia instancje
+ * TEGO przebiegu od zostalosci po poprzednim. Kasowanie katalogu wyzej gwarantuje,
+ * ze plik, ktory znajdzie kontrola, powstal wlasnie tutaj.
+ */
+recordInstanceIdentity({
+  port: instance.port,
+  dataDir: instance.dataDir,
+  instanceLabel: instance.env.APP_INSTANCE_LABEL,
+});
 
 console.log(
   `[e2e] instancja testowa: port=${instance.port} data=${instance.dataDir} etykieta=${instance.env.APP_INSTANCE_LABEL}`,

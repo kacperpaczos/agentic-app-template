@@ -1,10 +1,31 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 
 const int = (v: string | undefined, d: number) => {
   const n = v ? Number.parseInt(v, 10) : Number.NaN;
   return Number.isFinite(n) ? n : d;
 };
+
+/**
+ * An explicit, file-based model-provider override.
+ *
+ * The agent's SDK environment is subscription-only by policy (`subscriptionOnlyEnv`
+ * in `agent/auth.ts`): nothing inherited from the process environment may route a
+ * run through a paid API or a gateway. Some deployments legitimately need a
+ * gateway anyway — a subscription that the organization blocks, for instance —
+ * so the override exists, but as a *file*, not as environment variables: the
+ * path is the only thing that crosses `APP_PROVIDER_CONFIG`, the credentials are
+ * read once at startup and never re-enter the process environment that children
+ * could otherwise scrape. Absent the file, the platform runs exactly as before.
+ */
+export interface ProviderConfig {
+  /** Anthropic-compatible gateway base URL (https only). */
+  baseUrl: string;
+  /** Bearer credential the gateway expects. Never logged, never served. */
+  authToken: string;
+  /** Model name sent to the gateway verbatim. */
+  model: string;
+}
 
 export interface PlatformConfig {
   dataDir: string;
@@ -17,6 +38,8 @@ export interface PlatformConfig {
   /** Static bundle served in production; absent in dev. */
   webDistDir: string | null;
   model: string;
+  /** Gateway override from `APP_PROVIDER_CONFIG`; `null` = subscription-only. */
+  provider: ProviderConfig | null;
   /** Hard ceiling for a single agent run. */
   runTimeoutMs: number;
   maxUploadBytes: number;
@@ -88,9 +111,55 @@ export function assertTestInstanceIsIsolated(cfg: PlatformConfig, defaultDataDir
   }
 }
 
+/**
+ * Reads the provider file named by `APP_PROVIDER_CONFIG`, or returns `null`.
+ *
+ * Deliberately fatal on a malformed file: a half-written override must not
+ * silently downgrade to subscription mode (or vice versa) — the operator asked
+ * for a specific provider and gets a readable error instead.
+ */
+function loadProviderConfig(env: NodeJS.ProcessEnv): ProviderConfig | null {
+  const path = env.APP_PROVIDER_CONFIG;
+  if (!path) return null;
+
+  let raw: string;
+  try {
+    raw = readFileSync(path, 'utf8');
+  } catch (cause) {
+    throw new Error(
+      `[provider] APP_PROVIDER_CONFIG wskazuje na nieczytelny plik: ${path}` +
+        ` (${cause instanceof Error ? cause.message : String(cause)})`,
+    );
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (cause) {
+    throw new Error(`[provider] plik ${path} nie jest poprawnym JSON-em.`);
+  }
+  if (parsed === null || typeof parsed !== 'object') {
+    throw new Error(`[provider] plik ${path} musi zawierac obiekt { baseUrl, authToken, model? }.`);
+  }
+  const { baseUrl, authToken, model } = parsed as Record<string, unknown>;
+  if (typeof baseUrl !== 'string' || !baseUrl.startsWith('https://')) {
+    throw new Error(
+      `[provider] pole "baseUrl" musi byc adresem https (gateway), a jest: ${JSON.stringify(baseUrl) ?? 'brak'}.`,
+    );
+  }
+  if (typeof authToken !== 'string' || authToken.length < 8) {
+    throw new Error(`[provider] pole "authToken" musi byc niepustym tokenem (min. 8 znakow).`);
+  }
+  if (model !== undefined && typeof model !== 'string') {
+    throw new Error(`[provider] pole "model" musi byc stringiem (nazwa modelu u providera).`);
+  }
+  return { baseUrl, authToken, model: model ?? env.APP_MODEL ?? 'claude-sonnet-4-5' };
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): PlatformConfig {
   const defaultDataDir = resolve(process.cwd(), 'data');
   const dataDir = resolve(env.APP_DATA_DIR ?? defaultDataDir);
+  const provider = loadProviderConfig(env);
   const cfg: PlatformConfig = {
     dataDir,
     dbFile: resolve(dataDir, 'app.db'),
@@ -103,7 +172,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PlatformConfig
       .map((s) => s.trim())
       .filter(Boolean),
     webDistDir: env.APP_WEB_DIST ? resolve(env.APP_WEB_DIST) : null,
-    model: env.APP_MODEL ?? 'claude-sonnet-4-5',
+    // A provider file speaks for the whole gateway — its model wins; `APP_MODEL`
+    // remains the override when there is no file, or when the file omits one.
+    model: provider?.model ?? env.APP_MODEL ?? 'claude-sonnet-4-5',
+    provider,
     runTimeoutMs: int(env.APP_RUN_TIMEOUT_MS, 300_000),
     maxUploadBytes: int(env.APP_MAX_UPLOAD_BYTES, 8 * 1024 * 1024),
     instanceLabel: env.APP_INSTANCE_LABEL ?? null,

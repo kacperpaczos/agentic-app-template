@@ -46,8 +46,20 @@ const settled = (page: Page) =>
     timeout: 60_000,
   });
 
+/** Conversation id currently in the address bar, or null. */
+const urlConversation = (page: Page) => new URL(page.url()).searchParams.get('c');
+
 /** Everything the assistant said, including the acknowledged outcome. */
 const answer = (page: Page) => page.locator('.pf-chat');
+
+/** Treść przechowywanej historii tej rozmowy — prawda backendu, nie ekranu. */
+const historyText = (page: Page, conversationId: string) =>
+  page.evaluate(async (id) => {
+    const messages = (await (
+      await fetch(`/api/threads/get/${id}`, { credentials: 'include' })
+    ).json()) as Array<{ role: string; content: string }>;
+    return messages.map((m) => m.content).join(' ');
+  }, conversationId);
 
 test.describe('agent porusza sie po aplikacji', () => {
   test.describe.configure({ mode: 'serial', timeout: 180_000 });
@@ -157,6 +169,8 @@ test.describe('agent porusza sie po aplikacji', () => {
     await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'running', {
       timeout: 30_000,
     });
+    const background = urlConversation(page);
+    expect(background, 'rozmowa nie trafila do adresu').toBeTruthy();
 
     // Walk away before the navigation happens.
     await page.locator('.pf-chat .openui-icon-button[aria-label="New chat"]').first().click();
@@ -168,20 +182,26 @@ test.describe('agent porusza sie po aplikacji', () => {
     /*
      * The background task now issues its navigation. It must be refused: a task
      * the user has left may not drag their screen away from what they are doing.
+     *
+     * Czekamy warunkowo, nie przez sen: o tym, że nawigacja z rozmowy opuszczonej
+     * rzeczywiście się odbyła, rozstrzyga odmowa zapisana w jej historii
+     * (`inactive_conversation`) — dopiero ona gwarantuje, że moment próby minął.
+     * Sen wyznaczał tu okno na wprost: krótszy niż praca w tle ryzykował asercję
+     * o niczym, dłuższy zostawiał wyścig przy odejściu od rozmowy.
      */
-    await page.waitForTimeout(6000);
+    await expect
+      .poll(() => historyText(page, background!), {
+        timeout: 30_000,
+        message: 'odmowa nawigacji z opuszczonej rozmowy nie wpisala sie do jej historii',
+      })
+      .toContain('inactive_conversation');
+
+    // The screen is still where the user left it...
     expect(new URL(page.url()).pathname, 'zadanie w tle przejelo widok').toBe(parked);
     await expect(page.getByTestId('settings-page')).toHaveCount(0);
 
-    // And the refusal is recorded honestly against the conversation that asked.
-    const history = await page.evaluate(async () => {
-      const { threads } = await (await fetch('/api/threads/get', { credentials: 'include' })).json();
-      const first = threads.find((t: { title: string }) => t.title.includes('Popracuj w tle'));
-      return (await (
-        await fetch(`/api/threads/get/${first.id}`, { credentials: 'include' })
-      ).json()) as Array<{ role: string; content: string }>;
-    });
-    const text = history.map((m) => m.content).join(' ');
+    // ...and the refusal is recorded honestly against the conversation that asked.
+    const text = await historyText(page, background!);
     expect(text).toContain('executed=false');
     expect(text).toContain('inactive_conversation');
   });

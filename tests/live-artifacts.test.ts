@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { platformTools } from '@platform/server';
+import type { AppContext, ToolCallContext } from '@platform/contracts';
 import { createHarness, login, type Harness } from './helpers.ts';
 
 /**
@@ -81,6 +83,57 @@ describe('artefakt live odczytuje zarejestrowana operacje modulu', () => {
     expect(() =>
       h.platform.services.artifacts.assertLiveSourceIsResolvable({ rows: [{ a: 1 }] }),
     ).toThrowError(/wymaga deskryptora/);
+  });
+
+  it('narzedzie agenta artifact_create odrzuca live z nieznana operacja przy zapisie', async () => {
+    /*
+     * The service-level checks above are reached by HTTP; the agent reaches the
+     * same rule through the `artifact_create` tool, so the check has to sit in
+     * the tool handler as well — before anything is stored. Removing it from the
+     * tool would let the model promise a self-refreshing report naming a query
+     * nobody implements, and the failure would surface only later, to the user,
+     * on open.
+     */
+    const before = h.platform.services.artifacts.list(h.ownerId).length;
+    const def = platformTools(h.platform.services).find((t) => t.name === 'artifact_create')!;
+    const ctx: ToolCallContext = {
+      ownerId: h.ownerId,
+      appContext: {
+        conversationId: null, spaceId: null, resource: null,
+        selection: [], filters: {}, viewport: null, drafts: [],
+      } satisfies AppContext,
+      conversationId: null,
+      runId: null,
+      workspaceDir: null,
+      emit: () => {},
+    };
+    // Wejście przechodzi przez ten sam schemat, przez który przepuszcza je serwer MCP.
+    const input = def.inputSchema.parse({
+      title: 'Obietnica samoodswiezania',
+      kind: 'table',
+      mode: 'live',
+      rendererType: 'procurement.comparison',
+      content: { operation: 'procurement.nie_istnieje', input: { caseId } },
+    });
+    await expect(def.handler(input as never, ctx)).rejects.toThrowError(/Nieznana operacja odczytu/);
+    // Odrzucenie musiało nastąpić NA ZAPISIE: po odrzuceniu nie może zostać
+    // artefakt, który od początku nie mógłby się odświeżyć.
+    expect(h.platform.services.artifacts.list(h.ownerId), 'odrzucony artefakt nie moze zostac zapisany').toHaveLength(before);
+
+    // Kontrola dodatnia: to samo narzędzie przyjmuje znaną operację, więc
+    // odrzucenie dotyczy nieznanej operacji, a nie narzędzia jako takiego.
+    const ok = (await def.handler(
+      def.inputSchema.parse({
+        title: 'Porownanie na zywo',
+        kind: 'table',
+        mode: 'live',
+        rendererType: 'procurement.comparison',
+        content: { operation: 'procurement.comparison', input: { caseId } },
+      }) as never,
+      ctx,
+    )) as { artifactId: string };
+    expect(ok.artifactId).toBeTruthy();
+    expect(h.platform.services.artifacts.list(h.ownerId)).toHaveLength(before + 1);
   });
 
   it('artefakt live nigdy nie przechowuje danych, tylko pytanie', async () => {

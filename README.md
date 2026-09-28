@@ -4,9 +4,19 @@ Lokalna aplikacja full stack, w której interfejs, dane biznesowe i agent tworz�
 Składa się z **platformy agentowej** (nieznającej żadnego pojęcia biznesowego) oraz
 **modułu biznesowego** dopiętego do niej przez jawne kontrakty.
 
-Stan odbioru i pełna macierz kryteriów: **[RAPORT-DOMKNIECIA-PLATFORMY.md](RAPORT-DOMKNIECIA-PLATFORMY.md)**.
-Dziennik realizacji, decyzje i wszystkie znalezione problemy: **[FEEDBACK.md](FEEDBACK.md)**.
-Audyt stanu sprzed domknięcia: [RAPORT-STANU-PLATFORMY.md](RAPORT-STANU-PLATFORMY.md).
+**Obowiązująca specyfikacja (12 warstw, 200 kryteriów, 27 prób): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).**
+Rozliczenie wszystkich dokumentów i ich docelowych odpowiedników: [docs/DOCUMENTATION-MAP.md](docs/DOCUMENTATION-MAP.md).
+Kod i dokumentacja tej aplikacji są podstawą szablonu `agentic-app-template`; tam powstaje
+ocena wszystkich 200 kryteriów (`docs/ACCEPTANCE.md`) i backlog dalszych prac.
+
+Dokumenty historyczne tej aplikacji (oceniane wobec poprzedniej wersji specyfikacji, 95 kryteriów —
+[docs/archive/stack-agentowy-ustalenia-i-materialy-95-kryteriow.md](docs/archive/stack-agentowy-ustalenia-i-materialy-95-kryteriow.md)):
+
+- stan odbioru i macierz 95 kryteriów: [RAPORT-DOMKNIECIA-PLATFORMY.md](RAPORT-DOMKNIECIA-PLATFORMY.md);
+- dziennik realizacji, decyzje i znalezione problemy: [FEEDBACK.md](FEEDBACK.md);
+- audyt stanu sprzed domknięcia: [RAPORT-STANU-PLATFORMY.md](RAPORT-STANU-PLATFORMY.md).
+
+Wynik „95 z 95” dotyczy starej wersji wymagań i nie oznacza spełnienia 200 kryteriów obecnej specyfikacji.
 
 ---
 
@@ -100,7 +110,7 @@ pnpm check:boundaries     # kontrola granicy platforma–domena
 pnpm test:e2e             # testy przeglądarkowe (własne porty 8795-8799 i katalogi .e2e*; agent-ui.spec.ts wydaje jedną turę subskrypcji)
 pnpm backup:verify backups/data-2026-09-15   # ponowne sprawdzenie kopii stanu
 pnpm check:matrix         # historyczna macierz w FEEDBACK.md zgodna ze swoimi tabelami
-pnpm check:closure        # aktualna macierz odbioru: 95 kryteriów, bez braków i duplikatów
+pnpm check:closure        # historyczna macierz odbioru: 95 kryteriów poprzedniej specyfikacji, bez braków i duplikatów
 pnpm --filter @app/server diag   # rzeczywista sesja Claude: czy narzędzia MCP są widoczne
 node scripts/run-agent.mjs "<polecenie>" --case <id> --space <id>   # jedno prawdziwe uruchomienie agenta
 ```
@@ -131,6 +141,33 @@ Przykładowe polecenia dla agenta:
 - „Przetwórz ten CSV i przygotuj raport." — plik czytany i przetwarzany w sandboxie,
   wynik zapisany jako trwały artefakt do pobrania.
 
+
+### Zawężanie widoku przez agenta
+
+„Pokaż tylko dostawców z Polski" zawęża **widok**, nie rozmowę, i zawężenie
+trafia do adresu:
+
+```
+/data?country=PL      /data?country=!FI      /data?name=~av      /data?country=PL,CZ
+ równe                 różne od               zawiera             którekolwiek z
+```
+
+Dzięki temu zawężony widok da się wysłać linkiem, przeżywa odświeżenie i cofa się
+przyciskiem **Wstecz**. Filtr należy do swojego ekranu — wyjście na inny go
+zdejmuje.
+
+Nad każdym zawężonym ekranem stoi pasek: czym widok jest zawężony (opis
+generowany z tego, co faktycznie zastosowane), ile wierszy zostało i przycisk
+**Pokaż pełny widok**; gdy zawęził go agent tej sesji, pasek o tym mówi. Pola, po
+których wolno zawężać, deklaruje moduł — pole spoza tej listy agent dostaje z
+powrotem jako odmowę, zamiast pokazać pusty ekran.
+
+**Link nie omija uprawnień.** Parametry tylko usuwają wiersze z odpowiedzi, którą
+backend już ograniczył do właściciela; nic z adresu nie dociera do bazy. Ten sam
+link otwarty przez kogoś innego zawęża jego własne dane.
+
+Pytanie o dane, które mają swój ekran, też przenosi na ten ekran — odpowiadanie
+o danych i pokazywanie ich to tutaj ta sama czynność.
 
 ### Panel rozmowy
 

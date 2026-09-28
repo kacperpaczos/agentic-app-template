@@ -222,19 +222,38 @@ describe('rejestr uruchomien i cykl zycia zadania', () => {
     expect(h.platform.services.runs.get(run.id, h.ownerId).status).toBe('cancelled');
   });
 
-  it('anulowanie dociera do wykonania i jest mierzalne', () => {
+  it('anulowanie dociera do wykonania w tym samym wywolaniu i domyka przebieg', () => {
     const { run, abort } = startRun();
-    const t0 = Date.now();
-    const res = h.platform.services.runs.cancel(run.id, h.ownerId);
-    const elapsed = Date.now() - t0;
-    expect(res.cancelled).toBe(true);
-    expect(abort.signal.aborted).toBe(true);
-    // The signal is delivered synchronously; the model process sees it on its
-    // next await. This measures only the application half.
-    expect(elapsed).toBeLessThan(50);
+    // Odbiorca po stronie wykonania: słuchacz sygnału, tak jak podłącza go
+    // adapter modelu. Zapisuje powód przerwania w chwili dostarczenia.
+    const delivered: unknown[] = [];
+    abort.signal.addEventListener('abort', () => delivered.push(abort.signal.reason), {
+      once: true,
+    });
 
+    const res = h.platform.services.runs.cancel(run.id, h.ownerId);
+
+    /*
+     * Anulowanie jest synchroniczne względem wykonania: w chwili powrotu z
+     * `cancel()` sygnał wraz z powodem jest już dostarczony, więc model zobaczy
+     * go przy najbliższym `await`. Dawniej mierzono tu czas walcowy (`< 50 ms`),
+     * co opisywało szybkość maszyny, nie gwarancję produktu — dostarczenie w
+     * tym samym wywołaniu da się stwierdzić logicznie, bez zegara.
+     */
+    expect(res.cancelled).toBe(true);
+    expect(delivered, 'sygnal przerwania nie zostal dostarczony w tym samym wywolaniu').toHaveLength(1);
+    // Powód wskazuje ścieżkę anulowania przez użytkownika — nie zamykanie
+    // serwera ani limit czasu — więc wykonanie wie, dlaczego zostało przerwane.
+    expect(String(delivered[0])).toMatch(/cancelled_by_user/);
+    expect(abort.signal.aborted).toBe(true);
+
+    // Uruchomienie przerwane przed startem wykonania nie zostawia po sobie
+    // żadnych zdarzeń wykonania: ponowne podłączenie klienta widzi pusty dziennik.
     h.platform.services.runs.finish(run.id, 'cancelled', { errorCode: 'cancelled' });
     expect(h.platform.services.runs.get(run.id, h.ownerId).status).toBe('cancelled');
+    expect(h.platform.services.runs.events(run.id, h.ownerId)).toEqual([]);
+    // I nie ma już czego przerywać — zamknięty przebieg jest nieanulowalny.
+    expect(h.platform.services.runs.cancel(run.id, h.ownerId).cancelled).toBe(false);
   });
 
   it('kazde uruchomienie ma dokladnie jeden rozstrzygajacy status koncowy', () => {
@@ -340,6 +359,31 @@ describe('strumien zdarzen AG-UI', () => {
     const encoded = encodeSse({ type: 'TEXT_MESSAGE_CONTENT', messageId: 'm', delta: 'x' });
     expect(encoded).toBe('data: {"type":"TEXT_MESSAGE_CONTENT","messageId":"m","delta":"x"}\n\n');
   });
+
+  it('delta z nowa linia i unicode nie lamie ramki SSE', () => {
+    const delta = 'Linia 1\nLinia 2 — zażółć gęślą jaźń 🦊';
+    const encoded = encodeSse({ type: 'TEXT_MESSAGE_CONTENT', messageId: 'm', delta });
+
+    /*
+     * Ramka ma dokładnie jedno pole `data:` i dokładnie jeden pusty wiersz
+     * terminatora. Nowa linia w treści musi zostać zescapowana przez kodowanie
+     * JSON — surowy znak kończy ramkę i konsument odczyta pół zdarzenia jako
+     * osobną wiadomość, a strumień się rozjedzie.
+     */
+    expect(encoded.startsWith('data: ')).toBe(true);
+    expect(encoded.endsWith('\n\n')).toBe(true);
+    const payload = encoded.slice('data: '.length, encoded.length - '\n\n'.length);
+    expect(payload, 'ladunek nie moze zawierac surowego znaku nowej linii').not.toContain('\n');
+
+    // Dekodowanie drogą konsumenta — podział po `\n\n`, odcięcie prefiksu,
+    // JSON.parse — odtwarza zdarzenie dokładnie, łącznie z polskimi znakami
+    // i emoji (para surrogate'ów nie może zostać rozcięta).
+    const frames = encoded.split('\n\n').filter((f) => f.length > 0);
+    expect(frames, 'jedno zdarzenie = jedna ramka').toHaveLength(1);
+    const decoded = JSON.parse(frames[0]!.replace(/^data: /, '')) as { type: string; delta: string };
+    expect(decoded.type).toBe('TEXT_MESSAGE_CONTENT');
+    expect(decoded.delta).toBe(delta);
+  });
 });
 
 describe('automatyczne tytuly rozmow (bez API Anthropic)', () => {
@@ -350,6 +394,30 @@ describe('automatyczne tytuly rozmow (bez API Anthropic)', () => {
     expect(deriveTitle('   ')).toBe('Nowa rozmowa');
     expect(deriveTitle('a'.repeat(200)).length).toBeLessThanOrEqual(64);
     expect(deriveTitle('ile to kosztuje?')).toBe('Ile to kosztuje');
+  });
+
+  it('obcina tytul do 61 znakow z wielokropkiem na granicy dlugosci', () => {
+    // Dziewięć słów (tylu używa skracanie) o kontrolowanej łącznej długości:
+    // 8 spacji + 56 znaków = 64 — jeszcze bez obcinania.
+    const slowa = (dlugosci: number[]) => dlugosci.map((n) => 's'.repeat(n)).join(' ');
+    const granica = slowa([6, 6, 6, 6, 6, 6, 6, 6, 8]);
+    expect(granica).toHaveLength(64);
+    const tytulGraniczny = deriveTitle(granica);
+    expect(tytulGraniczny, '64 znaki mieszcza sie bez wielokropka').toBe(
+      granica.charAt(0).toUpperCase() + granica.slice(1),
+    );
+    expect(tytulGraniczny).not.toContain('…');
+
+    // Jeden znak więcej: 65 → obcięcie do 61 znaków treści plus wielokropek.
+    const przekroczona = slowa([6, 6, 6, 6, 6, 6, 6, 6, 9]);
+    const tytul = deriveTitle(przekroczona);
+    expect(tytul.endsWith('…'), 'tytul ma konczyc sie wielokropkiem').toBe(true);
+    expect(tytul).toHaveLength(62);
+    // Wielka litera nadawana jest po obcięciu, więc pierwsza pozycja tytułu
+    // jest nią również w wersji skróconej.
+    expect(tytul.slice(0, 61)).toBe(
+      przekroczona.charAt(0).toUpperCase() + przekroczona.slice(1, 61),
+    );
   });
 });
 
@@ -458,8 +526,17 @@ describe('token subskrypcji nie wycieka z aplikacji', () => {
     }
   });
 
-  it('rzeczywista wartosc tokena nie wystepuje w odpowiedzi /api/status', async () => {
+  it('rzeczywista wartosc tokena nie wystepuje w odpowiedzi /api/status', async (ctx) => {
     const tokens = readTokens();
+    if (tokens.length === 0) {
+      /*
+       * Brak pliku poświadczeń — pętla skanująca byłaby pusta, czyli cichy
+       * przelot, który niczego nie dowodzi. Stan jest oznaczany jawnie, wzorem
+       * testu probeAuth() wyżej: pomijamy skan z powodem, a nie udajemy, że
+       * przeszedł.
+       */
+      ctx.skip(true, 'brak pliku poswiadczen — nie ma rzeczywistej wartosci tokena do skanowania');
+    }
     const h = await createHarness({ withModule: false });
     try {
       const cookie = await login(h.platform.app, h.ownerId);
@@ -468,9 +545,10 @@ describe('token subskrypcji nie wycieka z aplikacji', () => {
       ).text();
       for (const token of tokens) {
         expect(text).not.toContain(token);
+        // Also reject a leading fragment, which would be enough to identify it.
         expect(text).not.toContain(token.slice(0, 16));
       }
-      // The metadata that *is* exposed stays exposed.
+      // The metadata that *is* exposed stays exposed — this runs in both states.
       expect(JSON.parse(text).auth).toHaveProperty('apiKeyPolicy', 'refused');
     } finally {
       h.dispose();

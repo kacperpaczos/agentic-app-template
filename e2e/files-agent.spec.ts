@@ -121,13 +121,33 @@ test.describe('pliki dolaczone przez interfejs, prawdziwy model', () => {
     );
     await settled(page);
 
+    /*
+     * Jedna linia, nie cala wypowiedź. Polecenie wprost kazalo wymienic kolory
+     * w jednej linii, oddzielone przecinkami — wiec odpowiedzia jest ta linia,
+     * a nie caly tekst modelu. Aserty kolejnosci przez indexOf na calej
+     * wypowiedzi bywaly flaky: model mowiacy o pliku „dokument-tekstowy” albo
+     * komentujacy obraz w innym zdaniu wplatal kolory poza lista, a pierwsze
+     * wystapienia slow zalezialy od przypadku, nie od odpowiedzi.
+     */
     const said = (await conversationText(page)).toLowerCase();
-    // The content, in order. None of this is derivable from the filename.
-    expect(said, `model odpowiedzial: ${said}`).toMatch(/czerwon/);
-    expect(said).toMatch(/zielon/);
-    expect(said).toMatch(/niebiesk/);
-    expect(said.indexOf('czerwon')).toBeLessThan(said.indexOf('zielon'));
-    expect(said.indexOf('zielon')).toBeLessThan(said.indexOf('niebiesk'));
+    const answerLine = said
+      .split('\n')
+      .map((line) => line.trim())
+      .find((line) => [/czerwon/, /zielon/, /niebiesk/].every((re) => re.test(line)));
+    expect(
+      answerLine,
+      `zadna linia odpowiedzi nie wymienia trzech kolorow w kolejnosci; odpowiedz modelu: ${JSON.stringify(said)}`,
+    ).toBeTruthy();
+
+    // The content, in order, within that one line. None of this is derivable
+    // from the filename.
+    expect(answerLine!.indexOf('czerwon')).toBeGreaterThanOrEqual(0);
+    expect(answerLine!.indexOf('zielon'), `linia odpowiedzi: ${answerLine}`).toBeGreaterThan(
+      answerLine!.indexOf('czerwon'),
+    );
+    expect(answerLine!.indexOf('niebiesk'), `linia odpowiedzi: ${answerLine}`).toBeGreaterThan(
+      answerLine!.indexOf('zielon'),
+    );
   });
 
   test('agent zmienia skoroszyt w sandboxie, a oryginal zostaje nietkniety', async ({
@@ -230,16 +250,43 @@ test.describe('pliki dolaczone przez interfejs, prawdziwy model', () => {
     const files = await page.evaluate(
       async () =>
         (await (await fetch('/api/files', { credentials: 'include' })).json()) as {
-          files: Array<{ id: string; version: number; derivedFromFileId: string | null }>;
+          files: Array<{
+            id: string;
+            filename: string;
+            version: number;
+            byteSize: number;
+            derivedFromFileId: string | null;
+          }>;
         },
     );
-    const produced = files.files.find((f) => f.derivedFromFileId !== null);
-    expect(produced).toBeTruthy();
+    const original = files.files.find((f) => f.filename === 'oferty.xlsx' && f.version === 1);
+    expect(original, 'nie znaleziono oryginalu na liscie plikow').toBeTruthy();
+    const produced = files.files.find((f) => f.derivedFromFileId === original!.id);
+    expect(produced, 'nie znaleziono wynikowej wersji pliku').toBeTruthy();
 
-    const status = await page.evaluate(
-      async (id) => (await fetch(`/api/files/${id}/content`, { credentials: 'include' })).status,
-      produced!.id,
-    );
-    expect(status).toBe(200);
+    /*
+     * Prawdziwe pobranie przez API, a nie samo „status 200": dostepny znaczy,
+     * ze leci pelny skoroszyt — z dodanym arkuszem i policzona suma (5300, jak
+     * w tescie poprzednim). Sprostowanie samego kodu odpowiedzi przeszloby
+     * rowniez z pusta trescia albo strona bledu.
+     */
+    const download = await page.evaluate(async (id) => {
+      const res = await fetch(`/api/files/${id}/content`, { credentials: 'include' });
+      return { status: res.status, bytes: Array.from(new Uint8Array(await res.arrayBuffer())) };
+    }, produced!.id);
+    expect(download.status).toBe(200);
+
+    const bytes = Buffer.from(download.bytes);
+    expect(bytes.length, 'pobrany plik jest pusty').toBeGreaterThan(0);
+    expect(bytes.length, 'rozmiar pobrany rozni sie od metadanych pliku').toBe(produced!.byteSize);
+
+    // And the bytes are the produced workbook: added sheet, derived total.
+    const wb = await loadWorkbook(bytes);
+    const summary = wb.getWorksheet('Podsumowanie');
+    expect(summary, 'arkusz "Podsumowanie" zniknal z wynikowego pliku').toBeTruthy();
+    expect(String(summary!.getCell('A1').value ?? '').toLowerCase()).toContain('razem');
+    const total = summary!.getCell('B1').value;
+    const numeric = typeof total === 'number' ? total : Number((total as { result?: number })?.result);
+    expect(numeric, `B1 zawiera ${JSON.stringify(total)}`).toBe(WORKBOOK_TOTAL);
   });
 });

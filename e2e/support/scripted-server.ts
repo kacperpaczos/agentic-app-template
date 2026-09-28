@@ -16,6 +16,7 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import type { ModelAgentLike } from '@platform/server';
 import { composeApp } from '../../apps/server/src/compose.ts';
+import { recordInstanceIdentity } from './isolation.ts';
 
 type Step =
   | { kind: 'text'; text: string; delayMs?: number }
@@ -26,7 +27,14 @@ type Step =
    * Asks the browser to move the interface, through the real runtime gate, and
    * records what the client reported back.
    */
-  | { kind: 'ui'; targetId: string; spaceId?: string; label?: string }
+  | {
+      kind: 'ui';
+      targetId: string;
+      spaceId?: string;
+      label?: string;
+      /** Narrowing to apply; `null` restores the full view. */
+      filter?: { predicates: Array<{ field: string; op: string; value: unknown }>; label: string } | null;
+    }
   | { kind: 'fail'; message: string };
 
 /**
@@ -133,6 +141,55 @@ const SCENARIOS: Record<string, Step[]> = {
     { kind: 'ui', targetId: 'platform.settings', label: 'ustawienia' },
     { kind: 'text', text: 'Koniec pracy w tle.' },
   ],
+  /*
+   * Narrowing a view instead of retyping its rows into the conversation.
+   *
+   * The fixture has four suppliers, three of them Polish, so "3 of 4" is a
+   * number the screen must actually produce — not one the scenario asserts.
+   */
+  'ui-filter-suppliers': [
+    { kind: 'wait', delayMs: 150 },
+    {
+      kind: 'ui',
+      targetId: 'procurement.data',
+      label: 'zawezenie',
+      filter: {
+        predicates: [{ field: 'country', op: 'eq', value: 'PL' }],
+        label: 'tylko dostawcy z Polski',
+      },
+    },
+    { kind: 'text', text: 'Zawezilem widok.' },
+  ],
+  /* A property the view does not declare: the answer must be a refusal. */
+  'ui-filter-unknown-field': [
+    { kind: 'wait', delayMs: 150 },
+    {
+      kind: 'ui',
+      targetId: 'procurement.data',
+      label: 'zawezenie',
+      filter: {
+        predicates: [{ field: 'wojewodztwo', op: 'eq', value: 'mazowieckie' }],
+        label: 'tylko mazowieckie',
+      },
+    },
+    { kind: 'text', text: 'Zglaszam odmowe.' },
+  ],
+  /* Narrow, then put it back — the agent's own way out, beside the button. */
+  'ui-filter-then-clear': [
+    { kind: 'wait', delayMs: 150 },
+    {
+      kind: 'ui',
+      targetId: 'procurement.data',
+      label: 'zawezenie',
+      filter: {
+        predicates: [{ field: 'country', op: 'eq', value: 'FI' }],
+        label: 'tylko dostawcy zagraniczni',
+      },
+    },
+    { kind: 'wait', delayMs: 1200 },
+    { kind: 'ui', targetId: 'procurement.data', label: 'pelny widok', filter: null },
+    { kind: 'text', text: 'Przywrocilem pelny widok.' },
+  ],
   'tool-error': [
     {
       kind: 'tool',
@@ -204,19 +261,37 @@ function scriptedAgent(steps: Step[]): ModelAgentLike {
              * reported verbatim, so a scenario cannot claim a navigation the
              * client did not perform.
              */
-            const step = e.step as { targetId: string; spaceId?: string; label?: string };
+            const step = e.step as {
+              targetId: string;
+              spaceId?: string;
+              label?: string;
+              filter?: { predicates: unknown[]; label: string } | null;
+            };
             const ctx = options?.toolContext;
             let outcome: Record<string, unknown> = { executed: false, reason: 'no_tool_context' };
             if (ctx?.requestUi) {
               outcome = (await ctx.requestUi({
                 targetId: step.targetId,
                 spaceId: step.spaceId ?? null,
+                // `undefined` leaves any narrowing alone; `null` clears it.
+                ...(step.filter !== undefined
+                  ? {
+                      filter:
+                        step.filter === null
+                          ? null
+                          : { targetId: step.targetId, ...step.filter },
+                    }
+                  : {}),
               })) as Record<string, unknown>;
             }
+            const counted = outcome.filtered as { matched: number; total: number } | undefined;
             yield {
               type: 'text-delta',
               payload: {
-                text: `[ui:${step.label ?? step.targetId}] executed=${outcome.executed} reason=${outcome.reason ?? '-'} `,
+                text:
+                  `[ui:${step.label ?? step.targetId}] executed=${outcome.executed} ` +
+                  `reason=${outcome.reason ?? '-'} ` +
+                  (counted ? `pokazane=${counted.matched}/${counted.total} ` : ''),
               },
             };
             continue;
@@ -239,6 +314,32 @@ if (!steps) {
 const platform = composeApp({ modelAgent: scriptedAgent(steps) });
 const { app, config } = platform;
 
+/*
+ * Odmowa startu, gdy port juz komus odpowiada.
+ *
+ * Kto pyta o zdrowie tej instancji, nie potrafi odróżnić "wlasnie wstala" od
+ * "od dawna tam siedzi": sonda zdrowia w ScriptedInstance powiedzie sie takze
+ * wobec serwera, ktory zostal na porcie po innym uruchomieniu — albo wobec
+ * instancji wspoldzielonej, ktora ktos skierowal na port scenariuszowy (to
+ * zderzenie przeszlo kiedys po cichu, wlasnie dlatego istnieje rezerwacja
+ * SCENARIO_PORTS). Ten proces wie, ze nie wystartowal — wiec odmawia glosno,
+ * zamiast pozwalac zestawowi rozmawiac z obcym.
+ */
+try {
+  const occupant = await fetch(`http://127.0.0.1:${config.port}/api/health`, {
+    signal: AbortSignal.timeout(1500),
+  });
+  await occupant.arrayBuffer().catch(() => undefined);
+  console.error(
+    `[scripted] port ${config.port} jest juz zajety (odpowiada na /api/health, HTTP ${occupant.status}). ` +
+      `Scenariusz "${scenario}" nie wystartuje na cudzym porcie — najczestsza przyczyna to ` +
+      'proces zostaly po niezakonczonym uruchomieniu testow; znajdz go i zakoncz, zanim uruchomisz je ponownie.',
+  );
+  process.exit(3);
+} catch {
+  /* Nikt nie odpowiada — port wolny, mozemy bindowac. */
+}
+
 const distDir = config.webDistDir ?? resolve(process.cwd(), 'apps/web/dist');
 if (existsSync(distDir)) {
   app.use('/assets/*', serveStatic({ root: distDir, rewriteRequestPath: (p) => p }));
@@ -246,6 +347,18 @@ if (existsSync(distDir)) {
 }
 
 const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
+  /*
+   * Dopiero udane bindowanie potwierdza tozsamosc: plik `instance-<port>.json`
+   * we wlasnym katalogu danych (port, katalog, pid) — dowod, ze to ten proces
+   * wystartowal nad tymi danymi w tym przebiegu. Katalog jest kasowany przed
+   * kazdym uruchomieniem zestawu, wiec plik, ktory znajdzie kontrola, moze
+   * pochodzic tylko stad.
+   */
+  recordInstanceIdentity({
+    port: info.port,
+    dataDir: config.dataDir,
+    instanceLabel: config.instanceLabel,
+  });
   console.log(`[scripted] scenariusz=${scenario} port=${info.port} data=${config.dataDir}`);
 });
 

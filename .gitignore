@@ -19,3 +19,6 @@ backups/
 
 .env
 .env.*
+
+# Locki runtime narzędzi w katalogu projektu
+.claude/scheduled_tasks.lock

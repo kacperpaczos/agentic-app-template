@@ -321,13 +321,38 @@ export class ProcurementRepository {
 
   /* --------------------------------- search ------------------------------- */
 
+  /** How much of each kind this owner has, regardless of any query. */
+  counts(ownerId: string): { cases: number; suppliers: number; offerItems: number } {
+    const one = (sql: string) => (this.#sql(sql, ownerId)[0]?.n as number) ?? 0;
+    return {
+      cases: one('SELECT COUNT(*) AS n FROM pc_cases WHERE owner_id = ?'),
+      suppliers: one('SELECT COUNT(*) AS n FROM pc_suppliers WHERE owner_id = ?'),
+      offerItems: one(
+        `SELECT COUNT(*) AS n FROM pc_offer_items i
+           JOIN pc_offers o ON o.id = i.offer_id
+           JOIN pc_cases  c ON c.id = o.case_id
+          WHERE c.owner_id = ?`,
+      ),
+    };
+  }
+
   search(ownerId: string, query: string, limit: number): Array<{
     kind: string;
     id: string;
     label: string;
     caseId: string | null;
   }> {
-    const like = `%${query.toLowerCase()}%`;
+    /*
+     * `*` and `%` mean "everything", not a character to look for.
+     *
+     * A real turn asked for everything with `query: "*"`, got no rows back —
+     * `LIKE '%*%'` matches nothing — and told the user the application was
+     * empty while it held four suppliers and a case. A search that answers
+     * "nothing" to "show me everything" is not a narrow search, it is a wrong
+     * one.
+     */
+    const wanted = query.trim();
+    const like = wanted === '*' || wanted === '%' ? '%' : `%${wanted.toLowerCase()}%`;
     const rows: Array<{ kind: string; id: string; label: string; caseId: string | null }> = [];
     for (const r of this.#sql(
       `SELECT id, title, code FROM pc_cases WHERE owner_id = ? AND (lower(title) LIKE ? OR lower(code) LIKE ?) LIMIT ?`,

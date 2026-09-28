@@ -64,6 +64,33 @@ describe('judgeStream', () => {
     expect(v.streamed).toBe(false);
   });
 
+  it('probka z faza koncowa nie liczy sie, choc zegar wskazuje czas przed koncem', () => {
+    /*
+     * Regression: the committed message can land *before* the recorded
+     * `terminalAt` — the phase attribute is written by a later DOM change than
+     * the text, so a sample can carry a terminal phase with `t < terminalAt`.
+     * Measured ordering from a real page: text at 15 ms, terminal phase stamped
+     * at 25 ms. The clock alone would count that sample as streaming and wave a
+     * burst-at-end reply through; the phase, read in the same tick, is the
+     * truth about completion.
+     */
+    const v = judgeStream(rec([[10, 4, 'running'], [15, 30, 'succeeded']], 25, 'x'.repeat(30)));
+    expect(v.whileRunning, 'probka z faza koncowa musiala zostac odrzucona').toHaveLength(1);
+    expect(v.whileRunning[0]!.phase).toBe('running');
+    expect(v.streamed).toBe(false);
+    expect(v.reason).toMatch(/tylko raz/);
+  });
+
+  it('zadna z faz koncowych nie przepuszcza probki po czasie', () => {
+    // `cancelled` and `failed` are terminal too — the guard is about the set,
+    // not about `succeeded` alone.
+    for (const phase of ['failed', 'cancelled']) {
+      const v = judgeStream(rec([[10, 4, 'running'], [15, 30, phase]], 25, 'x'.repeat(30)));
+      expect(v.whileRunning, `faza ${phase} musiala odrzucic probe`).toHaveLength(1);
+      expect(v.streamed).toBe(false);
+    }
+  });
+
   it('malejaca dlugosc jest odrzucona jako inna wiadomosc', () => {
     const v = judgeStream(rec([[10, 20, 'running'], [20, 8, 'running'], [30, 25, 'running']], 40, 'x'.repeat(25)));
     expect(v.streamed).toBe(false);

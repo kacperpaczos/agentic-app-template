@@ -273,4 +273,38 @@ test.describe('pelna sciezka uzytkownika z prawdziwym modelem', () => {
     await expect(timeline.first()).toBeVisible();
     expect(await markerText(page, marker)).toContain(marker);
   });
+
+  /**
+   * A question about data is a request to see it.
+   *
+   * Straight from a real session. Asked "what is in suppliers?", the agent read
+   * the data, retyped it into the conversation and left the user on the screen
+   * they were already on; the user then asked "why didn't you take me there?"
+   * and only then did it navigate. The tool had been available the whole time —
+   * the instruction fired on "show me", and a question is not phrased that way.
+   *
+   * Only a real turn can prove this: the fix is a rule in the system prompt, and
+   * a scripted model would be asserting that the script does what the script
+   * says. So this spends one subscription turn, and asserts on the address bar
+   * rather than on anything the model wrote.
+   */
+  test('pytanie o dane przenosi na ich widok, a nie tylko je opisuje', async ({ page }) => {
+    test.setTimeout(AGENT_TIMEOUT);
+
+    // Start somewhere that is not the answer, so arriving means something.
+    await page.goto('/files');
+    await expect(page.getByTestId('files-page')).toBeVisible();
+    await expect(page.locator('.openui-agent-thread-composer__input')).toBeVisible();
+
+    await sendCommand(page, 'Co jest w dostawcach?');
+
+    /*
+     * The visible effect. Deliberately not asserted on the answer text: an
+     * agent that lists the suppliers *and* moves the screen is right, one that
+     * only lists them is the defect — and the two are indistinguishable in the
+     * prose.
+     */
+    await expect.poll(() => new URL(page.url()).pathname, { timeout: AGENT_TIMEOUT }).toBe('/data');
+    await expect(page.getByTestId('data-page')).toBeVisible();
+  });
 });

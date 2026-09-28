@@ -1,3 +1,4 @@
+import { statSync } from 'node:fs';
 import { expect, test } from './support/fixtures.ts';
 import { type APIRequestContext, type Page } from '@playwright/test';
 
@@ -26,12 +27,49 @@ async function openFirstCase(page: Page) {
 }
 
 test.describe('powloka aplikacji', () => {
-  test('lewa nawigacja, canvas i czat wspolistnieja', async ({ page }) => {
+  test('lewa nawigacja, canvas i czat wspolistnieja', async ({ page, request }) => {
+    await request.post('/api/auth/session', { data: {} });
+    // Ekranem domyslnym jest canvas — musi byc czego oczekiwac. Seed zwykle
+    // tworzy przestrzen; gdyby jej nie bylo, powstaje jedna przez API, zeby
+    // test nie mierzyl komunikatu o braku przestrzeni zamiast powloki.
+    const { spaces } = await (await request.get('/api/canvas/spaces')).json();
+    if (!spaces.length) {
+      await request.post('/api/canvas/spaces', { data: { title: `Powloka ${Date.now()}` } });
+    }
+
     await page.goto('/');
     await expect(page.getByRole('navigation', { name: 'Nawigacja glowna' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Rozmowa z agentem' })).toBeVisible();
     await expect(page.getByTestId('statusbar')).toBeVisible();
     await expect(page.getByTestId('statusbar')).toContainText('Claude:');
+
+    /*
+     * Wspolistnienie, nie sama obecnosc: nawigacja, canvas i czat leza obok
+     * siebie jako trzy kolumny siatki powloki, a hit-test w miejscu styku
+     * odpowiada na pytanie, w co faktycznie trafi uzytkownik — zasloniety
+     * element nadal "jest widoczny", wiec sama widocznosc nic nie dowodzi.
+     */
+    await expect(page.getByTestId('canvas')).toBeVisible();
+
+    const rozklad = await page.evaluate(() => {
+      const box = (sel: string) => document.querySelector(sel)?.getBoundingClientRect() ?? null;
+      const nav = box('.pf-nav');
+      const canvas = box('[data-testid="canvas"]');
+      const czat = box('.pf-chat');
+      if (!nav || !canvas || !czat) return null;
+      return {
+        kolejnosc: nav.right <= canvas.left + 1 && canvas.right <= czat.left + 1,
+      };
+    });
+    expect(rozklad, 'brak jednego z trzech paneli powloki').not.toBeNull();
+    expect(rozklad!.kolejnosc, 'nawigacja, canvas i czat nie leza obok siebie').toBe(true);
+
+    const styk = await page.evaluate(() => {
+      const czat = document.querySelector('.pf-chat')!.getBoundingClientRect();
+      const el = document.elementFromPoint(czat.left - 8, czat.top + czat.height / 2);
+      return Boolean(el?.closest('[data-testid="canvas"]'));
+    });
+    expect(styk, 'punkt tuz przy krawedzi czatu nie trafia w canvas — cos go zakrywa').toBe(true);
   });
 
   test('hamburger zwija i rozwija menu', async ({ page }) => {
@@ -47,8 +85,35 @@ test.describe('powloka aplikacji', () => {
   test('menu jest obslugiwalne z klawiatury i ma widoczny fokus', async ({ page }) => {
     await page.goto('/');
     const link = page.getByRole('link', { name: 'Wszystkie sprawy' });
-    await link.focus();
+    await expect(link).toBeVisible();
+
+    /*
+     * Prawdziwa sciezka klawiszowa: Tab od poczatku dokumentu, nie
+     * programistyczny el.focus(), ktory omija kolejnosc tabulacji — a wlascie
+     * o nia tu chodzi. Petla z limitem, zeby przy regeneracji menu test konczyl
+     * sie czytelnym niepowodzeniem, a nie zawieszeniem.
+     */
+    for (let i = 0; i < 30 && !(await link.evaluate((el) => el === document.activeElement)); i++) {
+      await page.keyboard.press('Tab');
+    }
     await expect(link).toBeFocused();
+
+    /*
+     * Widoczny wskaznik fokusu mierzony tak, jak produkt go rysuje: globalna
+     * regula `:focus-visible` w platform-ui/src/styles.css rysuje obwodke
+     * `outline: 2px solid var(--pf-accent)` — schowana obwodka (outline-style:
+     * none albo szerokosc 0) oznacza fokus, ktorego uzytkownik klawiatury nie
+     * widzi.
+     */
+    const wskaznik = await link.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { styl: s.outlineStyle, szerokosc: s.outlineWidth };
+    });
+    expect(wskaznik.styl, 'fokus nie ma zadnej obwodki').not.toBe('none');
+    expect(parseFloat(wskaznik.szerokosc), 'obwodka fokusu jest zerowej szerokosci').toBeGreaterThan(
+      0,
+    );
+
     await page.keyboard.press('Enter');
     await expect(page.getByTestId('cases-page')).toBeVisible();
   });
@@ -151,7 +216,18 @@ test.describe('canvas i kompozycja', () => {
     await page.mouse.down();
     await page.mouse.move(box.x + box.width / 2 + 160, box.y + box.height / 2 + 110, { steps: 15 });
     await page.mouse.up();
-    await page.waitForTimeout(1200);
+
+    // Zapis geometrii jest asynchroniczny: czekamy na warunek (backend potwierdza
+    // nowa wersje geometrii), a nie na zdany czas.
+    await expect
+      .poll(
+        async () => {
+          const stan = await (await request.get(`/api/canvas/spaces/${space.id}`)).json();
+          return stan.cards.find((c: { id: string }) => c.id === card.id)?.geometryVersion ?? 0;
+        },
+        { message: 'przeciagniecie karty nie zostalo zapisane w backendzie' },
+      )
+      .toBeGreaterThan(card.geometryVersion);
 
     const after = await (await request.get(`/api/canvas/spaces/${space.id}`)).json();
     const moved = after.cards.find((c: { id: string }) => c.id === card.id);
@@ -222,7 +298,21 @@ test.describe('dane i pliki', () => {
   test('pliki zrodlowe sa do pobrania', async ({ page }) => {
     await page.goto('/files');
     await expect(page.getByTestId('files-page')).toBeVisible();
-    await expect(page.getByRole('link', { name: 'pobierz' }).first()).toBeVisible();
+    // Pierwsza tabela to pliki zrodlowe (druga to artefakty).
+    const wiersz = page.locator('.pf-table').first().locator('tbody tr').first();
+    await expect(wiersz).toBeVisible();
+    const nazwa = (await wiersz.locator('td').first().innerText()).trim();
+
+    // Prawdziwe pobranie, nie sama obecnosc linku: przeglarka dostaje plik o
+    // nazwie z wiersza i o niezerowej tresci.
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      wiersz.getByRole('link', { name: 'pobierz' }).click(),
+    ]);
+    expect(download.suggestedFilename(), 'pobrana nazwa nie zgadza sie z wierszem').toBe(nazwa);
+    const sciezka = await download.path();
+    expect(sciezka, 'pobranie nie wyprodukowalo pliku').toBeTruthy();
+    expect(statSync(sciezka!).size, 'pobrany plik jest pusty').toBeGreaterThan(0);
   });
 
   test('odrzucony typ pliku daje czytelny blad', async ({ page }) => {

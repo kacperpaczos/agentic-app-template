@@ -1,3 +1,4 @@
+import { readFileSync, writeFileSync } from 'node:fs';
 import { basename, isAbsolute, relative, resolve } from 'node:path';
 
 /**
@@ -16,16 +17,28 @@ import { basename, isAbsolute, relative, resolve } from 'node:path';
  * defect was not that the wrong value was typed; it was that no value was ever
  * checked.
  *
- * Three independent checks, because each catches what the others cannot:
+ * Cztery niezalezne warstwy kontroli, bo kazda lapie to, czego nie lapie
+ * zadna inna:
  *
- *  1. **here, before Playwright starts** — the port, the data directory and the
- *     base URL are validated at config load, so a bad configuration produces a
- *     readable error and *no* server, *no* directory and *no* request;
- *  2. **in the server** (`assertTestInstanceIsIsolated`) — a labelled process
- *     refuses to boot near real data even when something other than this
- *     harness spawns it;
- *  3. **at run time** (`assertIsolatedInstance`) — the suite asks the instance
- *     that actually answered whether it is one of ours, before the first test.
+ *  1. **tu, zanim Playwright wstanie** — port, katalog danych i adres bazowy
+ *     sa sprawdzane przy ladowaniu konfiguracji, wiec zla konfiguracja daje
+ *     czytelny blad i *zadnego* serwera, *zadnego* katalogu i *zadnego*
+ *     zadania;
+ *  2. **w serwerze** (`assertTestInstanceIsIsolated`) — oznaczony proces odmowi
+ *     startu obok prawdziwych danych, nawet kiedy odpala go cos innego niz ten
+ *     harness;
+ *  3. **w czasie biegu, po etykiecie** (`assertIsolatedInstance`) — zestaw
+ *     pyta instancje, ktora faktycznie odpowiedziala, czy jest nasza, zanim
+ *     ruszy pierwszy test;
+ *  4. **w czasie biegu, po tozsamosci** (`assertInstanceIdentity`) — sama
+ *     etykieta przestala wystarczac, kiedy w tym repozytorium zaczelo naraz
+ *     dzialac kilka instancji testowych: wszystkie ja nosza. Kazda instancja
+ *     zapisuje wiec przy starcie plik tozsamosci (port, katalog danych, pid)
+ *     we *wlasnym* katalogu danych, a zestaw porownuje ten plik z tym, o co
+ *     prosil. Instancja, ktora odpowie na zarezerwowanym porcie bez pliku z
+ *     tego przebiegu — zostalosc po zabitym uruchomieniu, skryptowany serwer
+ *     sasiedniego zestawu — zatrzymuje zestaw tutaj, zamiast cicho przejac jego
+ *     ruch.
  */
 
 /*
@@ -44,6 +57,44 @@ export const TEST_PORT_RANGE = { from: 8792, to: 8799 } as const;
 
 /** Port the application uses when nobody configures one; never a test port. */
 export const DEFAULT_APP_PORT = 8791;
+
+/**
+ * JEDNA lista rezerwacji portow scenariuszowych: port → katalog danych, ktory
+ * instancja scenariuszowa na tym porcie nosi.
+ *
+ * Skryptowane instancje (`ScriptedInstance` w e2e/support/scripted.ts) startuja
+ * na wlasnych portach, obok wspoldzielonej instancji zestawu. Rezerwacja istnieje
+ * dlatego, ze zderzenie tych dwoch swiatow zdarzylo sie po cichu: uruchomienie
+ * z `APP_E2E_PORT=8794` i background-tasks.spec powolalo wspoldzielona instancje
+ * na porcie scenariuszowym, a `verifyIsolatedInstance` przepuscilo ja, bo ta sama
+ * etykieta `agenticapp-test` jest i u niej. Testy rozmawialy wtedy ze
+ * wspoldzielona instancja — z prawdziwym modelem — mimo scenariusza, ktory ma
+ * model zastepowany. Zderzenie jest teraz odrzucane przy ladowaniu konfiguracji,
+ * a run-time potwierdza tozsamosc plikiem z tozsamoscia instancji (nizej).
+ *
+ * Port 8799 jest jedynym portem testowym poza ta lista — nalezy do instancji
+ * wspoldzielonej (`.e2e-data`). Nowy zestaw scenariuszowy bierze port stad, a
+ * nie wymysla wlasny.
+ */
+export const SCENARIO_PORTS = {
+  8792: '.e2e-scripted-filter', // view-filter.spec.ts
+  8793: '.e2e-scripted-uinav', // ui-navigation.spec.ts
+  8794: '.e2e-scripted-tasks', // background-tasks.spec.ts
+  8795: '.e2e-scripted-restore', // session-restore.spec.ts
+  8796: '.e2e-scripted-stream', // streaming.spec.ts
+  8797: '.e2e-scripted-slow', // measurements.spec.ts
+  8798: '.e2e-scripted', // tool-activity.spec.ts
+} as const;
+
+type ScenarioDataDir = (typeof SCENARIO_PORTS)[keyof typeof SCENARIO_PORTS];
+
+/** Katalog danych zarezerwowany dla tego portu scenariuszowego, albo null. */
+export function scenarioPortOwner(port: number): ScenarioDataDir | null {
+  return (SCENARIO_PORTS as Record<number, ScenarioDataDir>)[port] ?? null;
+}
+
+/** Katalog danych instancji wspoldzielonej — tej, o ktora pyta `baseURL` zestawu. */
+export const SHARED_DATA_DIR_NAME = '.e2e-data';
 
 export class TestIsolationError extends Error {
   constructor(message: string) {
@@ -138,12 +189,24 @@ export interface TestInstanceConfig {
 }
 
 /**
- * Resolves and validates the configuration of one isolated test instance.
+ * Sklada i sprawdza konfiguracje jednej izolowanej instancji testowej.
  *
- * `APP_BASE_URL` is honoured but not trusted: it may only ever name the instance
- * this same call is describing. Pointing the suite at a different origin is the
- * single environment variable that would silently send every request to the
- * user's application, so it is checked rather than obeyed.
+ * `APP_BASE_URL` jest honorowany, ale nieufny: moze wylacznie nazywac instancje,
+ * ktora to wlasnie wywolanie opisuje. Skierowanie zestawu na cudze zrodlo to
+ * jedna zmienna srodowiskowa, ktora po cichu wyslalaby kazde zadanie do aplikacji
+ * uzytkownika — jest sprawdzana, a nie wykonywana.
+ *
+ * Porty scenariuszowe sa chronione dwojako, bo zderzenie zdarzylo sie po cichu
+ * (`APP_E2E_PORT=8794` + background-tasks: wspoldzielona instancja na porcie
+ * scenariuszowym, przepuszczona przez kontrole etykiety, z prawdziwym modelem):
+ *
+ *  - `APP_E2E_PORT` nie moze nazywac portu z `SCENARIO_PORTS` — nadpisanie jest
+ *    wlasciwoscia instancji wspoldzielonej, a scenariuszowe i tak go ignoruja
+ *    (przekazuja wlasne `env`), wiec taka wartosc mialaby tylko jeden skutek:
+ *    cicha kolizja;
+ *  - instancja na porcie scenariuszowym musi nosic katalog danych z rezerwacji —
+ *    port i katalog to razem tozsamosc scenariusza, a rozjazd miedzy nimi znaczy,
+ *    ze dwa zestawy dealokowaly te sama pare na dwa sposoby.
  */
 export function resolveTestInstance(input: {
   repoRoot: string;
@@ -154,10 +217,28 @@ export function resolveTestInstance(input: {
 }): TestInstanceConfig {
   const env = input.env ?? process.env;
   const repoRoot = resolve(input.repoRoot);
+  const override = env.APP_E2E_PORT;
   const port = assertTestPort(
-    Number(env.APP_E2E_PORT ?? input.defaultPort),
+    Number(override ?? input.defaultPort),
     'port instancji testowej (APP_E2E_PORT)',
   );
+  const scenarioOwner = scenarioPortOwner(port);
+  if (override !== undefined && scenarioOwner !== null) {
+    throw new TestIsolationError(
+      `port instancji testowej (APP_E2E_PORT): ${port} jest zarezerwowany dla instancji ` +
+        `scenariuszowej z katalogiem danych "${scenarioOwner}". Wspoldzielona instancja testow ` +
+        'na tym porcie zderzylaby sie z instancja scenariusza, a kontrola etykiety przepuscilaby ' +
+        'je obie — etykieta jest wspolna. ' +
+        `Usun APP_E2E_PORT albo ustaw ${TEST_PORT_RANGE.to} — jedyny port poza rezerwacja scenariuszowa.`,
+    );
+  }
+  if (scenarioOwner !== null && input.dataDirName !== scenarioOwner) {
+    throw new TestIsolationError(
+      `port ${port} jest zarezerwowany dla instancji scenariuszowej z katalogiem danych ` +
+        `"${scenarioOwner}", a ta konfiguracja deklaruje katalog "${input.dataDirName}". ` +
+        'Para port + katalog danych instancji scenariuszowej musi pasowac do rezerwacji w SCENARIO_PORTS.',
+    );
+  }
   const dataDir = assertTestDataDir(
     resolve(repoRoot, input.dataDirName),
     repoRoot,
@@ -184,14 +265,158 @@ export function resolveTestInstance(input: {
   };
 }
 
+/* --------------------- tozsamosc instancji (plik) ------------------------- */
+
 /**
- * Confirms that the instance which actually answered is one of ours.
+ * To, co `/api/health` celowo nie mowi: gdzie ta instancja trzyma dane.
  *
- * The configuration checks above constrain what this process asks for; this one
- * checks what replied. An unlabelled answer means something else is listening on
- * the test port — the suite stops rather than write through it.
+ * Produkt w /api/health raportuje wylacznie etykiete i swiadomie nie zdradza
+ * katalogu danych (endpoint jest nieuwierzytelniony). To wystarczylo, dopoki
+ * instancja testowa byla jedna; przy kilku naraz etykieta przestala rozdziac
+ * instancje — wszystkie ja nosza, co pokazalo zderzenie APP_E2E_PORT=8794 z
+ * background-tasks. Zamiast zmieniac API produktu, kazda instancja testowa
+ * zapisuje przy starcie plik `instance-<port>.json` we WLASNYM katalogu danych:
+ * port, katalog, pid. Plik jest dowodem, ze ten proces wystartowal nad tymi
+ * danymi — i ze zrobil to ten przebieg testow, bo kazdy przebieg najpierw kasuje
+ * katalog, w ktorym plik lezy.
  */
-export async function assertIsolatedInstance(baseUrl: string): Promise<void> {
+export interface InstanceIdentity {
+  port: number;
+  dataDir: string;
+  instanceLabel: string | null;
+  pid: number;
+  startedAt: string;
+}
+
+/** Plik tozsamosci instancji na tym porcie, w jej wlasnym katalogu danych. */
+export function instanceIdentityFile(dataDir: string, port: number): string {
+  return resolve(dataDir, `instance-${port}.json`);
+}
+
+/**
+ * Zapisuje tozsamosc instancji przy starcie. Robia to dwa miejsca, oba w
+ * momencie, w ktorym instancja zaczyna wladac portem: boot-server (instancja
+ * wspoldzielona) i scripted-server (instancje scenariuszowe, po udanym bindowaniu).
+ */
+export function recordInstanceIdentity(identity: {
+  port: number;
+  dataDir: string;
+  instanceLabel: string | null;
+  pid?: number;
+}): InstanceIdentity {
+  if (identity.instanceLabel !== TEST_INSTANCE_LABEL) {
+    throw new TestIsolationError(
+      `instancja na porcie ${identity.port} nie nosi etykiety testowej ` +
+        `(instanceLabel=${JSON.stringify(identity.instanceLabel)}) — to nie jest instancja, ` +
+        'ktora testy moga odpalic ani potwierdzic.',
+    );
+  }
+  assertTestPort(identity.port, 'port instancji testowej');
+  const full: InstanceIdentity = {
+    port: identity.port,
+    dataDir: resolve(identity.dataDir),
+    instanceLabel: identity.instanceLabel,
+    pid: identity.pid ?? process.pid,
+    startedAt: new Date().toISOString(),
+  };
+  writeFileSync(instanceIdentityFile(full.dataDir, full.port), JSON.stringify(full, null, 2));
+  return full;
+}
+
+/**
+ * Dowod tozsamosci: port, o ktory prosza testy, zostal zajety w TYM przebiegu
+ * przez instancje nad TYM katalogiem danych.
+ *
+ * Sprawdzenie jest instancjoswoiste i dlatego lapie to, czego nie lapie etykieta:
+ * instancja bez pliku (ktoś cudzy na zarezerwowanym porcie), z niezgodnym
+ * katalogiem (wspoldzielona instancja na porcie scenariuszowym — zderzenie z
+ * P1-A), z plikiem po martwym procesie (zostalosc, ktora przejela port po
+ * zabitym uruchomieniu).
+ */
+export function assertInstanceIdentity(input: {
+  port: number;
+  expectedDataDir: string;
+}): InstanceIdentity {
+  const expectedDataDir = resolve(input.expectedDataDir);
+  const file = instanceIdentityFile(expectedDataDir, input.port);
+  let raw: string;
+  try {
+    raw = readFileSync(file, 'utf8');
+  } catch {
+    throw new TestIsolationError(
+      `Na porcie ${input.port} odpowiada instancja, ktora nie zapisala swojej tozsamosci w ` +
+        `${file}. Ten plik powstaje wlasnie przy starcie instancji testowej i kasowany razem ` +
+        'z katalogiem danych przed kazdym uruchomieniem, wiec jego brak znaczy, ze odpowiada ' +
+        'proces z innego (np. niezakonczonego) uruchomienia testow albo serwer, ktorego ten ' +
+        'harness nie odpalil.',
+    );
+  }
+  let marker: InstanceIdentity;
+  try {
+    marker = JSON.parse(raw) as InstanceIdentity;
+  } catch {
+    throw new TestIsolationError(`Plik tozsamosci instancji ${file} nie jest poprawnym JSON-em.`);
+  }
+  if (marker.port !== input.port) {
+    throw new TestIsolationError(
+      `Plik tozsamosci ${file} mowi o porcie ${marker.port}, a pytasz o porcie ${input.port}.`,
+    );
+  }
+  if (marker.instanceLabel !== TEST_INSTANCE_LABEL) {
+    throw new TestIsolationError(
+      `Plik tozsamosci ${file} nazywa instancje bez etykiety testowej ` +
+        `(instanceLabel=${JSON.stringify(marker.instanceLabel)}).`,
+    );
+  }
+  if (resolve(marker.dataDir) !== expectedDataDir) {
+    throw new TestIsolationError(
+      `Na porcie ${input.port} odpowiada instancja z katalogiem danych ${marker.dataDir}, ` +
+        `a ten zestaw oczekuje instancji nad ${expectedDataDir}. To instancja innego przebiegu ` +
+        'lub innego zestawu — pisalaby do cudzej bazy.',
+    );
+  }
+  try {
+    process.kill(marker.pid, 0);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ESRCH') {
+      throw new TestIsolationError(
+        `Proces (pid=${marker.pid}), ktory zapisal tozsamosc instancji na porcie ${input.port}, ` +
+          'juz nie zyje — odpowiada cos, czego nikt w tym przebiegu nie potwierdzil.',
+      );
+    }
+    /* Brak uprawnien do sygnalu znaczy: proces zyje (i nalezy do innego uzytkownika). */
+  }
+  return marker;
+}
+
+/**
+ * Katalog danych, jakiego ten zestaw oczekuje po instancji na tym porcie: dla
+ * portu scenariuszowego — z rezerwacji, dla wspoldzielonego — katalog wspoldzielony.
+ */
+export function expectedInstanceDataDir(port: number, repoRoot: string): string {
+  const owner = scenarioPortOwner(port);
+  return resolve(repoRoot, owner ?? SHARED_DATA_DIR_NAME);
+}
+
+/** Katalog glowny repozytorium, wzgledem ktorego ten modul rozumie swoje sciezki. */
+const REPO_ROOT = resolve(import.meta.dirname, '../..');
+
+/**
+ * Potwierdza, ze instancja, ktora faktycznie odpowiedziala, jest nasza.
+ *
+ * Kontrole konfiguracji powyzej ograniczaja to, o co ten proces prosi; ta
+ * sprawdza, co odpowiedzialo. Odpowiedz bez etykiety testowej znaczy, ze na
+ * porcie testowym slucha cos innego — zestaw sie zatrzymuje, zamiast przez nie
+ * pisac.
+ *
+ * Etykieta to dzis za malo: kazda instancja testowa w tym repozytorium ja nosi,
+ * wiec dodatkowo sprawdza plik tozsamosci (`assertInstanceIdentity`) — ze na tym
+ * porcie odpowiada instancja z TEGO przebiegu, nad oczekiwanym katalogiem danych.
+ */
+export async function assertIsolatedInstance(
+  baseUrl: string,
+  opts: { expectedDataDir?: string } = {},
+): Promise<void> {
   let body: { ok?: boolean; instanceLabel?: string | null };
   try {
     const res = await fetch(`${baseUrl}/api/health`);
@@ -209,4 +434,9 @@ export async function assertIsolatedInstance(baseUrl: string): Promise<void> {
         'To moze byc instancja uzytkownika — testy nie beda przez nia pisac.',
     );
   }
+  const port = Number(new URL(baseUrl).port);
+  assertInstanceIdentity({
+    port,
+    expectedDataDir: opts.expectedDataDir ?? expectedInstanceDataDir(port, REPO_ROOT),
+  });
 }

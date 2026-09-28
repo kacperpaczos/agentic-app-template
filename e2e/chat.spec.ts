@@ -4,15 +4,34 @@ import { type APIRequestContext } from '@playwright/test';
 /**
  * Conversation management through the ready-made OpenUI chat.
  *
- * No model call is made: conversations are created through the storage API the
- * chat itself uses, then driven in the browser. That keeps this suite free and
- * fast while still exercising the real component.
+ * Most of this suite makes no model call: conversations are created through the
+ * storage API the chat itself uses, then driven in the browser. The one
+ * exception is the artifact test — an artifact comes into being only through
+ * the agent's own `artifact_create` tool during a run (the HTTP API can list,
+ * read and patch one, but never create one), so that test spends a single real
+ * model turn, exactly like `agent-ui.spec.ts`.
  */
 async function seedThread(request: APIRequestContext, title: string) {
   await request.post('/api/auth/session', { data: {} });
   const created = await (
     await request.post('/api/threads/create', {
       data: { messages: [{ id: crypto.randomUUID(), role: 'user', content: title }] },
+    })
+  ).json();
+  return created as { id: string; title: string };
+}
+
+/**
+ * Rozmowa z jawnie roznymi tresciami tytulu i pierwszej wiadomosci.
+ *
+ * Rozdzielone celowo: asercja na tresc wiadomosci nie moze sie "odsieczyc"
+ * tekstem tytulu, ktory pojawia sie takze w liscie rozmow i w naglowku watku.
+ */
+async function seedThreadZTrescia(request: APIRequestContext, tytul: string, tresc: string) {
+  await request.post('/api/auth/session', { data: {} });
+  const created = await (
+    await request.post('/api/threads/create', {
+      data: { title: tytul, messages: [{ id: crypto.randomUUID(), role: 'user', content: tresc }] },
     })
   ).json();
   return created as { id: string; title: string };
@@ -68,24 +87,132 @@ test.describe('rozmowy', () => {
     expect(threads.map((t: { id: string }) => t.id)).toContain(b.id);
   });
 
-  test('przelaczenie rozmowy nie miesza wiadomosci', async ({ request }) => {
-    const a = await seedThread(request, `Pierwsza ${Date.now()}`);
-    const b = await seedThread(request, `Druga ${Date.now()}`);
+  test('przelaczenie rozmowy w interfejsie nie miesza wiadomosci', async ({ page, request }) => {
+    /*
+     * Poprzednia wersja tego testu nigdy nie przelaczyla rozmowy: porownywal
+     * dwa zasoby po API i stwierdzal, ze maja rozne tresci — co nie mowi nic o
+     * tym, co uzytkownik zobaczy po kliknieciu innej rozmowy w szufladzie.
+     * Tutaj przelaczenie jest prawdziwe (klik w wiersz szuflady), a asercje
+     * patrza na renderowana historie, wzmacniane prawda z API.
+     */
+    const trescA = `Znacznik alfa ${Date.now()} - to zdanie nalezalo do rozmowy pierwszej.`;
+    const trescB = `Znacznik beta ${Date.now()} - to zdanie nalezalo do rozmowy drugiej.`;
+    const a = await seedThreadZTrescia(request, 'Rozmowa pierwsza alfa', trescA);
+    const b = await seedThreadZTrescia(request, 'Rozmowa druga beta', trescB);
+
+    // Prawda z API: to dwa rozne zasoby, kazdy z dokladnie jedna wiadomoscia.
     const ma = await (await request.get(`/api/threads/get/${a.id}`)).json();
     const mb = await (await request.get(`/api/threads/get/${b.id}`)).json();
     expect(ma).toHaveLength(1);
     expect(mb).toHaveLength(1);
-    expect(ma[0].content).not.toBe(mb[0].content);
+    expect(ma[0].content).toBe(trescA);
+    expect(mb[0].content).toBe(trescB);
+
+    await page.goto('/');
+    const wiadomosci = page.locator('.openui-agent-thread-messages').first();
+    const szuflada = page.locator(
+      '.openui-agent-sidebar-container[data-sidebar-visual-state="expanded"]',
+    );
+
+    const otworz = async (tytul: string) => {
+      // Wybranie rozmowy zamyka szuflade — otwieramy ja z powrotem, tak jak
+      // uzytkownik wracajacy do listy. Czekamy na koniec animacji (stan
+      // "expanded" nadaje biblioteka po dojechaniu na miejsce): klik zlapany
+      // w trakcie ruchu trafial obok wiersza i zamykal szuflade bez wyboru
+      // rozmowy — transkrypt pozostawal pusty.
+      if ((await szuflada.count()) === 0) {
+        await page.locator('.pf-chat [aria-label="Open sidebar"]').first().click();
+      }
+      await expect(szuflada).toHaveCount(1);
+      await expect(page.locator('.openui-agent-thread-list')).toBeVisible();
+      await page
+        .locator('.openui-agent-thread-button', { hasText: tytul })
+        .first()
+        .locator('.openui-agent-thread-button-title')
+        .first()
+        .click();
+    };
+
+    await otworz('Rozmowa pierwsza alfa');
+    // Najpierw pozytywna asercja (tresc A sie pokazala), dopiero potem brak B —
+    // kolejnosc wolna od wyscigu z doladowaniem historii po kliknieciu.
+    await expect(wiadomosci).toContainText(trescA);
+    await expect(wiadomosci, 'w historii pierwszej rozmowy pojawila sie tresc drugiej').not.toContainText(
+      trescB,
+    );
+
+    await otworz('Rozmowa druga beta');
+    await expect(wiadomosci).toContainText(trescB);
+    await expect(wiadomosci, 'w historii drugiej rozmowy pojawila sie tresc pierwszej').not.toContainText(
+      trescA,
+    );
+
+    await otworz('Rozmowa pierwsza alfa');
+    await expect(wiadomosci).toContainText(trescA);
+    await expect(wiadomosci).not.toContainText(trescB);
   });
 
   test('usuniecie rozmowy odlacza artefakty zamiast je kasowac', async ({ request }) => {
+    test.setTimeout(300_000);
+
+    /*
+     * Realny incydent: klucz obcy artifacts.conversation_id zachowywal sie jak
+     * ON DELETE CASCADE — usuniecie rozmowy niszczylo artefakty, trwale wyniki
+     * pracy agenta, zamiast je odpiac. Poprzednia wersja tego testu tego nie
+     * widziala: w seedowanej bazie nie bylo zadnego artefaktu, wiec
+     * porownywala 0 z 0 i przeszla z aktywnym bledem kasujacym dane.
+     *
+     * Artefakt powstaje wylacznie przez narzedzie agenta `artifact_create` w
+     * trakcie runu (HTTP potrafi artefakt wypisac, odczytac i zmienic, ale nie
+     * utworzyc), wiec ten test wydaje jedna realna ture modelu przez wejscie
+     * `/api/agui/run` — ten sam, ktorego uzywa gotowy czat.
+     */
     await request.post('/api/auth/session', { data: {} });
-    const before = await (await request.get('/api/artifacts')).json();
     const t = await seedThread(request, `Do usuniecia ${Date.now()}`);
+
+    const polecenie =
+      'Utworz teraz dokladnie jeden artefakt narzedziem artifact_create, z tymi parametrami: ' +
+      'title="Artefakt kontrolny", kind="report", mode="snapshot", ' +
+      'rendererType="platform.markdown", ' +
+      'content={"markdown":"## Artefakt kontrolny\\n\\nTresc kontrolna testu E2E."}. ' +
+      'Nie uzywaj zadnych innych narzedzi. Na koniec potwierdz jednym zdaniem, co utworzyles.';
+    const uruchom = await request.post('/api/agui/run', {
+      data: {
+        threadId: t.id,
+        messages: [{ id: crypto.randomUUID(), role: 'user', content: polecenie }],
+      },
+      timeout: 240_000,
+    });
+    expect(uruchom.ok(), `run nie wystartowal: HTTP ${uruchom.status()}`).toBe(true);
+    // Odpowiedzia jest strumien SSE, ktory serwer zamyka w momencie zakonczenia
+    // runu — przeczytanie ciala jest wiec oczekiwaniem na koniec pracy agenta.
+    await uruchom.text();
+
+    const { runs } = await (await request.get(`/api/conversations/${t.id}/runs`)).json();
+    expect(runs.length, 'run nie zostal zarejestrowany dla tej rozmowy').toBeGreaterThan(0);
+    expect(
+      runs[0].status,
+      `run zakonczyl sie bledem: ${runs[0].errorMessage ?? '(bez komunikatu)'}`,
+    ).toBe('succeeded');
+
+    const przed = await (await request.get('/api/artifacts')).json();
+    const moje = przed.artifacts.filter((a: { threadId: string }) => a.threadId === t.id);
+    expect(
+      moje.length,
+      'rozmowa nie ma powiazanego artefaktu — test nie sprawdzalby nic',
+    ).toBeGreaterThanOrEqual(1);
+
     const del = await (await request.delete(`/api/threads/delete/${t.id}`)).json();
     expect(del.deleted).toBe(t.id);
-    const after = await (await request.get('/api/artifacts')).json();
-    expect(after.artifacts.length).toBe(before.artifacts.length);
+
+    // Artefakt przezywa usuniecie rozmowy: odpiety (threadId puste), nie skasowany.
+    const po = await (await request.get('/api/artifacts')).json();
+    expect(po.artifacts.length, 'usuniecie rozmowy skasowalo artefakty').toBe(
+      przed.artifacts.length,
+    );
+    const odlaczony = po.artifacts.find((a: { id: string }) => a.id === moje[0].id);
+    expect(odlaczony, 'artefakt zniknal razem z rozmowa, a mial zostac odpiety').toBeTruthy();
+    expect(odlaczony.threadId, 'artefakt mial zostac odpiety od rozmowy (threadId puste)').toBe('');
   });
 
   test('czat pokazuje, do jakiego zasobu odnosi sie rozmowa', async ({ page }) => {

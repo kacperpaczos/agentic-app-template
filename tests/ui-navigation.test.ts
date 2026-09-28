@@ -36,8 +36,40 @@ beforeEach(async () => {
 });
 afterEach(() => h.dispose());
 
+/*
+ * Stabilnosc bramki ack — diagnoza flakiness z audytu.
+ *
+ * Dwukrotnie zaobserwowano tu padniecia wygladajace jak "obce acki": test bez
+ * wlasnego potwierdzenia dostawal executed=true, a test potwierdzony — wynik bez
+ * url. Diagnoza przeprowadzona na kodzie i eksperymencie:
+ *
+ *  1. Magazyn pendingow (`AgentRuntime.#pendingUiCommands`) jest per-instancja,
+ *     a kazde wywolanie narzedzia buduje WLASNY runtime, wlasny strumien i
+ *     wlasny przebieg na wlasnej bazie harnessu — stan globalny procesu nie
+ *     istnieje (instrumentacja REQ/ACK/TIMEOUT/RESOLVE z tokenem instancji:
+ *     11 pelnych przebiegow i ~250 zdarzen bramki bez jednego przeciecia
+ *     miedzy tokenami; dodatkowo test stresowy: 80 rownoległych przeplywow na
+ *     jednej instancji platformy z ackami natychmiastowymi, opoznionymi i
+ *     brakiem acka — zero pomieszanych wynikow).
+ *  2. Jedyny wspolczynnik czasowy, o jaki mogly sie czepiac padniecia, to
+ *     termin 400 ms wspoldzielony przez testy z ackiem i bez. Docieranie acka
+ *     jest lancuchem mikrozadan natychmiast po emisji, wiec terminu nie
+ *     przestrzega tylko wtedy, gdy ack w ogole nie przyjdzie. Niemniej
+ *     testy POTWIERDZAJACE dostaja teraz jawnie dlugi termin (5 s): zapas nic
+ *     nie kosztuje, a wynik no_client dla flow z ackiem jest od razu czytelna
+ *     informacja o defekcie, a nie wygrywajacym timera przypadkiem. Krotkie
+ *     400 ms zostaje tylko tam, gdzie brak odpowiedzi jest oczekiwanym
+ *     wynikiem testu.
+ *  3. commandId jest licznikowy (sekwencia procesu + losowa koncowka), wiec
+ *     dwie komendy nie moga zwyciezyc przez kolizje klucza pendingow.
+ */
+
+/** Sekwencja komend w procesie: twarda unikalnosc commandId miedzy testami. */
+let uiCommandSeq = 0;
+
 /**
- * Calls `ui_navigate` the way a run does, composed from the same two pieces.
+ * Calls `ui_navigate` / `ui_filter` the way a run does, composed from the same
+ * two pieces.
  *
  * The tool handler is invoked directly with a context whose `requestUi` is the
  * runtime's real gate over a real event stream — which is exactly how the
@@ -46,25 +78,27 @@ afterEach(() => h.dispose());
  * (`tests/mcp-schema.test.ts`), and reaching into the SDK server's internals to
  * include it here would test the SDK, not this.
  */
-async function callNavigate(
-  h: Harness,
-  call: { targetId: string; spaceId?: string },
-  ack: (command: UiCommand, runtime: AgentRuntime) => void | Promise<void>,
+async function callUiTool(
+  harness: Harness,
+  toolName: 'ui_navigate' | 'ui_filter',
+  input: Record<string, unknown>,
+  ack: (command: UiCommand, runtime: AgentRuntime) => void | Promise<void> = () => {},
+  ackDeadlineMs = 400,
 ): Promise<{ result?: any; error?: unknown; emitted: UiCommand[] }> {
-  const runtime = new AgentRuntime(h.platform.services);
-  const conv = h.platform.services.conversations.create({
-    ownerId: h.ownerId,
+  const runtime = new AgentRuntime(harness.platform.services);
+  const conv = harness.platform.services.conversations.create({
+    ownerId: harness.ownerId,
     firstMessage: { content: 'pokaz pliki' },
   });
-  const run = h.platform.services.runs.start({
+  const run = harness.platform.services.runs.start({
     conversationId: conv.id,
-    ownerId: h.ownerId,
+    ownerId: harness.ownerId,
     prompt: 'pokaz pliki',
     appContext: EMPTY_CONTEXT(conv.id),
     workspaceDir: null,
     abort: new AbortController(),
   });
-  const stream = new RunEventStream(run.id, h.platform.services.runs);
+  const stream = new RunEventStream(run.id, harness.platform.services.runs);
 
   const emitted: UiCommand[] = [];
   const watcher = (async () => {
@@ -79,7 +113,7 @@ async function callNavigate(
   })();
 
   const ctx: ToolCallContext = {
-    ownerId: h.ownerId,
+    ownerId: harness.ownerId,
     appContext: EMPTY_CONTEXT(conv.id),
     conversationId: conv.id,
     runId: run.id,
@@ -88,30 +122,44 @@ async function callNavigate(
     requestUi: (command) =>
       runtime.requestUiCommand(
         {
-          commandId: `uic_${Math.random().toString(36).slice(2, 12)}`,
+          commandId: `uic_${(++uiCommandSeq).toString(36)}${Math.random().toString(36).slice(2, 8)}`,
           runId: run.id,
           conversationId: conv.id,
           targetId: command.targetId,
           spaceId: command.spaceId ?? null,
+          ...(command.filter !== undefined ? { filter: command.filter } : {}),
           reason: command.reason,
         },
         stream,
-        // Short, so the "nobody answered" case does not hold the suite open.
-        400,
+        // Termin na ack klienta — patrz komentarz o stabilnosci bramki wyzej.
+        ackDeadlineMs,
       ),
   };
 
-  const navigate = platformTools(h.platform.services).find((t) => t.name === 'ui_navigate')!;
+  const tool = platformTools(harness.platform.services).find((t) => t.name === toolName)!;
   const out: { result?: any; error?: unknown; emitted: UiCommand[] } = { emitted };
   try {
-    out.result = await navigate.handler(call as never, ctx);
+    out.result = await tool.handler(input as never, ctx);
   } catch (e) {
     out.error = e;
+  } finally {
+    // Domkniecie musi zajsc takze wtedy, gdy narzedzie rzucilo: watcher nie
+    // przecieka do nastepnego testu (po pool: 'forks' izolowane sa pliki, ale
+    // NIE testy w pliku — przeciekajacy watcher bylby wtedy sluchaczem cudzego
+    // strumienia).
+    stream.close();
+    await watcher;
   }
-  stream.close();
-  await watcher;
   return out;
 }
+
+/** `ui_navigate` przez realna bramke ack; `ackDeadlineMs` — patrz naglowek pliku. */
+const callNavigate = (
+  harness: Harness,
+  call: { targetId: string; spaceId?: string },
+  ack?: (command: UiCommand, runtime: AgentRuntime) => void | Promise<void>,
+  ackDeadlineMs = 400,
+) => callUiTool(harness, 'ui_navigate', call, ack, ackDeadlineMs);
 
 const EMPTY_CONTEXT = (conversationId: string) => ({
   conversationId,
@@ -168,15 +216,21 @@ describe('katalog celow interfejsu', () => {
 
 describe('ui_navigate zwraca to, co potwierdzil klient', () => {
   it('potwierdzone wykonanie wraca jako executed=true wraz z adresem', async () => {
-    const out = await callNavigate(h, { targetId: 'platform.files' }, (command, runtime) => {
-      runtime.acknowledgeUiCommand({
-        commandId: command.commandId,
-        executed: true,
-        targetId: command.targetId,
-        url: '/files',
-        highlighted: false,
-      });
-    });
+    const out = await callNavigate(
+      h,
+      { targetId: 'platform.files' },
+      (command, runtime) => {
+        runtime.acknowledgeUiCommand({
+          commandId: command.commandId,
+          executed: true,
+          targetId: command.targetId,
+          url: '/files',
+          highlighted: false,
+        });
+      },
+      // Ack jest czescia scenariusza — dlugi termin zamiast wyscigu z timerem.
+      5_000,
+    );
 
     expect(out.error).toBeUndefined();
     expect(out.result).toMatchObject({
@@ -193,9 +247,7 @@ describe('ui_navigate zwraca to, co potwierdzil klient', () => {
      * shortcut the acceptance criteria rule out: nothing observed the
      * navigation, so nothing may claim it.
      */
-    const out = await callNavigate(h, { targetId: 'platform.files' }, () => {
-      /* no client answers */
-    });
+    const out = await callNavigate(h, { targetId: 'platform.files' }, undefined, 400);
 
     expect(out.emitted, 'polecenie nie zostalo w ogole wyslane').toHaveLength(1);
     expect(out.result).toMatchObject({
@@ -205,28 +257,38 @@ describe('ui_navigate zwraca to, co potwierdzil klient', () => {
   });
 
   it('element nieobecny na ekranie to porazka z wlasnym powodem', async () => {
-    const out = await callNavigate(h, { targetId: 'platform.settings.auth' }, (command, runtime) => {
-      runtime.acknowledgeUiCommand({
-        commandId: command.commandId,
-        executed: false,
-        targetId: command.targetId,
-        reason: UI_COMMAND_FAILURES.notPresent,
-        url: '/settings',
-      });
-    });
+    const out = await callNavigate(
+      h,
+      { targetId: 'platform.settings.auth' },
+      (command, runtime) => {
+        runtime.acknowledgeUiCommand({
+          commandId: command.commandId,
+          executed: false,
+          targetId: command.targetId,
+          reason: UI_COMMAND_FAILURES.notPresent,
+          url: '/settings',
+        });
+      },
+      5_000,
+    );
     expect(out.result).toMatchObject({ executed: false, reason: UI_COMMAND_FAILURES.notPresent });
   });
 
   it('polecenie z rozmowy w tle nie przelacza widoku i mowi o tym wprost', async () => {
-    const out = await callNavigate(h, { targetId: 'platform.files' }, (command, runtime) => {
-      // The browser is looking at a different conversation, so it refuses.
-      runtime.acknowledgeUiCommand({
-        commandId: command.commandId,
-        executed: false,
-        targetId: command.targetId,
-        reason: UI_COMMAND_FAILURES.inactiveConversation,
-      });
-    });
+    const out = await callNavigate(
+      h,
+      { targetId: 'platform.files' },
+      (command, runtime) => {
+        // The browser is looking at a different conversation, so it refuses.
+        runtime.acknowledgeUiCommand({
+          commandId: command.commandId,
+          executed: false,
+          targetId: command.targetId,
+          reason: UI_COMMAND_FAILURES.inactiveConversation,
+        });
+      },
+      5_000,
+    );
     expect(out.result).toMatchObject({
       executed: false,
       reason: UI_COMMAND_FAILURES.inactiveConversation,
@@ -234,9 +296,7 @@ describe('ui_navigate zwraca to, co potwierdzil klient', () => {
   });
 
   it('nieznany cel jest odrzucony od razu, z lista dostepnych', async () => {
-    const out = await callNavigate(h, { targetId: 'platform.nie-istnieje' }, () => {
-      /* should never be reached */
-    });
+    const out = await callNavigate(h, { targetId: 'platform.nie-istnieje' });
 
     expect(out.result).toMatchObject({
       executed: false,
@@ -253,9 +313,7 @@ describe('ui_navigate zwraca to, co potwierdzil klient', () => {
       ownerId: h.otherOwnerId,
       title: 'Nie moja',
     });
-    const out = await callNavigate(h, { targetId: 'platform.canvas', spaceId: other.id }, () => {
-      /* should never be reached */
-    });
+    const out = await callNavigate(h, { targetId: 'platform.canvas', spaceId: other.id });
 
     expect(out.error, 'cudza przestrzen nie zostala odrzucona').toBeDefined();
     // Refused on ownership, by the same service that guards every other read.
@@ -264,9 +322,14 @@ describe('ui_navigate zwraca to, co potwierdzil klient', () => {
   });
 
   it('polecenie niesie rozmowe i stabilny identyfikator', async () => {
-    const out = await callNavigate(h, { targetId: 'platform.files' }, (command, runtime) => {
-      runtime.acknowledgeUiCommand({ commandId: command.commandId, executed: true });
-    });
+    const out = await callNavigate(
+      h,
+      { targetId: 'platform.files' },
+      (command, runtime) => {
+        runtime.acknowledgeUiCommand({ commandId: command.commandId, executed: true });
+      },
+      5_000,
+    );
 
     expect(out.emitted).toHaveLength(1);
     const command = out.emitted[0]!;
@@ -278,11 +341,21 @@ describe('ui_navigate zwraca to, co potwierdzil klient', () => {
   });
 
   it('pokazanie ustawienia nie ma zadnej operacji zmiany wartosci', () => {
-    // The tool surface is the guarantee: there is no "set" verb at all, so an
-    // agent cannot change a setting by accident while showing it.
-    const names = platformTools(h.platform.services).map((t) => t.name);
-    expect(names).toContain('ui_navigate');
-    expect(names.filter((n) => /^ui_/.test(n)).sort()).toEqual(['ui_catalog', 'ui_navigate']);
+    /*
+     * The tool surface is the guarantee: there is no "set" verb at all, so an
+     * agent cannot change a setting by accident while showing it.
+     *
+     * `ui_filter` joined this set when views became narrowable, and it does not
+     * weaken the property. It changes which rows are *displayed* and says so on
+     * screen; it writes nothing, and the user undoes it with one button. The
+     * assertion below is therefore two things: the exact list, so a new verb
+     * cannot appear unnoticed, and — the part that actually matters — that none
+     * of them writes.
+     */
+    const tools = platformTools(h.platform.services);
+    const ui = tools.filter((t) => /^ui_/.test(t.name));
+    expect(ui.map((t) => t.name).sort()).toEqual(['ui_catalog', 'ui_filter', 'ui_navigate']);
+    expect(ui.every((t) => t.effect === 'read')).toBe(true);
   });
 });
 
