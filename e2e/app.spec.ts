@@ -1,3 +1,4 @@
+import { statSync } from 'node:fs';
 import { expect, test } from './support/fixtures.ts';
 import { type APIRequestContext, type Page } from '@playwright/test';
 
@@ -49,8 +50,35 @@ test.describe('powloka aplikacji', () => {
   test('menu jest obslugiwalne z klawiatury i ma widoczny fokus', async ({ page }) => {
     await page.goto('/');
     const link = page.getByRole('link', { name: 'Wszystkie sprawy' });
-    await link.focus();
+    await expect(link).toBeVisible();
+
+    /*
+     * Prawdziwa sciezka klawiszowa: Tab od poczatku dokumentu, nie
+     * programistyczny el.focus(), ktory omija kolejnosc tabulacji — a wlascie
+     * o nia tu chodzi. Petla z limitem, zeby przy regeneracji menu test konczyl
+     * sie czytelnym niepowodzeniem, a nie zawieszeniem.
+     */
+    for (let i = 0; i < 30 && !(await link.evaluate((el) => el === document.activeElement)); i++) {
+      await page.keyboard.press('Tab');
+    }
     await expect(link).toBeFocused();
+
+    /*
+     * Widoczny wskaznik fokusu mierzony tak, jak produkt go rysuje: globalna
+     * regula `:focus-visible` w platform-ui/src/styles.css rysuje obwodke
+     * `outline: 2px solid var(--pf-accent)` — schowana obwodka (outline-style:
+     * none albo szerokosc 0) oznacza fokus, ktorego uzytkownik klawiatury nie
+     * widzi.
+     */
+    const wskaznik = await link.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { styl: s.outlineStyle, szerokosc: s.outlineWidth };
+    });
+    expect(wskaznik.styl, 'fokus nie ma zadnej obwodki').not.toBe('none');
+    expect(parseFloat(wskaznik.szerokosc), 'obwodka fokusu jest zerowej szerokosci').toBeGreaterThan(
+      0,
+    );
+
     await page.keyboard.press('Enter');
     await expect(page.getByTestId('cases-page')).toBeVisible();
   });
@@ -183,9 +211,22 @@ test.describe('canvas i kompozycja', () => {
     if (!box) throw new Error('brak karty na canvasie');
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
     await page.mouse.move(box.x + box.width / 2 + 160, box.y + box.height / 2 + 110, { steps: 15 });
     await page.mouse.up();
-    await page.waitForTimeout(1200);
+
+    // Zapis geometrii jest asynchroniczny: czekamy na warunek (backend potwierdza
+    // nowa wersje geometrii), a nie na zdany czas.
+    await expect
+      .poll(
+        async () => {
+          const stan = await (await request.get(`/api/canvas/spaces/${space.id}`)).json();
+          return stan.cards.find((c: { id: string }) => c.id === card.id)?.geometryVersion ?? 0;
+        },
+        { message: 'przeciagniecie karty nie zostalo zapisane w backendzie' },
+      )
+      .toBeGreaterThan(card.geometryVersion);
 
     const after = await (await request.get(`/api/canvas/spaces/${space.id}`)).json();
     const moved = after.cards.find((c: { id: string }) => c.id === card.id);
@@ -256,7 +297,21 @@ test.describe('dane i pliki', () => {
   test('pliki zrodlowe sa do pobrania', async ({ page }) => {
     await page.goto('/files');
     await expect(page.getByTestId('files-page')).toBeVisible();
-    await expect(page.getByRole('link', { name: 'pobierz' }).first()).toBeVisible();
+    // Pierwsza tabela to pliki zrodlowe (druga to artefakty).
+    const wiersz = page.locator('.pf-table').first().locator('tbody tr').first();
+    await expect(wiersz).toBeVisible();
+    const nazwa = (await wiersz.locator('td').first().innerText()).trim();
+
+    // Prawdziwe pobranie, nie sama obecnosc linku: przeglarka dostaje plik o
+    // nazwie z wiersza i o niezerowej tresci.
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      wiersz.getByRole('link', { name: 'pobierz' }).click(),
+    ]);
+    expect(download.suggestedFilename(), 'pobrana nazwa nie zgadza sie z wierszem').toBe(nazwa);
+    const sciezka = await download.path();
+    expect(sciezka, 'pobranie nie wyprodukowalo pliku').toBeTruthy();
+    expect(statSync(sciezka!).size, 'pobrany plik jest pusty').toBeGreaterThan(0);
   });
 
   test('odrzucony typ pliku daje czytelny blad', async ({ page }) => {
