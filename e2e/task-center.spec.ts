@@ -91,7 +91,7 @@ test.describe('centrum zadan', () => {
     await expect(page.getByTestId(`task-status-${runId}`)).toHaveAttribute('data-status', 'running');
     await expect(page.getByTestId(`task-conversation-${runId}`)).not.toContainText('undefined');
     const progress = page.getByTestId(`task-progress-${runId}`);
-    await expect(progress).toContainText('narzędzia: 1/1');
+    await expect(progress).toContainText('narzędzia: 2/2');
     await expect(page.getByTestId(`task-tools-${runId}`)).toContainText('canvas_list_cards');
     await expect(progress).toContainText('czas:');
 
