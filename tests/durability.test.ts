@@ -117,7 +117,7 @@ describe('sekrety nie wyciekaja poza proces SDK', () => {
     }
   });
 
-  it('baza danych aplikacji nie zawiera wartosci tokena', async () => {
+  it('baza danych aplikacji nie zawiera wartosci tokena, takze w WAL', () => {
     if (secrets.length === 0) return;
     // Exercise the paths that write to the database first.
     const conv = h.platform.services.conversations.create({
@@ -130,9 +130,22 @@ describe('sekrety nie wyciekaja poza proces SDK', () => {
       content: 'odpowiedz',
       meta: { toolCalls: [] },
     });
-    const dbFile = join(h.dataDir, 'app.db');
-    const blob = readFileSync(dbFile, 'latin1');
-    for (const s of secrets) expect(blob.includes(s)).toBe(false);
+    /*
+     * journal_mode = WAL: ostatnie wpisy leżą w app.db-wal poza głównym plikiem
+     * i trafiają do niego dopiero przy checkpoincie. Skan samego app.db jest
+     * więc ślepy na to, co aplikacja zapisała przed chwilą — wstrzyknięty w
+     * próbie zapis lądował wyłącznie w WAL (port z audytu 2026-09-28,
+     * AgenticApp fd0b4ae), więc token z ostatniej wiadomości wymknąłby się
+     * takiemu skanowi.
+     */
+    const mainFile = join(h.dataDir, 'app.db');
+    const walFile = `${mainFile}-wal`;
+    // Brak WAL-a oznaczałby, że skan obejmuje wyłącznie stary stan pliku.
+    expect(existsSync(walFile), 'app.db-wal nie istnieje — baza nie działa w trybie WAL').toBe(true);
+    for (const part of [mainFile, walFile]) {
+      const blob = readFileSync(part, 'latin1');
+      for (const s of secrets) expect(blob.includes(s), `token w ${part}`).toBe(false);
+    }
   });
 
   it('diagnostyka uruchomieniowa nie wypisuje tokena', () => {
@@ -303,6 +316,60 @@ describe('przerwana operacja wieloetapowa nie zostawia polowicznego stanu', () =
       expect(cases).toBeGreaterThan(0);
     } finally {
       again.close();
+    }
+
+    /*
+     * Stronger check (port z audytu 2026-09-28, AgenticApp fd0b4ae): a real
+     * *copy* of the database files, opened as its own platform, compared with
+     * the original by a per-table census — row count and a SHA-256 digest of
+     * the ordered contents. Counting two surfaces through the API proves the
+     * backend reports something; the census proves the copy carries the same
+     * data, byte for byte, table after table. The checkpoint first, so the
+     * copy does not silently miss what still lives in the WAL.
+     */
+    const { createHash } = await import('node:crypto');
+    const { cpSync, mkdtempSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const db = h.platform.db.$client;
+    db.pragma('wal_checkpoint(TRUNCATE)');
+    const copyDir = mkdtempSync(join(tmpdir(), 'durability-kopia-'));
+    try {
+      for (const part of ['app.db', 'app.db-wal', 'app.db-shm']) {
+        const src = join(h.dataDir, part);
+        if (existsSync(src)) cpSync(src, join(copyDir, part));
+      }
+      const census = (dir: string) => {
+        const open = createPlatform({ modules: [], env: { ...process.env, APP_DATA_DIR: dir } });
+        try {
+          const c = open.db.$client;
+          const digests: Record<string, string> = {};
+          for (const t of ['conversations', 'messages', 'agent_runs', 'artifacts', 'files']) {
+            const rows = c.prepare(`SELECT * FROM ${t} ORDER BY 1`).all() as Record<string, unknown>[];
+            digests[t] = createHash('sha256')
+              .update(JSON.stringify(rows))
+              .digest('hex');
+            // Straż niepustości: census pustych tabel niczego nie dowodzi.
+            if (t === 'conversations') expect(rows.length, 'census: brak rozmów w oryginale').toBeGreaterThan(0);
+          }
+          return digests;
+        } finally {
+          open.close();
+        }
+      };
+      const original = census(h.dataDir);
+      const copy = census(copyDir);
+      for (const t of Object.keys(original)) {
+        expect(copy[t], `census tabeli ${t}: kopia różni się od oryginału`).toBe(original[t]);
+      }
+      // And through the API of the copy itself, one surface as a witness.
+      const copyPlatform = createPlatform({ modules: [], env: { ...process.env, APP_DATA_DIR: copyDir } });
+      try {
+        expect(copyPlatform.services.files.list(DEFAULT_USER_ID)).toHaveLength(files);
+      } finally {
+        copyPlatform.close();
+      }
+    } finally {
+      rmSync(copyDir, { recursive: true, force: true });
     }
   });
 });
