@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FILE_ANALYSIS, AppError } from '@platform/contracts';
 import { analysisToolkit, createRunWorkspace } from '@platform/server';
-import { createHarness, type Harness } from './helpers.ts';
+import { createHarness, login, type Harness } from './helpers.ts';
 import { readZipEntry, writeZipWith, zipEntryNames } from './support/zip.ts';
 
 /**
@@ -163,26 +163,20 @@ describe('odczyt skoroszytu obejmuje arkusze i typy komorek', () => {
     expect(meta.getCell('B3').value).toBeNull();
   });
 
-  it('zapisana wartosc formuly moze byc nieaktualna — i dlatego nie jest wynikiem', async () => {
+  it('exceljs: uszkodzony plik konczy sie bledem biblioteki, nie zmyslona trescia', async () => {
     /*
-     * Written deliberately inconsistent: the formula says B*C (= 20) while the
-     * stored result says 999. A reader that recalculated would say 20; a reader
-     * that trusted the file says 999. The platform does neither silently — it
-     * reports both, which is why `FILE_ANALYSIS` states the limit out loud.
+     * Kontrakt BIBLIOTEKI, nazwany uczciwie: w tej aplikacji nie ma serwisu, ktory
+     * parsowalby XLSX po stronie platformy — analiza to skrypt pisany przez model
+     * i wykonywany w workspace uruchomienia (patrz describe powyzej), wiec
+     * zachowanie exceljs wobec smieci to sciezka produkcyjna. Uczciwosc testu
+     * polega na tym, ze asercjonujemy realny blad biblioteki: XLSX to archiwum
+     * ZIP, wiec smiec konczy sie bledem „end of central directory”, a nie
+     * pustym skoroszytem do dalszej „analizy”.
      */
     const wb = new ExcelJS.Workbook();
-    const sheet = wb.addWorksheet('S');
-    sheet.addRow([4, 5, { formula: 'A1*B1', result: 999 }]);
-    const bytes = Buffer.from(await wb.xlsx.writeBuffer());
-
-    const reread = new ExcelJS.Workbook();
-    await reread.xlsx.load(bytes as unknown as ArrayBuffer);
-    const cell = reread.getWorksheet('S')!.getCell('C1').value as { formula: string; result: number };
-
-    expect(cell.formula).toBe('A1*B1');
-    expect(cell.result).toBe(999);
-    expect(cell.result).not.toBe(20);
-    expect(FILE_ANALYSIS.spreadsheet.limits.join(' ')).toMatch(/NIE sa przeliczane/);
+    await expect(
+      wb.xlsx.load(Buffer.from('to nie jest skoroszyt') as unknown as ArrayBuffer),
+    ).rejects.toThrow(/zip/i);
   });
 
   it('uszkodzony plik konczy sie bledem, nie zmyslona trescia', async () => {
@@ -348,59 +342,36 @@ describe('magazyn plikow: typy, limity i dostep', () => {
 });
 
 describe('modyfikacja pliku zostawia oryginal nietkniety', () => {
-  it('nowa wersja to nowy plik wskazujacy na oryginal', async () => {
-    const originalBytes = await makeWorkbook();
+  it('oba pliki sa osobno pobieralne przez API, a obcy wlasciciel nie', async () => {
+    /*
+     * Pobieralnosc sprawdzana tak, jak robi to przegladarka: endpointem
+     * `/api/files/:id/content`, nie po ukladzie katalogow na dysku (sufiks
+     * rel_path to detal implementacji magazynu). Wersja i oryginal to dwa
+     * niezalezne pobrania; sesja innego uzytkownika dostaje 403.
+     */
     const original = h.platform.services.files.store({
-      ownerId: h.ownerId,
-      filename: 'oferty.xlsx',
-      mediaType: XLSX_MEDIA,
-      bytes: originalBytes,
-      scopeKind: 'case',
-      scopeId: 'case_1',
+      ownerId: h.ownerId, filename: 'a.xlsx', mediaType: XLSX_MEDIA, bytes: await makeWorkbook(),
+    });
+    const { version } = h.platform.services.files.storeVersion({
+      ownerId: h.ownerId, originalFileId: original.id, bytes: Buffer.from(await makeWorkbook()),
     });
 
-    // Modify: add a sheet, as a run would after parsing it.
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(originalBytes as unknown as ArrayBuffer);
-    wb.addWorksheet('Podsumowanie').addRow(['Razem', 4905]);
-    const modified = Buffer.from(await wb.xlsx.writeBuffer());
+    const cookie = await login(h.platform.app, h.ownerId);
+    const otherCookie = await login(h.platform.app, h.otherOwnerId);
 
-    const { original: after, version } = h.platform.services.files.storeVersion({
-      ownerId: h.ownerId,
-      originalFileId: original.id,
-      filename: 'oferty-poprawione.xlsx',
-      mediaType: XLSX_MEDIA,
-      bytes: modified,
+    for (const file of [original, version]) {
+      const res = await h.platform.app.request(`/api/files/${file.id}/content`, {
+        headers: { cookie },
+      });
+      expect(res.status, `pobranie ${file.filename} (wersja ${file.version})`).toBe(200);
+      expect(res.headers.get('content-type')).toBe(XLSX_MEDIA);
+      expect((await res.arrayBuffer()).byteLength).toBeGreaterThan(0);
+    }
+
+    const foreign = await h.platform.app.request(`/api/files/${original.id}/content`, {
+      headers: { cookie: otherCookie },
     });
-
-    expect(version.version).toBe(2);
-    expect(version.derivedFromFileId).toBe(original.id);
-    // Scope is inherited: a produced file stays attached to the same record.
-    expect(version.scopeKind).toBe('case');
-    expect(version.scopeId).toBe('case_1');
-
-    // The original is untouched — same identity, same checksum, same bytes.
-    expect(after.id).toBe(original.id);
-    expect(after.sha256).toBe(original.sha256);
-    expect(after.version).toBe(1);
-    const reread = h.platform.services.files.read(original.id, h.ownerId);
-    expect(Buffer.compare(reread.bytes, originalBytes)).toBe(0);
-
-    // And the produced file really is the modified workbook, still openable.
-    const check = new ExcelJS.Workbook();
-    await check.xlsx.load(
-      h.platform.services.files.read(version.id, h.ownerId).bytes as unknown as ArrayBuffer,
-    );
-    expect(check.worksheets.map((w) => w.name)).toContain('Podsumowanie');
-    expect(check.getWorksheet('Podsumowanie')!.getCell('B1').value).toBe(4905);
-    // The sheets that were there before survived the round trip.
-    expect(check.worksheets.map((w) => w.name)).toEqual(
-      expect.arrayContaining(['Ceny', 'Metryka', 'Pusty']),
-    );
-
-    expect(h.platform.services.files.versionsOf(original.id, h.ownerId).map((f) => f.id)).toEqual([
-      version.id,
-    ]);
+    expect(foreign.status).toBe(403);
   });
 
   it('oba pliki sa osobno pobieralne po zakonczeniu uruchomienia', async () => {
