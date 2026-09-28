@@ -61,6 +61,33 @@ export const TEST_PORT_RANGE = { from: 8792, to: 8799 } as const;
 /** Port the application uses when nobody configures one; never a test port. */
 export const DEFAULT_APP_PORT = 8791;
 
+/**
+ * Rezerwacja portów scenariuszowych: port → katalog danych instancji
+ * skryptowanej, która ten port nosi (porty wyprowadzone z `e2e/*.spec.ts`,
+ * stan na 2026-09-28). Port 8799 jest jedynym testowym portem poza listą —
+ * należy do instancji współdzielonej zestawu (`APP_E2E_PORT`, `.e2e-data`).
+ *
+ * Rezerwacja istnieje, bo zderzenie tych dwóch światów zdarzyło się po cichu:
+ * uruchomienie z `APP_E2E_PORT` pokrywającym port scenariuszowy powołało
+ * współdzieloną instancję na porcie scenariuszowym, a kontrola etykiety (i
+ * run-id — obie instancje należały do tego samego uruchomienia) przepuściła ją.
+ * Zderzenie jest teraz odrzucane przy ładowaniu konfiguracji (nizej).
+ */
+export const SCENARIO_PORTS = {
+  8793: '.e2e-scripted-uinav',
+  8794: '.e2e-scripted-tasks',
+  8795: '.e2e-scripted-restore / .e2e-scripted-taskcenter / .e2e-real-t15',
+  8796: '.e2e-scripted-glm / .e2e-scripted-stream / .e2e-scripted-continuity-limit',
+  8797: '.e2e-scripted-l97 / .e2e-scripted-reconnect / .e2e-real-bl03',
+  8798: '.e2e-scripted-* (większość speców scenariuszowych)',
+} as const;
+
+export const SHARED_DATA_DIR_NAME = '.e2e-data';
+
+export function scenarioPortOwner(port: number): string | null {
+  return (SCENARIO_PORTS as Record<number, string>)[port] ?? null;
+}
+
 export class TestIsolationError extends Error {
   constructor(message: string) {
     super(
@@ -206,6 +233,19 @@ export function resolveTestInstance(input: {
     Number(env.APP_E2E_PORT ?? input.defaultPort),
     'port instancji testowej (APP_E2E_PORT)',
   );
+  // Kolizja portów scenariuszowych: instancja współdzielona nie może wstać na
+  // porcie, który należy do instancji skryptowanej innego specu — kontrola
+  // etykiety (i run-id, bo obie instancje pochodzą z tego samego uruchomienia)
+  // nie odróżnia ich; dane scenariusza byłyby wtedy czytane/pisane przez zły
+  // zestaw (port z audytu 2026-09-28).
+  const owner = scenarioPortOwner(port);
+  if (env.APP_E2E_PORT !== undefined && owner) {
+    throw new TestIsolationError(
+      `APP_E2E_PORT=${port} jest zarezerwowany dla instancji scenariuszowej ` +
+        `(${owner}). Instancja współdzielona działa na porcie 8799 ` +
+        `(${SHARED_DATA_DIR_NAME}). Zadna operacja nie zostala wykonana.`,
+    );
+  }
   const dataDir = assertTestDataDir(
     resolve(repoRoot, input.dataDirName),
     repoRoot,

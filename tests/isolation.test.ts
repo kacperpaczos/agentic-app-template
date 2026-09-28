@@ -16,6 +16,9 @@ import {
   TEST_INSTANCE_LABEL,
   TEST_PORT_RANGE,
   TestIsolationError,
+  SCENARIO_PORTS,
+  scenarioPortOwner,
+  SHARED_DATA_DIR_NAME,
 } from '../e2e/support/isolation.ts';
 import {
   ACCEPTANCE_TEST_TURNS,
@@ -471,5 +474,40 @@ describe('spece z prawdziwym modelem: opt-in i nienaruszalnosc dowodow', () => {
     // A name that could climb out of the run's directory is not a file name.
     expect(() => evidencePath('../t25-wskazanie-wartosci.json')).toThrow(/zwykla nazwa pliku/);
     expect(() => evidencePath('runs/../t25.json')).toThrow(/zwykla nazwa pliku/);
+  });
+});
+
+describe('rezerwacja portow scenariuszowych (port z audytu 2026-09-28)', () => {
+  const PORTS = [8793, 8794, 8795, 8796, 8797, 8798];
+  for (const p of PORTS) {
+    it(`APP_E2E_PORT=${p} jest odrzucany — port scenariuszowy (${p})`, () => {
+      const dir = resolve(REPO, `.e2e-data`);
+      expect(() =>
+        resolveTestInstance({
+          repoRoot: REPO,
+          dataDirName: SHARED_DATA_DIR_NAME,
+          defaultPort: 8799,
+          env: { APP_E2E_PORT: String(p) },
+        }),
+      ).toThrow(/zarezerwowany dla instancji scenariuszowej/);
+      expect(scenarioPortOwner(p)).toBeTruthy();
+    });
+  }
+
+  it('port wspoldzielony 8799 pozostaje przyjmowany', () => {
+    const cfg = resolveTestInstance({
+      repoRoot: REPO,
+      dataDirName: SHARED_DATA_DIR_NAME,
+      defaultPort: 8799,
+    });
+    expect(cfg.port).toBe(8799);
+  });
+
+  it('porty 8792 i 8799 sa jedynymi niescenariuszowymi w zakresie testowym', () => {
+    for (let p = 8792; p <= 8799; p++) {
+      const owner = scenarioPortOwner(p);
+      if (p === 8792 || p === 8799) expect(owner, `port ${p} ma byc wolny`).toBeNull();
+      else expect(owner, `port ${p} ma byc zarezerwowany`).toBeTruthy();
+    }
   });
 });
