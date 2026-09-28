@@ -1147,3 +1147,45 @@ trwała plakietka i jednorazowy komunikat to L11.19, a wybór i egzekwowanie trz
 (L11.12) oraz izolowany dowód pełnej ścieżki GLM (L12.6) pozostają w BL-13. Wszystkie dowody
 powstały bez tury modelu (instancja skryptowa i harness jednostkowy) — żadnego potwierdzenia GLM
 to pakiet nie niesie.
+
+---
+
+## §A28 — Audyt jakości testów i konsolidacja z AgenticApp (2026-09-28)
+
+**Zakres.** Bezzwrotna konsolidacja: niepowiązana historia repo `AgenticApp`
+(import jako `archive/agenticapp-2026-09-28` = `fd0b4ae`, 2 commity) + audyt
+jakości testów (350 testów wg 8 kryteriów, 28 falsyfikacji, 26 wykrytych)
++ portowanie utwardzeń na kanon v0.4.
+
+**Wnioski audytu, które zmieniły main:**
+- izolacja E2E: rezerwacja portów scenariuszowych (`SCENARIO_PORTS`,
+  `e2e/support/isolation.ts`) — kolizja `APP_E2E_PORT` z instancją
+  scenariuszową przechodziła wcześniej cicho (etykieta i run-id nie
+  odróżniają instancji tego samego uruchomienia);
+- ochrona artefaktów: usunięcie rozmowy odłącza (SET NULL), nie kasuje —
+  test platformowy `tests/chat-history.test.ts` (falsyfikacja CASCADE);
+- skan sekretów obejmuje `app.db-wal` (WAL leży poza głównym plikiem);
+  kopia bazy weryfikowana censusem SHA-256 per tabela;
+- scoring: testy liczbowe min-max (span 0, brak imputacji), brzegi
+  `missing_prices`/`quantity_mismatch`/`defaultCriteria`, dokładny format
+  kwoty (U+00A0); canary typów wewnętrznych zod w `assertMcpCompatibleShape`;
+- run: idempotencja statusu końcowego, kolejkowanie (`queuedMs`), brzegi
+  ramki SSE (unicode/nowa linia), granica tytułu 61+…, anulowanie bez
+  zegara ściennego; sesja: flagi ciasteczka, `users` bez obcej tożsamości;
+  auth: plik bez `claudeAiOauth` = „absent"; observability: „nic nie wysyła"
+  zmierzone; contracts: `ownerId` w ciele żądania przegrywa z sesją.
+
+**Świadome odrzucenia (z powodem):** plikowy provider `APP_PROVIDER_CONFIG`
+(duplikat trybu `APP_MODEL_PROVIDER=glm`; synteza odłożona); test E2E
+artefaktów na turze modelowej (SDK-CLI 2.1.270 w trybie glm: „Not logged in"
+przy turze; host-CLI 2.1.283 przechodzi — rozbieżność wersji; ochrona
+przeniesiona do testu platformowego); dopasowania „identycznych drzew"
+starych raportów — historia żyje w `archive/*`.
+
+**Rejestry procesu:** `/home/paczos/Documents/agentic-konsolidacja-20260928/`
+(manifest, bundly v2, rozliczenia main↔archive i P4, raport prywatności,
+wykaz Etapu G, backup `AGENTICAPP-BACKUP-PRZED-SPRZATANIEM-2026-09-28`).
+
+**Czego to NIE dowodzi.** Audyt nie domyka 12 otwartych kryteriów v0.4
+(BL-03/07/09/11/13) ani nie przenosi działania żywej instancji do kanonicznego
+katalogu — przełączenie instancji rozliczone osobno (§A28b, ten sam dzień).
