@@ -1,5 +1,15 @@
 import { expect, test } from '@playwright/test';
 
+async function seedThread(request: APIRequestContext, title: string) {
+  await request.post('/api/auth/session', { data: {} });
+  const created = await (
+    await request.post('/api/threads/create', {
+      data: { messages: [{ id: crypto.randomUUID(), role: 'user', content: title }] },
+    })
+  ).json();
+  return created as { id: string; title: string };
+}
+
 /*
  * SPEC MODELOWY (odplatne tury GLM). Nie wlaczac do biegow skryptowanych —
  * uruchamiany swiadomie: APP_MODEL_PROVIDER=glm + CLAUDE_CONFIG_DIR izolowany
