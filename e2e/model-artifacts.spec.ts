@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type APIRequestContext } from '@playwright/test';
 
 async function seedThread(request: APIRequestContext, title: string) {
   await request.post('/api/auth/session', { data: {} });
