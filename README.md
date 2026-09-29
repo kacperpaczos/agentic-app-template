@@ -178,9 +178,26 @@ Pełny opis architektury i kontraktów: [`docs/ARCHITECTURE.md`](docs/ARCHITECTU
 ### Pierwszy start
 
 ```bash
+git clone https://github.com/kacperpaczos/agentic-app-template.git agentic-app-template
+cd agentic-app-template
 pnpm install --frozen-lockfile
 pnpm build
 pnpm start          # http://localhost:8791
+```
+
+Pełna kontrola jakości po klonowaniu (typy, granice modułów, macierze odbioru, build, testy bez
+modelu — bez przeglądarki i bez tury modelowej):
+
+```bash
+pnpm verify
+```
+
+Testy przeglądarkowe (skryptowany agent, instancja testowa na 8799 z własnym katalogiem danych —
+nie dotyka `data/` ani instancji deweloperskiej):
+
+```bash
+pnpm exec playwright install chromium   # jednorazowo
+pnpm test:e2e                           # pełny zestaw skryptowany
 ```
 
 Przy pierwszym starcie aplikacja tworzy bazę w katalogu `data/` i dodaje dane przykładowe — raz, więc
