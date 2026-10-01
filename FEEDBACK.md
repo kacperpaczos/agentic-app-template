@@ -1221,8 +1221,14 @@ włączonego specu. Odcisk nie ustala sprawcy zmiany; poświadczenia nie odczyty
 diagnozie, a przyczyny nie przypisano bez dowodu. Po naprawie `pnpm verify` ponownie
 przeszło (1200/1200), a zwykłe `pnpm test:e2e` przeszło 229/229 (EXIT 0, 31,7 min)
 z niezmienionym odciskiem OAuth; żaden test modelowy nie wszedł do przebiegu.
-Przełączenie działającego procesu 8791 rozliczane osobno w raporcie
-końcowym tej zmiany. Nie uruchomiono tu rzeczywistej tury GLM; L12.6 pozostaje otwarte.
+**Przełączenie lokalne.** Po potwierdzeniu braku aktywnych uruchomień stary proces 8791
+zatrzymano przez SIGTERM. `scripts/backup-state.mjs` utworzył i zweryfikował kopię w
+`backups/glm-switch-2026-10-01/` (2 rozmowy, 40 wiadomości, 5 plików, integrity check OK).
+Usługa użytkownika `agenticapp-glm.service` jest aktywna i włączona na przyszłe starty;
+działa z kanonicznego katalogu na 8791, log potwierdza GLM/Z.AI i model
+`glm-5.3-flash[1m]`, a `/api/health` zwraca `{"ok":true}`. Prywatny plik środowiska usługi
+jest poza repo (`~/.config/agenticapp/glm.env`, 0600). Nie uruchomiono rzeczywistej tury GLM;
+L12.6 pozostaje otwarte.
 
 **Pozostała praca.** 12 kryteriów w `docs/BACKLOG.md`. Priorytet: pozytywna granica dostępu
 narzędzi plikowych (L11.4/L11.11), rzeczywista ścieżka GLM (L12.6) i zależne od niej próby
