@@ -78,7 +78,7 @@ import {
 import { resolveLastResult, scriptedAgent, type Step } from '../e2e/support/scripted-agent.ts';
 import { buildDataModel, describeDataInstance } from '../packages/platform-ui/src/views/model.ts';
 import { withGrouping } from '../packages/platform-ui/src/views/grouping.ts';
-import { createHarness, login, type Harness } from './helpers.ts';
+import { createHarness, login, type Harness, testGlmEnv } from './helpers.ts';
 
 /**
  * The versioned description of the active screen (BL-01: L6.15, L6.17).
@@ -873,7 +873,7 @@ describe('I1: bardzo dlugi adres zawezonego widoku', () => {
     let platform: PlatformInstance;
     platform = createPlatform({
       modules: [],
-      env: { ...process.env, APP_DATA_DIR: dataDir },
+      env: testGlmEnv(dataDir),
       modelAgent: scriptedAgent([{ kind: 'call', name: 'get_context', maxChars: 4000 }], {
         tools: () => collectToolEntries({ registry: platform.registry, platformTools: platformTools(platform.services) }),
       }),

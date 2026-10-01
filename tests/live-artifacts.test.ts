@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createHarness, login, type Harness } from './helpers.ts';
+import { createHarness, login, type Harness, testGlmEnv } from './helpers.ts';
 
 /**
  * Live artifacts.
@@ -293,7 +293,7 @@ describe('trwalosc po restarcie', () => {
     h.platform.close();
     const reopened = createPlatform({
       modules: (services) => [createProcurementModule(services)],
-      env: { ...process.env, APP_DATA_DIR: h.dataDir },
+      env: testGlmEnv(h.dataDir),
     });
 
     try {

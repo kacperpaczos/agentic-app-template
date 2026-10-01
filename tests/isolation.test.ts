@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
+import { testGlmEnv } from './helpers.ts';
 import {
   assertTestInstanceIsIsolated,
   loadConfig,
@@ -69,6 +70,18 @@ import {
  */
 
 const REPO = resolve(import.meta.dirname, '..');
+
+/** Historical subscription ledger checks; the running application remains GLM-only. */
+const withArchivedSubscription = <T>(fn: () => T): T => {
+  const original = process.env.APP_MODEL_PROVIDER;
+  process.env.APP_MODEL_PROVIDER = 'subscription';
+  try {
+    return fn();
+  } finally {
+    if (original === undefined) delete process.env.APP_MODEL_PROVIDER;
+    else process.env.APP_MODEL_PROVIDER = original;
+  }
+};
 
 describe('granice konfiguracji testow', () => {
   it('domyslny port aplikacji nie jest portem testowym', () => {
@@ -231,6 +244,7 @@ describe('serwer odmawia startu przy niezgodnej konfiguracji', () => {
     const dir = resolve(tmp(), 'dane-produkcyjne');
     expect(() =>
       loadConfig({
+        ...testGlmEnv(dir),
         APP_INSTANCE_LABEL: TEST_INSTANCE_LABEL,
         APP_DATA_DIR: dir,
         PORT: '8799',
@@ -243,6 +257,7 @@ describe('serwer odmawia startu przy niezgodnej konfiguracji', () => {
   it('loadConfig przyjmuje poprawna instancje testowa', () => {
     const dir = resolve(tmp(), '.e2e-ok');
     const config = loadConfig({
+      ...testGlmEnv(dir),
       APP_INSTANCE_LABEL: TEST_INSTANCE_LABEL,
       APP_DATA_DIR: dir,
       PORT: '8799',
@@ -284,6 +299,7 @@ describe('spece z prawdziwym modelem: opt-in i nienaruszalnosc dowodow', () => {
       '**/bl01-bl02-model.spec.ts',
       '**/agent-ui.spec.ts',
       '**/files-agent.spec.ts',
+      '**/model-artifacts.spec.ts',
     ]);
     expect(Z11_MODEL_SPEC_PATTERNS).toEqual([
       '**/bl03-model-canvas.spec.ts',
@@ -302,7 +318,7 @@ describe('spece z prawdziwym modelem: opt-in i nienaruszalnosc dowodow', () => {
   /**
    * The second grant, and why it needs a second switch.
    *
-   * `pnpm test:e2e:model` is documented as costing 11 turns. Putting BL-03's
+   * `pnpm test:e2e:model` is documented as costing up to 12 turns. Putting BL-03's
    * four specs into the same project would change that number for everyone who
    * runs it, without anybody choosing it — the same class of surprise as the
    * default run spending turns. So `APP_E2E_MODEL_Z11` has to be set **as well**,
@@ -410,7 +426,7 @@ describe('spece z prawdziwym modelem: opt-in i nienaruszalnosc dowodow', () => {
     expect(readFileSync(resolve(REPO, '.gitignore'), 'utf8')).toContain('.e2e-model-turns/');
     // The closed grant is the starting count, never a file this suite writes.
     expect(RECORDED_LEDGER).toBe(resolve(EVIDENCE_ROOT, 'tury-modelu.json'));
-    const seeded = readLedger(22);
+    const seeded = withArchivedSubscription(() => readLedger(22));
     const recorded = JSON.parse(readFileSync(RECORDED_LEDGER, 'utf8')) as { wydane: number };
     expect(seeded.wydane).toBe(recorded.wydane);
   });
@@ -421,7 +437,9 @@ describe('spece z prawdziwym modelem: opt-in i nienaruszalnosc dowodow', () => {
      * T25 (jedna tura naprawde wyslana) i dopiero T26 odmowil. Sprawdzenie
      * wstepne pyta o caly spec, zanim cokolwiek pojdzie do modelu.
      */
-    const short = budgetPreflight({ budget: 22, spent: 21, needed: ACCEPTANCE_TURNS_NEEDED });
+    const short = withArchivedSubscription(() =>
+      budgetPreflight({ budget: 22, spent: 21, needed: ACCEPTANCE_TURNS_NEEDED }),
+    );
     expect(short.ok).toBe(false);
     expect(short).toMatchObject({ budget: 22, spent: 21, left: 1, needed: 7, shortfall: 6 });
     const message = (short as { message: string }).message;
@@ -447,7 +465,7 @@ describe('spece z prawdziwym modelem: opt-in i nienaruszalnosc dowodow', () => {
     expect(MODEL_SPEC_TURNS['bl01-bl02-model.spec.ts']).toBe(ACCEPTANCE_TURNS_NEEDED);
 
     // Na stanie galezi (zamkniety grant) spec jest pomijany, a nie uruchamiany.
-    expect(acceptancePreflight(22).ok).toBe(false);
+    expect(withArchivedSubscription(() => acceptancePreflight(22).ok)).toBe(false);
   });
 
   it('spec odbiorowy pomija proby na podstawie sprawdzenia wstepnego, zanim cokolwiek wysle', () => {

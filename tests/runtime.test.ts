@@ -17,7 +17,7 @@ import {
   encodeSse,
   deriveTitle,
 } from '@platform/server';
-import { createHarness, login, type Harness } from './helpers.ts';
+import { createHarness, login, testGlmEnv, type Harness } from './helpers.ts';
 
 describe('workspace i sandbox', () => {
   let h: Harness;
@@ -72,7 +72,7 @@ describe('polityka wylacznie subskrypcyjna', () => {
       AWS_BEARER_TOKEN_BEDROCK: 'tajne',
       HOME: '/home/u',
     };
-    const out = subscriptionOnlyEnv(env);
+    const out = subscriptionOnlyEnv(env, 'subscription');
     expect(out.PATH).toBe('/usr/bin');
     expect(out.HOME).toBe('/home/u');
     expect(out.ANTHROPIC_API_KEY).toBeUndefined();
@@ -91,24 +91,24 @@ describe('polityka wylacznie subskrypcyjna', () => {
       CLAUDE_CONFIG_DIR: '/home/u/.claude',
       PATH: '/usr/bin',
     };
-    const out = subscriptionOnlyEnv(env);
+    const out = subscriptionOnlyEnv(env, 'subscription');
     expect(out.CLAUDE_CODE_SESSION_ID).toBeUndefined();
     expect(out.CLAUDE_CODE_MESSAGING_SOCKET).toBeUndefined();
     expect(out.CLAUDE_CODE_MESSAGING_TOKEN).toBeUndefined();
     expect(out.CLAUDECODE).toBeUndefined();
     expect(out.CLAUDE_CONFIG_DIR).toBe('/home/u/.claude');
-    expect(scrubbedEnvKeys(env)).toEqual(
+    expect(scrubbedEnvKeys(env, 'subscription')).toEqual(
       expect.arrayContaining(['CLAUDE_CODE_SESSION_ID', 'CLAUDECODE']),
     );
-    expect(scrubbedEnvKeys(env)).not.toContain('CLAUDE_CONFIG_DIR');
+    expect(scrubbedEnvKeys(env, 'subscription')).not.toContain('CLAUDE_CONFIG_DIR');
   });
 
   it('raport uwierzytelnienia nie zawiera zadnej wartosci sekretnej', () => {
     const status = probeAuth();
     const text = JSON.stringify(status);
     expect(text).not.toMatch(/sk-ant|accessToken|refreshToken/i);
-    expect(status.apiKeyPolicy).toBe('refused');
-    expect(['subscription', 'none']).toContain(status.method);
+    expect(status.apiKeyPolicy).toBe('glm_explicit');
+    expect(status.method).toBe('glm');
   });
 });
 
@@ -496,7 +496,7 @@ describe('kopia i odtworzenie trwalego stanu lokalnego', () => {
 
       const restored = createPlatform({
         modules: (s) => [createProcurementModule(s)],
-        env: { ...process.env, APP_DATA_DIR: copy },
+        env: testGlmEnv(copy),
       });
       try {
         expect(restored.services.artifacts.meta(artifact.meta.id, h.ownerId).title).toBe(
@@ -613,7 +613,7 @@ describe('token subskrypcji nie wycieka z aplikacji', () => {
         expect(text.includes(token.slice(0, 16)), 'poczatek tokena w odpowiedzi /api/status').toBe(false);
       }
       // The metadata that *is* exposed stays exposed.
-      expect(JSON.parse(text).auth).toHaveProperty('apiKeyPolicy', 'refused');
+      expect(JSON.parse(text).auth).toHaveProperty('apiKeyPolicy', 'glm_explicit');
     } finally {
       h.dispose();
     }

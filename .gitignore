@@ -24,6 +24,7 @@ playwright-report/
 # Licznik tur subskrypcji wydanych przez spece modelowe. Kopia robocza, nie
 # dowód: rejestr zamkniętego grantu leży w docs/evidence/ i nikt go nie nadpisuje.
 .e2e-model-turns/
+.e2e-glm-config/
 
 # Kopie stanu lokalnego — zawierają PRAWDZIWE dane użytkownika (rozmowy,
 # kompozycje, pliki). Nie mogą trafić do repozytorium ani do obrazu.

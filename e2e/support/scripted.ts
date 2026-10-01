@@ -1,7 +1,7 @@
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, type WriteStream } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { TEST_RUN_ID, resolveTestInstance, type TestInstanceConfig } from './isolation.ts';
+import { TEST_RUN_ID, resolveTestInstance, scriptedGlmEnv, type TestInstanceConfig } from './isolation.ts';
 import { assertDirectoryFree, assertPortFree } from './port-probe.ts';
 import { verifyIsolatedInstance } from './fixtures.ts';
 
@@ -69,7 +69,7 @@ export class ScriptedInstance {
       env: {},
     });
     this.#entry = opts.entry ?? 'scripted';
-    this.#extraEnv = opts.env ?? {};
+    this.#extraEnv = { ...scriptedGlmEnv(this.config.repoRoot), ...opts.env };
     this.#logFile = opts.logFile ? resolve(this.config.repoRoot, opts.logFile) : null;
   }
 
@@ -109,7 +109,7 @@ export class ScriptedInstance {
       execFileSync('pnpm', [script], {
         cwd: this.config.repoRoot,
         stdio: 'ignore',
-        env: { ...process.env, ...this.config.env },
+        env: { ...process.env, ...this.#extraEnv, ...this.config.env },
       });
     }
   }

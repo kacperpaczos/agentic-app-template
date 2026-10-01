@@ -11,8 +11,9 @@ const int = (v: string | undefined, d: number) => {
 /**
  * Who provides the model the harness executes.
  *
- * **Subscription is the default and is unchanged in every detail.** `glm` is an
- * explicit, opt-in mode (decyzja właściciela 2026-09-20): the Claude Agent SDK
+ * GLM is the only active provider in v0.4 (decyzja właściciela 2026-10-01).
+ * The historical subscription policy remains in helpers for audit tests, but
+ * `loadConfig` refuses to start an application with it. The Claude Agent SDK
  * remains the harness, and the model calls go to a GLM/Z.AI endpoint that
  * speaks the Anthropic wire protocol, configured with `ANTHROPIC_BASE_URL` and
  * `ANTHROPIC_AUTH_TOKEN`. Anything else is refused — an unknown value of
@@ -22,21 +23,18 @@ const int = (v: string | undefined, d: number) => {
  */
 export type ModelProvider = 'subscription' | 'glm';
 
-export const MODEL_PROVIDERS: readonly ModelProvider[] = ['subscription', 'glm'];
+export const MODEL_PROVIDERS: readonly ModelProvider[] = ['glm'];
 
-const isModelProvider = (v: string | undefined): v is ModelProvider =>
-  v === 'subscription' || v === 'glm';
+const isModelProvider = (v: string | undefined): v is ModelProvider => v === 'glm';
 
 /**
  * Tolerant read of the provider from an environment.
  *
- * Anything but the exact `'glm'` reads as the default `subscription`; the
- * *strict* decision — an unknown value refusing the start — lives only in
- * {@link loadConfig}, so a helper that must not throw (status answers, probe
- * dispatch) cannot accidentally become a second policy.
+ * This helper preserves explicit subscription reporting for historical probes.
+ * The strict active-provider decision lives in {@link loadConfig}.
  */
 export function modelProviderFromEnv(env: NodeJS.ProcessEnv = process.env): ModelProvider {
-  return env.APP_MODEL_PROVIDER === 'glm' ? 'glm' : 'subscription';
+  return env.APP_MODEL_PROVIDER === 'subscription' ? 'subscription' : 'glm';
 }
 
 export interface PlatformConfig {
@@ -50,7 +48,7 @@ export interface PlatformConfig {
   /** Static bundle served in production; absent in dev. */
   webDistDir: string | null;
   model: string;
-  /** How the model is reached: the local subscription, or the explicit GLM mode. */
+  /** How the model is reached: GLM/Z.AI in active v0.4. */
   modelProvider: ModelProvider;
   /**
    * Origin of the Anthropic-compatible endpoint, **glm mode only**.
@@ -179,17 +177,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PlatformConfig
   /*
    * Provider first, and fail-closed: an unknown value of `APP_MODEL_PROVIDER`
    * refuses the start before anything else is resolved. The default — no
-   * variable at all — is and stays `subscription`, whose behaviour this change
-   * does not alter in any detail.
+   * variable at all — selects GLM. An explicit subscription is refused.
    */
   if (env.APP_MODEL_PROVIDER !== undefined && !isModelProvider(env.APP_MODEL_PROVIDER)) {
     throw new Error(
-      `[konfiguracja] APP_MODEL_PROVIDER="${env.APP_MODEL_PROVIDER}" jest nieznany. ` +
+      `[konfiguracja] APP_MODEL_PROVIDER="${env.APP_MODEL_PROVIDER}" jest wyłączony lub nieznany. ` +
         `Dozwolone wartości: ${MODEL_PROVIDERS.join(', ')}. Start odmówiony — ` +
-        'nieznany provider modelu nigdy nie jest obsługiwany po cichu.',
+        'inny provider modelu nigdy nie jest obsługiwany po cichu.',
     );
   }
-  const modelProvider: ModelProvider = env.APP_MODEL_PROVIDER ?? 'subscription';
+  const modelProvider: ModelProvider = 'glm';
 
   /*
    * GLM mode has hard requirements, and a start without any one of them is
@@ -281,7 +278,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PlatformConfig
       .map((s) => s.trim())
       .filter(Boolean),
     webDistDir: env.APP_WEB_DIST ? resolve(env.APP_WEB_DIST) : null,
-    model: env.APP_MODEL ?? 'claude-sonnet-4-5',
+    model: env.APP_MODEL!.trim(),
     modelProvider,
     modelEndpointOrigin,
     runTimeoutMs: int(env.APP_RUN_TIMEOUT_MS, 300_000),

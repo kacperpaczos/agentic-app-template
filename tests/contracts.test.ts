@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { AppContext, ToolCallContext } from '@platform/contracts';
-import { createHarness, caseCode, login, type Harness } from './helpers.ts';
+import { createHarness, caseCode, login, type Harness, testGlmEnv } from './helpers.ts';
 
 const emptyContext: AppContext = {
   conversationId: null,
@@ -122,7 +122,7 @@ describe('kontrakty: walidacja, uprawnienia, konflikty, powtorzenia', () => {
     const text = await res.text();
     expect(text).not.toMatch(/sk-ant|accessToken|refreshToken|Bearer /i);
     const body = JSON.parse(text);
-    expect(body.auth.apiKeyPolicy).toBe('refused');
+    expect(body.auth.apiKeyPolicy).toBe('glm_explicit');
     expect(Object.keys(body.auth)).not.toContain('token');
   });
 
@@ -426,7 +426,7 @@ describe('kontrakty: walidacja, uprawnienia, konflikty, powtorzenia', () => {
     const { createProcurementModule } = await import('@module/procurement/server');
     const restarted = createPlatform({
       modules: (s) => [createProcurementModule(s)],
-      env: { ...process.env, APP_DATA_DIR: h.dataDir },
+      env: testGlmEnv(h.dataDir),
     });
     const contentAfter = restarted.services.files.read(target.id, h.ownerId).bytes.toString('utf8');
     expect(contentAfter).toBe(contentBefore);

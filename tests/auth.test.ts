@@ -40,7 +40,7 @@ const emptyDir = (): string => {
 };
 
 const SYNTHETIC = { accessToken: 'SYNTETYCZNY-NIE-JEST-TOKENEM', refreshToken: 'SYNTETYCZNY-REFRESH' };
-const env = (dir: string) => ({ CLAUDE_CONFIG_DIR: dir }) as NodeJS.ProcessEnv;
+const env = (dir: string) => ({ APP_MODEL_PROVIDER: 'subscription', CLAUDE_CONFIG_DIR: dir }) as NodeJS.ProcessEnv;
 
 afterEach(() => {
   resetVerification();
@@ -186,7 +186,7 @@ describe('polityka wylacznie subskrypcyjna', () => {
       CLAUDE_CONFIG_DIR: '/home/x/.claude',
     } as NodeJS.ProcessEnv;
 
-    const clean = subscriptionOnlyEnv(dirty);
+    const clean = subscriptionOnlyEnv(dirty, 'subscription');
     for (const key of Object.keys(dirty)) {
       if (key === 'PATH' || key === 'CLAUDE_CONFIG_DIR') {
         expect(clean[key], `${key} musi zostac`).toBeDefined();
@@ -198,7 +198,7 @@ describe('polityka wylacznie subskrypcyjna', () => {
     const serialized = JSON.stringify(clean);
     expect(serialized).not.toContain('sk-ant-SYNTETYCZNY');
     expect(serialized).not.toContain('gateway.example');
-    expect(scrubbedEnvKeys(dirty).sort()).toEqual(
+    expect(scrubbedEnvKeys(dirty, 'subscription').sort()).toEqual(
       [
         'ANTHROPIC_API_KEY',
         'ANTHROPIC_AUTH_TOKEN',

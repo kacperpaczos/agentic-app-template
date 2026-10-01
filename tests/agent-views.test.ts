@@ -25,7 +25,7 @@ import {
 } from '@platform/server';
 import { scriptedAgent } from '../e2e/support/scripted-agent.ts';
 import { createProcurementModule } from '@module/procurement/server';
-import { createHarness, login, type Harness } from './helpers.ts';
+import { createHarness, login, type Harness, testGlmEnv } from './helpers.ts';
 
 /**
  * Agent views: server-side validation of OpenUI compositions, the tools that
@@ -290,7 +290,7 @@ describe('walidacja przy zapisie kart i przy starcie', () => {
     expect(() =>
       createPlatform({
         modules: withView('root = Stack([x])\nx = Tabelka("a")'),
-        env: { ...process.env, APP_DATA_DIR: h.dataDir },
+        env: testGlmEnv(h.dataDir),
       }),
     ).toThrowError(/Modul procurement, widok procurement\.data: Kompozycja OpenUI odrzucona: Instrukcja x: nieznany komponent Tabelka/);
   });

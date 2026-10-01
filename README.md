@@ -157,7 +157,7 @@ Pełny opis architektury i kontraktów: [`docs/ARCHITECTURE.md`](docs/ARCHITECTU
 | Czat i dynamiczne widoki | OpenUI Agent Interface, OpenUI Lang + Renderer | gotowy interfejs rozmów zamiast własnego; kompozycje tylko z zarejestrowanego katalogu komponentów |
 | Komunikacja z agentem | AG-UI | jeden strumień zdarzeń dla tekstu, narzędzi, błędów i zgód |
 | Backend | Node.js, Hono | jeden język z frontendem, długotrwały proces odpowiedni dla sesji agenta i strumieni |
-| Agent | Mastra + Claude Agent SDK | prawdziwa pętla agenta Claude z narzędziami, sesjami i sandboxem; domyślnie subskrypcja Claude, jawnie tryb GLM/Z.AI (`APP_MODEL_PROVIDER=glm`); bez cichego klucza API |
+| Agent | Mastra + Claude Agent SDK | pętla agenta z narzędziami, sesjami i sandboxem; model GLM/Z.AI przez endpoint kompatybilny z Anthropic; bez fallbacku do subskrypcji Claude |
 | Narzędzia agenta | MCP, Zod | typowane operacje backendu ze sprawdzanymi schematami |
 | Dane | SQLite, Drizzle | lokalna baza bez osobnego serwera, z migracjami |
 | Testy | Vitest, Playwright | kontrakty i logika bez modelu; zachowanie w przeglądarce na buildzie produkcyjnym |
@@ -169,10 +169,8 @@ Pełny opis architektury i kontraktów: [`docs/ARCHITECTURE.md`](docs/ARCHITECTU
 - **Node.js ≥ 22.12** (sprawdzane na 24.19.0) i **pnpm 9.15.9** (np. przez `corepack enable`).
 - **Linux.** Aplikacja była uruchamiana tylko na Linuksie (Fedora 44); sandbox Claude Agent SDK zależy
   od mechanizmów systemu, a inne systemy nie były testowane.
-- **Konto Claude z subskrypcją**, zalogowane lokalnie w CLI `claude` (polecenie `/login`). Aplikacja
-  nie używa klucza API Anthropic. Bez logowania wszystko poza agentem działa — canvas, dane, pliki,
-  rozmowy — a polecenia do agenta kończą się czytelnym błędem. Alternatywą jest **jawny tryb GLM**
-  (`APP_MODEL_PROVIDER=glm`, opis niżej), w którym subskrypcja Claude nie jest używana ani czytana.
+- **Dostęp do GLM/Z.AI**: model, endpoint kompatybilny z Anthropic, token Z.AI i izolowany
+  `CLAUDE_CONFIG_DIR` (opis niżej). Subskrypcja Claude i lokalne logowanie OAuth nie są używane.
 - Do testów przeglądarkowych: Chromium dla Playwright (`pnpm exec playwright install chromium`).
 
 ### Pierwszy start
@@ -182,6 +180,8 @@ git clone https://github.com/kacperpaczos/agentic-app-template.git agentic-app-t
 cd agentic-app-template
 pnpm install --frozen-lockfile
 pnpm build
+# Ustaw APP_MODEL, ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN i CLAUDE_CONFIG_DIR
+# zgodnie z sekcją „GLM/Z.AI” poniżej, a następnie:
 pnpm start          # http://localhost:8791
 ```
 
@@ -218,9 +218,9 @@ odpowiada**: backend uruchomiony przez `pnpm dev` przedstawia się etykietą `ag
 żądania do cudzej instancji. Inny port: `APP_DEV_API_PORT=8765 pnpm dev` — port zainstalowanej
 aplikacji (8791) i porty zarezerwowane dla testów (8792–8799) są odrzucane z podaniem powodu.
 
-**Docker** — `docker compose build --no-cache`, potem `docker compose up -d`. Dane są w wolumenie, nie
-w obrazie. Poświadczenie Claude nie jest wbudowywane w obraz; żeby agent działał w kontenerze, trzeba
-świadomie odkomentować montowanie `~/.claude` w `compose.yaml`.
+**Docker** — po ustawieniu `APP_MODEL`, `ANTHROPIC_BASE_URL` i `ANTHROPIC_AUTH_TOKEN` w środowisku
+Compose: `docker compose build --no-cache`, potem `docker compose up -d`. Dane są w wolumenie, nie
+w obrazie. Izolowany `CLAUDE_CONFIG_DIR` jest ustawiony wewnątrz kontenera; nie montuj `~/.claude`.
 
 **Istniejące dane** — nowa wersja uruchomiona na starym katalogu `data/` stosuje zaległe migracje.
 Zanim to zrobisz, wykonaj kopię i próbę migracji na kopii:
@@ -233,8 +233,8 @@ Zanim to zrobisz, wykonaj kopię i próbę migracji na kopii:
 | `PORT` | `8791` | port backendu |
 | `APP_DATA_DIR` | `<repo>/data` | baza, pliki i katalogi robocze agenta |
 | `APP_ALLOWED_ORIGINS` | adresy `localhost` i `127.0.0.1` na portach 5173 i 8791 | dozwolone originy, po przecinku |
-| `APP_MODEL` | `claude-sonnet-4-5` | model agenta; w trybie `glm` **wymagany** |
-| `APP_MODEL_PROVIDER` | `subscription` | dostawca modelu: `subscription` (subskrypcja Claude, zachowanie domyślne) albo `glm` (jawny tryb GLM/Z.AI); inna wartość = odmowa startu |
+| `APP_MODEL` | wymagany | nazwa modelu GLM udostępnionego przez Z.AI |
+| `APP_MODEL_PROVIDER` | `glm` | jedyny aktywny provider; `subscription` i inne wartości = odmowa startu |
 | `APP_RUN_TIMEOUT_MS` | `300000` | twardy limit czasu jednego uruchomienia agenta (patrz „Co kończy wykonanie bez Stop”) |
 | `APP_CONSENT_TIMEOUT_MS` | `120000` | ile prośba o zgodę czeka na decyzję, zanim zostanie **odrzucona** |
 | `APP_MAX_UPLOAD_BYTES` | `8388608` | maksymalny rozmiar pliku |
@@ -242,35 +242,16 @@ Zanim to zrobisz, wykonaj kopię i próbę migracji na kopii:
 | `APP_DEV_API_PORT` | `8790` | port backendu w trybie deweloperskim; cel proxy Vite. Odrzuca 8791 i 8792–8799 |
 | `APP_INSTANCE_LABEL` | — | etykieta instancji na `/api/health`; `pnpm dev` ustawia `agenticapp-dev`, testy `agenticapp-test` |
 
-Dostęp do aplikacji chroni lokalna sesja w ciasteczku, niezależna od subskrypcji Claude.
+Dostęp do aplikacji chroni lokalna sesja w ciasteczku, niezależna od dostępu do modelu.
 
-**Jak aplikacja czyta poświadczenie.** Ekran Ustawień pokazuje plan i termin ważności logowania. Żeby
-je podać, aplikacja **parsuje cały plik** `~/.claude/.credentials.json` (albo `$CLAUDE_CONFIG_DIR/.credentials.json`,
-jeśli zmienna jest ustawiona) — inaczej nie da się sięgnąć po pola, które w nim siedzą. Oznacza to, że
-`accessToken` i `refreshToken` **przechodzą przez pamięć procesu** przy każdym takim odczycie, nawet
-jeśli nic ich stamtąd nie bierze. Wcześniejsza wersja tego akapitu mówiła, że aplikacja „wczytuje z
-pliku tylko plan i termin”, co nie było zgodne z kodem.
+Historyczne testy ochrony poświadczeń OAuth pozostają w repo jako regresja. Aktywna aplikacja v0.4
+nie otwiera pliku `~/.claude/.credentials.json`; używa wyłącznie izolowanego katalogu GLM.
 
-Co jest sprawdzalne i sprawdzane:
+### GLM/Z.AI — jedyny aktywny provider modelu
 
-- z rozparsowanej wartości kopiowane są wyłącznie `subscriptionType` i `expiresAt`; obiekt jest
-  porzucany po zwróceniu wyniku (`packages/platform-server/src/agent/auth.ts`),
-- `accessToken` i `refreshToken` nie są nigdzie zwracane, zapisywane, logowane ani przesyłane —
-  `tests/durability.test.ts` i `tests/runtime.test.ts` biorą prawdziwą wartość z dysku i szukają jej we
-  frontendzie, w bundlu serwera, w bazie, w diagnostyce startowej, w raportach i śladach Playwright
-  oraz w odpowiedziach HTTP; `e2e/auth-limits.spec.ts` przeszukuje log serwera, zdarzenia uruchomień,
-  artefakty i magazyn plików po prawdziwym przebiegu rozmowy,
-- plik jest **tylko czytany**. Odświeżaniem tokena zajmuje się Claude Agent SDK, który czyta i
-  nadpisuje ten sam plik po swojemu; aplikacja nie ma własnego przepływu tokenów,
-- katalog poświadczeń jest niedostępny dla agenta: blokują go ustawienia sandboxa oraz odmowa w hooku
-  `PreToolUse` i w bramce narzędzi, więc `Read`, `Glob` czy `Grep` wycelowane w ten katalog kończą się
-  odmową widoczną w czacie.
-
-### Tryb GLM (jawny provider modelu)
-
-Decyzja właściciela 2026-09-20: **Claude Code / Claude Agent SDK pozostaje harnesssem** (sesja,
-pętla wykonania, narzędzia, zgody, sandbox), a providerem modelu może być GLM/Z.AI przez endpoint
-kompatybilny z Anthropic. Prawdziwa subskrypcja Claude i OAuth Anthropic są w tym trybie **nieużywane
+Decyzja właściciela 2026-10-01: **Claude Code / Claude Agent SDK pozostaje harnesssem** (sesja,
+pętla wykonania, narzędzia, zgody, sandbox), a jedynym providerem modelu jest GLM/Z.AI przez endpoint
+kompatybilny z Anthropic. Subskrypcja Claude i OAuth Anthropic są **nieużywane
 i nieczytane**.
 
 ```bash
@@ -296,25 +277,23 @@ Zasady trybu, których nie zmieniasz:
   (`sdkOptions.model`), nie ze środowiska.
 - **Zero sekretów w zapisie.** Token nigdy nie trafia do kodu, testów, logów, dowodów ani commitów;
   diagnostyka pokazuje endpoint wyłącznie jako ORIGIN.
-- **Domyślny tryb bez zmian.** Bez `APP_MODEL_PROVIDER` aplikacja działa na subskrypcji dokładnie
-  tak jak wcześniej — `e2e/auth-limits.spec.ts` i regresja uwierzytelnienia pilnują obu trybów.
+- **Jeden aktywny tryb.** Bez `APP_MODEL_PROVIDER` aplikacja wybiera GLM; jawne `subscription`
+  odmawia startu. Testy historycznych helperów subskrypcji nie włączają jej w aplikacji.
 
 Testy negatywne dotyczące logowania **nie dotykają logowania użytkownika**: pracują na syntetycznym
 poświadczeniu w katalogu tymczasowym wskazanym przez `CLAUDE_CONFIG_DIR`.
 `tests/credential-guard.test.ts` bierze rozmiar i czas modyfikacji prawdziwego pliku przed suitą
 i porównuje po niej, więc ta własność jest mierzona, a nie tylko zamierzona.
 
-**Skan wycieku wymaga poświadczenia.** `tests/durability.test.ts` szuka prawdziwej wartości tokena
-w buildzie, bazie, logach, artefaktach i śladach Playwright. Na maszynie **bez logowania Claude** nie
-ma czego szukać, więc test **oblewa z komunikatem**, co zrobić — bo pusty skan przechodzący na zielono
-jest gorszy niż czerwony: wygląda jak dowód, a nim nie jest. Dwie drogi: zalogować się (`claude`,
-`/login`) albo zadeklarować brak logowania zmienną `APP_ALLOW_NO_CREDENTIAL=1`. To jest konfiguracja
-środowiska, nie regres.
+**Skan wycieku ma zawsze niepusty zestaw.** `tests/durability.test.ts` szuka syntetycznego tokenu
+GLM używanego przez izolowaną instancję testową w buildzie, bazie, logach, artefaktach i śladach
+Playwright. Jeżeli lokalnie istnieje poświadczenie OAuth Claude, skanuje też jego rzeczywistą wartość
+bez zapisywania jej w raporcie. Do `pnpm verify` nie jest potrzebne logowanie Claude.
 
 **Sprawdzenie sesji SDK.** Przycisk „Sprawdź sesję SDK” w Ustawieniach pyta sam Claude Agent SDK,
 w jaki sposób jest uwierzytelniony — żądaniem sterującym `accountInfo()`, które **nie wydaje tury
-modelu**. Odpowiedź rozróżnia subskrypcję OAuth od sesji na kluczu API i pokazuje wykorzystanie limitu
-planu. Raport nie niesie adresu e-mail ani nazwy organizacji konta. Poza aplikacją to samo sprawdzenie
+modelu**. W trybie GLM stan subskrypcji OAuth jest niespójny z konfiguracją, a limity planu Claude
+nie są miarą wykorzystania Z.AI. Raport nie niesie adresu e-mail ani nazwy organizacji konta. Poza aplikacją to samo sprawdzenie
 wykonuje `node scripts/probe-sdk-session.ts` (patrz „Sprawdzanie zmian”).
 
 ### Sprawdzanie zmian
@@ -322,13 +301,14 @@ wykonuje `node scripts/probe-sdk-session.ts` (patrz „Sprawdzanie zmian”).
 ```bash
 pnpm verify          # kontrola granicy, spójność macierzy odbioru (200 kryteriów) i jej archiwum 95, typy, build i testy (bez modelu)
 pnpm test:e2e        # testy w przeglądarce na zbudowanej aplikacji; bez testów z prawdziwym modelem
-pnpm test:e2e:model  # tylko testy z prawdziwym modelem — kosztują 11 tur subskrypcji na przebieg
+pnpm test:e2e:model  # tylko testy z prawdziwym modelem GLM — do 12 tur GLM na przebieg
 pnpm check:module-swap   # próba podmiany modułu przykładowego na kontrolny, na kopii repozytorium
 pnpm probe:sdk-session   # pyta SDK, jak jest uwierzytelniony; NIE wydaje tury modelu
-pnpm probe:auth-refusal  # odtwarza odmowę uwierzytelnienia na kopii; NIE wydaje tury modelu
+pnpm probe:auth-refusal  # historyczna sonda OAuth; w aktywnym trybie GLM jawnie pomijana
 ```
 
-`pnpm probe:auth-refusal` (oraz `--revoked`) kieruje **prawdziwy** Claude Agent SDK na **kopię**
+Historyczna sonda `pnpm probe:auth-refusal` (oraz `--revoked`) w dawnym trybie
+subskrypcyjnym kierowała **prawdziwy** Claude Agent SDK na **kopię**
 poświadczenia z celowo zepsutymi oboma tokenami i zapisuje, co SDK naprawdę odpowiada. Przebieg nie
 przechodzi uwierzytelnienia, więc nie dociera do modelu i nie kosztuje tury. `--rehearsal` robi próbę
 generalną bez SDK i bez sieci.
@@ -344,7 +324,7 @@ generalną bez SDK i bez sieci.
 `pnpm probe:sdk-session` otwiera sesję Claude Agent SDK, której strumień wejściowy nie emituje żadnej
 wiadomości, zadaje dwa **żądania sterujące** (`accountInfo()` oraz odczyt limitów planu) i zamyka ją.
 Model nie dostaje polecenia, więc nic nie kosztuje. Wynik trafia do
-`docs/evidence/z12-bl04/sesja-sdk.json`; `tests/sdk-session-evidence.test.ts` pilnuje, żeby zapisany
+`docs/evidence/z12-bl04/sesja-sdk-glm.json`; `tests/sdk-session-evidence.test.ts` pilnuje, żeby zapisany
 dowód dotyczył wersji SDK, adaptera i CLI zainstalowanych w tym drzewie — po aktualizacji którejkolwiek
 z nich test oblewa i trzeba sondę powtórzyć.
 
@@ -364,17 +344,19 @@ trzeba będzie naprawdę podnieść wersje w manifestach i lockfile, a potem prz
 `pnpm typecheck` (w `pnpm verify`) sprawdza pakiety, każdy moduł osobno bez warstwy składania
 (`pnpm typecheck:modules`) i katalog `e2e/` (`tsconfig.e2e.json`).
 
-Trzy spece odpowiadają **prawdziwym modelem** i wydają tury subskrypcji: `e2e/bl01-bl02-model.spec.ts`
-(7 tur), `e2e/agent-ui.spec.ts` (2) i `e2e/files-agent.spec.ts` (2). Domyślny przebieg ich nie zawiera —
+Cztery spece odpowiadają **prawdziwym modelem** i mogą wydawać tury GLM: `e2e/bl01-bl02-model.spec.ts`
+(7 tur), `e2e/agent-ui.spec.ts` (2), `e2e/files-agent.spec.ts` (2) i
+`e2e/model-artifacts.spec.ts` (1). Domyślny przebieg ich nie zawiera —
 wypisuje, co pominął i ile by to kosztowało — a `pnpm test:e2e:model` (`APP_E2E_MODEL=1`) uruchamia
 wyłącznie je. Licznik wydanych tur leży w `.e2e-model-turns/` (poza repozytorium); dowody przebiegu
 zapisują się pod stemplem przebiegu w `docs/evidence/<zadanie>/runs/`, więc nie nadpisują zapisanych
 wyników prób odbiorowych. Jeśli budżet tur nie pokrywa całego spec-a odbiorowego, spec pomija próby
 z komunikatem, zanim cokolwiek wyśle do modelu — zamiast wydać turę i paść na następnej.
 
-Licznik i to sprawdzenie obejmują **tylko** spec odbiorowy. `e2e/agent-ui.spec.ts` i
-`e2e/files-agent.spec.ts` wydają swoje 4 tury bez liczenia i bez bramki, więc `pnpm test:e2e:model`
-kosztuje 11 tur nawet wtedy, gdy spec odbiorowy sam się pominie.
+Licznik i to sprawdzenie obejmują **tylko** spec odbiorowy. `e2e/agent-ui.spec.ts`,
+`e2e/files-agent.spec.ts` i `e2e/model-artifacts.spec.ts` wydają swoje 5 tur bez liczenia
+i bez bramki, więc `pnpm test:e2e:model` może kosztować 5 tur, nawet gdy spec odbiorowy
+sam się pominie. Uruchomienie wymaga osobnego grantu GLM.
 
 `pnpm acceptance` i `scripts/run-agent.mjs` działają inaczej: łączą się z **działającą** instancją
 (`APP_BASE`, domyślnie `http://127.0.0.1:8790`) i **zmieniają jej dane** — zmieniają ilość pozycji i

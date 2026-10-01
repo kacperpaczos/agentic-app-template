@@ -61,6 +61,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const REPO = resolve(import.meta.dirname, '..');
 const ROOT = resolve(REPO, '.e2e-bl07');
+const MODEL_ENV = {
+  APP_MODEL_PROVIDER: 'glm',
+  APP_MODEL: 'glm-test-model',
+  ANTHROPIC_BASE_URL: 'https://glm.endpoint.invalid',
+  ANTHROPIC_AUTH_TOKEN: 'FAKE-GLM-TOKEN-TEST-ONLY',
+  CLAUDE_CONFIG_DIR: resolve(ROOT, '.e2e-glm-config'),
+};
 const SCRIPTS_DIR = resolve(REPO, 'scripts');
 
 type Kind = 'zapis-chroniony' | 'odczyt-chroniony' | 'zapis-docelowy' | 'odczyt' | 'wartosc' | 'przelacznik';
@@ -107,6 +114,7 @@ const ODMOWA_DANYCH = /lezy w katalogu danych aplikacji|zawiera katalog danych a
 function run(script: string, args: string[]): { status: number; out: string } {
   const r = spawnSync(process.execPath, [resolve(SCRIPTS_DIR, script), ...args], {
     cwd: REPO,
+    env: { ...process.env, ...MODEL_ENV },
     encoding: 'utf8',
   });
   return { status: r.status ?? -1, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };

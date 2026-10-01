@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AgentRuntime, type ModelAgentLike } from '@platform/server';
-import { createHarness, type Harness } from './helpers.ts';
+import { createHarness, type Harness, testGlmEnv } from './helpers.ts';
 
 /**
  * Run lifecycle, measurement points and persisted tool activity.
@@ -291,7 +291,7 @@ describe('aktywnosc narzedzi trafia do historii rozmowy', () => {
 
     const { createPlatform, DEFAULT_USER_ID } = await import('@platform/server');
     h.platform.close();
-    const reopened = createPlatform({ modules: [], env: { ...process.env, APP_DATA_DIR: h.dataDir } });
+    const reopened = createPlatform({ modules: [], env: testGlmEnv(h.dataDir) });
     try {
       const after = reopened.services.conversations.messages(r.conv.id, DEFAULT_USER_ID);
       expect(after.map((m) => m.id)).toEqual(before.map((m) => m.id));

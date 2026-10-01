@@ -7,7 +7,8 @@ raportem implementacji ani dowodem, że wszystkie wymagania są już wdrożone.
 
 Claude Code / Claude Agent SDK pozostaje harnessiem sesji, narzędzi i kontroli
 uprawnień. GLM/Z.AI jest providerem modelu przez endpoint zgodny z Anthropic.
-W trybie GLM aplikacja nie używa OAuth ani subskrypcji Anthropic użytkownika,
+GLM jest jedynym aktywnym providerem v0.4. Brak `APP_MODEL_PROVIDER` wybiera GLM;
+jawne `subscription` odmawia startu. Aplikacja nie używa OAuth ani subskrypcji Anthropic użytkownika,
 nie czyta ich poświadczeń i nie ma automatycznego fallbacku do innego providera.
 
 ## D-02 — Klasy wymagań

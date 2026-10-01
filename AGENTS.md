@@ -47,13 +47,13 @@ Mapa wszystkich dokumentów: [`docs/DOCUMENTATION-MAP.md`](docs/DOCUMENTATION-MA
   **OpenUI Agent Interface** (rozszerzenia przez publiczne propsy, sloty i wąskie adaptery — nie
   pisze się własnego czatu), Hono, Mastra, Claude Agent SDK, MCP, Zod, SQLite + Drizzle,
   Vitest i Playwright.
-- **Provider modelu: decyzja właściciela 2026-09-20.** Claude Code / Claude Agent SDK pozostaje
-  harnesssem w każdym wariancie. Domyślnie model idzie z **subskrypcji użytkownika** — to zachowanie
-  bez zmian. Jawny tryb `APP_MODEL_PROVIDER=glm` kieruje wywołania modelu do GLM/Z.AI przez endpoint
-  kompatybilny z Anthropic (`ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`); w tym trybie subskrypcja
+- **Provider modelu: decyzja właściciela 2026-10-01.** Claude Code / Claude Agent SDK pozostaje
+  harnesssem. Jedynym aktywnym providerem v0.4 jest **GLM/Z.AI** przez endpoint
+  kompatybilny z Anthropic (`ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`). Brak
+  `APP_MODEL_PROVIDER` oznacza `glm`; jawne `subscription` odmawia startu. Subskrypcja
   Claude i OAuth Anthropic są nieużywane, plik poświadczeń nie jest czytany w ogóle, a
   `CLAUDE_CONFIG_DIR` musi wskazywać izolowany katalog (domyślny `~/.claude` = odmowa startu).
-  Nie dodawaj klucza API Anthropic, gatewaya ani płatnego fallbacku poza tym jawnym trybem — także
+  Nie dodawaj klucza API Anthropic, gatewaya ani płatnego fallbacku — także
   „tymczasowo” przy błędzie logowania; trybów nie rozpoznanych przez konfigurację nie obsługuje się
   po cichu (fail-closed). Token Z.AI nie trafia do kodu, testów, logów, dowodów ani commitów —
   operátor podaje go w env procesu serwera. Szczegóły: README, „Tryb GLM”.
@@ -105,8 +105,8 @@ Rodzaj dowodu nie jest statusem. W raporcie i w `assessment.json` rozróżniaj: 
 pnpm install --frozen-lockfile
 pnpm verify          # granica, macierz 200 (check:acceptance + check:matrix), archiwum 95 (check:closure), typy (pakiety + e2e), build, testy
 pnpm test:e2e        # przeglądarka na istniejącym buildzie produkcyjnym (po verify/build — inaczej testuje stary bundle);
-                     # BEZ testów z prawdziwym modelem — nie zużywa ani jednej tury subskrypcji
-pnpm test:e2e:model  # tylko testy z prawdziwym modelem BL-01/BL-02; koszt: 11 tur subskrypcji na przebieg
+                     # BEZ testów z prawdziwym modelem — nie zużywa ani jednej tury GLM
+pnpm test:e2e:model  # tylko testy z prawdziwym modelem; do 12 tur GLM na przebieg
 pnpm test:e2e:z11    # tylko proby modelowe pakietu BL-03; koszt: do 22 tur z grantu 25 (osobny rejestr)
 pnpm diag            # prawdziwa sesja SDK, wylacznie zadania sterujace — 0 tur; porownuje narzedzia
 pnpm check:module-swap   # przy zmianach kontraktu modułu lub warstwy składania
@@ -135,14 +135,20 @@ typów, więc bez tej drugiej bramki błąd typu w specu wychodzi dopiero w trak
 modelowych kosztuje turę.
 
 **Testy z prawdziwym modelem są świadomym wyborem, nie domyślnym.** `e2e/bl01-bl02-model.spec.ts`
-(7 tur), `e2e/agent-ui.spec.ts` (2) i `e2e/files-agent.spec.ts` (2) nie należą do żadnego projektu
+(7 tur), `e2e/agent-ui.spec.ts` (2), `e2e/files-agent.spec.ts` (2) i
+`e2e/model-artifacts.spec.ts` (1) nie należą do żadnego projektu
 domyślnego przebiegu — żaden argument ani filtr do nich nie sięgnie. Uruchamia je wyłącznie
 `pnpm test:e2e:model` (czyli `APP_E2E_MODEL=1`). Domyślny przebieg wypisuje, co pominął i ile by to
 kosztowało.
 
+**Zmiana providera nie odnawia grantów.** Dawne liczniki BL-01/BL-02 i BL-03 opisują
+historyczne próby z subskrypcją Claude. Nowy przebieg GLM wymaga osobnego, jawnego grantu
+na tury Z.AI oraz sprawdzenia, czy SDK w aktualnej wersji potrafi je wykonać. Samo
+`APP_E2E_MODEL=1` jest przełącznikiem technicznym, a nie takim grantem.
+
 Osiem specek pakietu BL-03 (`e2e/bl03-model-*.spec.ts`, razem 22 tury) wydaje **inny grant** i ma
 **drugi przełącznik**: `pnpm test:e2e:z11` (`APP_E2E_MODEL=1 APP_E2E_MODEL_Z11=1`). Nie należą do
-projektu `model`, więc `pnpm test:e2e:model` nadal kosztuje 11 tur i ani jednej więcej — dołożenie ich
+projektu `model`, więc `pnpm test:e2e:model` kosztuje do 12 tur — dołożenie ich
 tam zmieniłoby cenę polecenia, którego cena jest udokumentowana. Ich licznik to osobny plik
 (`.e2e-model-turns/z11-bl03.json`, sufit 25), bo rejestr BL-01/BL-02 opisuje **zamknięty** grant i nikt
 go nie dopisuje. Próbę generalną tych scenariuszy — te same asercje, model zastąpiony scenariuszem —
@@ -165,8 +171,9 @@ podniesienie sufitu wymaga grantu koordynatora. Nic nie idzie wtedy do modelu i 
 jest ruszany: pominięcie jest uczciwą odpowiedzią na brak budżetu, w przeciwieństwie do przebiegu, który
 wydaje turę i pada na następnej.
 
-Bramka i licznik obejmują **wyłącznie** spec odbiorowy. `e2e/agent-ui.spec.ts` i `e2e/files-agent.spec.ts`
-wydają swoje 4 tury bez liczenia i bez sprawdzenia budżetu, więc `pnpm test:e2e:model` kosztuje 11 tur
+Bramka i licznik obejmują **wyłącznie** spec odbiorowy. `e2e/agent-ui.spec.ts`,
+`e2e/files-agent.spec.ts` i `e2e/model-artifacts.spec.ts`
+wydają swoje 5 tur bez liczenia i bez sprawdzenia budżetu, więc `pnpm test:e2e:model` kosztuje do 12 tur
 także wtedy, gdy spec odbiorowy sam się pominie. Zanim uruchomisz przebieg modelowy, policz to sam.
 
 Podaj faktyczne polecenia, kody wyjścia i liczby testów. Dowody zapisuj w `docs/evidence/<zadanie>/`

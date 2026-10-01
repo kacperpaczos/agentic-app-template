@@ -150,9 +150,9 @@ export interface ProbeOptions {
   /**
    * Which provider policy to apply when `applyPolicy` is on.
    *
-   * The default `subscription` scrubs every provider variable; `glm` passes
-   * the two GLM endpoint variables through, exactly as a run in that mode
-   * would — the probe must describe the same environment the agent gets.
+   * The active default `glm` passes the two GLM endpoint variables through,
+   * exactly as a run would. An explicit historical `subscription` probe
+   * scrubs every provider variable; startup never enables that provider.
    */
   provider?: ModelProvider;
 }
@@ -189,7 +189,7 @@ export async function probeSdkSession(opts: ProbeOptions = {}): Promise<SdkSessi
             ? (Object.fromEntries(
                 Object.entries(opts.env ?? process.env).filter(([, v]) => v !== undefined),
               ) as Record<string, string>)
-            : subscriptionOnlyEnv(opts.env ?? process.env, opts.provider ?? 'subscription'),
+            : subscriptionOnlyEnv(opts.env ?? process.env, opts.provider ?? 'glm'),
         // A probe does nothing. Listing no allowed tool and forbidding the ones
         // that could act keeps that true even if a future SDK decided to start
         // a turn on its own.

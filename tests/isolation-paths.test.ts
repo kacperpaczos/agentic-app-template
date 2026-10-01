@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { testGlmEnv } from './helpers.ts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { assertTestInstanceIsIsolated, loadConfig } from '@platform/server';
 import { assertInsideManagedRoot } from '../packages/platform-server/src/util/managed-fs.ts';
@@ -173,6 +174,7 @@ describe('serwer wobec dowiazanego katalogu danych', () => {
     const { repo, link, data } = repoWithLink();
     expect(() =>
       loadConfig({
+        ...testGlmEnv(link),
         APP_INSTANCE_LABEL: TEST_INSTANCE_LABEL,
         APP_DATA_DIR: link,
         PORT: '8799',

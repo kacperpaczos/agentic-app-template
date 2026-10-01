@@ -19,11 +19,10 @@ import { modelProviderFromEnv, type ModelProvider } from '../config.ts';
  * verified access) and never collapses them, because a credential file that
  * exists is not evidence that signing in works.
  *
- * Two configured methods exist since decyzja właściciela 2026-09-20: the
- * default `subscription` (described below) and the explicit `glm` mode, in
- * which the OAuth credential is not used and — this module's own rule — not
- * even opened. Everything below about reading and protecting the credential
- * file describes the subscription path; the glm path answers from policy alone.
+ * GLM is the only active provider since decyzja właściciela 2026-10-01.
+ * The subscription branch below remains for historical audit tests, but
+ * application startup refuses that provider. In GLM mode this module does
+ * not open the OAuth credential file and answers from policy alone.
  *
  * **On reading the credential file.** This module does parse
  * `~/.claude/.credentials.json` — or `$CLAUDE_CONFIG_DIR/.credentials.json`,
@@ -389,7 +388,7 @@ const HARNESS_EXTRA = new Set(['CLAUDECODE', 'CLAUDE_PID', 'CLAUDE_EFFORT', 'AI_
 
 export function subscriptionOnlyEnv(
   env: NodeJS.ProcessEnv = process.env,
-  provider: ModelProvider = 'subscription',
+  provider: ModelProvider = 'glm',
 ): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(env)) {
@@ -411,7 +410,7 @@ export function subscriptionOnlyEnv(
  */
 export function scrubbedEnvKeys(
   env: NodeJS.ProcessEnv = process.env,
-  provider: ModelProvider = 'subscription',
+  provider: ModelProvider = 'glm',
 ): string[] {
   return Object.keys(env).filter(
     (k) =>

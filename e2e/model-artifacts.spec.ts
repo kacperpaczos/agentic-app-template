@@ -18,6 +18,8 @@ async function seedThread(request: APIRequestContext, title: string) {
  * in") — otwarta pozycja; host-CLI 2.1.283 przechodzi.
  */
 
+test.skip(process.env.APP_E2E_MODEL !== '1', 'Wymaga jawnej zgody na płatną turę GLM.');
+
 test('usuniecie rozmowy odlacza artefakty zamiast je kasowac', async ({ request }) => {
     test.setTimeout(300_000);
 

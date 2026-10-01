@@ -129,6 +129,9 @@ export function createPlatform(input: {
    */
   sessionProbe?: SessionProbe | null;
 }): PlatformInstance {
+  if (input.config?.modelProvider && input.config.modelProvider !== 'glm') {
+    throw new Error('[konfiguracja] v0.4 uruchamia wyłącznie provider GLM.');
+  }
   const config = { ...loadConfig(input.env), ...input.config };
   const db = openDatabase(config.dbFile);
 
@@ -192,7 +195,7 @@ export function createPlatform(input: {
      * so it can assert the dispatch.
      */
     sessionProbe:
-      input.sessionProbe ?? ((provider) => probeSdkSession({ provider: provider ?? 'subscription' })),
+      input.sessionProbe ?? ((provider) => probeSdkSession({ provider: provider ?? 'glm' })),
     env: input.env ?? process.env,
   });
 

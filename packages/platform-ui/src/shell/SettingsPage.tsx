@@ -72,12 +72,20 @@ const SDK_SESSION_BADGE: Record<AuthStatus['sdkSession']['state'], string> = {
  * mode decides the wording; the subscription wording is unchanged.
  */
 const sdkSessionLabel = (a: AuthStatus): string =>
-  a.method === 'glm' && a.sdkSession.state === 'api_key'
-    ? 'poswiadczenie endpointu — oczekiwane w trybie GLM'
+  a.method === 'glm'
+    ? a.sdkSession.state === 'api_key'
+      ? 'poswiadczenie endpointu — oczekiwane w trybie GLM'
+      : a.sdkSession.state === 'subscription'
+        ? 'subskrypcja Claude — niezgodna z trybem GLM'
+        : SDK_SESSION_LABEL[a.sdkSession.state]
     : SDK_SESSION_LABEL[a.sdkSession.state];
 const sdkSessionBadge = (a: AuthStatus): string =>
-  a.method === 'glm' && a.sdkSession.state === 'api_key'
-    ? 'pf-badge--ok'
+  a.method === 'glm'
+    ? a.sdkSession.state === 'api_key'
+      ? 'pf-badge--ok'
+      : a.sdkSession.state === 'subscription'
+        ? 'pf-badge--err'
+        : SDK_SESSION_BADGE[a.sdkSession.state]
     : SDK_SESSION_BADGE[a.sdkSession.state];
 
 const ACCESS_REMEDY: Record<AuthStatus['access']['state'], string> = {
@@ -146,7 +154,7 @@ export function SettingsPage() {
       </p>
 
       {/* Anchor for `platform.settings.auth` in the UI target catalog. */}
-      <h2 data-testid="settings-auth">Uwierzytelnienie Claude</h2>
+      <h2 data-testid="settings-auth">Dostęp do modelu GLM</h2>
       {/*
         Three separate rows on purpose. "A credential file exists" is not "signing
         in works", and an expired local expiry is not a failure — the SDK renews

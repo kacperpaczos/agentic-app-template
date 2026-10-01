@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createPlatform, DEFAULT_USER_ID, type PlatformInstance } from '@platform/server';
 import { createProbeModule } from '@module/devkit-probe/server';
-import { login } from './helpers.ts';
+import { login, testGlmEnv } from './helpers.ts';
 
 /**
  * The platform must be usable without the procurement module. If any of these
@@ -15,7 +15,7 @@ describe('platforma dziala bez modulu zakupowego', () => {
   const disposers: Array<() => void> = [];
   const boot = (modules: 'none' | 'probe') => {
     const dataDir = mkdtempSync(join(tmpdir(), 'agentic-boundary-'));
-    const env = { ...process.env, APP_DATA_DIR: dataDir };
+    const env = testGlmEnv(dataDir);
     const platform = createPlatform({
       modules: modules === 'none' ? [] : (services) => [createProbeModule(services)],
       env,

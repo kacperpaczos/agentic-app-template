@@ -1189,3 +1189,41 @@ wykaz Etapu G, backup `AGENTICAPP-BACKUP-PRZED-SPRZATANIEM-2026-09-28`).
 **Czego to NIE dowodzi.** Audyt nie domyka 12 otwartych kryteriów v0.4
 (BL-03/07/09/11/13) ani nie przenosi działania żywej instancji do kanonicznego
 katalogu — przełączenie instancji rozliczone osobno (§A28b, ten sam dzień).
+
+---
+
+## §A29 — GLM jako jedyny aktywny provider v0.4 (2026-10-01)
+
+**Decyzja właściciela.** Claude Agent SDK pozostaje harnesssem, natomiast wywołania modelu
+mają używać GLM/Z.AI. Brak `APP_MODEL_PROVIDER` wybiera GLM; jawne `subscription` i inne
+wartości odmawiają startu. `APP_MODEL`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` i izolowany
+`CLAUDE_CONFIG_DIR` są wymagane. Brak dowolnej zmiennej kończy start przed otwarciem bazy;
+nie ma cichego powrotu do OAuth/subskrypcji. Żaden token nie został dodany do repozytorium.
+
+**Zmiana.** Konfiguracja serwera, nadpisanie providera przez API, domyślna sonda sesji i UI
+wybierają GLM. Status SDK raportujący subskrypcję w tym trybie jest niespójny i nie oznacza
+dostępnego modelu. Skryptowana instancja E2E używa fikcyjnego endpointu i tokena, więc zwykły
+test nie zużywa tury modelowej. Sondy historycznego OAuth są wyłączone w aktywnym trybie;
+testy ich helperów zachowują jawny provider historyczny jako regresję. README, Compose,
+ARCHITECTURE i decyzje v0.4 opisują jeden aktywny provider.
+
+**Weryfikacja kodu.** `pnpm verify` EXIT 0: 73 pliki testowe, 1200/1200 testów, typy,
+granice, macierze i build. Testy celowane historycznych skryptów i kontraktów: 93/93.
+Tymczasowa instancja na 8790 z odrębną syntetyczną bazą wystartowała z prywatną konfiguracją
+GLM, podała `/api/health={"ok":true}`, a następnie zakończyła się poprawnie po SIGTERM;
+nie wysłano polecenia do modelu.
+Pierwszy pełny E2E ujawnił pominięcie na liście opt-in: `model-artifacts.spec.ts` wydał
+jedną próbę do fikcyjnego endpointu testowego (ENOTFOUND), choć 229 pozostałych scenariuszy
+przeszło. Spec dołączono do wykluczenia zwykłej suity i jawnego projektu modelowego;
+`playwright test --list` pokazuje odtąd 229 zwykłych testów. W tym samym przebiegu strażnik
+wskazał zmianę czasu modyfikacji pliku OAuth użytkownika o 20:12 UTC, przed startem błędnie
+włączonego specu. Odcisk nie ustala sprawcy zmiany; poświadczenia nie odczytywano w tej
+diagnozie, a przyczyny nie przypisano bez dowodu. Po naprawie `pnpm verify` ponownie
+przeszło (1200/1200), a zwykłe `pnpm test:e2e` przeszło 229/229 (EXIT 0, 31,7 min)
+z niezmienionym odciskiem OAuth; żaden test modelowy nie wszedł do przebiegu.
+Przełączenie działającego procesu 8791 rozliczane osobno w raporcie
+końcowym tej zmiany. Nie uruchomiono tu rzeczywistej tury GLM; L12.6 pozostaje otwarte.
+
+**Pozostała praca.** 12 kryteriów w `docs/BACKLOG.md`. Priorytet: pozytywna granica dostępu
+narzędzi plikowych (L11.4/L11.11), rzeczywista ścieżka GLM (L12.6) i zależne od niej próby
+SDK/modelu, a następnie wybierane tryby zgód (L11.12) i centrum uwagi (L11.19).

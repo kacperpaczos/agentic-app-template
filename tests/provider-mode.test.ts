@@ -15,9 +15,8 @@ import { authIsConfirmed, authIsUsable, UNPROBED_SDK_SESSION } from '@platform/c
  * token values here are fakes — they exist so the tests can prove where they
  * travel and, more importantly, where they never appear.
  *
- * The default subscription mode must keep behaving exactly as before; the
- * assertions for it live with the existing suites and are repeated here only
- * as the negative control for the pass-through below.
+ * GLM is the only active provider. Subscription helpers remain as historical
+ * negative controls, but the application refuses to boot with that provider.
  */
 
 const FAKE_TOKEN = 'FAKE-GLM-TOKEN-nigdy-nie-byl-tokenem';
@@ -46,10 +45,20 @@ afterEach(() => {
 });
 
 describe('konfiguracja: fail-closed wokol APP_MODEL_PROVIDER', () => {
-  it('brak zmiennej to tryb subskrypcji — zachowanie domyslne bez zmian', () => {
-    const cfg = loadConfig({ APP_DATA_DIR: isoDir() });
-    expect(cfg.modelProvider).toBe('subscription');
-    expect(cfg.modelEndpointOrigin).toBeNull();
+  it('brak zmiennej wybiera GLM i wymaga jego konfiguracji', () => {
+    expect(() => loadConfig({ APP_DATA_DIR: isoDir() })).toThrow(/APP_MODEL.*ANTHROPIC_BASE_URL.*ANTHROPIC_AUTH_TOKEN.*CLAUDE_CONFIG_DIR/s);
+    const cfg = loadConfig(glmEnv({ APP_MODEL_PROVIDER: undefined }));
+    expect(cfg.modelProvider).toBe('glm');
+    expect(cfg.modelEndpointOrigin).toBe(FAKE_ENDPOINT);
+  });
+
+  it('jawna subskrypcja jest odrzucona przy starcie', () => {
+    expect(() => loadConfig(glmEnv({ APP_MODEL_PROVIDER: 'subscription' }))).toThrow(/APP_MODEL_PROVIDER.*subscription.*Dozwolone wartości: glm/s);
+  });
+
+  it('nadpisanie konfiguracji nie wlacza subskrypcji za plecami loadConfig', () => {
+    expect(() => createPlatform({ modules: [], env: glmEnv(), config: { modelProvider: 'subscription' } }))
+      .toThrow(/wyłącznie provider GLM/);
   });
 
   it('nieznana wartosc odmawia startu, zamiast cicho wybrac subskrypcje', () => {
@@ -180,10 +189,10 @@ describe('srodowisko procesu agenta: polityka per provider', () => {
     expect(scrubbedSub).toContain('ANTHROPIC_AUTH_TOKEN');
   });
 
-  it('domyslny parametr (bez providera) pozostaje subskrypcja — istniejace wolania bez zmian', () => {
+  it('domyslny parametr (bez providera) wybiera GLM', () => {
     const clean = subscriptionOnlyEnv(dirty);
-    expect(clean.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
-    expect(scrubbedEnvKeys(dirty)).toContain('ANTHROPIC_AUTH_TOKEN');
+    expect(clean.ANTHROPIC_AUTH_TOKEN).toBe(FAKE_TOKEN);
+    expect(scrubbedEnvKeys(dirty)).not.toContain('ANTHROPIC_AUTH_TOKEN');
   });
 });
 
@@ -220,7 +229,7 @@ describe('probeAuth w trybie glm: plik poswiadczen nie jest czytany', () => {
     const s = probeAuth({ APP_MODEL_PROVIDER: 'glm', CLAUDE_CONFIG_DIR: dir });
     expect(s.credential.state).toBe('absent');
     // The subscription path, for contrast, does read and would report the breakage.
-    const sub = probeAuth({ CLAUDE_CONFIG_DIR: dir });
+    const sub = probeAuth({ APP_MODEL_PROVIDER: 'subscription', CLAUDE_CONFIG_DIR: dir });
     expect(sub.credential.state).toBe('unreadable');
   });
 
@@ -272,6 +281,14 @@ describe('authIsUsable / authIsConfirmed w trybie glm', () => {
     expect(
       authIsUsable({ ...s, method: 'subscription', credential: { present: true, subscriptionType: 'max', expiresAt: null, state: 'valid' }, apiKeyPolicy: 'refused' }),
     ).toBe(false);
+  });
+
+  it('sesja SDK na subskrypcji jest niezgodna z aktywnym GLM', () => {
+    const s = glmStatus({
+      sdkSession: { ...UNPROBED_SDK_SESSION, state: 'subscription' },
+    });
+    expect(authIsUsable(s)).toBe(false);
+    expect(authIsConfirmed({ ...s, access: { ...s.access, state: 'verified' } })).toBe(false);
   });
 
   it('odwołany dostęp i odmowa odnowienia odmawiają zdatności jak dotychczas', () => {
@@ -358,21 +375,10 @@ describe('/api/sdk-session: sonda dostaje provider z zadanania (recenzja F1)', (
     }
   });
 
-  it('w trybie subskrypcji sonda dostaje wprost subscription (kontrola pozytywna)', async () => {
+  it('aplikacja nie uruchamia sondy w jawnym trybie subskrypcji', async () => {
     const seen: Array<string | undefined> = [];
-    const { platform, cookie } = await boot({ APP_DATA_DIR: isoDir() }, seen);
-    try {
-      const res = await platform.app.request('/api/sdk-session', {
-        method: 'POST',
-        headers: { cookie },
-      });
-      expect(res.status).toBe(200);
-      expect(seen).toEqual(['subscription']);
-      const body = (await res.json()) as { sdkSession: { apiKeySource: string | null } };
-      expect(body.sdkSession.apiKeySource).toBeNull();
-    } finally {
-      platform.close();
-    }
+    await expect(boot(glmEnv({ APP_MODEL_PROVIDER: 'subscription' }), seen)).rejects.toThrow(/Dozwolone wartości: glm/);
+    expect(seen).toEqual([]);
   });
 });
 

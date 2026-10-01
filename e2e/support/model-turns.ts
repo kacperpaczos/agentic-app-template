@@ -4,7 +4,7 @@ import { relative, resolve } from 'node:path';
 import { codeVersion, environment } from '../../tests/support/measurement-evidence.ts';
 
 /**
- * The three specs that answer with the **real model**, and everything that
+ * The registered specs that answer with the **real model**, and everything that
  * protects what they leave behind.
  *
  * **Why they are opt-in.** Every other spec costs time; these cost turns of a
@@ -28,8 +28,13 @@ import { codeVersion, environment } from '../../tests/support/measurement-eviden
  * own directory, and refuses anything else.
  */
 
-/** Spec files that spend subscription turns, by file name. */
-export const MODEL_SPEC_FILES = ['bl01-bl02-model.spec.ts', 'agent-ui.spec.ts', 'files-agent.spec.ts'] as const;
+/** Every spec that sends a real model turn, by file name. */
+export const MODEL_SPEC_FILES = [
+  'bl01-bl02-model.spec.ts',
+  'agent-ui.spec.ts',
+  'files-agent.spec.ts',
+  'model-artifacts.spec.ts',
+] as const;
 export type ModelSpecFile = (typeof MODEL_SPEC_FILES)[number];
 
 /** The same three as Playwright matches them (`testIgnore` / `testMatch`). */
@@ -53,6 +58,7 @@ export const MODEL_SPEC_TURNS: Record<ModelSpecFile, number> = {
   'bl01-bl02-model.spec.ts': ACCEPTANCE_TURNS_NEEDED,
   'agent-ui.spec.ts': 2,
   'files-agent.spec.ts': 2,
+  'model-artifacts.spec.ts': 1,
 };
 
 export const MODEL_TURNS_PER_RUN = Object.values(MODEL_SPEC_TURNS).reduce((a, b) => a + b, 0);
@@ -95,8 +101,7 @@ const REPO_ROOT = resolve(import.meta.dirname, '../..');
 /**
  * Which provider the run's model turns go to.
  *
- * The default is and stays the subscription; `APP_MODEL_PROVIDER=glm` is the
- * owner's explicit switch (2026-09-20). Every turn counter, budget message and
+ * GLM is the default and sole active provider in v0.4 (2026-10-01). Every turn counter, budget message and
  * evidence envelope below reads this **once per helper call**, so a GLM run
  * books its turns against the GLM grant and describes its own source — the
  * closed subscription grants are never written to and never quoted as GLM
@@ -105,7 +110,7 @@ const REPO_ROOT = resolve(import.meta.dirname, '../..');
 export type E2EModelProvider = 'subscription' | 'glm';
 
 export const modelProvider = (env: NodeJS.ProcessEnv = process.env): E2EModelProvider =>
-  env.APP_MODEL_PROVIDER === 'glm' ? 'glm' : 'subscription';
+  env.APP_MODEL_PROVIDER === 'subscription' ? 'subscription' : 'glm';
 
 export const glmMode = (env: NodeJS.ProcessEnv = process.env): boolean =>
   modelProvider(env) === 'glm';
@@ -297,8 +302,8 @@ export function writeEvidence(name: string, body: Record<string, unknown>): void
 /**
  * Why a second set of everything rather than four more entries above.
  *
- * **A separate switch.** `pnpm test:e2e:model` costs 11 turns and is documented
- * as costing 11. Adding these files to the same project would silently change
+ * **A separate switch.** `pnpm test:e2e:model` can cost 12 turns and is documented
+ * as such. Adding these files to the same project would silently change
  * that number for everyone who runs it, which is how the default run came to
  * spend turns in the first place. `APP_E2E_MODEL_Z11=1` is a second, deliberate
  * choice on top of the first, and the default browser run ignores both.

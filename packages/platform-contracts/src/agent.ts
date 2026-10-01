@@ -293,7 +293,7 @@ export const authStatusSchema = z.object({
   apiKeyDetected: z.boolean(),
   /**
    * What the configuration does with what it detected: `refused` scrubs every
-   * provider variable (the default subscription mode); `glm_explicit` passes
+   * provider variable (historical subscription probe); `glm_explicit` passes
    * only the two GLM endpoint variables (`ANTHROPIC_BASE_URL`,
    * `ANTHROPIC_AUTH_TOKEN`) to the agent process and still scrubs
    * `ANTHROPIC_API_KEY`, Bedrock and Vertex. The field is a policy name —
@@ -321,7 +321,8 @@ export type AuthStatus = z.infer<typeof authStatusSchema>;
  */
 export function authIsUsable(status: AuthStatus): boolean {
   if (status.method === 'glm') {
-    return status.access.state !== 'revoked' && status.access.state !== 'refresh_refused';
+    return status.sdkSession.state !== 'subscription' &&
+      status.access.state !== 'revoked' && status.access.state !== 'refresh_refused';
   }
   if (status.method !== 'subscription') return false;
   if (!status.credential.present) return false;

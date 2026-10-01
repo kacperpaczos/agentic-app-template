@@ -100,7 +100,9 @@ function StatusBar() {
    */
   const label =
     auth.method === 'glm'
-      ? auth.access.state === 'revoked' || auth.access.state === 'refresh_refused'
+      ? auth.sdkSession.state === 'subscription'
+        ? 'GLM/Z.AI — sesja SDK korzysta z subskrypcji Claude; konfiguracja niezgodna'
+        : auth.access.state === 'revoked' || auth.access.state === 'refresh_refused'
         ? 'GLM/Z.AI — dostep odrzucony przez endpoint; sprawdz token'
         : auth.access.state === 'rate_limited'
           ? 'GLM/Z.AI — limit uzycia wyczerpany'

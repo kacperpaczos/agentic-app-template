@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { resolveTestInstance } from './e2e/support/isolation.ts';
+import { resolveTestInstance, scriptedGlmEnv } from './e2e/support/isolation.ts';
 import {
   MODEL_SPEC_PATTERNS,
   Z11_MODEL_SPEC_PATTERNS,
@@ -50,8 +50,8 @@ export default defineConfig({
    * default, which is how a routine `pnpm test:e2e` came to spend subscription
    * turns and overwrite the recorded acceptance evidence with its own failures.
    *
-   * `pnpm test:e2e:model` sets the switch and runs exactly the three of
-   * BL-01/BL-02. The four of BL-03 need a **second** switch on top of it
+   * `pnpm test:e2e:model` sets the switch and runs the four registered model
+   * specs. The BL-03 specs need a **second** switch on top of it
    * (`pnpm test:e2e:z11`), because they spend a different grant: folding them
    * into the same project would change what `pnpm test:e2e:model` costs without
    * anybody choosing that. Exactly one project exists at a time, so the two
@@ -80,6 +80,9 @@ export default defineConfig({
     // one, which is how it ended up writing through the user's instance.
     reuseExistingServer: false,
     timeout: 60_000,
-    env: instance.env,
+    env: {
+      ...(modelSpecsRequested() || z11SpecsRequested() ? {} : scriptedGlmEnv(instance.repoRoot)),
+      ...instance.env,
+    },
   },
 });

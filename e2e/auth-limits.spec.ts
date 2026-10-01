@@ -187,9 +187,8 @@ test.describe('uwierzytelnienie i limity w interfejsie (symulacja na granicy ada
       await openSettings(page);
       await expect(page.getByTestId('auth-access-state')).toHaveAttribute('data-state', c.access);
       await expect(page.getByTestId('auth-remedy')).toHaveAttribute('data-state', c.access);
-      // The local credential is untouched by any of this: the file is still
-      // there and still valid. A failure of access is not a lost login.
-      await expect(page.getByTestId('auth-credential-state')).toHaveAttribute('data-state', 'valid');
+      // GLM never reads the synthetic OAuth file, even when it exists.
+      await expect(page.getByTestId('auth-credential-state')).toHaveAttribute('data-state', 'absent');
       // No secret reached the page.
       const body = (await page.locator('body').innerText()).toLowerCase();
       expect(body.includes(CANARY.toLowerCase()), 'wartosc poswiadczenia na ekranie Ustawien').toBe(false);
@@ -229,15 +228,14 @@ test.describe('uwierzytelnienie i limity w interfejsie (symulacja na granicy ada
 
   /* --------------------- expired locally, working anyway ------------------ */
 
-  test('miniony termin w pliku nie blokuje uruchomienia, a po udanym wywolaniu dostep jest potwierdzony', async ({ page }) => {
-    // A credential whose recorded expiry passed a day ago. The SDK holds a
-    // refresh token and renews on its own, so this must not stop anything.
+  test('miniony termin w nieuzywanym pliku OAuth nie blokuje GLM, a udane wywolanie potwierdza dostep', async ({ page }) => {
+    // GLM ignores this synthetic OAuth file, including its expiry.
     writeCredential(Date.now() - 24 * 3600 * 1000);
     await scripted.start('auth-expired-ok');
     await openApp(page);
 
     await openSettings(page);
-    await expect(page.getByTestId('auth-credential-state')).toHaveAttribute('data-state', 'stale');
+    await expect(page.getByTestId('auth-credential-state')).toHaveAttribute('data-state', 'absent');
     await expect(page.getByTestId('auth-access-state')).toHaveAttribute('data-state', 'unverified');
     // Presence is not health: nothing has been confirmed yet.
     await expect(page.getByTestId('statusbar-auth')).toHaveAttribute('data-auth-confirmed', 'false');
@@ -250,8 +248,8 @@ test.describe('uwierzytelnienie i limity w interfejsie (symulacja na granicy ada
       timeout: 30_000,
     });
     await openSettings(page);
-    // Two facts, two rows, and they disagree — which is the point of L8.10.
-    await expect(page.getByTestId('auth-credential-state')).toHaveAttribute('data-state', 'stale');
+    // The OAuth file stays irrelevant while GLM access becomes verified.
+    await expect(page.getByTestId('auth-credential-state')).toHaveAttribute('data-state', 'absent');
     await expect(page.getByTestId('auth-access-state')).toHaveAttribute('data-state', 'verified');
 
     writeCredential(Date.now() + 7 * 24 * 3600 * 1000);
@@ -351,8 +349,8 @@ test.describe('uwierzytelnienie i limity w interfejsie (symulacja na granicy ada
    * `scripts/probe-sdk-session.ts`, evidence in `docs/evidence/z12-bl04/`.
    */
   for (const [answer, state, usableAfterProbe] of [
-    ['subscription', 'subscription', true],
-    ['api-key', 'api_key', false],
+    ['subscription', 'subscription', false],
+    ['api-key', 'api_key', true],
     ['unavailable', 'unavailable', true],
   ] as const) {
     test(`sesja SDK "${answer}" ma wlasny, rozroznialny stan w Ustawieniach`, async ({ page }) => {
@@ -383,7 +381,7 @@ test.describe('uwierzytelnienie i limity w interfejsie (symulacja na granicy ada
           'pf-dot--warn',
         );
       } else {
-        expect(usable, 'sesja na kluczu API nie jest oznaczona jako niezgodna').toContain('pf-dot--warn');
+        expect(usable, 'sesja niezgodna z GLM nie jest oznaczona jako problem').toContain('pf-dot--warn');
       }
 
       // No secret on the page, whatever the answer was.
@@ -493,7 +491,7 @@ test.describe('uwierzytelnienie i limity w interfejsie (symulacja na granicy ada
   });
 
   test('odpowiedz sondy nie niesie adresu e-mail ani nazwy organizacji', async ({ page }) => {
-    await scripted.start('auth-expired-ok', { SDK_SESSION: 'subscription' });
+    await scripted.start('auth-expired-ok', { SDK_SESSION: 'glm' });
     await openApp(page);
     const answer = await page.evaluate(async () => {
       const r = await fetch('/api/sdk-session', {
@@ -506,7 +504,7 @@ test.describe('uwierzytelnienie i limity w interfejsie (symulacja na granicy ada
     });
     // The redaction is a property of the contract, so it is asserted on the
     // wire rather than on the screen.
-    expect(answer).toContain('subscription');
+    expect(answer).toContain('api_key');
     expect(/email|organization|@/i.test(answer), 'raport sesji niesie dane konta').toBe(false);
   });
 });

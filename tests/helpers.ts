@@ -20,6 +20,17 @@ export interface Harness {
   dispose: () => void;
 }
 
+/** Fake provider configuration for tests that never call a real model. */
+export const testGlmEnv = (dataDir: string): NodeJS.ProcessEnv => ({
+  ...process.env,
+  APP_DATA_DIR: dataDir,
+  APP_MODEL_PROVIDER: 'glm',
+  APP_MODEL: 'glm-test-model',
+  ANTHROPIC_BASE_URL: 'https://glm.endpoint.invalid',
+  ANTHROPIC_AUTH_TOKEN: 'FAKE-GLM-TOKEN-TEST-ONLY',
+  CLAUDE_CONFIG_DIR: dataDir,
+});
+
 /** Fresh platform + module on a throw-away database. No network, no model. */
 export async function createHarness(
   options: {
@@ -41,7 +52,7 @@ export async function createHarness(
   } = {},
 ): Promise<Harness> {
   const dataDir = mkdtempSync(join(tmpdir(), 'agentic-test-'));
-  const env = { ...process.env, APP_DATA_DIR: dataDir };
+  const env = testGlmEnv(dataDir);
   const withModule = options.withModule !== false;
 
   const platform = createPlatform({

@@ -42,9 +42,8 @@ import {
  * changes nothing has to fail, and an agent that says nothing and does the
  * right thing has to pass.
  *
- * This is the only suite besides `agent-ui.spec.ts` and `files-agent.spec.ts`
- * that spends subscription turns, so nothing runs it by accident: the default
- * `pnpm test:e2e` has no project that matches these three files at all, and
+ * This suite and the other registered model specs spend paid turns, so none
+ * runs by accident: the default `pnpm test:e2e` has no project matching them, and
  * reaching them takes an explicit `pnpm test:e2e:model`
  * (`support/model-turns.ts`). Inside, the budget is enforced in code
  * (`MODEL_TURN_BUDGET`) rather than left to care: every command goes through

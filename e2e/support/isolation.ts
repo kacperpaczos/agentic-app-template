@@ -84,6 +84,15 @@ export const SCENARIO_PORTS = {
 
 export const SHARED_DATA_DIR_NAME = '.e2e-data';
 
+/** Fake GLM settings for scripted, model-free browser runs only. */
+export const scriptedGlmEnv = (repoRoot: string): Record<string, string> => ({
+  APP_MODEL_PROVIDER: 'glm',
+  APP_MODEL: 'glm-test-model',
+  ANTHROPIC_BASE_URL: 'https://glm.endpoint.invalid',
+  ANTHROPIC_AUTH_TOKEN: 'FAKE-GLM-TOKEN-TEST-ONLY',
+  CLAUDE_CONFIG_DIR: resolve(repoRoot, '.e2e-glm-config'),
+});
+
 export function scenarioPortOwner(port: number): string | null {
   return (SCENARIO_PORTS as Record<number, string>)[port] ?? null;
 }

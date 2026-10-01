@@ -39,6 +39,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const REPO = resolve(import.meta.dirname, '..');
 const ROOT = resolve(REPO, '.e2e-bl07');
+const MODEL_ENV = {
+  APP_MODEL_PROVIDER: 'glm',
+  APP_MODEL: 'glm-test-model',
+  ANTHROPIC_BASE_URL: 'https://glm.endpoint.invalid',
+  ANTHROPIC_AUTH_TOKEN: 'FAKE-GLM-TOKEN-TEST-ONLY',
+  CLAUDE_CONFIG_DIR: resolve(ROOT, '.e2e-glm-config'),
+};
 
 const Database = createRequire(resolve(REPO, 'packages/platform-server/package.json'))(
   'better-sqlite3',
@@ -57,7 +64,7 @@ interface Ran {
 function run(script: string, args: string[], env: Record<string, string> = {}): Ran {
   const r = spawnSync(process.execPath, [resolve(REPO, 'scripts', script), ...args], {
     cwd: REPO,
-    env: { ...process.env, ...env },
+    env: { ...process.env, ...MODEL_ENV, ...env },
     encoding: 'utf8',
   });
   return { status: r.status ?? -1, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
@@ -74,7 +81,7 @@ function boot(dataDir: string): Ran {
   const r = spawnSync(
     process.execPath,
     ['--experimental-transform-types', '--no-warnings=ExperimentalWarning', '--input-type=module', '-e', script],
-    { cwd: REPO, env: { ...process.env, APP_DATA_DIR: dataDir }, encoding: 'utf8' },
+    { cwd: REPO, env: { ...process.env, ...MODEL_ENV, APP_DATA_DIR: dataDir }, encoding: 'utf8' },
   );
   return { status: r.status ?? -1, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
 }

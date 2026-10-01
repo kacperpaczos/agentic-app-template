@@ -1,3 +1,4 @@
+import { testGlmEnv } from './helpers.ts';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -188,7 +189,7 @@ function makeLegacyDatabase(): { dataDir: string; dbFile: string; runId: string;
 function boot(dataDir: string): void {
   const platform = createPlatform({
     modules: (services) => [createProcurementModule(services)],
-    env: { ...process.env, APP_DATA_DIR: dataDir } as NodeJS.ProcessEnv,
+    env: testGlmEnv(dataDir),
   });
   platform.close();
 }

@@ -1,3 +1,4 @@
+import { testGlmEnv } from './helpers.ts';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -32,7 +33,7 @@ describe('modul rejestruje sie wylacznie przez zadeklarowane kontrakty', () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'agentic-module-contract-'));
     const platform = createPlatform({
       modules: modules === 'none' ? [] : (services) => [createProbeModule(services)],
-      env: { ...process.env, APP_DATA_DIR: dataDir },
+      env: testGlmEnv(dataDir),
     });
     disposers.push(() => {
       platform.close();
@@ -240,7 +241,7 @@ describe('brak modulu nie powoduje odwolan do jego tabel', () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'agentic-module-tables-'));
     const p = createPlatform({
       modules: (services) => [createProbeModule(services)],
-      env: { ...process.env, APP_DATA_DIR: dataDir },
+      env: testGlmEnv(dataDir),
     });
     try {
       return p.registry.modules
@@ -258,7 +259,7 @@ describe('brak modulu nie powoduje odwolan do jego tabel', () => {
     expect(declared).toContain('probe_notes');
 
     const dataDir = mkdtempSync(join(tmpdir(), 'agentic-module-none-'));
-    const p = createPlatform({ modules: [], env: { ...process.env, APP_DATA_DIR: dataDir } });
+    const p = createPlatform({ modules: [], env: testGlmEnv(dataDir) });
     disposers.push(() => {
       p.close();
       rmSync(dataDir, { recursive: true, force: true });

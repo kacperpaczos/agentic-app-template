@@ -522,10 +522,11 @@ describe('sekret ze srodowiska nie trafia do diagnostyki', () => {
        * through — so their absence is a decision, not an empty environment.
        */
       expect(process.env.ANTHROPIC_API_KEY).toBe(CANARY);
-      expect(subscriptionOnlyEnv().ANTHROPIC_API_KEY).toBeUndefined();
-      expect(subscriptionOnlyEnv().ANTHROPIC_AUTH_TOKEN).toBeUndefined();
-      expect(JSON.stringify(subscriptionOnlyEnv())).not.toContain(CANARY);
-      expect(subscriptionOnlyEnv().APP_TAJNY_KANAREK).toBe(CANARY_GENERIC);
+      const historicalSubscriptionEnv = subscriptionOnlyEnv(process.env, 'subscription');
+      expect(historicalSubscriptionEnv.ANTHROPIC_API_KEY).toBeUndefined();
+      expect(historicalSubscriptionEnv.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+      expect(JSON.stringify(historicalSubscriptionEnv)).not.toContain(CANARY);
+      expect(historicalSubscriptionEnv.APP_TAJNY_KANAREK).toBe(CANARY_GENERIC);
 
       /*
        * The explicit GLM policy, applied to the same canary environment —
@@ -539,6 +540,7 @@ describe('sekret ze srodowiska nie trafia do diagnostyki', () => {
        */
       const asGlm = subscriptionOnlyEnv(process.env, 'glm');
       expect(asGlm.ANTHROPIC_AUTH_TOKEN).toBe(CANARY);
+      expect(subscriptionOnlyEnv().ANTHROPIC_AUTH_TOKEN).toBe(CANARY);
       expect(asGlm.ANTHROPIC_API_KEY).toBeUndefined();
       expect(scrubbedEnvKeys(process.env, 'glm')).toContain('ANTHROPIC_API_KEY');
       expect(scrubbedEnvKeys(process.env, 'glm')).not.toContain('ANTHROPIC_AUTH_TOKEN');

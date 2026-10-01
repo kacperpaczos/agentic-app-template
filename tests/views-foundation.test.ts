@@ -43,7 +43,7 @@ import {
 } from '@platform/ui';
 import { buildChartModel, buildDataModel, describeDataInstance } from '../packages/platform-ui/src/views/model.ts';
 import { scriptedAgent, type Step } from '../e2e/support/scripted-agent.ts';
-import { createHarness, login, type Harness } from './helpers.ts';
+import { createHarness, login, type Harness, testGlmEnv } from './helpers.ts';
 
 /**
  * Foundation of composed data views.
@@ -335,7 +335,7 @@ describe('zgodnosc zawezania UiTarget z deskryptorem widoku przy starcie', () =>
         modules: (services) => [
           withDataFilter(createProcurementModule(services), [{ field: 'wojewodztwo', label: 'Wojewodztwo' }]),
         ],
-        env: { ...process.env, APP_DATA_DIR: dataDir },
+        env: testGlmEnv(dataDir),
       }),
     ).toThrowError(/wojewodztwo nie sa zadeklarowane/);
   });

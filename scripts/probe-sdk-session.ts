@@ -5,7 +5,7 @@
  * node --experimental-transform-types --no-warnings=ExperimentalWarning scripts/probe-sdk-session.ts
  * ```
  *
- * **This spends no subscription turn.** It opens an SDK session whose input
+ * **This spends no model turn.** It opens an SDK session whose input
  * stream never yields a message and asks two *control requests* — messages the
  * CLI answers itself, without reaching a model — and then closes it. Nothing is
  * prompted and nothing is generated.
@@ -20,9 +20,8 @@
  *  3. the same key with the policy **switched off**, so the key really is on
  *     the path.
  *
- * Runs 1 and 2 answer "the active path is the subscription". Run 3 answers "and
- * this probe would have said otherwise if it were not" — without it, two
- * identical answers could equally mean the probe is blind to the difference.
+ * Runs 1 and 2 check the active GLM path. Run 3 removes the environment
+ * policy as a control, so differences in credential sourcing remain visible.
  * A policy that only deletes environment variables can be believed; a policy
  * whose configurations produce different, observable answers has been checked.
  *
@@ -35,11 +34,12 @@
  * writes only what that function returns.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
-import { probeSdkSession } from '@platform/server';
+import { loadConfig, probeSdkSession } from '@platform/server';
 
 const EVIDENCE_DIR = 'docs/evidence/z12-bl04';
 /*
@@ -48,7 +48,19 @@ const EVIDENCE_DIR = 'docs/evidence/z12-bl04';
  * glm wydarzylo sie 2026-09-20 i zostalo odkrecone (dowod oryginalny przywrocony
  * z gita, wynik glm zachowany jako `sesja-sdk-glm.json`).
  */
-const FILE = process.env.APP_MODEL_PROVIDER === 'glm' ? 'sesja-sdk-glm.json' : 'sesja-sdk.json';
+if (process.env.APP_MODEL_PROVIDER && process.env.APP_MODEL_PROVIDER !== 'glm') {
+  throw new Error('Sonda v0.4 obsługuje wyłącznie GLM; APP_MODEL_PROVIDER=subscription jest wyłączony.');
+}
+// Apply the same fail-closed GLM guard as the application before the SDK can
+// read any default OAuth directory. Use a throw-away data directory so this
+// configuration check never creates files in the live instance.
+const configProbeDir = mkdtempSync(join(tmpdir(), 'agentic-glm-probe-config-'));
+try {
+  loadConfig({ ...process.env, APP_DATA_DIR: configProbeDir });
+} finally {
+  rmSync(configProbeDir, { recursive: true, force: true });
+}
+const FILE = 'sesja-sdk-glm.json';
 
 /** A key that is syntactically a key and cannot buy anything. */
 const FAKE_KEY = 'sk-ant-api03-PROBA-NIEPRAWDZIWY-KLUCZ-BEZ-WARTOSCI';
@@ -105,8 +117,8 @@ const shell = (cmd: string, args: string[]): string => {
  * rekordu w żadnym wariancie — zapis mówi o źródle poświadczenia, nie o jego
  * treści.
  */
-const GLM_MODE = process.env.APP_MODEL_PROVIDER === 'glm';
-const PROVIDER = GLM_MODE ? 'glm' : 'subscription';
+const GLM_MODE = true;
+const PROVIDER = 'glm';
 
 const subscription = await probeSdkSession({ timeoutMs: 45_000, provider: PROVIDER });
 const keyInParent = await probeSdkSession({

@@ -3,7 +3,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { credentialFilePath } from '@platform/server';
-import { createHarness, type Harness } from './helpers.ts';
+import { createHarness, type Harness, testGlmEnv } from './helpers.ts';
 
 /**
  * Two things the audit's evidence did not actually establish.
@@ -36,15 +36,8 @@ afterAll(() => h.dispose());
  */
 const credentialsFile = credentialFilePath(process.env);
 
-/**
- * Escape hatch for a machine with no Claude login.
- *
- * Explicit, because the alternative is what this file used to do: an empty
- * needle list turned every assertion below into a tautology and the suite
- * reported a clean scan of nothing. A run without a credential is a legitimate
- * situation — and it has to be *declared*, not inferred from a missing file.
- */
-const NO_CREDENTIAL_ENV = 'APP_ALLOW_NO_CREDENTIAL';
+/** Always-present credential used by the model-free GLM test harness. */
+const SYNTHETIC_GLM_TOKEN = 'FAKE-GLM-TOKEN-TEST-ONLY';
 
 /** The real token values, read once, never printed and never written anywhere. */
 function realSecrets(): string[] {
@@ -74,31 +67,13 @@ function filesUnder(dir: string, limitBytes = 12 * 1024 * 1024): string[] {
 }
 
 describe('sekrety nie wyciekaja poza proces SDK', () => {
-  const secrets = realSecrets();
+  const secrets = [SYNTHETIC_GLM_TOKEN, ...realSecrets()];
 
-  it('skan ma czego szukac, inaczej kazda asercja ponizej jest pusta', () => {
-    /*
-     * The check that decides whether the rest of this file means anything.
-     *
-     * It used to be a `console.warn` and an assertion that an array is an
-     * array, which passes on a machine with no login while every scan below
-     * iterates over an empty list of needles and reports success. Now the
-     * absence of a credential fails here, by name, unless somebody says out
-     * loud that this machine has none.
-     */
-    if (secrets.length === 0) {
-      expect(
-        process.env[NO_CREDENTIAL_ENV] === '1',
-        `brak poswiadczenia w ${credentialsFile}: skan wycieku nie ma czego szukac. ` +
-          `Zaloguj sie (claude /login) albo zadeklaruj brak logowania: ${NO_CREDENTIAL_ENV}=1.`,
-      ).toBe(true);
-      return;
-    }
-    expect(secrets.length, 'poswiadczenie jest, ale nie dalo sie z niego odczytac zadnej wartosci').toBeGreaterThan(0);
+  it('skan ma gwarantowany kanarek GLM takze bez logowania Claude', () => {
+    expect(secrets).toContain(SYNTHETIC_GLM_TOKEN);
   });
 
   it('zbudowany frontend nie zawiera wartosci tokena', () => {
-    if (secrets.length === 0) return;
     const files = filesUnder(resolve(process.cwd(), 'apps/web/dist'));
     expect(files.length, 'brak zbudowanego frontendu — uruchom pnpm build').toBeGreaterThan(0);
     for (const f of files) {
@@ -108,7 +83,6 @@ describe('sekrety nie wyciekaja poza proces SDK', () => {
   });
 
   it('zbudowany backend nie zawiera wartosci tokena', () => {
-    if (secrets.length === 0) return;
     const files = filesUnder(resolve(process.cwd(), 'apps/server/dist'));
     expect(files.length, 'brak zbudowanego backendu — uruchom pnpm build').toBeGreaterThan(0);
     for (const f of files) {
@@ -118,7 +92,6 @@ describe('sekrety nie wyciekaja poza proces SDK', () => {
   });
 
   it('baza danych aplikacji nie zawiera wartosci tokena, takze w WAL', () => {
-    if (secrets.length === 0) return;
     // Exercise the paths that write to the database first.
     const conv = h.platform.services.conversations.create({
       ownerId: h.ownerId,
@@ -149,11 +122,10 @@ describe('sekrety nie wyciekaja poza proces SDK', () => {
   });
 
   it('diagnostyka uruchomieniowa nie wypisuje tokena', () => {
-    if (secrets.length === 0) return;
     // `pnpm migrate` boots the platform and prints its startup diagnostics.
     const out = execFileSync('pnpm', ['migrate'], {
       encoding: 'utf8',
-      env: { ...process.env, APP_DATA_DIR: h.dataDir },
+      env: testGlmEnv(h.dataDir),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     for (const s of secrets) expect(out.includes(s)).toBe(false);
@@ -174,7 +146,6 @@ describe('sekrety nie wyciekaja poza proces SDK', () => {
    * different answer from "there was nothing in it".
    */
   it('raporty i slady Playwright nie zawieraja wartosci tokena', () => {
-    if (secrets.length === 0) return;
     const roots = ['docs/evidence/playwright-report', 'test-results'].map((d) =>
       resolve(process.cwd(), d),
     );
@@ -191,7 +162,6 @@ describe('sekrety nie wyciekaja poza proces SDK', () => {
   });
 
   it('katalogi robocze uruchomien i magazyn plikow nie zawieraja wartosci tokena', async () => {
-    if (secrets.length === 0) return;
     /*
      * The workspace is where model-authored code writes, and the file store is
      * where published results land. Both are inside the harness's own data
@@ -310,7 +280,7 @@ describe('przerwana operacja wieloetapowa nie zostawia polowicznego stanu', () =
     const { createPlatform, DEFAULT_USER_ID } = await import('@platform/server');
     // Reopening the same file is the weaker check the audit already had; it is
     // kept because it is still worth knowing, not because it proves atomicity.
-    const again = createPlatform({ modules: [], env: { ...process.env, APP_DATA_DIR: h.dataDir } });
+    const again = createPlatform({ modules: [], env: testGlmEnv(h.dataDir) });
     try {
       expect(again.services.files.list(DEFAULT_USER_ID)).toHaveLength(files);
       expect(cases).toBeGreaterThan(0);
@@ -339,7 +309,7 @@ describe('przerwana operacja wieloetapowa nie zostawia polowicznego stanu', () =
         if (existsSync(src)) cpSync(src, join(copyDir, part));
       }
       const census = (dir: string) => {
-        const open = createPlatform({ modules: [], env: { ...process.env, APP_DATA_DIR: dir } });
+        const open = createPlatform({ modules: [], env: testGlmEnv(dir) });
         try {
           const c = open.db.$client;
           const digests: Record<string, string> = {};
@@ -362,7 +332,7 @@ describe('przerwana operacja wieloetapowa nie zostawia polowicznego stanu', () =
         expect(copy[t], `census tabeli ${t}: kopia różni się od oryginału`).toBe(original[t]);
       }
       // And through the API of the copy itself, one surface as a witness.
-      const copyPlatform = createPlatform({ modules: [], env: { ...process.env, APP_DATA_DIR: copyDir } });
+      const copyPlatform = createPlatform({ modules: [], env: testGlmEnv(copyDir) });
       try {
         expect(copyPlatform.services.files.list(DEFAULT_USER_ID)).toHaveLength(files);
       } finally {

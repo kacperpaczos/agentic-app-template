@@ -95,30 +95,29 @@ test.describe('powloka aplikacji', () => {
     await expect(page.getByTestId('settings-page')).toBeVisible();
   });
 
-  test('ustawienia pokazuja tryb subskrypcji i nie ujawniaja sekretow', async ({ page }) => {
+  test('ustawienia pokazuja GLM i nie ujawniaja sekretow', async ({ page }) => {
     await page.goto('/settings');
     const auth = page.getByTestId('auth-status');
     await expect(auth).toBeVisible();
-    await expect(auth).toContainText(/subskrypcja|brak logowania/);
+    await expect(page.getByTestId('auth-method')).toHaveAttribute('data-method', 'glm');
     const body = (await page.locator('body').innerText()).toLowerCase();
     expect(body).not.toContain('sk-ant');
     expect(body).not.toContain('accesstoken');
     expect(body).not.toContain('refreshtoken');
-    await expect(page.getByText('wylacznie subskrypcja', { exact: false })).toBeVisible();
+    await expect(page.getByText('wylacznie subskrypcja', { exact: false })).toHaveCount(0);
   });
 
   /*
    * Provider-aware by reading the mode the page itself reports, not by
-   * knowing the environment the run started with. The default run is the
-   * subscription mode and keeps every assertion it ever had; a GLM-mode run
-   * (when somebody starts one) gets its own honest labels asserted instead —
-   * and must NOT be shown the subscription-only policy line.
+   * knowing the environment the run started with. The active run must report
+   * GLM and must not show the historical subscription policy line.
    */
   test('ustawienia i pasek stanu nazywaja skonfigurowany provider i nie ujawniaja sekretow', async ({
     page,
   }) => {
     await page.goto('/settings');
-    const method = (await page.getByTestId('auth-method').getAttribute('data-method')) ?? 'subscription';
+    const method = await page.getByTestId('auth-method').getAttribute('data-method');
+    expect(method).toBe('glm');
     const policy = page.getByTestId('auth-policy');
     await expect(policy).toBeVisible();
 
@@ -127,16 +126,10 @@ test.describe('powloka aplikacji', () => {
     expect(body).not.toContain('accesstoken');
     expect(body).not.toContain('refreshtoken');
 
-    if (method === 'glm') {
-      await expect(page.getByTestId('auth-method')).toContainText(/GLM\/Z\.AI/);
-      await expect(policy).toContainText(/tryb GLM/i);
-      await expect(page.getByTestId('statusbar')).toContainText(/GLM\/Z\.AI/);
-      await expect(page.getByText('wylacznie subskrypcja', { exact: false })).toHaveCount(0);
-    } else {
-      await expect(page.getByTestId('auth-status')).toContainText(/subskrypcja|brak logowania/);
-      await expect(policy).toContainText(/wylacznie subskrypcja/i);
-      await expect(page.getByTestId('statusbar')).toContainText('Claude:');
-    }
+    await expect(page.getByTestId('auth-method')).toContainText(/GLM\/Z\.AI/);
+    await expect(policy).toContainText(/tryb GLM/i);
+    await expect(page.getByTestId('statusbar')).toContainText(/GLM\/Z\.AI/);
+    await expect(page.getByText('wylacznie subskrypcja', { exact: false })).toHaveCount(0);
   });
 });
 

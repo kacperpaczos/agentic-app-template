@@ -68,20 +68,25 @@ const REHEARSAL = process.argv.includes('--rehearsal');
  * a czytanie prawdziwego pliku byłoby sprzeczne z tą trybem wprost. Pominięcie
  * jest zapisane, nie przemilczane.
  */
-if (process.env.APP_MODEL_PROVIDER === 'glm') {
+if (process.env.APP_MODEL_PROVIDER === 'subscription') {
+  throw new Error('APP_MODEL_PROVIDER=subscription jest wyłączony w v0.4; historyczna sonda OAuth nie jest uruchamiana.');
+}
+{
   const record = {
     zapisano: new Date().toISOString(),
     pominieto: true,
     powod:
-      'APP_MODEL_PROVIDER=glm: próba czyta plik poświadczeń OAuth i próbuje odnowienia — ' +
+      'Aktywny provider GLM: próba czyta plik poświadczeń OAuth i próbuje odnowienia — ' +
       'w trybie GLM poświadczenia OAuth są nieużywane, a ich czytanie sprzeczne z trybem. ' +
       'Żadna próba nie została wykonana, żaden plik nie został czytany.',
   };
   console.log(`[sonda] POMINIĘTO: ${record.powod}`);
   console.log(JSON.stringify(record, null, 2));
-  process.exit(0);
 }
 
+// Zachowujemy kod próby wyłącznie do odczytu historycznych dowodów. Nie jest
+// wywoływany w aktywnym trybie GLM; wydzielenie zapobiega wykonaniu OAuth.
+async function legacyOAuthProbeNeverRun(): Promise<void> {
 /** Tekst zaobserwowany na rzeczywistej awarii SDK 0.3.270. */
 const REAL_SDK_AUTH_FAILURE =
   'Claude Code returned an error result: Failed to authenticate: OAuth session expired and could not be refreshed';
@@ -400,3 +405,5 @@ platform.close();
 rmSync(configDir, { recursive: true, force: true });
 rmSync(dataDir, { recursive: true, force: true });
 process.exit(untouched ? 0 : 3);
+}
+void legacyOAuthProbeNeverRun;

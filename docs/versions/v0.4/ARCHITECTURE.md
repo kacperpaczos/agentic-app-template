@@ -420,7 +420,7 @@ Jedna sesja Claude nie jest uruchamiana równolegle bez obsługi takiego trybu. 
 
 **Cel:** rzeczywisty runtime Claude Code / Claude Agent SDK jako harness z GLM/Z.AI jako providerem modelu. **Technologie:** Claude Agent SDK, `@mastra/claude`, endpoint zgodny z Anthropic.
 
-**Odpowiedzialność warstwy.** Harness wykonuje sesje, narzędzia i kontrolę uprawnień przez oficjalny SDK i adapter Mastry. Provider GLM jest wybierany jawnie konfiguracją procesu; wymaga endpointu i tokenu przekazanych wyłącznie do tego procesu. Tryb GLM nie czyta pliku poświadczeń OAuth użytkownika, nie używa jego subskrypcji Anthropic i nie ma automatycznego fallbacku do Anthropic, gatewaya ani innego płatnego providera. Brak lub niepoprawność konfiguracji kończy start albo wykonanie czytelnym błędem, nie cichą zmianą providera.
+**Odpowiedzialność warstwy.** Harness wykonuje sesje, narzędzia i kontrolę uprawnień przez oficjalny SDK i adapter Mastry. GLM jest jedynym aktywnym providerem v0.4; brak `APP_MODEL_PROVIDER` wybiera GLM, a jawne `subscription` odmawia startu. Wymaga endpointu i tokenu przekazanych wyłącznie do procesu. Tryb GLM nie czyta pliku poświadczeń OAuth użytkownika, nie używa jego subskrypcji Anthropic i nie ma automatycznego fallbacku do Anthropic, gatewaya ani innego płatnego providera. Brak lub niepoprawność konfiguracji kończy start albo wykonanie czytelnym błędem, nie cichą zmianą providera.
 
 Diagnostyka rozdziela wybrany harness, providera modelu, stan konfiguracji oraz ostatni potwierdzony dostęp, bez ujawniania sekretów. Aplikacja nie implementuje własnego odświeżania tokenów GLM ani nie materializuje OAuth Anthropic dla metadanych w trybie GLM.
 

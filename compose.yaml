@@ -20,28 +20,16 @@ services:
       PORT: "8791"
       APP_DATA_DIR: /data
       APP_WEB_DIST: /app/web
+      APP_MODEL_PROVIDER: glm
+      APP_MODEL: ${APP_MODEL:?Ustaw model GLM w APP_MODEL}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:?Ustaw endpoint GLM w ANTHROPIC_BASE_URL}
+      ANTHROPIC_AUTH_TOKEN: ${ANTHROPIC_AUTH_TOKEN:?Ustaw token Z.AI w ANTHROPIC_AUTH_TOKEN}
+      CLAUDE_CONFIG_DIR: /tmp/claude-glm-isolated
       # Backend wpuszcza tylko originy z tej listy; adres musi zgadzać się z tym,
       # pod którym otwierasz aplikację w przeglądarce.
       APP_ALLOWED_ORIGINS: "http://localhost:8791,http://127.0.0.1:8791"
     volumes:
       - agenticapp-data:/data
-
-      # ----------------------------------------------------------------------
-      # Dostęp agenta do subskrypcji Claude — świadomie wyłączony domyślnie.
-      #
-      # Claude Agent SDK czyta poświadczenie subskrypcji z katalogu `~/.claude`
-      # na hoście. W kontenerze tego katalogu nie ma, więc aplikacja wstanie i
-      # będzie w pełni używalna (canvas, dane, pliki, rozmowy), ale **agent nie
-      # wykona żadnego polecenia** — ekran Ustawienia pokaże „brak logowania".
-      #
-      # Poświadczenie nie jest wbudowywane w obraz i nie powinno być: obraz to
-      # artefakt do przenoszenia, a to jest sekret. Jeżeli świadomie chcesz dać
-      # kontenerowi dostęp do swojej subskrypcji, odkomentuj poniższą linię.
-      # Montowanie jest tylko do odczytu, ale to nadal wystawienie działającego
-      # poświadczenia procesowi w kontenerze — decyzja należy do Ciebie.
-      #
-      # - ${HOME}/.claude:/home/node/.claude:ro
-      # ----------------------------------------------------------------------
 
     restart: unless-stopped
     healthcheck:

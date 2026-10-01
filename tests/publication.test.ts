@@ -11,7 +11,7 @@ import {
   removeManagedTree,
   sha256,
 } from '@platform/server';
-import { createHarness, login, type Harness } from './helpers.ts';
+import { createHarness, login, type Harness, testGlmEnv } from './helpers.ts';
 import { dispatchingAgent, newStandInHandle, type Plan, type Step } from './support/model-standin.ts';
 
 /**
@@ -374,7 +374,7 @@ describe('publikacja jest niepodzielna', () => {
     const { createPlatform } = await import('@platform/server');
     const restarted = createPlatform({
       modules: [],
-      env: { ...process.env, APP_DATA_DIR: h.dataDir },
+      env: testGlmEnv(h.dataDir),
     });
     try {
       const meta = restarted.services.artifacts.meta(artifactId, h.ownerId);
