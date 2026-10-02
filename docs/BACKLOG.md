@@ -15,7 +15,7 @@ Otwartych kryteriów: **12** z 200, w 5 pakietach. Kolejność pakietów jest pr
 
 ## BL-03 — Powtarzalne próby na prawdziwym modelu w szablonie
 
-Funkcje potwierdzone w AgenticApp wyłącznie historycznym przebiegiem lub ręczną sondą, bez dowodu wykonywanego na kodzie szablonu. Trzeba je powtórzyć w szablonie i utrwalić jako powtarzalny, izolowany test lub skrypt odbiorowy z zapisem wersji i wyniku.
+Pozostałe kryteria pakietu wymagają naprawy izolacji narzędzi plikowych albo brakującego dowodu z rzeczywistym modelem GLM na kodzie szablonu. Historyczne przebiegi AgenticApp i symulacje nie zamykają tych konkretnych braków; istniejące próby na szablonie należy czytać wraz z opisem ich ograniczeń.
 
 **Warunek zamknięcia:** każde kryterium pakietu ma dowód z przebiegu na commicie szablonu (test e2e z modelem lub skrypt odbiorowy z logiem), oznaczony jako rzeczywisty model, z kontrolą negatywną tam, gdzie wymaga jej treść kryterium.
 
@@ -39,7 +39,7 @@ Pozostaje jedno pytanie, na które nie da się odpowiedzieć bez tury modelu: kt
 
 ## BL-09 — Pliki, sandbox i zadania w tle
 
-To, co w warstwie 11 zostało po zamknięciu zgód, publikacji i pracy w tle (2026-09-18): trzy kryteria, których nie da się potwierdzić bez tury modelu — zakończenie procesu potomnego samego Claude Agent SDK przy Stop, faktyczna kolejność mechanizmów uprawnień SDK i to, czy odpowiedź agenta nie podaje zapisanej wartości formuły jako wyniku przeliczenia.
+Pozostały dwa kryteria: zakończenie procesu potomnego samego Claude Agent SDK przy Stop (L11.7) oraz to, czy odpowiedź agenta nie podaje zapisanej wartości formuły jako wyniku przeliczenia (L11.23). Zgody i formularz wymagający uwagi są rozliczane osobno w BL-13.
 
 **Warunek zamknięcia:** każde z pozostałych kryteriów ma dowód z przebiegu na prawdziwym modelu, w ramach przyznanego budżetu tur, oznaczony jako rzeczywisty model; części niezależne od modelu są już pokryte regresją szablonu z kontrolami negatywnymi.
 
@@ -50,9 +50,9 @@ To, co w warstwie 11 zostało po zamknięciu zgód, publikacji i pracy w tle (20
 
 ## BL-11 — Domena, backend i cache
 
-Braki w warstwach 6, 7, 9 i 10 niepasujące do innych pakietów: współbieżność, atomowość, konflikty, kontekst podczas długiego wykonania, cache.
+Pozostało L6.11: platforma rozróżnia brak zasobu, nieaktualność i utratę dostępu, lecz zachowanie agenta przy tych stanach wymaga dowodu z rzeczywistym modelem.
 
-**Warunek zamknięcia:** kryteria pakietu mają test kontraktu lub test GUI w regresji szablonu, z próbami negatywnymi.
+**Warunek zamknięcia:** L6.11 ma dowód z przebiegu na rzeczywistym modelu, że agent nie uzupełnia brakujących danych własnym domysłem; deterministyczne kontrakty pozostają w regresji.
 
 | ID | Wymaganie | Stan | Brak |
 |---|---|---|---|
@@ -60,7 +60,7 @@ Braki w warstwach 6, 7, 9 i 10 niepasujące do innych pakietów: współbieżno�
 
 ## BL-13 — v0.4 — centrum zadań, tryby zgód i pełna ścieżka GLM
 
-Decyzje v0.4 wzmacniają istniejące funkcje: wymagają globalnego centrum zadań, wyboru i egzekwowania trzech trybów zgód oraz pełnego, izolowanego dowodu GUI przez aktualnego providera GLM. Dotychczasowe listy przebiegów, polityka narzędzi i dowód subskrypcyjny są częściową bazą, nie zamknięciem tych wymagań.
+Globalne centrum zadań (L11.6) jest potwierdzone. Otwarte pozostają trzy kryteria: wybór i egzekwowanie trybów zgód (L11.12), formularz i powiadomienia dla zadania wymagającego uwagi (L11.19) oraz izolowany dowód pełnej ścieżki GUI przez GLM (L12.6). Historyczny dowód subskrypcyjny nie zamyka L12.6.
 
 **Warunek zamknięcia:** L11.6, L11.12 i L11.19 mają wdrożony kontrakt backend–UI oraz testy kontraktowe i GUI. L12.6 ma izolowany dowód pełnej ścieżki GLM/Z.AI → Claude Code / Claude Agent SDK → Mastra → AG-UI → OpenUI z oznaczoną wersją, środowiskiem i providerem.
 

@@ -21,6 +21,12 @@ i **historii**.
    [observability.md](observability.md) i [odzyskiwanie-stanu.md](odzyskiwanie-stanu.md)
    (załączniki operacyjne).
 
+`ACCEPTANCE.md` i `BACKLOG.md` pokazują **ostatnią zapisaną ocenę** (data w
+macierzy), a nie automatyczny odbiór każdej późniejszej zmiany kodu. Przed
+stwierdzeniem, że bieżący commit spełnia kryterium, sprawdź pochodzenie i
+aktualność jego dowodu. Oba pliki są generowane z `docs/acceptance/assessment.json`
+i muszą być identyczne z projekcjami w `docs/`.
+
 ## Role dokumentów i źródła prawdy
 
 | Dokument lub materiał | Rola | Czy definiuje bieżący system? |

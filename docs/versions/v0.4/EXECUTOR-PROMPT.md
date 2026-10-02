@@ -63,7 +63,7 @@ Prowadź pracę małymi pakietami z backlogu, zachowując granicę platforma–d
 - nawigacja, filtry oraz wskazanie konkretnego miejsca lub wartości;
 - obowiązkowe „Widoki agenta” i dozwolone komponenty per widok;
 - centrum zadań: postęp, artefakty, błędy, anulowanie, wznowienie i formularze „wymaga uwagi”;
-- tryby zgód: ręczny, domyślny i pełna automatyzacja;
+- tryby zgód: ręczny, nadzorowany i pełna automatyzacja;
 - bezpieczeństwo poświadczeń, izolacja testów i odporność na błędy strumienia.
 
 ## Sposób pracy
@@ -71,11 +71,11 @@ Prowadź pracę małymi pakietami z backlogu, zachowując granicę platforma–d
 1. Wykonaj preflight: status Git, aktywną wersję dokumentacji, konfigurację GLM, porty i katalog danych.
 2. Przed pierwszą zmianą przedstaw krótką mapę całego backlogu: pakiet → kryteria → rodzaj pozostałej pracy („implementacja”, „dowód deterministyczny” albo „pojedynczy dowód GLM”). Nie pomijaj pakietu i nie klasyfikuj wymagań informacyjnych jako pracy blokującej.
 3. Nigdy nie dotykaj instancji użytkownika na porcie 8791 ani jej danych.
-4. Wybierz jeden mały pakiet backlogu. Najpierw wskaż kryteria, potem zaimplementuj zmianę, następnie zbierz dowód.
+4. Wybierz jeden mały pakiet backlogu. Najpierw wskaż kryteria, potem zleć implementację zmiany zgodnie z sekcją „Delegowanie i review”, następnie zweryfikuj ją i zbierz dowód.
 5. Najpierw uruchamiaj deterministyczne testy. Test przeglądarkowy uruchamiaj tylko dla zmienionego przepływu i tylko w izolowanym środowisku.
 6. Próbę na prawdziwym modelu wykonuj wyłącznie wtedy, gdy konkretne wymaganie produktowe lub jakościowe naprawdę jej wymaga, a implementacja i review są gotowe.
 7. Po dwóch nieudanych turach modelowych bez nowej diagnozy lub postępu zatrzymaj próby dla danego kryterium. Oznacz je jako zablokowane, opisz przyczynę i wskaż następny sensowny krok. Nie powtarzaj losowo promptów.
-8. Jeżeli masz dostęp do subagentów, używaj ich wyłącznie do wąskiego niezależnego review diffu, kontraktu albo dowodu. Pozostajesz odpowiedzialny za plan, integrację i raport.
+8. Zlecaj podagentom wąskie zadania implementacyjne zgodnie z sekcją „Delegowanie i review”. Niezależne review diffu, kontraktu i dowodu powierz innemu podagentowi, jeśli jest dostępny. Pozostajesz odpowiedzialny za plan, integrację i raport.
 9. Po każdym pakiecie wykonaj niezależne review zmienionego kodu i testu. Test musi wykrywać brak funkcji, a nie jedynie obecność elementu UI.
 10. Nie aktualizuj statusu kryterium na podstawie deklaracji lub samej analizy kodu — wymagaj odpowiedniego dowodu działania.
 
