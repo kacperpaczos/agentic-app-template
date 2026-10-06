@@ -339,6 +339,14 @@ describe('zdarzenia platformy trafiaja do wlasciwych odbiorcow', () => {
     qc.setQueryData(['canvas', 'local-user', 'space', 'sp_inna'], { cards: [] });
     await drain([runStarted, canvasChanged], qc);
     expect(invalidated(qc)).toContainEqual(key);
+    // Port z audytu AgenticApp 2026-09-28: negatywnie — inwalidacja jednej
+    // przestrzeni nie może być szerokim prefiksem obejmującym inne przestrzenie.
+    expect(invalidated(qc), 'inwalidacja przestrzeni nie moze objac innej przestrzeni').not.toContainEqual([
+      'canvas',
+      'local-user',
+      'space',
+      'sp_inna',
+    ]);
   });
 
   it('zmiana danych uniewaznia odczyty modulu, canvas i otwarte artefakty', async () => {

@@ -150,17 +150,43 @@ describe('odczyt skoroszytu obejmuje arkusze i typy komorek', () => {
      * The property the whole "formulas are not recalculated" limit rests on:
      * the cell carries the formula *and* the value the spreadsheet last wrote,
      * as two separate fields. Reporting the second as the first would be
-     * presenting a stale number as a calculation.
+     * presenting a stale number as a calculation. The exact object shape is
+     * pinned: a cell that came back as a bare (recalculated) number, or as any
+     * other wrapper, fails here rather than passing as "truthy".
      */
     const computed = prices.getCell('D2').value as { formula: string; result: number };
-    expect(computed.formula).toBe('B2*C2');
-    expect(computed.result).toBe(2505);
-    expect(computed).not.toBe(2505);
+    // 10 szt. x 250,50 = 2 505 — recznie, niezaleznie od biblioteki.
+    expect(computed).toEqual({ formula: 'B2*C2', result: 10 * 250.5 });
 
     const meta = wb.getWorksheet('Metryka')!;
     expect(meta.getCell('B1').value).toBeInstanceOf(Date);
     expect(meta.getCell('B2').value).toBe(true);
     expect(meta.getCell('B3').value).toBeNull();
+  });
+
+  // Port z audytu AgenticApp 2026-09-28: zapisany obok formuly wynik jest tym,
+  // co arkusz zapamietal OSTATNIO — moze byc nieaktualny wzgledem samych danych,
+  // i wlasnie dlatego platforma nie moze go podawac jako przeliczonej wartosci.
+  it('zapisana wartosc formuly moze byc nieaktualna — i dlatego nie jest wynikiem', async () => {
+    /*
+     * Zapisane celowo niespojnie: formula mowi A1*B1 (= 20), a zapisany result
+     * mowi 999. Czytnik, ktory przeliczalby, powiedzialby 20; czytnik, ktory
+     * ufa plikowi — 999. Platforma nie robi ani jedno, ani drugie po cichu:
+     * raportuje jedno i drugie, dlatego FILE_ANALYSIS mowi o tym limicie glosno.
+     */
+    const wb = new ExcelJS.Workbook();
+    const sheet = wb.addWorksheet('S');
+    sheet.addRow([4, 5, { formula: 'A1*B1', result: 999 }]);
+    const bytes = Buffer.from(await wb.xlsx.writeBuffer());
+
+    const reread = new ExcelJS.Workbook();
+    await reread.xlsx.load(bytes as unknown as ArrayBuffer);
+    const cell = reread.getWorksheet('S')!.getCell('C1').value as { formula: string; result: number };
+
+    expect(cell.formula).toBe('A1*B1');
+    expect(cell.result).toBe(999);
+    expect(cell.result).not.toBe(20);
+    expect(FILE_ANALYSIS.spreadsheet.limits.join(' ')).toMatch(/NIE sa przeliczane/);
   });
 
   it('exceljs: uszkodzony plik konczy sie bledem biblioteki, nie zmyslona trescia', async () => {
@@ -177,13 +203,6 @@ describe('odczyt skoroszytu obejmuje arkusze i typy komorek', () => {
     await expect(
       wb.xlsx.load(Buffer.from('to nie jest skoroszyt') as unknown as ArrayBuffer),
     ).rejects.toThrow(/zip/i);
-  });
-
-  it('uszkodzony plik konczy sie bledem, nie zmyslona trescia', async () => {
-    const wb = new ExcelJS.Workbook();
-    await expect(
-      wb.xlsx.load(Buffer.from('to nie jest skoroszyt') as unknown as ArrayBuffer),
-    ).rejects.toThrow();
   });
 });
 
@@ -342,6 +361,64 @@ describe('magazyn plikow: typy, limity i dostep', () => {
 });
 
 describe('modyfikacja pliku zostawia oryginal nietkniety', () => {
+  // Port z audytu AgenticApp 2026-09-28: wersjonowanie to NOWY plik wskazujacy
+  // na oryginal, a nie przepisanie istniejacego — granica, bez ktorej „agent
+  // zmienil mi arkusz" jest nieodwracalne i niemozliwe do sprawdzenia.
+  it('nowa wersja to nowy plik wskazujacy na oryginal', async () => {
+    const originalBytes = await makeWorkbook();
+    const original = h.platform.services.files.store({
+      ownerId: h.ownerId,
+      filename: 'oferty.xlsx',
+      mediaType: XLSX_MEDIA,
+      bytes: originalBytes,
+      scopeKind: 'case',
+      scopeId: 'case_1',
+    });
+
+    // Modyfikacja: dokladany arkusz, tak jak zrobi to uruchomienie po parsowaniu.
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(originalBytes as unknown as ArrayBuffer);
+    wb.addWorksheet('Podsumowanie').addRow(['Razem', 4905]);
+    const modified = Buffer.from(await wb.xlsx.writeBuffer());
+
+    const { original: after, version } = h.platform.services.files.storeVersion({
+      ownerId: h.ownerId,
+      originalFileId: original.id,
+      filename: 'oferty-poprawione.xlsx',
+      mediaType: XLSX_MEDIA,
+      bytes: modified,
+    });
+
+    expect(version.version).toBe(2);
+    expect(version.derivedFromFileId).toBe(original.id);
+    // Zakres dziedziczony: wytworzony plik zostaje przy tym samym rekordzie.
+    expect(version.scopeKind).toBe('case');
+    expect(version.scopeId).toBe('case_1');
+
+    // Oryginal nietkniety — ta sama tozsamosc, ta sama suma, te same bajty.
+    expect(after.id).toBe(original.id);
+    expect(after.sha256).toBe(original.sha256);
+    expect(after.version).toBe(1);
+    const reread = h.platform.services.files.read(original.id, h.ownerId);
+    expect(Buffer.compare(reread.bytes, originalBytes)).toBe(0);
+
+    // A wytworzony plik to naprawde zmodyfikowany skoroszyt, dajacy sie otworzyc.
+    const check = new ExcelJS.Workbook();
+    await check.xlsx.load(
+      h.platform.services.files.read(version.id, h.ownerId).bytes as unknown as ArrayBuffer,
+    );
+    expect(check.worksheets.map((w) => w.name)).toContain('Podsumowanie');
+    expect(check.getWorksheet('Podsumowanie')!.getCell('B1').value).toBe(4905);
+    // Arkusze, ktore tam byly, przezyly podroz w obie strony.
+    expect(check.worksheets.map((w) => w.name)).toEqual(
+      expect.arrayContaining(['Ceny', 'Metryka', 'Pusty']),
+    );
+
+    expect(h.platform.services.files.versionsOf(original.id, h.ownerId).map((f) => f.id)).toEqual([
+      version.id,
+    ]);
+  });
+
   it('oba pliki sa osobno pobieralne przez API, a obcy wlasciciel nie', async () => {
     /*
      * Pobieralnosc sprawdzana tak, jak robi to przegladarka: endpointem

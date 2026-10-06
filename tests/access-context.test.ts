@@ -169,6 +169,17 @@ describe('opozniona odpowiedz nie przywraca cudzych danych', () => {
     await expect(settled).resolves.toEqual({ ok: 1 });
     expect(accessScope()).toBe('local-user');
   });
+
+  /*
+   * Port z audytu AgenticApp 2026-09-28 — uwaga z falsyfikacji: sam test „dane
+   * A nie laduja w cache" NIE jest w stanie wykryc usuniecia kontroli epoki w
+   * `api()`, bo `setAccessContext` dysponuje druga, niezalezna obrona
+   * (`cancelQueries` + `clear`), ktora anuluje zadanie zanim odpowiedz zdzy
+   * cokolwiek zapisac. Dlatego ponizszy test pinuje WLASNIE to sprzatanie:
+   * zadanie w locie nie przezywa przelaczenia jako wpis cache — jego usuniecie
+   * jest falsyfikowalne pojedyncza, realistyczna usterka (przelaczenie
+   * przestaje sprzatac zadania w locie).
+   */
   it('przelaczenie usuwa z cache takze zapytanie w locie, nie tylko dane wstawione recznie', async () => {
     const qc = new QueryClient();
     setAccessContext(qc, 'local-user');

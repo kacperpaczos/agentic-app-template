@@ -249,7 +249,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): PlatformConfig
 
     if (env.ANTHROPIC_BASE_URL?.trim()) {
       try {
-        modelEndpointOrigin = new URL(env.ANTHROPIC_BASE_URL).origin;
+        const endpoint = new URL(env.ANTHROPIC_BASE_URL);
+        if (endpoint.protocol !== 'https:') {
+          missing.push(
+            `ANTHROPIC_BASE_URL="${env.ANTHROPIC_BASE_URL}" nie używa https — token GLM jest przesyłany ` +
+              'w nagłówku autoryzacyjnym każdego wywołania modelu i nie może iść siecią w otwartym tekście',
+          );
+        }
+        modelEndpointOrigin = endpoint.origin;
       } catch {
         missing.push(`ANTHROPIC_BASE_URL="${env.ANTHROPIC_BASE_URL}" nie jest poprawnym adresem URL`);
       }
