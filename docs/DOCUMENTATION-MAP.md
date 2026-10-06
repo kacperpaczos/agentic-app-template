@@ -118,4 +118,4 @@ kanon, jedno liczenie**, archiwum jako osobny, jawnie nazwany świat.
 | `scripts/audit-matrix.mjs` | usunięty: martwy duplikat ocen `A`, nikt go nie wywoływał |
 | `tests/matrix-gates.test.ts` (nowy) | regresja bramek na rdzeniu z fixture'ami: usunięte kryterium, zmiana statusu, duplikat, rozjazd stałych, zmyślony raport pochodny — każda kontrola z asercją „za co oblewa”; plus smoke trzech bramek na drzewie |
 
-- `FEEDBACK.md` §A28 — audyt jakości testów 2026-09-28 i konsolidacja z AgenticApp (wnioski i odrzucenia). Rejestry procesu pozostają poza repozytorium; ta mapa nie traktuje ich jako dowodu dostępnego w świeżym klonie.
+- `FEEDBACK.md` §A28 — audyt jakości testów 2026-09-28 i konsolidacja z AgenticApp (wnioski i odrzucenia). Ledger i briefy zlecenia z 2026-09-20 są zachowane w `docs/versions/v0.4/archive/domkniecie-2026-09/`; to historia procesu, nie dowód bieżącego stanu aplikacji.

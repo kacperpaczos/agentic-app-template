@@ -1233,3 +1233,17 @@ L12.6 pozostaje otwarte.
 **Pozostała praca.** 12 kryteriów w `docs/BACKLOG.md`. Priorytet: pozytywna granica dostępu
 narzędzi plikowych (L11.4/L11.11), rzeczywista ścieżka GLM (L12.6) i zależne od niej próby
 SDK/modelu, a następnie wybierane tryby zgód (L11.12) i centrum uwagi (L11.19).
+
+---
+
+## §A30 — Archiwum roboczego zlecenia domknięcia (2026-10-06)
+
+Przeniesiono do `docs/versions/v0.4/archive/domkniecie-2026-09/` 32 dokumenty z roboczego
+katalogu `.sdd-zlecenie`: zlecenie, ledger, briefy, mapy, raporty i recenzje etapów oraz pakietu
+GLM. Materiały są zapisem historycznym, nie bieżącą specyfikacją ani aktualnym wynikiem odbioru.
+Zachowano także szkic briefu etapu 1, oznaczony w indeksie jako zastąpiony wersją finalną.
+
+Przed dodaniem przejrzano strukturę i treść dokumentów pod kątem duplikatów, sekretów i danych
+hosta. Nie znaleziono rzeczywistych tokenów ani kluczy; usunięto lokalne ścieżki z kopii
+archiwalnej. URL `glm.example.com` pozostaje jako jawnie syntetyczny przykład testu sanitizacji.
+Po sprawdzeniu commita źródłowe `.sdd-zlecenie/` przeniesiono do Kosza; kopia archiwalna jest w Git.

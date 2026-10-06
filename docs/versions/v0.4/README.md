@@ -54,3 +54,9 @@ Nie używa się symlinków.
 
 v0.3 pozostaje nieedytowaną historią. [CHANGES-FROM-v0.3.md](CHANGES-FROM-v0.3.md)
 jest changelogiem, a nie drugą specyfikacją.
+
+## Archiwum przebiegu zlecenia
+
+[Archiwum domknięcia AgenticApp z września 2026](archive/domkniecie-2026-09/README.md)
+zawiera historyczne briefy, raporty i recenzje. Materiały służą do późniejszego
+przeglądu; nie są bieżącą specyfikacją ani aktualnym stanem odbioru.

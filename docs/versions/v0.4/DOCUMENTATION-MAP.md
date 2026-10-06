@@ -104,6 +104,12 @@ Ta faza nie przenosiła dokumentów między repozytoriami: powstała w szablonie
 | `evidence/bl01-bl02-2026-09-17/` | dowody prób T25, T26, T27 z prawdziwego modelu, rejestr tur, przebiegi nieudane | nowy; zapisane werdykty są nienadpisywalne przez kolejne przebiegi |
 | `.superpowers/sdd/2026-09-17-bl01-bl02/` | ledger przebiegu, briefy, raporty zadań i pakiety przeglądów | **poza szablonem** (katalog ignorowany); cytowany w raporcie architekta |
 
+## 8. Archiwum zlecenia domknięcia — 2026-09-20
+
+| Materiał | Co zachowuje | Status i sposób czytania |
+|---|---|---|
+| [`archive/domkniecie-2026-09/`](archive/domkniecie-2026-09/README.md) | 32 pliki: zlecenie i ledger, briefy, mapy, raporty i recenzje etapów macierzy, izolacji, Mastry, ponownego użycia dowodów oraz pakietu GLM | archiwum przebiegu; zawiera stany pośrednie i decyzje sprzed aktualnych decyzji v0.4. Nie jest bieżącą instrukcją ani dowodem aktualnego odbioru. Szkic briefu etapu 1 zachowano, oznaczając go jako zastąpiony wersją finalną. |
+
 ## 7. Domknięcie bramek macierzy — 2026-09-20
 
 Przed tą zmianą `pnpm check:acceptance` liczył 200 kryteriów z kanonu, a `pnpm check:matrix` — 95
