@@ -18,6 +18,22 @@ async function seedThread(request: APIRequestContext, title: string) {
   return created as { id: string; title: string };
 }
 
+/**
+ * Rozmowa z jawnie roznymi tresciami tytulu i pierwszej wiadomosci.
+ *
+ * Rozdzielone celowo: asercja na tresc wiadomosci nie moze sie "odsieczyc"
+ * tekstem tytulu, ktory pojawia sie takze w liscie rozmow i w naglowku watku.
+ */
+async function seedThreadZTrescia(request: APIRequestContext, tytul: string, tresc: string) {
+  await request.post('/api/auth/session', { data: {} });
+  const created = await (
+    await request.post('/api/threads/create', {
+      data: { title: tytul, messages: [{ id: crypto.randomUUID(), role: 'user', content: tresc }] },
+    })
+  ).json();
+  return created as { id: string; title: string };
+}
+
 test.describe('rozmowy', () => {
   test('rozmowa dostaje sensowny tytul z pierwszej wiadomosci', async ({ request }) => {
     const t = await seedThread(request, 'Porownaj oferty dla sprawy PC-2026-01. Potem dodaj wykres.');
@@ -68,14 +84,69 @@ test.describe('rozmowy', () => {
     expect(threads.map((t: { id: string }) => t.id)).toContain(b.id);
   });
 
-  test('przelaczenie rozmowy nie miesza wiadomosci', async ({ request }) => {
-    const a = await seedThread(request, `Pierwsza ${Date.now()}`);
-    const b = await seedThread(request, `Druga ${Date.now()}`);
+  test('przelaczenie rozmowy w interfejsie nie miesza wiadomosci', async ({ page, request }) => {
+    /*
+     * Poprzednia wersja tego testu nigdy nie przelaczyla rozmowy: porownywal
+     * dwa zasoby po API i stwierdzal, ze maja rozne tresci — co nie mowi nic o
+     * tym, co uzytkownik zobaczy po kliknieciu innej rozmowy w szufladzie.
+     * Tutaj przelaczenie jest prawdziwe (klik w wiersz szuflady), a asercje
+     * patrza na renderowana historie, wzmacniane prawda z API.
+     */
+    const trescA = `Znacznik alfa ${Date.now()} - to zdanie nalezalo do rozmowy pierwszej.`;
+    const trescB = `Znacznik beta ${Date.now()} - to zdanie nalezalo do rozmowy drugiej.`;
+    const a = await seedThreadZTrescia(request, 'Rozmowa pierwsza alfa', trescA);
+    const b = await seedThreadZTrescia(request, 'Rozmowa druga beta', trescB);
+
+    // Prawda z API: to dwa rozne zasoby, kazdy z dokladnie jedna wiadomoscia.
     const ma = await (await request.get(`/api/threads/get/${a.id}`)).json();
     const mb = await (await request.get(`/api/threads/get/${b.id}`)).json();
     expect(ma).toHaveLength(1);
     expect(mb).toHaveLength(1);
-    expect(ma[0].content).not.toBe(mb[0].content);
+    expect(ma[0].content).toBe(trescA);
+    expect(mb[0].content).toBe(trescB);
+
+    await page.goto('/');
+    const wiadomosci = page.locator('.openui-agent-thread-messages').first();
+    const szuflada = page.locator(
+      '.openui-agent-sidebar-container[data-sidebar-visual-state="expanded"]',
+    );
+
+    const otworz = async (tytul: string) => {
+      // Wybranie rozmowy zamyka szuflade — otwieramy ja z powrotem, tak jak
+      // uzytkownik wracajacy do listy. Czekamy na koniec animacji (stan
+      // "expanded" nadaje biblioteka po dojechaniu na miejsce): klik zlapany
+      // w trakcie ruchu trafial obok wiersza i zamykal szuflade bez wyboru
+      // rozmowy — transkrypt pozostawal pusty.
+      if ((await szuflada.count()) === 0) {
+        await page.locator('.pf-chat [aria-label="Open sidebar"]').first().click();
+      }
+      await expect(szuflada).toHaveCount(1);
+      await expect(page.locator('.openui-agent-thread-list')).toBeVisible();
+      await page
+        .locator('.openui-agent-thread-button', { hasText: tytul })
+        .first()
+        .locator('.openui-agent-thread-button-title')
+        .first()
+        .click();
+    };
+
+    await otworz('Rozmowa pierwsza alfa');
+    // Najpierw pozytywna asercja (tresc A sie pokazala), dopiero potem brak B —
+    // kolejnosc wolna od wyscigu z doladowaniem historii po kliknieciu.
+    await expect(wiadomosci).toContainText(trescA);
+    await expect(wiadomosci, 'w historii pierwszej rozmowy pojawila sie tresc drugiej').not.toContainText(
+      trescB,
+    );
+
+    await otworz('Rozmowa druga beta');
+    await expect(wiadomosci).toContainText(trescB);
+    await expect(wiadomosci, 'w historii drugiej rozmowy pojawila sie tresc pierwszej').not.toContainText(
+      trescA,
+    );
+
+    await otworz('Rozmowa pierwsza alfa');
+    await expect(wiadomosci).toContainText(trescA);
+    await expect(wiadomosci).not.toContainText(trescB);
   });
 
     /*

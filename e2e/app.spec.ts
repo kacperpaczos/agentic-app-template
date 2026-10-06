@@ -28,6 +28,15 @@ async function openFirstCase(page: Page) {
 
 test.describe('powloka aplikacji', () => {
   test('lewa nawigacja, canvas i czat wspolistnieja', async ({ page }) => {
+    /*
+     * Ten test mierzy sama powloke, wiec nie potrzebuje seeda przez API:
+     * ekranem domyslnym jest canvas (`/` renderuje CanvasHost), a tu dowodzimy
+     * tylko wspobytu regionow powloki. Intencja hit-testu z audytu (zasloniety
+     * element nadal "jest widoczny", wiec sama widocznosc niczego nie dowodzi)
+     * jest w tym repo zrealizowana w e2e/bl10-shell-canvas.spec.ts — tam
+     * elementFromPoint rozstrzyga, w co faktycznie trafia uzytkownik na stykach
+     * paneli.
+     */
     await page.goto('/');
     await expect(page.getByRole('navigation', { name: 'Nawigacja glowna' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Rozmowa z agentem' })).toBeVisible();

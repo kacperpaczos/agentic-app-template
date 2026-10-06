@@ -79,6 +79,12 @@ describe('kontrakty: walidacja, uprawnienia, konflikty, powtorzenia', () => {
 
   /* ------------------------------- access -------------------------------- */
 
+  // Port z audytu AgenticApp 2026-09-28: poprawny identyfikator sprawy nie
+  // otwiera niczego obcemu — granica jest ownerId z sesji, nie znajomość id.
+  it('drugi uzytkownik nie widzi cudzej sprawy — mimo poprawnego identyfikatora', () => {
+    expect(() => h.service.getCaseDetail(caseId, h.otherOwnerId)).toThrowError(/innego wlasciciela/);
+  });
+
   it('identyfikator wlasciciela z ciala zadania nie daje dostepu', async () => {
     /*
      * Scenariusz z nazwy testu: zapis z CIALEM zadania, ktore podsuwa wlasciciela.

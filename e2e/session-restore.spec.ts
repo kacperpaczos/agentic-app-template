@@ -15,6 +15,13 @@ import { type Page } from '@playwright/test';
  * Run against the scripted model so a real exchange exists to restore — the
  * history has to be genuine for its restoration to mean anything — and so it
  * costs no subscription turns and always produces the same conversation.
+ *
+ * Kazdy test jest tu samowystarczalny, wiec pojedynczy case da sie wywolac przez
+ * `-g`: beforeEach daje swieza instancje scenariusza, a rozmowe tworzy test
+ * we wlasnym zakresie (dwa dodatkowo przez `createExchangedConversation`) —
+ * zadny nie dziedziczy stanu po tescie pierwszym. Test, ktory pada samodzielnie
+ * i przechodzi w sasiedztwie innych, sprawdza aplikacje — nie uklad kart
+ * w pliku ani kolejnosc wykonywania.
  */
 
 const scripted = new ScriptedInstance({ port: 8795, dataDirName: '.e2e-scripted-restore' });

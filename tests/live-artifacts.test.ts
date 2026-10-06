@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { platformTools } from '@platform/server';
+import type { AppContext, ToolCallContext } from '@platform/contracts';
 import { createHarness, login, type Harness, testGlmEnv } from './helpers.ts';
 
 /**
@@ -81,6 +83,64 @@ describe('artefakt live odczytuje zarejestrowana operacje modulu', () => {
     expect(() =>
       h.platform.services.artifacts.assertLiveSourceIsResolvable({ rows: [{ a: 1 }] }),
     ).toThrowError(/wymaga deskryptora/);
+  });
+
+  // Port z audytu AgenticApp 2026-09-28: ta sama reguła musi być osiągalna
+  // ścieżką agenta — walidacja live siedzi w handlerze narzędzia
+  // `artifact_create` (packages/platform-server/src/agent/tools/artifacts.ts,
+  // wywołanie services.artifacts.assertLiveSourceIsResolvable), a nie tylko
+  // w warstwie HTTP. Test chroni ten wiring w B.
+  it('narzedzie agenta artifact_create odrzuca live z nieznana operacja przy zapisie', async () => {
+    /*
+     * Serwisowe sprawdzenia powyżej są osiągalne przez HTTP; agent dochodzi do
+     * tej samej reguły narzędziem `artifact_create`, więc sprawdzenie musi siedzieć
+     * też w handlerze narzędzia — przed czymkolwiek zapisem. Gdyby narzędzie
+     * pomijało walidację, model mógłby obiecać samoodświeżający się raport
+     * nazywający zapytanie, którego nikt nie zaimplementował, a porażka wyszłaby
+     * dopiero później — u użytkownika, przy otwarciu.
+     */
+    const before = h.platform.services.artifacts.list(h.ownerId).length;
+    const def = platformTools(h.platform.services).find((t) => t.name === 'artifact_create')!;
+    const ctx: ToolCallContext = {
+      ownerId: h.ownerId,
+      appContext: {
+        conversationId: null, spaceId: null, resource: null,
+        selection: [], filters: {}, viewport: null, drafts: [], ui: null,
+      } satisfies AppContext,
+      conversationId: null,
+      runId: null,
+      workspaceDir: null,
+      emit: () => {},
+    };
+    // Wejście przechodzi przez ten sam schemat, przez który przepuszcza je serwer MCP.
+    const input = def.inputSchema.parse({
+      title: 'Obietnica samoodswiezania',
+      kind: 'table',
+      mode: 'live',
+      rendererType: 'procurement.comparison',
+      content: { operation: 'procurement.nie_istnieje', input: { caseId } },
+      operationId: 'audyt-live-odrzucenie-01',
+    });
+    await expect(def.handler(input as never, ctx)).rejects.toThrowError(/Nieznana operacja/);
+    // Odrzucenie musiało nastąpić NA ZAPISIE: po odrzuceniu nie może zostać
+    // artefakt, który od początku nie mógłby się odświeżyć.
+    expect(h.platform.services.artifacts.list(h.ownerId), 'odrzucony artefakt nie moze zostac zapisany').toHaveLength(before);
+
+    // Kontrola dodatnia: to samo narzędzie przyjmuje znaną operację, więc
+    // odrzucenie dotyczy nieznanej operacji, a nie narzędzia jako takiego.
+    const ok = (await def.handler(
+      def.inputSchema.parse({
+        title: 'Porownanie na zywo',
+        kind: 'table',
+        mode: 'live',
+        rendererType: 'procurement.comparison',
+        content: { operation: 'procurement.comparison', input: { caseId } },
+        operationId: 'audyt-live-zapis-01',
+      }) as never,
+      ctx,
+    )) as { artifactId: string };
+    expect(ok.artifactId).toBeTruthy();
+    expect(h.platform.services.artifacts.list(h.ownerId)).toHaveLength(before + 1);
   });
 
   it('artefakt live nigdy nie przechowuje danych, tylko pytanie', async () => {

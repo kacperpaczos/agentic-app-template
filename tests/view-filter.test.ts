@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  AppError,
   PLATFORM_CUSTOM_EVENTS,
   UI_COMMAND_FAILURES,
   filterFromSearch,
@@ -61,10 +62,22 @@ const EMPTY_CONTEXT = (conversationId: string) => ({
  * Calls `ui_filter` the way a run does, over the runtime's real acknowledgement
  * gate and a real event stream — the same composition `ui_navigate` is tested
  * through, so the command the browser would receive is the one asserted here.
+ *
+ * Port z audytu AgenticApp 2026-09-28: licznikowy commandId (twarda unikalnosc
+ * miedzy testami — czysty random moze sie zderzyc, a obcy ack to mylace
+ * zawalenie), termin acka ustawiany jawnie (5 s dla scenariuszy z
+ * potwierdzeniem, 400 ms gdy brak odpowiedzi jest oczekiwanym wynikiem — 400 ms
+ * wystarcza i domyka test szybciej) oraz domkniecie strumienia i watchera
+ * w `finally`, zeby watcher nigdy nie przeciekł do nastepnego testu.
  */
+
+/** Sekwencja komend w procesie: twarda unikalnosc commandId miedzy testami. */
+let uiCommandSeq = 0;
+
 async function callFilter(
   input: Record<string, unknown>,
   ack: (command: UiCommand, runtime: AgentRuntime) => void | Promise<void>,
+  ackDeadlineMs = 400,
 ): Promise<{ result?: any; error?: unknown; emitted: UiCommand[] }> {
   const runtime = new AgentRuntime(h.platform.services);
   const conv = h.platform.services.conversations.create({
@@ -103,7 +116,7 @@ async function callFilter(
     requestUi: (command) =>
       runtime.requestUiCommand(
         {
-          commandId: `uic_${Math.random().toString(36).slice(2, 12)}`,
+          commandId: `uic_${(++uiCommandSeq).toString(36)}${Math.random().toString(36).slice(2, 8)}`,
           runId: run.id,
           conversationId: conv.id,
           targetId: command.targetId,
@@ -112,7 +125,7 @@ async function callFilter(
           reason: command.reason,
         },
         stream,
-        400,
+        ackDeadlineMs,
       ),
   };
 
@@ -122,9 +135,10 @@ async function callFilter(
     out.result = await tool.handler(input as never, ctx);
   } catch (e) {
     out.error = e;
+  } finally {
+    stream.close();
+    await watcher;
   }
-  stream.close();
-  await watcher;
   return out;
 }
 
@@ -210,6 +224,7 @@ describe('zawezanie widoku przez agenta', () => {
         label: 'tylko dostawcy z Polski',
       },
       applies(3, 4),
+      5_000,
     );
 
     expect(emitted).toHaveLength(1);
@@ -269,7 +284,7 @@ describe('zawezanie widoku przez agenta', () => {
   });
 
   it('zawezenie bez zdania dla uzytkownika jest bledem, nie cichym filtrem', async () => {
-    const { error } = await callFilter(
+    const { error, emitted } = await callFilter(
       { targetId: 'procurement.data', predicates: [{ field: 'country', op: 'eq', value: 'PL' }] },
       applies(3, 4),
     );
@@ -278,16 +293,31 @@ describe('zawezanie widoku przez agenta', () => {
      * correctly with or without this. What it buys is the agent being able to
      * say what it did in the conversation — narrowing a screen silently and
      * then talking about something else is its own kind of wrong.
+     *
+     * Port z audytu AgenticApp 2026-09-28: pierworzedna jest struktura bledu —
+     * AppError z kodem `validation_failed`, bo to kod trafia do klienta narzedzia
+     * i jest stabilny. Tresc zostaje jako asercja drugorzedna — narzedzie musi
+     * nazwac brakujaca rzecz (label), zeby agent mogl poprawic wywolanie zamiast
+     * zgadywac.
      */
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe('validation_failed');
     expect(String((error as Error).message)).toContain('label');
+    // Odmowa przed dotknieciem przegladarki: blad walidacji niczego nie wysyla.
+    expect(emitted).toHaveLength(0);
   });
 
   it('zawezenie bez warunkow jest bledem — to nie to samo co pelny widok', async () => {
-    const { error } = await callFilter(
+    const { error, emitted } = await callFilter(
       { targetId: 'procurement.data', label: 'wszystko' },
       applies(4, 4),
     );
+    // Port z audytu AgenticApp 2026-09-28: kod stabilny dla warstwy klienta;
+    // tresc wskazuje agentowi wyjscie (clear=true).
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe('validation_failed');
     expect(String((error as Error).message)).toContain('clear=true');
+    expect(emitted).toHaveLength(0);
   });
 
   it('clear=true przywraca pelny widok celu z zawezeniem, a cel bez zawezenia odmawia bez komendy', async () => {
@@ -302,6 +332,7 @@ describe('zawezanie widoku przez agenta', () => {
           url: '/data',
         });
       },
+      5_000,
     );
     expect(emitted).toHaveLength(1);
     // `null`, not absent: absent would leave whatever narrowing is on screen.
@@ -339,6 +370,7 @@ describe('zawezanie widoku przez agenta', () => {
           reason: UI_COMMAND_FAILURES.notApplied,
         });
       },
+      5_000,
     );
     expect(result.executed).toBe(false);
     expect(result.reason).toBe(UI_COMMAND_FAILURES.notApplied);
@@ -347,37 +379,27 @@ describe('zawezanie widoku przez agenta', () => {
 });
 
 describe('instrukcja agenta', () => {
-  it('mowi, ze odpowiadanie o danych to takze ich pokazanie', async () => {
-    const { buildSystemPrompt } = await import('@platform/server');
-    const prompt = buildSystemPrompt({
-      registry: h.platform.services.modules,
-      catalog: h.platform.services.catalog,
-      appContext: EMPTY_CONTEXT('c'),
-      resourceSummary: null,
-      workspaceDir: null,
-      stagedFiles: [],
-      toolkit: [],
-    } as never);
-
-    /*
-     * Asserted on the prompt because that is where the rule lives; whether the
-     * model then obeys it is a question only a real turn can answer, and
-     * `e2e/ui-navigation.spec.ts` spends one on exactly that.
-     */
-    expect(prompt).toContain('ODPOWIADANIE O DANYCH TO TEZ POKAZYWANIE');
-    expect(prompt).toContain('ui_filter');
-    expect(prompt).toMatch(/zawezanie po: .*country/);
-  });
-
   /*
-   * From a real turn: asked for Polish suppliers, the agent tried "Polska"
-   * (0 rows), went to another screen to look at the countries, came back with
-   * "Poland" (0 rows) and only then reached "PL". The values were declared the
-   * whole time and `ui_catalog` already returned them — nothing said to use
-   * them, and nothing put them where the field names are read.
+   * Port z audytu AgenticApp 2026-09-28: PIN KONTRAKTU promptu systemowego.
+   *
+   * Nie urywa slownych formul — opisy moga sie zmieniac — tylko strukture, po
+   * ktorej mozna stwierdzic, ze regula NADAL jest dostarczana modelowi:
+   *   1. sekcja "# Sterowanie interfejsem" istnieje i nazywa narzedzia po ich
+   *      identyfikatorach MCP (mcp__app__ui_navigate / ui_filter / ui_catalog),
+   *      a nie po przypadkowych slowach opisu;
+   *   2. zawiera naglowek-znacznik reguly "ODPOWIADANIE O DANYCH TO TEZ
+   *      POKAZYWANIE" — bez niej wraca incydent, w ktorym agent odpowiadajac
+   *      o danych trescia nie otworzyl widoku, do ktorego dane nalezaly;
+   *   3. kazdy cel deklarujacy zawezanie ma wypisane swoje pola w formacie
+   *      "| zawezanie po: <pola>" — asercja budowana z rejestru celow, wiec
+   *      przezywa parafrazy i lapie takze NOWY cel zadeklarowany bez listy pol.
+   *
+   * Czy model regule stosuje, sprawdza dopiero prawdziwa tura
+   * (e2e/ui-navigation.spec.ts); ten plik pilnuje, by regula w ogole do niego
+   * trafiala.
    */
-  it('podaje zadeklarowane wartosci pola zawezania i kaze uzyc ich doslownie', async () => {
-    const { buildSystemPrompt } = await import('@platform/server');
+  it('przekazuje kontrakt sterowania interfejsem: sekcja, narzedzia i regula pokazywania', async () => {
+    const { buildSystemPrompt, mcpToolName } = await import('@platform/server');
     const prompt = buildSystemPrompt({
       registry: h.platform.services.modules,
       catalog: h.platform.services.catalog,
@@ -388,17 +410,45 @@ describe('instrukcja agenta', () => {
       toolkit: [],
     } as never);
 
-    expect(prompt).toMatch(/zawezanie po: .*country \(PL\|FI\|DE\|CZ\)/);
-    expect(prompt).toContain('uzyj JEDNEJ Z NICH DOSLOWNIE');
-    expect(prompt).toContain('nie „Polska" ani „Poland"');
-    expect(prompt).toContain('Pole bez values przyjmuje dowolna wartosc');
+    const sectionStart = prompt.indexOf('# Sterowanie interfejsem');
+    expect(sectionStart, 'brak sekcji sterowania interfejsem w prompcie').toBeGreaterThan(-1);
+    // Granica = kolejny naglowek PIERWSZEGO poziomu ("# "), a nie podsekcja ("##").
+    const nextSection = prompt.indexOf('\n# ', sectionStart + 1);
+    const section =
+      nextSection === -1 ? prompt.slice(sectionStart) : prompt.slice(sectionStart, nextSection);
 
-    // The same values the tool answers with, so prompt and catalog cannot drift.
-    const country = h.platform.services.modules
+    // Identyfikatory narzedzi — dokladnie te nazwy, ktore model widzi na liscie MCP.
+    for (const tool of ['ui_navigate', 'ui_filter', 'ui_catalog']) {
+      expect(section, `brak identyfikatora ${mcpToolName(tool)} w sekcji`).toContain(
+        mcpToolName(tool),
+      );
+    }
+
+    // Naglowek-znacznik kontraktu: odpowiedz o danych to tez pokazanie widoku.
+    expect(section).toContain('ODPOWIADANIE O DANYCH TO TEZ POKAZYWANIE');
+
+    // Format pola zgodny z describeFilterField w prompt.ts (wartosci pola w
+    // nawiasie, skrot przy przecieciu limitu) — listing wypisany z REJESTRU,
+    // nie z tekstu testu.
+    const PROMPT_FILTER_VALUES = 12;
+    const describeFilterField = (field: { field: string; values?: string[] }): string => {
+      const values = field.values ?? [];
+      if (values.length === 0) return field.field;
+      const shown = values.slice(0, PROMPT_FILTER_VALUES).join('|');
+      return `${field.field} (${shown}${values.length > PROMPT_FILTER_VALUES ? '|... pelna lista w ui_catalog' : ''})`;
+    };
+
+    // Pola zawezania wypisane dla KAZDEGO celu, ktory je deklaruje — z rejestru.
+    const filterable = h.platform.services.modules
       .uiTargets()
-      .flatMap((t) => t.filter?.fields ?? [])
-      .find((f) => f.field === 'country');
-    expect(country?.values).toEqual(['PL', 'FI', 'DE', 'CZ']);
+      .filter((t) => (t.filter?.fields.length ?? 0) > 0);
+    expect(filterable.length).toBeGreaterThan(0);
+    for (const target of filterable) {
+      const listing = `| zawezanie po: ${target
+        .filter!.fields.map(describeFilterField)
+        .join(', ')}`;
+      expect(section, `cel ${target.id} nie ma wypisanych pol zawezania`).toContain(listing);
+    }
   });
 });
 

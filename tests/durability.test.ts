@@ -1,5 +1,7 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { credentialFilePath } from '@platform/server';
@@ -64,6 +66,52 @@ function filesUnder(dir: string, limitBytes = 12 * 1024 * 1024): string[] {
   };
   walk(dir);
   return out;
+}
+
+/*
+ * Port z audytu AgenticApp 2026-09-28: `better-sqlite3` nalezy do
+ * `@platform/server`, wiec jest rozwiazywany z pakietu, ktory go posiada — i
+ * typowany strukturalnie. Wystarczy garstka czlonkow uzywanych przez census.
+ */
+interface SqliteReadHandle {
+  prepare: (sql: string) => {
+    all: (...params: never[]) => unknown[];
+    get: (...params: never[]) => unknown;
+  };
+  close: () => void;
+}
+type SqliteConstructor = new (file: string, options?: { readonly?: boolean }) => SqliteReadHandle;
+
+/**
+ * Port z audytu AgenticApp 2026-09-28: licznosc wierszy i kanoniczny skrót
+ * SHA-256 tresci per tabela — ksztalt *i* zawartosc. Zestaw tabel brany z
+ * sqlite_master (caly schemat migracji, nie wybrane nazwy), wiersze
+ * kanonizowane: klucze posortowane w parach, wiersze posortowane niezaleznie
+ * od fizycznej kolejnosci w pliku.
+ */
+function census(db: Pick<SqliteReadHandle, 'prepare'>) {
+  const tables = (
+    db
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`,
+      )
+      .all() as Array<{ name: string }>
+  ).map((r) => r.name);
+  const counts: Record<string, number> = {};
+  const digests: Record<string, string> = {};
+  for (const t of tables) {
+    counts[t] = (db.prepare(`SELECT COUNT(*) AS n FROM "${t}"`).get() as { n: number }).n;
+    const rows = db.prepare(`SELECT * FROM "${t}"`).all() as Array<Record<string, unknown>>;
+    digests[t] = createHash('sha256')
+      .update(
+        rows
+          .map((r) => JSON.stringify(Object.keys(r).sort().map((k) => [k, r[k]])))
+          .sort()
+          .join('\n'),
+      )
+      .digest('hex');
+  }
+  return { tables, counts, digests };
 }
 
 describe('sekrety nie wyciekaja poza proces SDK', () => {
@@ -290,56 +338,124 @@ describe('przerwana operacja wieloetapowa nie zostawia polowicznego stanu', () =
 
     /*
      * Stronger check (port z audytu 2026-09-28, AgenticApp fd0b4ae): a real
-     * *copy* of the database files, opened as its own platform, compared with
-     * the original by a per-table census — row count and a SHA-256 digest of
-     * the ordered contents. Counting two surfaces through the API proves the
-     * backend reports something; the census proves the copy carries the same
-     * data, byte for byte, table after table. The checkpoint first, so the
-     * copy does not silently miss what still lives in the WAL.
+     * *copy* of the whole data directory, compared with the original by a
+     * census of EVERY table — row count and a canonical SHA-256 digest of the
+     * sorted rows — and then reopened as its own platform, with the domain
+     * module, and compared surface by surface through the API. Counting two
+     * surfaces proves the backend reports something; the census proves the
+     * copy carries the same data, byte for byte, table after table.
      */
     const { createHash } = await import('node:crypto');
     const { cpSync, mkdtempSync, rmSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');
-    const db = h.platform.db.$client;
-    db.pragma('wal_checkpoint(TRUNCATE)');
-    const copyDir = mkdtempSync(join(tmpdir(), 'durability-kopia-'));
+    const { createProcurementModule, ProcurementService } = await import(
+      '@module/procurement/server'
+    );
+
+    /*
+     * Swiezy, wielotabelowy stan: rozmowa z wiadomoscia, artefakt; pliki i
+     * sprawy pochodza z zasianego modulu. Kopia powstaje z tego, a nie z pustej
+     * bazy — inaczej porownanie byloby pustka.
+     */
+    const conv = h.platform.services.conversations.create({
+      ownerId: h.ownerId,
+      title: 'Do odtworzenia',
+      firstMessage: { content: 'przed kopia' },
+    });
+    h.platform.services.conversations.upsertMessage(conv.id, h.ownerId, {
+      id: 'am_kopia_1',
+      role: 'assistant',
+      content: 'odpowiedz przed kopia',
+      meta: { toolCalls: [] },
+    });
+    const artifact = h.platform.services.artifacts.create({
+      ownerId: h.ownerId,
+      kind: 'report',
+      mode: 'snapshot',
+      title: 'Artefakt do odtworzenia',
+      rendererType: 'platform.file',
+      content: { wartosc: 41 },
+    });
+
+    /*
+     * Checkpoint przed kopiowaniem — w trybie WAL ostatnie wpisy leza w
+     * app.db-wal, wiec kopia samego pliku glownego bylaby niekompletna. Po
+     * TRUNCATE caly stan jest w app.db i katalog daje sie skopiowac w spojnym
+     * punkcie.
+     */
+    h.platform.db.$client.pragma('wal_checkpoint(TRUNCATE)');
+
+    // Stan zrodla mierzony w tym samym momencie, w ktorym powstaje kopia.
+    const przed = census(h.platform.db.$client);
+    const rozmowyZrodla = h.platform.services.conversations.list(h.ownerId);
+    const plikiZrodla = h.platform.services.files.list(h.ownerId);
+    const sprawyZrodla = h.service.listCases(h.ownerId);
+
+    const kopia = mkdtempSync(join(tmpdir(), 'agentic-kopia-'));
     try {
-      for (const part of ['app.db', 'app.db-wal', 'app.db-shm']) {
-        const src = join(h.dataDir, part);
-        if (existsSync(src)) cpSync(src, join(copyDir, part));
-      }
-      const census = (dir: string) => {
-        const open = createPlatform({ modules: [], env: testGlmEnv(dir) });
-        try {
-          const c = open.db.$client;
-          const digests: Record<string, string> = {};
-          for (const t of ['conversations', 'messages', 'agent_runs', 'artifacts', 'files']) {
-            const rows = c.prepare(`SELECT * FROM ${t} ORDER BY 1`).all() as Record<string, unknown>[];
-            digests[t] = createHash('sha256')
-              .update(JSON.stringify(rows))
-              .digest('hex');
-            // Straż niepustości: census pustych tabel niczego nie dowodzi.
-            if (t === 'conversations') expect(rows.length, 'census: brak rozmów w oryginale').toBeGreaterThan(0);
-          }
-          return digests;
-        } finally {
-          open.close();
-        }
-      };
-      const original = census(h.dataDir);
-      const copy = census(copyDir);
-      for (const t of Object.keys(original)) {
-        expect(copy[t], `census tabeli ${t}: kopia różni się od oryginału`).toBe(original[t]);
-      }
-      // And through the API of the copy itself, one surface as a witness.
-      const copyPlatform = createPlatform({ modules: [], env: testGlmEnv(copyDir) });
+      // Caly katalog danych, nie tylko pliki bazy: kopia ma byc instancja.
+      cpSync(h.dataDir, kopia, { recursive: true });
+
+      /* Census PLIKU kopii wobec pliku zrodla: kazda tabela, licznosc i tresc. */
+      const otworzBaze = createRequire(
+        resolve(import.meta.dirname, '../packages/platform-server/package.json'),
+      )('better-sqlite3') as SqliteConstructor;
+      const kopiaDb = new otworzBaze(join(kopia, 'app.db'), { readonly: true });
+      let po: ReturnType<typeof census>;
       try {
-        expect(copyPlatform.services.files.list(DEFAULT_USER_ID)).toHaveLength(files);
+        po = census(kopiaDb);
       } finally {
-        copyPlatform.close();
+        kopiaDb.close();
+      }
+      expect(po.tables, 'kopia ma inny zestaw tabel niz zrodlo').toEqual(przed.tables);
+      for (const tabela of przed.tables) {
+        expect(po.counts[tabela], `licznosc tabeli ${tabela} w kopii`).toBe(przed.counts[tabela]);
+        expect(po.digests[tabela], `tresc tabeli ${tabela} w kopii`).toBe(przed.digests[tabela]);
+      }
+
+      /* Otwarcie kopii swieza instancja platformy, z modulami domenowymi. */
+      const odtworzona = createPlatform({
+        modules: (services) => [createProcurementModule(services)],
+        env: testGlmEnv(kopia),
+      });
+      try {
+        // Straż niepustosci: gdyby harness byl pusty, porownania niczego by nie
+        // dowodzily — dokladnie ta wada zostala wykryta w pierwotnej wersji.
+        expect(rozmowyZrodla.length, 'harness bez rozmow — test niczego by nie sprawdzil').toBeGreaterThan(0);
+        expect(plikiZrodla.length, 'harness bez plikow — test niczego by nie sprawdzil').toBeGreaterThan(0);
+        expect(sprawyZrodla.length, 'harness bez spraw — test niczego by nie sprawdzil').toBeGreaterThan(0);
+
+        const serwisKopii = new ProcurementService(odtworzona.services);
+        expect(serwisKopii.listCases(DEFAULT_USER_ID).length).toBe(sprawyZrodla.length);
+        expect(odtworzona.services.conversations.list(DEFAULT_USER_ID).length).toBe(
+          rozmowyZrodla.length,
+        );
+        // Wiadomosci porownane rozmowa po rozmowie: identyfikatory, role, tresc.
+        for (const c of rozmowyZrodla) {
+          const uZrodla = h.platform.services.conversations
+            .messages(c.id, h.ownerId)
+            .map((m) => [m.id, m.role, m.content]);
+          const uKopii = odtworzona.services.conversations
+            .messages(c.id, DEFAULT_USER_ID)
+            .map((m) => [m.id, m.role, m.content]);
+          expect(uKopii, `wiadomosci rozmowy ${c.id} w kopii`).toEqual(uZrodla);
+        }
+        expect(odtworzona.services.artifacts.list(DEFAULT_USER_ID).length).toBe(
+          h.platform.services.artifacts.list(h.ownerId).length,
+        );
+        // Tresc artefaktu wraca w tej samej wersji, nie jako puste otarcie.
+        expect(odtworzona.services.artifacts.version(artifact.meta.id, DEFAULT_USER_ID).content).toEqual({
+          wartosc: 41,
+        });
+        // Pliki: te same identyfikatory i te same skroty tresci.
+        expect(odtworzona.services.files.list(DEFAULT_USER_ID).map((f) => [f.id, f.sha256])).toEqual(
+          plikiZrodla.map((f) => [f.id, f.sha256]),
+        );
+      } finally {
+        odtworzona.close();
       }
     } finally {
-      rmSync(copyDir, { recursive: true, force: true });
+      rmSync(kopia, { recursive: true, force: true });
     }
   });
 });

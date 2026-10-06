@@ -125,6 +125,12 @@ describe('konfiguracja: fail-closed wokol APP_MODEL_PROVIDER', () => {
       /nie jest poprawnym adresem URL/,
     );
   });
+
+  it('endpoint bez https odmawia startu — token modelu nie jedzie otwartym tekstem (port z audytu AgenticApp 2026-09-28)', () => {
+    expect(() => loadConfig(glmEnv({ ANTHROPIC_BASE_URL: 'http://glm.endpoint.invalid' }))).toThrow(
+      /nie używa https/,
+    );
+  });
 });
 
 describe('srodowisko procesu agenta: polityka per provider', () => {
