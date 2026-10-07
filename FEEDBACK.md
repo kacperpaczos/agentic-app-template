@@ -1287,6 +1287,15 @@ wczesne odczyty URL dawały `null` i próżne asercje; test czyta adres po ustal
 (3) Znany flak środowiskowy: `tests/backup-migration.test.ts` (etap platform-0001-init)
 wpada w limit 300 s pod obciążeniem pełnej suity; w izolacji 45/45 (2026-10-07).
 
+**Dopisek (2026-10-07, po pełnej regresji).** Pierwszy pełny przebieg e2e wykrył (230/237,
+C/D w bl03-rehearsal): serwer scenariuszowy nie kończył się po SIGTERM w 20 s. Przyczyna:
+jego `shutdown` czeka na `server.close()` bez ograniczenia czasu, a plakietka zadań
+czekających (L11.19) polluje `/api/runs/active` co 3 s z poziomu powłoki — keep-alive
+pozostaje ciepły i zamykanie głoduje; produkcyjny `main.ts` ma fallback `process.exit(0)`
+po 5 s, scenariuszowy go nie miał. Naprawa (8ab696d): ten sam bound w scripted-server;
+bisekcja potwierdziła wejście regresji z b4b4019; bl03-rehearsal 14/14, pełna suita
+237/237 (33,9 min) po naprawie.
+
 **Otwarte.** BL-13: L12.6 (rzeczywista ścieżka GLM GUI→SDK→Mastra→AG-UI→OpenUI) — wymaga
 przebiegu modelowego; właściciel zatwierdził 2026-10-07 podniesienie grantu z11 do 45 tur
 (fizyczna zmiana sufitu przed falą modelową BL-03).
