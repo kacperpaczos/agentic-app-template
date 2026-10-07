@@ -231,15 +231,19 @@ test.describe('BL-03 przebieg T14: cztery proby izolacji plikowej na prawdziwym 
        * powodu. To jest wlasnie „odmowa widoczna w dowodzie", nie wywnioskowana.
        */
       for (const [nazwa, c] of [
-        ['Read app.db', odczytBazy!],
-        ['Read sekret', odczytSekretu!],
-        ['Write poza workspace', zapisPoza!],
-        ['Glob poza workspace', globPoza!],
-        ['Grep poza workspace', grepPoza!],
+        ['Read app.db', odczytBazy],
+        ['Read sekret', odczytSekretu],
+        ['Write poza workspace', zapisPoza],
+        ['Glob poza workspace', globPoza],
+        ['Grep poza workspace', grepPoza],
       ] as Array<[string, (typeof calls)[number] | undefined]>) {
-        expect(c!.isError, `${nazwa} NIE zostalo odrzucone (L11.4/L11.5/L11.11): ${String(c!.rawResult).slice(0, 200)}`).toBe(true);
+        /* Próba bez zdarzenia (binarna kontrola CLI, zgłoszony brak narzędzia)
+           została przyjęta asercją wyżej — tu rozliczamy tylko te wywołania,
+           które naprawdę dotarły do strumienia. */
+        if (!c) continue;
+        expect(c.isError, `${nazwa} NIE zostalo odrzucone (L11.4/L11.5/L11.11): ${String(c.rawResult).slice(0, 200)}`).toBe(true);
         expect(
-          String(c!.rawResult ?? '').length,
+          String(c.rawResult ?? '').length,
           `${nazwa} odrzucone bez tresci powodu — odmowa niewidoczna w dowodzie`,
         ).toBeGreaterThan(0);
       }
