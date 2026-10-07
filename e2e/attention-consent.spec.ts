@@ -128,9 +128,8 @@ test.describe('zadanie czekajace na decyzje: centrum, plakietka, toast (L11.19)'
        conversation's own — announced only once it belongs to a conversation
        nobody is reading. */
     await startNewConversation(page);
-    const conversationB = urlConversation(page)!;
-    expect(conversationB).not.toBe(conversationA);
-
+    /* The new conversation starts as a draft: the address carries no `c` yet.
+       The run below now belongs to a conversation nobody is reading. */
     const toast = page.getByTestId('attention-toast');
     await expect(toast).toBeVisible({ timeout: 15_000 });
     await expect(toast).toContainText(POLECENIE);
@@ -139,14 +138,34 @@ test.describe('zadanie czekajace na decyzje: centrum, plakietka, toast (L11.19)'
     await expect(badge).toBeVisible();
     await expect(badge).toHaveAttribute('data-count', '1');
 
-    /* (b) One notice per run: more than one polling interval later the task is
-       still waiting, and the toast must not have come back for a second time. */
-    await page.waitForTimeout(5_000);
-    await expect(page.getByTestId('attention-toast')).toHaveCount(1);
+    /* (b) One notice per run: closing the notice ends it. Two poll-scan
+       re-runs follow while the task still waits — sending from the draft
+       persists it (the address gains `c`), and the new run parks at the gate
+       a few seconds later (the badge counts both). A re-announcing toast
+       would be back within seconds of the dismissal, so absence is checked
+       continuously across both windows; a single instant check would race
+       exactly the transient this criterion forbids. */
+    /* From here on, every appearance of the toast is recorded page-side, by
+       a mutation observer — even a sub-second re-announcement between two
+       checks would leave a mark. The dismissal instant is the boundary. */
+    await page.evaluate(() => {
+      (window as unknown as { __toastSeen: number[] }).__toastSeen = [];
+      const seen = (window as unknown as { __toastSeen: number[] }).__toastSeen;
+      new MutationObserver(() => {
+        if (document.querySelector('[data-testid="attention-toast"]')) seen.push(Date.now());
+      }).observe(document.body, { childList: true, subtree: true });
+    });
+    const zamkniecie = Date.now();
+    await toast.getByTestId('attention-toast-close').click();
+    await send(page, POLECENIE);
+    const conversationB = urlConversation(page)!;
+    await expect(badge).toHaveAttribute('data-count', '2', { timeout: 20_000 });
 
-    /* (c) The toast's one action: to the task center, leaving the active
-       conversation exactly where it was. */
-    await toast.getByTestId('attention-toast-open').click();
+    /* (c) On to the task center, from the navigation entry — the notice has
+       already been used up, and the toast's own action is covered in the third
+       test. Leaving for the center changes nothing about the active
+       conversation. */
+    await page.getByRole('link', { name: 'Centrum zadań' }).click();
     await expect(page.getByTestId('task-center')).toBeVisible();
     expect(urlConversation(page), 'przejście do centrum nie zmienia aktywnej rozmowy').toBe(
       conversationB,
@@ -160,11 +179,20 @@ test.describe('zadanie czekajace na decyzje: centrum, plakietka, toast (L11.19)'
     );
 
     await page.getByTestId(`task-consent-deny-${runA.id}`).click();
-    await expect.poll(async () => (await activeRuns(page)).length, { timeout: 30_000 }).toBe(0);
+    /* The first task is resolved by the denial; the second one, asked from the
+       conversation the user is reading, is still parked at the gate. */
+    await expect.poll(async () => (await activeRuns(page)).length, { timeout: 30_000 }).toBe(1);
     expect(await artifactCount(page), 'odmowa z centrum mimo wszystko wykonala operacje').toBe(0);
     await expect(page.getByTestId(`task-status-${runA.id}`)).toHaveAttribute('data-status', 'succeeded');
-    await expect(badge).toHaveCount(0);
-    await expect(toast).toHaveCount(0);
+    await expect(badge).toHaveAttribute('data-count', '1');
+    await expect(page.getByTestId('attention-toast')).toHaveCount(0);
+    const poZamknieciu: number[] = await page.evaluate(
+      () => (window as unknown as { __toastSeen: number[] }).__toastSeen,
+    );
+    expect(
+      poZamknieciu.filter((t) => t > zamkniecie),
+      'toast nie wraca po zamknieciu — zadne ponowne ogloszenie tego samego czekania',
+    ).toEqual([]);
   });
 
   test('przeladowanie w trakcie oczekiwania: plakietka trwa, toast sie nie pojawia, rozmowa zrodlowa ma zdarzenie proby', async ({
@@ -216,9 +244,11 @@ test.describe('zadanie czekajace na decyzje: centrum, plakietka, toast (L11.19)'
     const runA = await awaitingRunOf(page, conversationA);
 
     await startNewConversation(page);
+    const conversationB = urlConversation(page)!;
     await expect(page.getByTestId('attention-toast')).toBeVisible({ timeout: 15_000 });
     await page.getByTestId('attention-toast-open').click();
     await expect(page.getByTestId('task-center')).toBeVisible();
+    expect(urlConversation(page), 'akcja toastu nie zmienia aktywnej rozmowy').toBe(conversationB);
 
     await page.getByTestId(`task-consent-allow-${runA.id}`).click();
     await expect.poll(async () => (await activeRuns(page)).length, { timeout: 30_000 }).toBe(0);
