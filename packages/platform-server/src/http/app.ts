@@ -767,6 +767,18 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
         // The title is what makes a background task nameable in the interface;
         // without it a task list is a list of identifiers.
         conversationTitle: services.conversations.get(r.conversationId, ownerId).title,
+        /*
+         * L11.19: the command a run started from, for runs parked at the
+         * consent gate — the one case where the interface names the task
+         * *outside* the task center (the one-shot notice), and the listing
+         * above carries nothing else to name it by. Additive and conditional
+         * on purpose: every other consumer of this endpoint reads the fields
+         * it already had, and an awaiting run is rare, so the extra primary-key
+         * read stays in the same league as the title lookup above it.
+         */
+        ...(r.status === 'awaiting_consent'
+          ? { intent: services.runs.task(r.id, ownerId).prompt }
+          : {}),
       })),
     });
   });

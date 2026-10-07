@@ -718,6 +718,50 @@ const taskCenterScript = (prompt: string): Step[] => {
   ];
 };
 
+/**
+ * L11.19 — zadanie w tle czekające na decyzję, obsługiwane spoza rozmowy
+ * źródłowej.
+ *
+ * Jedna gałąź (dobór po treści polecenia nie jest tu potrzebny: każdy test
+ * dostaje czystą bazę i wysyła jedno polecenie): prośba o `Bash` w prawdziwej
+ * bramce `canUseTool`, a po zgodzie jeden `artifact_create` z kluczem
+ * wyprowadzonym z polecenia. Skutek decyzji jest więc policzalny w store'cie:
+ * odmowa — zero artefaktów, jedna zgoda — dokładnie jeden.
+ *
+ * Odczekanie przed prośbą jest częścią układanki, nie ozdobą: toast ogłasza
+ * **zaobserwowane** przejście do `awaiting_consent`, a interwał pollingu
+ * `/api/runs/active` wynosi 3 s — run, który parkuje na bramce szybciej, niż
+ * poll zdąży zobaczyć go w `running`, nigdy przejścia nie ma. Cztery sekundy
+ * dają pollingowi pewne okno na zapisanie stanu „wykonywane”.
+ */
+const attentionScript = (prompt: string): Step[] => {
+  const operationId = `uwaga-${prompt.replace(/[^a-zA-Z0-9]/g, '').slice(-24) || 'domyslna'}`;
+  return [
+    { kind: 'text', text: 'Przygotowalem skrypt. ', delayMs: 150 },
+    { kind: 'wait', delayMs: 4000 },
+    {
+      kind: 'ask',
+      toolName: 'Bash',
+      input: { command: 'node przetworz.mjs' },
+      then: [
+        {
+          kind: 'call',
+          name: 'artifact_create',
+          input: {
+            title: 'Wynik po decyzji z centrum zadan',
+            kind: 'report',
+            rendererType: 'platform.markdown',
+            content: { text: 'Operacja wykonana po decyzji podjetej w centrum zadan.' },
+            operationId,
+          },
+          maxChars: 200,
+        },
+      ],
+    },
+    { kind: 'text', text: 'Koniec.' },
+  ];
+};
+
 const CONVERSATION_SCENARIOS: Record<string, (prompt: string) => Step[]> = {
   'agent-views': agentViewsScript,
   'bl10-messages': messageKindsScript,
@@ -735,6 +779,8 @@ const CONVERSATION_SCENARIOS: Record<string, (prompt: string) => Step[]> = {
   'bl09-files': filesScript,
   /* L11.12: trzy tryby zgody wybrane przy kompozytorze (dobór po treści polecenia). */
   'bl13-modes': consentModesScript,
+  /* L11.19: decyzja o zadaniu w tle, podjeta z centrum zadan. */
+  'bl13-attention': attentionScript,
   /* BL-09, L9.7: repeats of the creating write tools produce one effect. */
   'bl09-l97': idempotencyScript,
   /* BL-04: a mutation, then the limit, then a retry the user asks for. */

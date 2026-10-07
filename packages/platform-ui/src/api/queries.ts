@@ -10,6 +10,7 @@ import type {
   ReadOperationSummary,
   CardGeometry,
   CardSpec,
+  RunStatus,
   StoredFileWithUse,
   TaskList,
   UiTarget,
@@ -59,6 +60,8 @@ export const qk = {
   agentViews: (conversationId: string) => ['canvas', accessScope(), 'agent-views', conversationId] as const,
   /** Zadania właściciela ze wszystkich rozmów — globalne centrum zadań (L11.6). */
   tasks: () => ['tasks', accessScope()] as const,
+  /** Runy w toku ze wszystkich rozmów — plakietka uwagi i toast (L11.19). */
+  activeRuns: () => ['active-runs', accessScope()] as const,
   agentViewsAll: () => ['canvas', accessScope(), 'agent-views'] as const,
   uiTargets: () => ['ui-targets', accessScope()] as const,
   uiViews: () => ['ui-views', accessScope()] as const,
@@ -173,6 +176,39 @@ export const useTasks = () =>
     queryKey: qk.tasks(),
     queryFn: () => apiGet<TaskList>('/api/tasks'),
     refetchInterval: 2000,
+  });
+
+/**
+ * Jeden wiersz `GET /api/runs/active` — run w toku, w dowolnej rozmowie.
+ *
+ * `intent` jest dołączany przez backend tylko dla runów zaparkowanych na bramce
+ * zgody (L11.19): to jedyny moment, w którym interfejs ma nazwać polecenie poza
+ * centrum zadań — w treści toastu. Dla pozostałych statusów pole nie istnieje.
+ */
+export interface ActiveRunInfo {
+  id: string;
+  conversationId: string;
+  status: RunStatus;
+  enqueuedAt: string;
+  startedAt: string;
+  conversationTitle: string;
+  intent?: string;
+}
+
+/**
+ * Runy w toku ze wszystkich rozmów (L11.19).
+ *
+ * Wspólne źródło dwóch rzeczy, które muszą o tym samym mówić to samo: plakietki
+ * przy „Centrum zadań” i jednorazowego toastu. Polling jest łagodny dla
+ * lokalnego backendu (3 s) i współdzielony przez klucz zapytania — dwa miejsca
+ * na ekranie to nadal jedno zapytanie na interwał. Klucz zawiera zakres
+ * dostępu, jak `qk.tasks()`: zmiana tożsamości nie odziedziczy cudzych runów.
+ */
+export const useActiveRuns = () =>
+  useQuery({
+    queryKey: qk.activeRuns(),
+    queryFn: () => apiGet<{ runs: ActiveRunInfo[] }>('/api/runs/active'),
+    refetchInterval: 3000,
   });
 
 /** Generic reader for a business module's own HTTP routes. */

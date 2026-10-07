@@ -58,6 +58,40 @@ export function TasksPage() {
     void setConversation(conversationId);
   };
 
+  /*
+   * L11.19: answering the consent question where the task is handled, without
+   * entering the source conversation. Bound to the request id the backend is
+   * still holding, so the answer cannot attach itself to another run's
+   * question.
+   *
+   * `answered: false` is a 200 that decided nothing — this click arrived after
+   * the question was answered elsewhere or expired. It is not an error and not
+   * a success; the refetch below is the whole response, showing the state that
+   * actually holds (the form gone, the row in its true status).
+   */
+  const answerConsent = async (task: TaskView, allow: boolean) => {
+    const pending = task.pendingPermission;
+    if (!pending) return;
+    setActionError(null);
+    setPendingRunId(task.run.id);
+    try {
+      await apiPost<{ answered: boolean }>(`/api/runs/${task.run.id}/permission`, {
+        requestId: pending.requestId,
+        allow,
+      });
+    } catch (e) {
+      const message = requestFailureMessage(e);
+      if (message) setActionError(`${allow ? 'Zgoda' : 'Odmowa'}: ${message}`);
+    } finally {
+      /* On either outcome the rows must come from the backend again: the form
+         follows the run's real state, and the attention badge follows the run
+         out of `awaiting_consent` in the same refresh. */
+      await qc.invalidateQueries({ queryKey: qk.tasks() });
+      await qc.invalidateQueries({ queryKey: qk.activeRuns() });
+      setPendingRunId(null);
+    }
+  };
+
   if (tasks.isError) {
     /* A failed fetch must not look like an empty center: the two mean
        opposite things, and the backend may be working right now. */
@@ -105,6 +139,7 @@ export function TasksPage() {
               onOpenResult={() => open(task.conversationId)}
               onCancel={() => void act(task.run.id, `/api/runs/${task.run.id}/cancel`, 'Anulowanie')}
               onRetry={() => void act(task.run.id, `/api/runs/${task.run.id}/retry`, 'Ponowienie')}
+              onConsent={(allow) => void answerConsent(task, allow)}
             />
           ))}
         </ul>
@@ -112,6 +147,23 @@ export function TasksPage() {
     </div>
   );
 }
+
+/**
+ * The tool input as the form shows it: readable JSON, cut when it would stop
+ * being a preview.
+ *
+ * The cut is a **render** decision only — the raw input travels nowhere, and
+ * the answer endpoint receives the request id, not this text. What the cut
+ * protects is the row itself: an input is arbitrary agent-chosen JSON, and one
+ * large payload must not turn one task into three screens of it. The cut says
+ * so by name, so a shortened preview can never pass for the whole input.
+ */
+const CONSENT_INPUT_LIMIT = 800;
+const consentInputPreview = (input: unknown): string => {
+  const pretty = JSON.stringify(input, null, 2) ?? String(input);
+  if (pretty.length <= CONSENT_INPUT_LIMIT) return pretty;
+  return `${pretty.slice(0, CONSENT_INPUT_LIMIT)}\n… (podgląd ucięty — ${pretty.length} znaków łącznie)`;
+};
 
 function TaskRow({
   task,
@@ -121,6 +173,7 @@ function TaskRow({
   onOpenResult,
   onCancel,
   onRetry,
+  onConsent,
 }: {
   task: TaskView;
   now: number;
@@ -129,6 +182,7 @@ function TaskRow({
   onOpenResult: () => void;
   onCancel: () => void;
   onRetry: () => void;
+  onConsent: (allow: boolean) => void;
 }) {
   const { run, progress } = task;
   const active = (ACTIVE_RUN_STATUSES as readonly string[]).includes(run.status);
@@ -219,6 +273,53 @@ function TaskRow({
         <p className="pf-state pf-state--error" data-testid={`task-error-${run.id}`} role="alert">
           {run.errorCode ?? 'błąd'}: {run.errorMessage ?? 'wykonanie zakończone błędem'}
         </p>
+      )}
+
+      {/*
+        L11.19: the question itself, answerable where the task is handled. The
+        key `pendingPermission` exists only while the run is parked at the gate
+        and disappears — the key, not a null — when the question is answered,
+        expired or released, so this block lives and dies with the real state
+        from the backend, never with this tab's memory of it.
+      */}
+      {task.pendingPermission && (
+        <div className="pf-tasklist__consent" data-testid={`task-consent-form-${run.id}`}>
+          <p className="pf-tasklist__consent__title">
+            Zadanie czeka na decyzję — narzędzie{' '}
+            <strong data-testid={`task-consent-tool-${run.id}`}>{task.pendingPermission.toolName}</strong>
+          </p>
+          {/*
+            The command the decision is about, restated here on purpose: the
+            question has to be answerable from this block alone — the row's
+            head is a summary for scanning, not a part of the question.
+          */}
+          <p className="pf-tasklist__consent__meta">
+            Polecenie: {task.intent || '(polecenie bez treści)'}
+          </p>
+          <pre className="pf-tasklist__consent__input" data-testid={`task-consent-input-${run.id}`}>
+            {consentInputPreview(task.pendingPermission.input)}
+          </pre>
+          <div className="pf-tasklist__actions">
+            <button
+              type="button"
+              className="pf-btn pf-btn--tiny pf-btn--primary"
+              data-testid={`task-consent-allow-${run.id}`}
+              disabled={busy}
+              onClick={() => onConsent(true)}
+            >
+              Zgoda
+            </button>
+            <button
+              type="button"
+              className="pf-btn pf-btn--tiny"
+              data-testid={`task-consent-deny-${run.id}`}
+              disabled={busy}
+              onClick={() => onConsent(false)}
+            >
+              Odmowa
+            </button>
+          </div>
+        </div>
       )}
 
       <div className="pf-tasklist__actions">
