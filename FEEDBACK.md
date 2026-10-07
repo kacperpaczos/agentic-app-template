@@ -1299,3 +1299,30 @@ bisekcja potwierdziła wejście regresji z b4b4019; bl03-rehearsal 14/14, pełna
 **Otwarte.** BL-13: L12.6 (rzeczywista ścieżka GLM GUI→SDK→Mastra→AG-UI→OpenUI) — wymaga
 przebiegu modelowego; właściciel zatwierdził 2026-10-07 podniesienie grantu z11 do 45 tur
 (fizyczna zmiana sufitu przed falą modelową BL-03).
+
+---
+
+## §A32 — BL-03: granica narzędzi plikowych zamknięta po stronie kodu (2026-10-08)
+
+Naprawa wg recepty z BACKLOG: narzędzia plikowe (Read/Write/Edit/Glob/Grep) usunięte z
+`allowedTools` we wszystkich trybach — lista dozwolonych cieniuje bramkę `canUseTool` na
+prawdziwym SDK, co tury 17/18 płaciły sekretem spoza workspace i zapisem poza workspace.
+Każde wywołanie plikowe dochodzi teraz do strażników bramki (w workspace `auto` bez pytania
+— UX supervised/auto bez zmian; poza workspace odmowa niezależna od zgody).
+`blockReadsOutsideWorkingDirectories` zostaje jako obrona w głębi. TDD: czerwona 2 FAIL
+(przepięte niezmienniki), zieleń 65/65 + 1225/1225 jednostkowej + rehearsal 14/14; falsy
+fikacja: powrót shadowingu → 2 asercje padają, przywrócenie bajt w bajt. Dowód fazy
+czerwonej: docs/evidence/z11-bl03/czerwona-faza-granica-narzedzi-plikowych.md.
+
+**Grant na falę modelową — korekta własnego oznakowania.** Decyzja właściciela z 2026-10-07
+(sufit 45 dla fali) jest w kodzie zaimplementowana na grancie **GLM** (`GLM_TURN_BUDGET`
+25→45), bo w trybie GLM próby BL-03 rysują z ledgera GLM (`z11Preflight`), a rejestr z11
+(subskrypcyjny, 22/25) to zamknięta historia. Wcześniejsza zapowiedź „z11 → 45" była moim
+błędnym oznakowaniem; substancja decyzji (sufit 45: ~17 tur fali + ponowienia + zapas na
+spece legacy) bez zmian. Testy izolacji przepięte na sufit wg trybu (dwa pinowania przechodziły
+przypadkiem, póki obie liczby były 25). AGENTS.md: wiersz `test:e2e:z11` mówi teraz o
+aktywnym grancie.
+
+**Otwarte.** Dowód L11.4/L11.5/L11.11 = tury modelowe (isolation 3 + t14 1) na tej naprawie;
+L1.6/L5.8 = lifecycle 7; BL-09/BL-11/BL-07 = t15 4 + t16 1; L12.6 = agent-ui 2. Razem ~17 tur
+z sufitu 45.

@@ -173,8 +173,18 @@ describe('macierz uprawnien narzedzi', () => {
     // The deny rule is passed, so a forbidden tool is not even in the model's
     // context — the gate below is the second line, not the only one.
     expect(options.disallowedTools).toEqual([...TOOL_PERMISSION_MATRIX.forbidden]);
+    /*
+     * Kategoria `auto` narzędzi plikowych urzeczywistnia się w BRAMCE, nie na
+     * liście dozwolonych: wpis w `allowedTools` zatwierdza wywołanie, zanim
+     * `canUseTool` cokolwiek zobaczy, a to strażnicy w bramce (`workspaceConfinementRefusal`
+     * i spółka) odmawiają wszystkiego poza katalogiem roboczym — niezależnie od
+     * zgody. Pre-zatwierdzenie plikowego było więc obejściem tej odmowy (tura 17:
+     * sekret spoza workspace; tura 18: plik poza workspace). Narzędzie plikowe
+     * nie trafia na listę w żadnym trybie; niezmiennik per tryb pinuje
+     * `tests/consent-modes.test.ts`.
+     */
     for (const tool of TOOL_PERMISSION_MATRIX.auto) {
-      expect(options.allowedTools, `${tool} nie jest wstepnie zatwierdzone`).toContain(tool);
+      expect(options.allowedTools, `${tool} na allowedTools omija straznikow sciezek`).not.toContain(tool);
     }
     for (const tool of TOOL_PERMISSION_MATRIX.consent) {
       /*

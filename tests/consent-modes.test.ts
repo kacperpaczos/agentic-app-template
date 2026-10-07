@@ -5,7 +5,6 @@ import {
   CONSENT_REQUIRED_TOOLS,
   FORBIDDEN_TOOLS,
   collectToolEntries,
-  declaresPathArguments,
   decideTool,
   platformTools,
 } from '@platform/server';
@@ -287,24 +286,70 @@ describe('niezmienniki sdkOptions we wszystkich trybach', () => {
       // mechanizmem zgody, także gdy autozatwierdza.
       expect(typeof options!.canUseTool, `tryb ${mode}: brak bramki canUseTool`).toBe('function');
       /*
-       * (f')/(f'') — jedyna różnica między trybami na poziomie SDK. Reguła
+       * (f')/(f'') — niezmiennik wspólny dla WSZYSTKICH trybów: na liście
+       * dozwolonych są WYŁĄCZNIE narzędzia aplikacji (`mcp__app__*`). Reguła
        * allow cieńuje bramkę `canUseTool` (SDK zatwierdza po stronie listy,
-       * zanim bramka cokolwiek zobaczy), więc w trybie `manual` lista dozwolonych
-       * musi być PUSTA: każde wywołanie inicjowane przez agenta ma dotrzeć do
-       * pytania (D-06: „prosi o zgodę przed każdą akcją"). `supervised` i `auto`
-       * dostają listę jak dotychczas — narzędzia aplikacji i narzędzia plikowe,
-       * które zadeklarowały, jak podają ścieżkę.
+       * zanim bramka cokolwiek zobaczy — `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`),
+       * więc nazwa na tej liście omija strażników ścieżek: tura 17 oddała sekret
+       * spoza workspace przez pre-zatwierdzone `Read`, tura 18 utworzyła plik
+       * poza workspace przez pre-zatwierdzone `Write`. Narzędzia plikowe
+       * (`AUTO_APPROVED_FILE_TOOLS`) nie są więc pre-zatwierdzane w ŻADNYM
+       * trybie — każde wywołanie dociera do bramki. `manual` dodatkowo dostaje
+       * listę PUSTĄ: „prosi o zgodę przed każdą akcją" (D-06) nie może zostawić
+       * pre-zatwierdzonej furtki także dla narzędzi aplikacji.
        */
       if (mode === 'manual') {
         expect(options!.allowedTools, `tryb ${mode}: allowedTools ma byc puste`).toEqual([]);
       } else {
-        expect(options!.allowedTools, `tryb ${mode}: lista jak dotychczas`).toEqual([
+        expect(options!.allowedTools, `tryb ${mode}: wylacznie narzedzia aplikacji`).toEqual([
           ...capturing.toolNames,
-          ...AUTO_APPROVED_FILE_TOOLS.filter(declaresPathArguments),
         ]);
+      }
+      for (const tool of AUTO_APPROVED_FILE_TOOLS) {
+        expect(
+          options!.allowedTools,
+          `tryb ${mode}: ${tool} na allowedTools cieniuje bramke i straznikow sciezek`,
+        ).not.toContain(tool);
       }
     }
   });
+});
+
+/* ------------- (f''') narzedzia plikowe za bramka — bez regresji UX -------- */
+
+describe('narzedzia plikowe docieraja do bramki', () => {
+  /*
+   * Narzędzia plikowe są poza `allowedTools` w każdym trybie, więc każde ich
+   * wywołanie dochodzi do bramki — i w workspace bramka odpowiada `auto` BEZ
+   * pytania: brak `platform.permission_request` jest zewnętrznym dowodem, że
+   * faza `awaiting_consent` nie nastąpiła (to jest właściwość, którą zmiana
+   * listy mogła zepsuć, a nie mogła). Droga odwrotna — to samo narzędzie poza
+   * workspace, odmowa bez pytania i bez powstania pliku — jest przypięta już
+   * w `tests/z12-r4-ataki.test.ts` (D2: „znane narzedzie celujace poza
+   * workspace jest przez bramke ODMOWIONE bez pytania"); nie dubluję jej tutaj.
+   */
+  for (const mode of ['supervised', 'auto'] as const) {
+    it(`Read w workspace: bramka allow bez pytania (${mode})`, async () => {
+      const started = await startRun(
+        conversation(`Plikowe w workspace ${mode}`),
+        [
+          { kind: 'ask', toolName: 'Read', input: { file_path: 'notatka-w-workspace.txt' } },
+          { kind: 'text', text: 'koniec' },
+        ],
+        mode,
+      );
+      await started.done;
+
+      expect(started.stand.gate).toEqual([
+        expect.objectContaining({ toolName: 'Read', allowed: true }),
+      ]);
+      expect(
+        permissionRequestsOf(started.events),
+        `tryb ${mode}: bramka pytala o narzedzie plikowe w workspace`,
+      ).toEqual([]);
+      expect(started.run().status).toBe('succeeded');
+    });
+  }
 });
 
 /* ------------------------- (b) zabronione w każdym trybie ------------------ */

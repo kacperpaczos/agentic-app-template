@@ -111,17 +111,27 @@ export const TOOL_PERMISSION_MATRIX = {
  * tool nobody can be asked to allow. What the mode never touches either:
  * `disallowedTools` stays the forbidden category and `allowedTools` never
  * carries a decision-category tool — the `canUseTool` gate remains the only
- * mechanism of consent in all three modes.
+ * mechanism of consent in all three modes. The same list never carries a file
+ * tool either — in **no** mode at all. The file tools' `auto` answer may come
+ * only from the gate, after the path guards (`workspaceConfinementRefusal`,
+ * `directoryWalkRefusal`, `protectedPathRefusal`) have had their say: a name on
+ * the allow list would approve the call before any of them ran, which is how a
+ * real model once read a canary from outside the workspace and wrote a file
+ * where the shell had just been refused (turns 17 and 18). The gate is the only
+ * file-access authority in every mode.
  *
  * One consequence lives on the SDK-options side (`runtime.ts`) and is stated
  * here because this file is where the ordering of the three mechanisms is
- * documented: an allow rule is *older* than the gate, so in `manual` mode the
- * runtime passes an **empty** `allowedTools`. Otherwise the allow list would
- * shadow the gate (`CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`) and "prosi o zgodę
- * przed każdą akcją" would silently exclude exactly the tools the platform
- * pre-approves. In `supervised` and `auto` the list is unchanged — in `auto`
- * the gate itself approves the asking category, so nothing needs pre-approval
- * there either.
+ * documented: an allow rule is *older* than the gate. The runtime therefore
+ * passes only the application's own tools on `allowedTools` — and an **empty**
+ * list in `manual` mode. Otherwise the allow list would shadow the gate
+ * (`CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`): "prosi o zgodę przed każdą akcją"
+ * would silently exclude exactly the tools the platform pre-approves, and a
+ * pre-approved file tool would slip past the path guards altogether. In
+ * `supervised` and `auto` nothing needs pre-approval either: the gate answers
+ * the file tools' `auto` category itself, without a question, once the path
+ * guards have passed — and in `auto` it promotes the asking category the same
+ * way.
  */
 export function decideTool(
   toolName: string,
