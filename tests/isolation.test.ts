@@ -33,6 +33,8 @@ import {
   RECORDED_LEDGER,
   RUN_STAMP,
   Z11_MODEL_SPEC_FILES,
+  GLM_TURN_BUDGET,
+  glmMode,
   Z11_MODEL_SPEC_PATTERNS,
   Z11_OPT_IN_ENV,
   Z11_SPEC_TURNS,
@@ -340,7 +342,12 @@ describe('spece z prawdziwym modelem: opt-in i nienaruszalnosc dowodow', () => {
     expect(Z11_WORKING_LEDGER.startsWith(EVIDENCE_ROOT)).toBe(false);
     // A fresh checkout starts this grant at zero, not at the other one's count.
     if (!existsSync(Z11_WORKING_LEDGER)) expect(readZ11Ledger().wydane).toBe(0);
-    expect(readZ11Ledger().budzet).toBe(Z11_TURN_BUDGET);
+    // The ledger read here is the grant this mode charges (GLM by default,
+    // the BL-03 subscription register only outside GLM) — passed blindly while
+    // both ceilings read 25.
+    expect(readZ11Ledger().budzet).toBe(
+      glmMode() ? GLM_TURN_BUDGET : Z11_TURN_BUDGET,
+    );
 
     /*
      * The plan fits inside the grant, with room for retries.
@@ -409,7 +416,11 @@ describe('spece z prawdziwym modelem: opt-in i nienaruszalnosc dowodow', () => {
     } as NodeJS.ProcessEnv);
     expect(both).toContain('model-z11');
     expect(both).toContain(String(Z11_TURNS_PLANNED));
-    expect(both).toContain(String(Z11_TURN_BUDGET));
+    // The ceiling named is the grant this mode actually charges — GLM by
+    // default (D-01), the closed BL-03 subscription ledger only outside it.
+    // Asserting the Z11 constant blindly passed while both ceilings read 25;
+    // the divergence is what keeps this honest.
+    expect(both).toContain(String(GLM_TURN_BUDGET));
   });
 
   it('pominiecie jest powiedziane, z kosztem w turach', () => {

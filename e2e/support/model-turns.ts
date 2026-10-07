@@ -363,7 +363,8 @@ export const Z11_TURNS_PLANNED = Object.values(Z11_SPEC_TURNS).reduce((a, b) => 
  * The ceiling, not the plan: 22 turns buy one clean pass of the eight specs and
  * the remaining 3 are for retries. Raising it needs a new grant, and the ledger
  * on disk carries every turn with the spec that spent it, so a later number
- * cannot quietly become a fresh start.
+ * cannot quietly become a fresh start. Closed history since the GLM cutover:
+ * a GLM-mode run charges the GLM grant here, never this one.
  */
 export const Z11_TURN_BUDGET = 25;
 
@@ -377,11 +378,17 @@ export const z11SpecsRequested = (env: NodeJS.ProcessEnv = process.env): boolean
 export const Z11_WORKING_LEDGER = resolve(REPO_ROOT, '.e2e-model-turns/z11-bl03.json');
 
 /**
- * The GLM grant: 25 turns, from the coordinator, for GLM-provider trials —
- * and for nothing else. Same ceiling rule as the subscription grants: the
- * register on disk carries every turn with the spec that spent it.
+ * The GLM grant: 45 turns, for GLM-provider trials — and for nothing else.
+ *
+ * History: 25 from the first coordinator grant (1 spent on the smoke turn);
+ * the owner granted the raise to 45 on 2026-10-07 for the wave that verifies
+ * the BL-03 file-tool boundary repair on the real SDK plus L12.6 — in GLM mode
+ * that wave charges THIS grant (`z11Preflight`, the BL-03 specs included), and
+ * 24 remaining would not have covered it with retries. Same ceiling rule as
+ * the subscription grants: the register on disk carries every turn with the
+ * spec that spent it, so the raise extends the same ledger.
  */
-export const GLM_TURN_BUDGET = 25;
+export const GLM_TURN_BUDGET = 45;
 
 /** This grant's tally, in the working copy (gitignored), starting at zero. */
 export const GLM_WORKING_LEDGER = resolve(REPO_ROOT, '.e2e-model-turns/glm.json');

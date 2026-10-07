@@ -107,7 +107,7 @@ pnpm verify          # granica, macierz 200 (check:acceptance + check:matrix), a
 pnpm test:e2e        # przeglądarka na istniejącym buildzie produkcyjnym (po verify/build — inaczej testuje stary bundle);
                      # BEZ testów z prawdziwym modelem — nie zużywa ani jednej tury GLM
 pnpm test:e2e:model  # tylko testy z prawdziwym modelem; do 12 tur GLM na przebieg
-pnpm test:e2e:z11    # tylko proby modelowe pakietu BL-03; koszt: do 22 tur z grantu 25 (osobny rejestr)
+pnpm test:e2e:z11    # tylko proby modelowe pakietu BL-03; koszt: do 22 tur z aktywnego grantu GLM (sufit 45 — decyzja wlasciciela 2026-10-07); rejestr subskrypcyjny z11 to historia
 pnpm diag            # prawdziwa sesja SDK, wylacznie zadania sterujace — 0 tur; porownuje narzedzia
 pnpm check:module-swap   # przy zmianach kontraktu modułu lub warstwy składania
 pnpm evidence            # regeneracja plików dowodowych z regresji (APP_WRITE_EVIDENCE=1) — na żądanie
