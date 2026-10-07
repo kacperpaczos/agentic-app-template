@@ -293,6 +293,28 @@ export const PLATFORM_MIGRATIONS: ModuleMigration[] = [
       ALTER TABLE agent_runs ADD COLUMN user_message_id TEXT;
     `,
   },
+  {
+    /**
+     * Tryb zgód (L11.12): polityka zgody utrwalona na wierszu wykonania.
+     *
+     * `agent_runs` nie zapisywał, komu przysługuje decyzja o narzędziu, które
+     * nie jest ani wstępnie zatwierdzone, ani zabronione — zachowanie było
+     * jedno (obecne `supervised`) i żyło wyłącznie w kodzie bramki. Trzy tryby
+     * (`manual`, `supervised`, `auto`) potrzebują rekordu, bo tryb jest własścią
+     * uruchomienia: zapisywanym raz, przy starcie, i odczytywanym z wiersza przy
+     * każdej decyzji bramki — nigdy z bieżącego payloadu, więc w trakcie
+     * wykonania nie ma drogi eskalacji.
+     *
+     * `NOT NULL DEFAULT 'supervised'` jest dokładnym opisem wierszy historycznych,
+     * nie domysłem: do tej pory każde wykonanie działało w trybie nadzorowanym,
+     * bo innego nie było. Kolumna nigdy nie jest pozniej mutowana przez żaden
+     * endpoint.
+     */
+    id: 'platform-0008-run-consent-mode',
+    sql: /* sql */ `
+      ALTER TABLE agent_runs ADD COLUMN consent_mode TEXT NOT NULL DEFAULT 'supervised';
+    `,
+  },
 ];
 
 /** Applies every not-yet-applied migration inside one transaction each. */

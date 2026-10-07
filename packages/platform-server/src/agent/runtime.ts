@@ -9,6 +9,7 @@ import {
   UI_COMMAND_FAILURES,
   type AppContext,
   type AppErrorCode,
+  type ConsentMode,
   type ModuleEmittedEvent,
   type ToolCallContext,
   type UiCommand,
@@ -51,6 +52,14 @@ export interface StartRunInput {
   /** Uploaded files staged into the run workspace before the model starts. */
   attachFileIds?: string[];
   /**
+   * The consent mode this run runs under (L11.12). Absent means `supervised`.
+   *
+   * Read once, here, and written into the run row; the gate reads the mode
+   * from the **record** at every decision, never from a live payload, so there
+   * is no way to raise a run's own privileges mid-execution.
+   */
+  consentMode?: ConsentMode;
+  /**
    * The user message this run answers, when the caller knows it.
    *
    * Carried so the attachment link can name the *command*, not just the
@@ -70,6 +79,14 @@ export interface StartedRun {
 interface PendingPermission {
   resolve: (allow: boolean) => void;
   toolName: string;
+  /**
+   * The raw tool input the question is about, kept for the task center's
+   * `pendingPermission` view (L11.19): a run parked on a question has to be
+   * describable to a client that was not watching when it was asked. Shown,
+   * never re-executed — answering goes through `answerPermission` and is bound
+   * to the run and owner there.
+   */
+  input: unknown;
   /**
    * The run that asked, and the owner it belongs to.
    *
@@ -262,6 +279,25 @@ export class AgentRuntime {
   }
 
   /**
+   * The question one run is parked on, in the shape the task center publishes
+   * (L11.19).
+   *
+   * Read from the same in-process map the gate and `answerPermission` use, so
+   * the view cannot say a question is open after the map has lost it — the
+   * entry is removed exactly when the question is resolved, whichever way it
+   * resolved. A run reaches the gate one call at a time, so the first (and
+   * normally only) entry of that run is the answer; if two were ever pending,
+   * reporting the first is honest about there being an open question.
+   */
+  pendingPermissionFor(runId: string): { requestId: string; toolName: string; input: unknown } | undefined {
+    for (const [requestId, pending] of this.#pendingPermissions) {
+      if (pending.runId !== runId) continue;
+      return { requestId, toolName: pending.toolName, input: pending.input };
+    }
+    return undefined;
+  }
+
+  /**
    * Refuses everything this run was still waiting to be told, and says why.
    *
    * Called when the run is aborted — Stop, the hard timeout, a shutdown. Without
@@ -358,6 +394,9 @@ export class AgentRuntime {
       // wykonanie dostało, także gdy pliki już znikną z rozmowy.
       inputFileIds: input.attachFileIds ?? [],
       userMessageId: input.userMessageId ?? null,
+      // Tryb zgód zapisywany raz, na wierszu wykonania; bramka czyta go
+      // z rekordu, nie z payloadu — patrz `#consentModeOfRun`.
+      consentMode: input.consentMode ?? 'supervised',
     });
 
     const workspace = createRunWorkspace(
@@ -862,6 +901,14 @@ export class AgentRuntime {
       return { continue: true };
     };
 
+    /*
+     * Tryb czytany z rekordu także przy budowie `sdkOptions`, z tej samej
+     * przyczyny co w bramce: lista dozwolonych zależy od trybu, a tryb jest
+     * własnością wiersza wykonania — nie payloadu. Zapisuje go wyłącznie
+     * `runs.start`.
+     */
+    const consentMode = this.#consentModeOfRun(runId, args.ownerId);
+
     const sdkOptions: Record<string, unknown> = {
       cwd: args.workspace.dir,
       mcpServers: { app: server },
@@ -887,8 +934,22 @@ export class AgentRuntime {
        */
       strictMcpConfig: true,
       systemPrompt: { type: 'preset', preset: 'claude_code', append: systemPrompt },
-      // Only the application's own tools and the workspace file tools are
-      // pre-approved; Bash is deliberately absent (see `permissions.ts`).
+      /*
+       * Lista dozwolonych zależnie od trybu zgody (L11.12).
+       *
+       * Reguła allow w SDK jest starsza od bramki: nazwa na tej liście
+       * autozatwierdza wywołanie, zanim `canUseTool` cokolwiek zobaczy
+       * (`CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`). Dlatego:
+       *  - `manual` — lista jest PUSTA. „Prosi o zgodę przed każdą akcją"
+       *    (D-06) nie może zostawić pre-zatwierdzonej furtki: każde wywołanie
+       *    inicjowane przez agenta — także narzędzie aplikacji i odczyt pliku —
+       *    musi dotrzeć do bramki i zostać tam zadecydowane;
+       *  - `supervised` i `auto` — lista jak dotychczas: narzędzia aplikacji
+       *    plus narzędzia plikowe z deklaracją ścieżki. `Bash` jest świadomie
+       *    nieobecny w obu: w `supervised` to właśnie brak wpisu kieruje go do
+       *    pytania, a w `auto` bramka sam go zatwierdza — bramka pozostaje
+       *    jedynym mechanizmem zgody.
+       */
       /*
        * Z8 — wyprowadzone z TEJ SAMEJ reguły, która decyduje o auto/zgoda.
        *
@@ -900,10 +961,10 @@ export class AgentRuntime {
        * niemożliwym: strażnik ścieżek sprawdzi tylko narzędzia, które
        * zadeklarowały, jak podają ścieżkę.
        */
-      allowedTools: [
-        ...this.#toolNames,
-        ...AUTO_APPROVED_FILE_TOOLS.filter(declaresPathArguments),
-      ],
+      allowedTools:
+        consentMode === 'manual'
+          ? []
+          : [...this.#toolNames, ...AUTO_APPROVED_FILE_TOOLS.filter(declaresPathArguments)],
       /*
        * The forbidden category. These reach the network from inside the SDK
        * process, where the shell sandbox's empty domain allowlist does not
@@ -1177,6 +1238,25 @@ export class AgentRuntime {
   }
 
   /**
+   * The consent mode of a run, read from its **row** — the single place the
+   * mode is stored after `runs.start` writes it.
+   *
+   * Reading per decision, rather than capturing the value once, is what makes
+   * "no mid-run escalation" a property of the mechanism and not of caller
+   * discipline: whatever a payload carries, the next gate decision of this run
+   * still consults the record. A row that has disappeared (its conversation
+   * deleted while a question was open) reads as `supervised` — the
+   * conservative answer, a question instead of an unannounced execution.
+   */
+  #consentModeOfRun(runId: string, ownerId: string): ConsentMode {
+    try {
+      return this.services.runs.get(runId, ownerId).consentMode;
+    } catch {
+      return 'supervised';
+    }
+  }
+
+  /**
    * Permission gate — the third of the three SDK mechanisms described in
    * `permissions.ts`, and the only one this application implements itself.
    *
@@ -1236,7 +1316,16 @@ export class AgentRuntime {
       const resolvedInput =
         resolvedPathInput(toolName, input, (p) => realResolve(run.workspaceDir, p)) ?? input;
 
-      const decision = decideTool(toolName, this.#toolNames);
+      /*
+       * Tryb czytany z rekordu przy KAŻDEJ decyzji bramki — nigdy z payloadu.
+       * Zapisuje go wyłącznie `runs.start` w chwili utworzenia wiersza, więc
+       * żadne żądanie HTTP wysłane w trakcie wykonania nie ma jak podnieść
+       * uprawnień tego uruchomienia. Rekord, który zniknął (rozmowa usunięta w
+       * trakcie pytania), zachowawczo oznacza `supervised`: pytamy, zamiast
+       * przepuszczać.
+       */
+      const consentMode = this.#consentModeOfRun(run.runId, run.ownerId);
+      const decision = decideTool(toolName, this.#toolNames, consentMode);
       if (decision === 'auto') return { behavior: 'allow', updatedInput: resolvedInput };
       if (decision === 'forbidden') {
         return { behavior: 'deny', message: forbiddenToolMessage(toolName) };
@@ -1248,6 +1337,7 @@ export class AgentRuntime {
         this.#pendingPermissions.set(requestId, {
           resolve,
           toolName,
+          input,
           runId: run.runId,
           ownerId: run.ownerId,
         });

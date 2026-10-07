@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { consentModeSchema } from './agent.ts';
 
 /**
  * AG-UI wire contract.
@@ -69,6 +70,15 @@ export const runAgentInputSchema = z.object({
   messages: z.array(z.record(z.string(), z.unknown())).default([]),
   /** Frontend-supplied application context; validated separately. */
   context: z.unknown().optional(),
+  /**
+   * The consent mode requested for the run this input starts (L11.12).
+   *
+   * Optional with **no default in the schema** on purpose: the wire says what
+   * the client asked for, and the server — not the contract — closes the
+   * missing value to `'supervised'` when the run row is written. A default
+   * here would make the payload look decided about before it is.
+   */
+  consentMode: consentModeSchema.optional(),
   forwardedProps: z.record(z.string(), z.unknown()).optional(),
   state: z.unknown().optional(),
   tools: z.array(z.unknown()).optional(),

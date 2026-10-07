@@ -330,6 +330,8 @@ describe('migracja istniejacej bazy', () => {
       'platform-0006-message-attachments',
       // L11.6: wejście zadania (pliki polecenia, wiadomość źródłowa) na wierszu wykonania.
       'platform-0007-run-task-inputs',
+      // L11.12: tryb zgód utrwalony na wierszu wykonania.
+      'platform-0008-run-consent-mode',
       'procurement-0001-init',
     ]);
   });
