@@ -40,7 +40,7 @@ import { type Page } from '@playwright/test';
  * the report records — that they can fail.
  */
 
-const scripted = new ScriptedInstance({ port: 8798, dataDirName: '.e2e-scripted-bl03' });
+const scripted = new ScriptedInstance({ port: 8798, dataDirName: '.e2e-scripted-bl03', logFile: '/tmp/bl03-rehearsal-server.log' });
 const BASE = scripted.baseUrl;
 
 const send = typeCommand;

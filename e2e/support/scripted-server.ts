@@ -906,6 +906,13 @@ const shutdown = () => {
     platform.close();
     process.exit(0);
   });
+  /*
+   * Ten sam bound co w wejsciu produkcyjnym (apps/server/src/main.ts): zamkniecie
+   * czeka na polaczenia, a poll interfejsu (np. plakietka zadan w tle, 3 s)
+   * potrafi trzymac keep-alive cieply bez konca — SIGTERM nie moze byc wtedy
+   * zawieszeniem bez wyroku. Fallback jest unref, wiec sam nie trzyma petli.
+   */
+  setTimeout(() => process.exit(0), 5000).unref();
 };
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
