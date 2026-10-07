@@ -704,6 +704,14 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
       attachFileIds,
       // The command the files were attached to, so the link survives the run.
       userMessageId: userMessage.id,
+      /*
+       * The consent mode, closed here to the default the schema leaves open.
+       * The enum itself was validated with `runAgentInputSchema` above — a
+       * wrong value answered 400 before a conversation, a message or a run row
+       * existed. From this line on the mode belongs to the run's record; no
+       * endpoint writes that column again.
+       */
+      consentMode: input.consentMode ?? 'supervised',
     });
     if (runKey) {
       startingRuns.set(
@@ -759,6 +767,18 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
         // The title is what makes a background task nameable in the interface;
         // without it a task list is a list of identifiers.
         conversationTitle: services.conversations.get(r.conversationId, ownerId).title,
+        /*
+         * L11.19: the command a run started from, for runs parked at the
+         * consent gate — the one case where the interface names the task
+         * *outside* the task center (the one-shot notice), and the listing
+         * above carries nothing else to name it by. Additive and conditional
+         * on purpose: every other consumer of this endpoint reads the fields
+         * it already had, and an awaiting run is rare, so the extra primary-key
+         * read stays in the same league as the title lookup above it.
+         */
+        ...(r.status === 'awaiting_consent'
+          ? { intent: services.runs.task(r.id, ownerId).prompt }
+          : {}),
       })),
     });
   });
@@ -796,11 +816,21 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
       }
     });
     const { prompt, inputFileIds, appContext: _appContext, ...run } = row;
+    /*
+     * The open consent question (L11.19), read from the runtime's pending map
+     * — the same map the answer endpoint resolves against, so the view and the
+     * answer cannot disagree about what is still open. Attached only while the
+     * run is parked at the gate: an answered question is *absent*, so a client
+     * cannot mistake a stale prompt for a live one.
+     */
+    const pendingPermission =
+      row.status === 'awaiting_consent' ? runtime.pendingPermissionFor(row.id) : undefined;
     return {
       run,
       conversationId: row.conversationId,
       conversationTitle: services.conversations.get(row.conversationId, row.ownerId).title,
       intent: prompt,
+      consentMode: row.consentMode,
       progress: {
         toolCallsStarted: stats.toolCallsStarted,
         toolCallsFinished: stats.toolCallsFinished,
@@ -811,6 +841,7 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
       tools: precomputed?.tools.get(row.id) ?? services.runs.toolSummary(row.id),
       inputFiles,
       artifacts: artifacts.map((a) => ({ id: a.id, title: a.title, kind: a.kind, mode: a.mode })),
+      ...(pendingPermission ? { pendingPermission } : {}),
     };
   };
 
@@ -893,6 +924,13 @@ export function createPlatformApp(deps: PlatformAppDeps): Hono<Env> {
         appContext: source.appContext,
         attachFileIds: survivingInputs,
         userMessageId: userMessage.id,
+        /*
+         * To ta sama intencja użytkownika, więc i ta sama polityka zgody:
+         * ponowienie dziedziczy tryb źródła. Zapisany w wierszu tryb nie może
+         * zostać po cichu obniżony do `supervised` (to by okradło ponowne
+         * wykonanie z pytania, na które użytkownik się zgodził) ani podniesiony.
+         */
+        consentMode: source.consentMode,
       });
       return { runId: started.runId, conversationId: source.conversationId };
     })();

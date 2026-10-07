@@ -33,6 +33,7 @@ interface RunRow {
   workspace_dir: string | null;
   input_file_ids: string | null;
   user_message_id: string | null;
+  consent_mode: string;
 }
 
 /**
@@ -52,6 +53,12 @@ const toRun = (r: RunRow): AgentRun => ({
   conversationId: r.conversation_id,
   ownerId: r.owner_id,
   status: r.status as RunStatus,
+  /*
+   * Kolumna jest NOT NULL DEFAULT 'supervised' (platform-0008), więc wartość
+   * jest zawsze zapisana; zapasowy `??` opisuje tylko wiersz odczytany zanim
+   * migracja zdążyła go dotknąć — a taki tryb to dokładnie `supervised`.
+   */
+  consentMode: (r.consent_mode ?? 'supervised') as AgentRun['consentMode'],
   claudeSessionId: r.claude_session_id,
   // Rows written before the split carry no `enqueued_at`; for those the two
   // instants were the same value, so reporting it twice is accurate, not a guess.
@@ -102,13 +109,20 @@ export class RunRegistry {
     /** Files attached to the command; empty when it carried none. */
     inputFileIds?: string[];
     userMessageId?: string | null;
+    /**
+     * Tryb zgód (L11.12) zapisywany **raz**, przy utworzeniu wiersza. Po tym
+     * wpisie żadna ścieżka w aplikacji nie modyfikuje tej kolumny — bramka
+     * czyta ją z rekordu, więc payload wysłany w trakcie wykonania nie ma jak
+     * podnieść własnych uprawnień.
+     */
+    consentMode?: AgentRun['consentMode'];
   }): AgentRun {
     const id = newId('run');
     const ts = nowIso();
     this.db.$client
       .prepare(
-        `INSERT INTO agent_runs (id, conversation_id, owner_id, status, claude_session_id, prompt, app_context, enqueued_at, started_at, workspace_dir, input_file_ids, user_message_id)
-         VALUES (?, ?, ?, 'queued', NULL, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO agent_runs (id, conversation_id, owner_id, status, claude_session_id, prompt, app_context, enqueued_at, started_at, workspace_dir, input_file_ids, user_message_id, consent_mode)
+         VALUES (?, ?, ?, 'queued', NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -126,6 +140,7 @@ export class RunRegistry {
         // not what a request promised and the message later lost.
         JSON.stringify(input.inputFileIds ?? []),
         input.userMessageId ?? null,
+        input.consentMode ?? 'supervised',
       );
     this.#aborts.set(id, input.abort);
     return toRun(this.#row(id));

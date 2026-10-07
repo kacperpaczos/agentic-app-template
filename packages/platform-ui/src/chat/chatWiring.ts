@@ -192,6 +192,16 @@ export function createChatLlm(qc: QueryClient): ChatLLM {
           runId: crypto.randomUUID(),
           messages,
           context: appContext,
+          /*
+           * The consent mode chosen at the composer, read from the store at
+           * send time like the rest of the command's context (L11.12). Sent on
+           * every command, default included, so the payload says what was
+           * asked for rather than letting the reader infer it; the backend
+           * closes the missing value to `supervised` anyway. From the response
+           * on, the mode belongs to the run's record — this field has no say
+           * over a run already going.
+           */
+          consentMode: state.consentMode,
           forwardedProps: { attachFileIds: state.attachments },
         }),
       });

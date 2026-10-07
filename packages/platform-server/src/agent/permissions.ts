@@ -1,5 +1,6 @@
 import { lstatSync, readdirSync, readlinkSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, parse, resolve } from 'node:path';
+import type { ConsentMode } from '@platform/contracts';
 import { claudeConfigDir } from './auth.ts';
 import { isWithin, realResolveFrom, UnresolvablePathError } from '../util/real-path.ts';
 
@@ -86,31 +87,73 @@ export const TOOL_PERMISSION_MATRIX = {
 } as const;
 
 /**
- * What the platform does with a tool call, by name.
+ * What the platform does with a tool call, by name — under a consent mode.
  *
  * `mcpToolNames` are the application's own tools: they are the backend's
  * operations, already bounded by the domain services and the owner, so they are
  * automatic. Anything unrecognised is `consent` — the default is the cautious
  * one, so a tool added by a future SDK version reaches the user rather than
  * running unannounced.
+ *
+ * ## The mode, and what it may and may not move
+ *
+ * The mode shifts the *asking* boundary, never the forbidden one:
+ *  - `supervised` (the default, so existing two-argument callers keep today's
+ *    behaviour exactly) — the category decides: `auto` runs, `consent` asks;
+ *  - `manual` — the user is asked about every non-forbidden action: an `auto`
+ *    tool is demoted to `consent`, because "pytaj o każdą akcję" cannot leave
+ *    a pre-approved call out;
+ *  - `auto` — the gate approves an asking-category call by itself: `consent`
+ *    is promoted to `auto`, which is what makes an unattended run possible.
+ *
+ * `forbidden` is returned for the forbidden category in **every** mode, before
+ * the mode is consulted at all — a tool that must never run must also be a
+ * tool nobody can be asked to allow. What the mode never touches either:
+ * `disallowedTools` stays the forbidden category and `allowedTools` never
+ * carries a decision-category tool — the `canUseTool` gate remains the only
+ * mechanism of consent in all three modes.
+ *
+ * One consequence lives on the SDK-options side (`runtime.ts`) and is stated
+ * here because this file is where the ordering of the three mechanisms is
+ * documented: an allow rule is *older* than the gate, so in `manual` mode the
+ * runtime passes an **empty** `allowedTools`. Otherwise the allow list would
+ * shadow the gate (`CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`) and "prosi o zgodę
+ * przed każdą akcją" would silently exclude exactly the tools the platform
+ * pre-approves. In `supervised` and `auto` the list is unchanged — in `auto`
+ * the gate itself approves the asking category, so nothing needs pre-approval
+ * there either.
  */
-export function decideTool(toolName: string, mcpToolNames: readonly string[]): ToolDecision {
+export function decideTool(
+  toolName: string,
+  mcpToolNames: readonly string[],
+  mode: ConsentMode = 'supervised',
+): ToolDecision {
   if ((FORBIDDEN_TOOLS as readonly string[]).includes(toolName)) return 'forbidden';
-  if (mcpToolNames.includes(toolName)) return 'auto';
-  /*
-   * Wstępne zatwierdzenie **wymaga zadeklarowania, jak narzędzie podaje ścieżkę**.
-   *
-   * Odwrócenie tej samej komplementarności, o którą chodzi w regule pozytywnej:
-   * lista narzędzi też jest zbiorem do wyliczenia, więc nie opieramy się na tym,
-   * że ktoś pamiętał o obu listach naraz. Narzędzie dopisane do
-   * `AUTO_APPROVED_FILE_TOOLS` bez wpisu w `PATH_ARGUMENTS` nie dostaje `auto`,
-   * tylko trafia do zgody użytkownika — bo strażnik ścieżek nie umiałby go
-   * sprawdzić, a cicha luka jest gorsza od pytania.
-   */
-  if ((AUTO_APPROVED_FILE_TOOLS as readonly string[]).includes(toolName)) {
-    return PATH_ARGUMENTS[toolName] ? 'auto' : 'consent';
+  let category: ToolDecision;
+  if (mcpToolNames.includes(toolName)) {
+    category = 'auto';
+  } else if ((AUTO_APPROVED_FILE_TOOLS as readonly string[]).includes(toolName)) {
+    /*
+     * Wstępne zatwierdzenie **wymaga zadeklarowania, jak narzędzie podaje ścieżkę**.
+     *
+     * Odwrócenie tej samej komplementarności, o którą chodzi w regule pozytywnej:
+     * lista narzędzi też jest zbiorem do wyliczenia, więc nie opieramy się na tym,
+     * że ktoś pamiętał o obu listach naraz. Narzędzie dopisane do
+     * `AUTO_APPROVED_FILE_TOOLS` bez wpisu w `PATH_ARGUMENTS` nie dostaje `auto`,
+     * tylko trafia do zgody użytkownika — bo strażnik ścieżek nie umiałby go
+     * sprawdzić, a cicha luka jest gorsza od pytania.
+     */
+    category = PATH_ARGUMENTS[toolName] ? 'auto' : 'consent';
+  } else {
+    category = 'consent';
   }
-  return 'consent';
+  /*
+   * Tryb przesuwa wyłącznie granicę pytania; kategoria `forbidden` nie dotarła
+   * tu nigdy (odmowa wyżej), a `consent` w trybie `manual` zostaje pytaniem.
+   */
+  if (mode === 'manual' && category === 'auto') return 'consent';
+  if (mode === 'auto' && category === 'consent') return 'auto';
+  return category;
 }
 
 /** Message the gate refuses a forbidden tool with. Stated as policy, not as an error. */

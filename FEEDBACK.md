@@ -1247,3 +1247,55 @@ Przed dodaniem przejrzano strukturę i treść dokumentów pod kątem duplikató
 hosta. Nie znaleziono rzeczywistych tokenów ani kluczy; usunięto lokalne ścieżki z kopii
 archiwalnej. URL `glm.example.com` pozostaje jako jawnie syntetyczny przykład testu sanitizacji.
 Po sprawdzeniu commita źródłowe `.sdd-zlecenie/` przeniesiono do Kosza; kopia archiwalna jest w Git.
+
+---
+
+## §A31 — BL-13: tryby zgód (L11.12) i centrum uwagi (L11.19) domknięte (2026-10-07)
+
+**Co powstało** (gałąź `feat/bl13-tryby-zgod-centrum-zadan`, 5 commitów: 91f1a3b, 7a01447,
+b4b4019, 199de7f + dokumentacja): trzy tryby zgód wybierane przez użytkownika — ręczny,
+nadzorowany (domyślny), pełna automatyzacja — przypisane do wykonania (`agent_runs.consent_mode`,
+migracja platform-0008), czytane z rekordu przy każdej decyzji bramki, bez drogi eskalacji
+w trakcie; `allowedTools` puste w trybie ręcznym, bo lista dozwolonych cieniuje bramkę
+`canUseTool` na prawdziwym SDK; ponowienie dziedziczy tryb źródła. Selektor trybów przy
+kompozytorze (reset do nadzorowanego przy zmianie zakresu właściciela), tryb per zadanie
+w centrum. L11.19: `pendingPermission` w TaskView i formularz Zgoda/Odmowa w centrum zadań,
+trwała plakietka liczby zadań czekających przy wejściu /tasks, jednorazowy toast tylko na
+obserwowanym przejściu, tylko dla runu innej rozmowy niż aktywna, z przejściem do centrum
+bez ruszania aktywnej rozmowy; `/api/runs/active` addytywnie niesie `intent` dla
+`awaiting_consent`.
+
+**Weryfikacja.** tests/consent-modes.test.ts (19), e2e/consent-modes.spec.ts (5),
+e2e/attention-consent.spec.ts (3); regresje consent-runs/task-center/background-tasks 21/21
+w jednym przebiegu; typechecki src/e2e i build exit 0. Falsyfikacja nowej logiki testowej:
+F1 (tryb ignorowany w bramce) → 5 asercji pada; F2 (pytanie nie trafia do centrum) → pada;
+F3 (brak konsumpcji latchu) → 10 ponownych pojawień toastu po zamknięciu wykrytych asercją
+MutationObserver — po dwóch próbach wstępnych, które uczą (zły punkt wstrzyknięcia; okno
+przejściowe maskowane kontrolami momentowymi). Dowód: docs/evidence/bl13-2026-10-07/
+proby-falsyfikacji.md; przywrócenia bajt w bajt (cmp).
+
+**Zmiany ocen.** L11.12 i L11.19 → potwierdzone (dowód gui+kontrakt); macierz: 10 otwartych
+z 200, BL-13 = L12.6. Wpisy wygenerowane (pnpm acceptance:render), kontrole spójności
+(check:acceptance, check:matrix, check:closure) zielone; kanon v0.4.1 zsynchronizowany
+bajtowo z projekcjami.
+
+**Problemy znalezione po drodze.** (1) W drugim pakiecie wymagana poprawka: początkowa
+implementacja zostawiła `allowedTools` z narzędziami MCP w trybie ręcznym — na prawdziwym
+SDK pytanie nigdy by nie nastąpiło; poprawione przed commitem (TDD, czerwona 2 FAIL).
+(2) Draft rozmowy nie ma `c` w adresie, a nawigacja „New chat" jest asynchroniczna —
+wczesne odczyty URL dawały `null` i próżne asercje; test czyta adres po ustaleniu.
+(3) Znany flak środowiskowy: `tests/backup-migration.test.ts` (etap platform-0001-init)
+wpada w limit 300 s pod obciążeniem pełnej suity; w izolacji 45/45 (2026-10-07).
+
+**Dopisek (2026-10-07, po pełnej regresji).** Pierwszy pełny przebieg e2e wykrył (230/237,
+C/D w bl03-rehearsal): serwer scenariuszowy nie kończył się po SIGTERM w 20 s. Przyczyna:
+jego `shutdown` czeka na `server.close()` bez ograniczenia czasu, a plakietka zadań
+czekających (L11.19) polluje `/api/runs/active` co 3 s z poziomu powłoki — keep-alive
+pozostaje ciepły i zamykanie głoduje; produkcyjny `main.ts` ma fallback `process.exit(0)`
+po 5 s, scenariuszowy go nie miał. Naprawa (8ab696d): ten sam bound w scripted-server;
+bisekcja potwierdziła wejście regresji z b4b4019; bl03-rehearsal 14/14, pełna suita
+237/237 (33,9 min) po naprawie.
+
+**Otwarte.** BL-13: L12.6 (rzeczywista ścieżka GLM GUI→SDK→Mastra→AG-UI→OpenUI) — wymaga
+przebiegu modelowego; właściciel zatwierdził 2026-10-07 podniesienie grantu z11 do 45 tur
+(fizyczna zmiana sufitu przed falą modelową BL-03).

@@ -330,6 +330,102 @@ export const consentScript = (prompt: string): Step[] => {
       ];
 };
 
+/**
+ * L11.12 — trzy tryby zgody, wybrane przy kompozytorze, w jednej rozmowie.
+ *
+ * Dobór po treści polecenia (konwencja tego pliku): jedna instancja gra jeden
+ * scenariusz, a polecenie wybiera gałąź. Każda gałąź kończy się publikacją
+ * artefaktu **tylko** po allow — skutek operacji jest tym, co test liczy przy
+ * odmowie („bez skutku”), a jego brak w trybie auto byłby porażką tego
+ * scenariusza, bo bramka tam zatwierdza sama.
+ *
+ * Prośby celowo o dwa różne narzędzia:
+ *  - `Bash` — kategoria „pytaj” w nadzorowanym; w pełnej automatyzacji bramka
+ *    zatwierdza ją sama, bez zdarzenia prośby;
+ *  - `mcp__app__canvas_list_cards` — narzędzie aplikacji, w nadzorowanym
+ *    kategoria „auto”; dopiero tryb ręczny zdejmuje je z listy dozwolonych
+ *    i wysyła do pytania.
+ */
+export const consentModesScript = (prompt: string): Step[] => {
+  /* Jeden identyfikator publikacji na polecenie, jak w `consentScript`:
+     powtórka tego samego polecenia publikuje raz, dwa różne polecenia
+     nie dzielą wyniku. */
+  const operationId = `tryby-${prompt.replace(/[^a-zA-Z0-9]/g, '').slice(-24) || 'domyslna'}`;
+  if (prompt.includes('automatyzacji')) {
+    return [
+      { kind: 'text', text: 'Przygotowalem skrypt. ', delayMs: 150 },
+      {
+        kind: 'ask',
+        toolName: 'Bash',
+        input: { command: 'node przetworz.mjs' },
+        then: [
+          {
+            kind: 'call',
+            name: 'artifact_create',
+            input: {
+              title: 'Wynik pelnej automatyzacji',
+              kind: 'report',
+              rendererType: 'platform.markdown',
+              content: { text: 'Operacja zatwierdzona przez bramke w trybie pelnej automatyzacji.' },
+              operationId,
+            },
+            maxChars: 200,
+          },
+        ],
+      },
+      { kind: 'text', text: 'Koniec.' },
+    ];
+  }
+  if (prompt.includes('kanwe')) {
+    return [
+      { kind: 'text', text: 'Sprobuje odczytac kanwe. ', delayMs: 150 },
+      {
+        kind: 'ask',
+        toolName: 'mcp__app__canvas_list_cards',
+        input: { spaceId: 'sp_scripted' },
+        then: [
+          {
+            kind: 'call',
+            name: 'artifact_create',
+            input: {
+              title: 'Wynik po zgodzie na narzedzie aplikacji',
+              kind: 'report',
+              rendererType: 'platform.markdown',
+              content: { text: 'Operacja wykonana po zgodzie na narzedzie aplikacji.' },
+              operationId,
+            },
+            maxChars: 200,
+          },
+        ],
+      },
+      { kind: 'text', text: 'Koniec.' },
+    ];
+  }
+  return [
+    { kind: 'text', text: 'Przygotowalem skrypt. ', delayMs: 150 },
+    {
+      kind: 'ask',
+      toolName: 'Bash',
+      input: { command: 'node przetworz.mjs' },
+      then: [
+        {
+          kind: 'call',
+          name: 'artifact_create',
+          input: {
+            title: 'Wynik po zgodzie',
+            kind: 'report',
+            rendererType: 'platform.markdown',
+            content: { text: 'Operacja wykonana po zgodzie uzytkownika.' },
+            operationId,
+          },
+          maxChars: 200,
+        },
+      ],
+    },
+    { kind: 'text', text: 'Koniec.' },
+  ];
+};
+
 /** Long background work with a marker the browser can count occurrences of. */
 export const continuityScript = (prompt: string): Step[] =>
   prompt.includes('krotkie')

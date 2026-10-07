@@ -1,17 +1,48 @@
 import { useEffect, type ReactNode } from 'react';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { MENU_SECTIONS, authIsConfirmed, authIsUsable } from '@platform/contracts';
-import { useStatus } from '../api/queries.ts';
+import { useActiveRuns, useStatus } from '../api/queries.ts';
 import { CanvasHost } from '../canvas/CanvasHost.tsx';
 import { ChatPanel } from '../chat/ChatPanel.tsx';
 import { useRegistry } from '../catalog/registry.tsx';
 import { useAppState } from '../state/appState.ts';
 import { AccessContextReset } from './AccessContextReset.tsx';
 import { SpaceSync } from './SpaceSync.tsx';
+import { AttentionToast } from './AttentionToast.tsx';
 import { BackgroundTasks } from './BackgroundTasks.tsx';
 import { UiCommandRunner } from './UiCommandRunner.tsx';
 import { UiSnapshotPublisher } from './UiSnapshotPublisher.tsx';
 import { ViewFilterBanner } from './ViewFilterBanner.tsx';
+
+/**
+ * The count of tasks waiting for a decision, beside the task center's entry.
+ *
+ * The durable half of L11.19: unlike the toast, this is read straight from the
+ * backend's answer on every poll — so it survives a reload by construction, and
+ * a screen that was never open when the question was asked still shows it. It
+ * counts active runs in `awaiting_consent` across every conversation; hidden
+ * entirely when the count is zero, because a badge that reads "0" is noise, and
+ * absence here is what "nothing needs you" should look like.
+ *
+ * Mounted inside the `/tasks` item rather than as a general menu decoration:
+ * the number is an invitation to exactly that screen, and no other entry has
+ * anything to wait for.
+ */
+function TasksAttentionBadge() {
+  const runs = useActiveRuns();
+  const count = (runs.data?.runs ?? []).filter((r) => r.status === 'awaiting_consent').length;
+  if (count === 0) return null;
+  return (
+    <span
+      className="pf-nav__badge"
+      data-testid="tasks-attention-badge"
+      data-count={count}
+      title="Zadania czekające na decyzję"
+    >
+      {count}
+    </span>
+  );
+}
 
 /**
  * Collapsible left navigation.
@@ -56,6 +87,7 @@ function Nav() {
                         className={`pf-nav__link ${current === item.to ? 'pf-nav__link--active' : ''}`}
                       >
                         {item.label}
+                        {item.to === '/tasks' && <TasksAttentionBadge />}
                       </Link>
                     </li>
                   ))}
@@ -181,6 +213,12 @@ export function AppShell({ children }: { children?: ReactNode }) {
         itself. See `state/accessReset.ts`.
       */}
       <AccessContextReset />
+      {/*
+        The one-shot notice about a task waiting for a decision, outside the
+        conversation being read (L11.19). At the shell's level, not inside any
+        screen: the waiting is everyone's business and no screen's.
+      */}
+      <AttentionToast />
       <Nav />
       <main className="pf-main">
         <StatusBar />

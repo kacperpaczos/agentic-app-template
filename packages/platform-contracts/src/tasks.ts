@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { agentRunSchema } from './agent.ts';
+import { agentRunSchema, consentModeSchema } from './agent.ts';
 
 /**
  * The task view behind the global task center (L11.6).
@@ -50,6 +50,23 @@ export const taskArtifactRefSchema = z.object({
 });
 export type TaskArtifactRef = z.infer<typeof taskArtifactRefSchema>;
 
+/**
+ * The question a run is parked on, surfaced through the task center (L11.19).
+ *
+ * Strict so a field added here has to be a field the interface was meant to
+ * read: the answer endpoint takes only `requestId` and `allow`, and a stray
+ * key in this object would otherwise travel to the browser unnoticed.
+ * `input` is the raw JSON value the agent passed to the tool — shown, never
+ * re-executed; answering goes through `POST /api/runs/:id/permission` and is
+ * bound to the run and its owner there.
+ */
+export const pendingPermissionSchema = z.strictObject({
+  requestId: z.string(),
+  toolName: z.string(),
+  input: z.unknown(),
+});
+export type PendingPermission = z.infer<typeof pendingPermissionSchema>;
+
 export const taskViewSchema = z.object({
   /** The truth about status, instants and error — fields passed through, not copied. */
   run: agentRunSchema,
@@ -57,6 +74,12 @@ export const taskViewSchema = z.object({
   conversationTitle: z.string(),
   /** The command the task started from. Never rewritten after the fact. */
   intent: z.string(),
+  /**
+   * The consent mode the run was started with, stated at the top level so the
+   * center can badge a task without reaching into `run` — and so the mode a
+   * background task runs under is visible exactly where the task is handled.
+   */
+  consentMode: consentModeSchema,
   progress: taskProgressSchema,
   /** Tools used by this run, with call counts. */
   tools: z.array(taskToolUseSchema),
@@ -64,6 +87,13 @@ export const taskViewSchema = z.object({
   inputFiles: z.array(taskFileRefSchema),
   /** Output artifacts linked to this run. */
   artifacts: z.array(taskArtifactRefSchema),
+  /**
+   * Present only while the run is parked at the consent gate; absent — the
+   * key itself, not `null` — the moment the question is answered, expired or
+   * released. The center renders it as "czeka na zgode" and offers the two
+   * answers.
+   */
+  pendingPermission: pendingPermissionSchema.optional(),
 });
 export type TaskView = z.infer<typeof taskViewSchema>;
 

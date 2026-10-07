@@ -122,11 +122,37 @@ export const ACTIVE_RUN_STATUSES = ['queued', 'running', 'awaiting_consent'] as 
 /** The resolving statuses; exactly one of them is ever recorded per run. */
 export type TerminalRunStatus = Exclude<RunStatus, (typeof ACTIVE_RUN_STATUSES)[number]>;
 
+/**
+ * The consent policy of one run, fixed at start (L11.12).
+ *
+ * Three levels of who decides about a tool call that is neither pre-approved
+ * nor forbidden:
+ *  - `manual` — the user is asked about **every** such action, even one the
+ *    platform would otherwise pre-approve;
+ *  - `supervised` — the default and the behaviour this platform always had:
+ *    pre-approved categories run, everything else asks at the gate;
+ *  - `auto` — the gate approves the asking category by itself, so the run
+ *    proceeds unattended; forbidden tools stay forbidden in every mode.
+ *
+ * A property of the run rather than of the request that happens to be reading
+ * it: it is written once, when the run row is created, and read from that row
+ * at every gate decision afterwards — so no payload sent mid-run can raise it.
+ */
+export const consentModeSchema = z.enum(['manual', 'supervised', 'auto']);
+export type ConsentMode = z.infer<typeof consentModeSchema>;
+
 export const agentRunSchema = z.object({
   id: z.string(),
   conversationId: z.string(),
   ownerId: z.string(),
   status: runStatusSchema,
+  /**
+   * The consent mode the run was **started** with. Absent from the wire only
+   * for payloads of the same shape produced before this field existed, which
+   * the default names honestly: those runs ran supervised, because supervised
+   * was all there was.
+   */
+  consentMode: consentModeSchema.default('supervised'),
   claudeSessionId: z.string().nullable(),
   /*
    * Three distinct instants, because collapsing them hides exactly the things

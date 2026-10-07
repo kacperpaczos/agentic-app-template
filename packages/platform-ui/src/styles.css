@@ -93,6 +93,25 @@ body {
 .pf-nav__link:hover { background: #eef2f7; }
 .pf-nav__link--active { background: #e3ecfb; color: var(--pf-accent); font-weight: 600; }
 
+/*
+  The attention badge beside the task center's entry (L11.19): a count of tasks
+  waiting for a decision. Rendered only when the count is above zero, so the
+  layout shows nothing at all rather than an empty pill.
+*/
+.pf-nav__link { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pf-nav__badge {
+  flex: none;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--pf-accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+
 /* -------------------------------- main ----------------------------------- */
 
 .pf-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
@@ -577,6 +596,32 @@ th[aria-sort='descending'] .pf-sort::after { content: '▼' / ''; opacity: 1; }
 .pf-tasks__phase { font-size: 11px; color: var(--pf-muted, #666); }
 
 /*
+  The one-shot attention toast (L11.19).
+
+  Fixed, bottom-left, small: it must be noticeable without taking the screen —
+  it never covers the chat (right) or the status bar (top), and it removes
+  itself after a few seconds. The badge in the navigation is the durable form
+  of the same fact; this one is allowed to be temporary.
+*/
+.pf-attention {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 420px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid var(--pf-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 16%);
+}
+.pf-attention__text { margin: 0; font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
+.pf-attention__actions { display: flex; gap: 6px; flex: none; }
+
+/*
   Task center page (L11.6).
 
   A flat list on purpose: an operational view is scanned, not explored. The
@@ -592,6 +637,34 @@ th[aria-sort='descending'] .pf-sort::after { content: '▼' / ''; opacity: 1; }
 .pf-tasklist__progress, .pf-tasklist__meta { margin: 0; font-size: 12px; color: var(--pf-muted, #555); }
 .pf-tasklist__artifact { display: inline-block; margin-right: 10px; }
 .pf-tasklist__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+
+/*
+  The consent question, asked where the task is handled (L11.19). Same visual
+  family as the prompt in the chat (.pf-permission) — one kind of question
+  should not look like two — but inline in the row, because the row is the
+  unit the user is acting on.
+*/
+.pf-tasklist__consent {
+  border-left: 3px solid var(--pf-warn);
+  background: #fdf8ee;
+  border-radius: 0 6px 6px 0;
+  padding: 8px 10px;
+  display: grid;
+  gap: 6px;
+}
+.pf-tasklist__consent__title { margin: 0; font-size: 13px; }
+.pf-tasklist__consent__meta { margin: 0; font-size: 12px; color: var(--pf-muted, #555); }
+.pf-tasklist__consent__input {
+  margin: 0;
+  font-size: 11px;
+  max-height: 120px;
+  overflow: auto;
+  background: #fff;
+  padding: 6px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 /*
   Attaching a file, inside the ready-made composer.
@@ -680,6 +753,24 @@ th[aria-sort='descending'] .pf-sort::after { content: '▼' / ''; opacity: 1; }
   margin: 0; color: var(--pf-error); font-size: 11px;
 }
 .pf-attach__error button { border: 0; background: none; cursor: pointer; font-size: 13px; line-height: 1; color: inherit; }
+
+/*
+  Consent-mode selector, in the composer's own action bar (L11.12).
+
+  Portalled next to the paperclip (see `ConsentModeSelect.tsx`), so it inherits
+  the composer's row: `__action-bar` is flex with send on `margin-left:auto`,
+  and a native `select` needs no positioning of ours. Sized to the clip's 28px
+  row so the three controls read as one strip; the library's composer keeps its
+  own submit path untouched.
+*/
+.pf-consent { display: flex; align-items: center; }
+.pf-consent__select {
+  max-width: 168px; height: 28px; padding: 0 4px;
+  border: 1px solid var(--pf-border, #d9dee6); border-radius: 8px;
+  background: transparent; color: var(--openui-text-neutral-secondary, #5a6472);
+  font: inherit; font-size: 12px;
+}
+.pf-consent__select:focus-visible { outline: 2px solid; outline-offset: 1px; }
 
 /*
   „Ten widok nie pokazuje wszystkiego" — i jak to cofnac.

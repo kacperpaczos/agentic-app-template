@@ -139,6 +139,9 @@ describe('dowod pakietu BL-11c', () => {
       cardState: { card_poprzedniego: { showExcluded: false } },
       lastRunId: 'run_poprzedniego',
       attachments: ['file_poprzedniego'],
+      // Tryb inny niż domyślny: "odziedziczony po poprzednim właścicielu"
+      // wybór pełnej automatyzacji musi zniknąć wraz ze zmianą tożsamości.
+      consentMode: 'auto',
       agentFilterKey: 'klucz_poprzedniego',
       filterOutcome: { targetId: 'procurement.data', matched: 3, total: 4 },
       viewStates: {

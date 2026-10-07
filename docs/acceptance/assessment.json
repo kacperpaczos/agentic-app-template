@@ -1,7 +1,7 @@
 {
   "meta": {
-    "codeState": "gałąź domkniecie/integracja po minimalnej bramce GLM: Claude Code / Claude Agent SDK jako harness, GLM/Z.AI jako provider; izolowana sonda SDK i jedna odpowiedź modelu potwierdzone w raporcie domknięcia. Pozostałe oceny zachowują swój dowód i nie są deklaracją pełnego odbioru całego systemu.",
-    "date": "2026-09-21",
+    "codeState": "gałąź feat/bl13-tryby-zgod-centrum-zadan (na 056fd42): wdrożone tryby zgód i centrum uwagi; harness Claude Code / Claude Agent SDK, provider GLM/Z.AI. Pozostałe oceny zachowują swój dowód i nie są deklaracją pełnego odbioru całego systemu.",
+    "date": "2026-10-07",
     "scope": "snapshot v0.4: klasyfikacja kryteriów oraz zatwierdzone decyzje architektury. Statusy opisują istniejące dowody na tym kodzie; wersja dokumentacji nie zastępuje odbioru implementacji nowych funkcji produktu.",
     "classification": "v0.4: kazde kryterium ma pole class: produktowe, jakosciowe albo informacyjne. Produktowe i jakosciowe blokują odbior; informacyjne wymagają uzasadnienia, lecz nie trafiają do backlogu."
   },
@@ -2268,12 +2268,11 @@
       "class": "jakosciowe"
     },
     "L11.12": {
-      "status": "czesciowe",
-      "evidence": "test",
+      "status": "potwierdzone",
+      "evidence": "gui",
       "origin": "szablon",
-      "proof": "Macierz uprawnień jest jawna i ma trzy kategorie (packages/platform-server/src/agent/permissions.ts): automatyczne (narzędzia MCP aplikacji + Read/Write/Edit/Glob/Grep), wymagające decyzji (Bash i wszystko nierozpoznane) oraz ZABRONIONE (WebFetch, WebSearch) — te ostatnie trafiają do disallowedTools SDK i są dodatkowo odrzucane przez bramkę bez pytania użytkownika. tests/consent.test.ts: „trzy kategorie sa rozlaczne i kazda ma tresc”, „decyduje o narzedziu po nazwie, a nieznane trafia do pytania”, „uruchomienie przekazuje SDK reguly zgodne z macierza” (disallowedTools = kategoria zabroniona; żadne narzędzie z kategorii „decyzja” nie jest w allowedTools, bo wpis tam omija canUseTool), „narzedzie zabronione jest odrzucone bez pytania uzytkownika” (brak zdarzenia prośby o zgodę i brak skutku). e2e/consent-runs.spec.ts: Bash realnie przechodzi przez bramkę w GUI, a odmowa nie wykonuje operacji. tests/runtime.test.ts: autoAllowBashIfSandboxed=false. Kolejność mechanizmów opisana w README („Zgody: co jest automatyczne…”) i docs/NEW-APPLICATION.md §7.",
-      "gap": "Obecna trzykategoryjna polityka narzędzi nie realizuje trzech wybieranych przez użytkownika trybów ręcznego, nadzorowanego i pełnej automatyzacji, nie pokazuje ich w centrum zadań i nie dowodzi, że model nie może eskalować trybu. Wymaga implementacji oraz testów kontraktowych i GUI.",
-      "backlog": "BL-13",
+      "proof": "Trzy tryby wybierane przez użytkownika działają na bramce canUseTool i są przypisane do wykonania: agent_runs.consent_mode (migracja platform-0008, domyślnie supervised), zapisywany raz przy tworzeniu i czytany Z REKORDU przy każdej decyzji — żadne żądanie w trakcie nie podnosi trybu (tests/consent-modes.test.ts „consentMode w zadaniu zgody nie zmienia decyzji kolejnej bramki tego runu”, brak narzędzia zmieniającego tryb w katalogu MCP). decideTool z trybem: manual demuje auto→zgoda (pytanie przed każdą akcją agenta), auto promuje zgoda→auto (bez pytań o pojedyncze akcje), zabronione odrzucane we wszystkich trybach przed konsultacją trybu. allowedTools jest PUSTE w manual — lista dozwolonych cieniuje bramkę na prawdziwym SDK, więc w trybie ręcznym każde wywołanie do niej dociera; w supervised/auto lista bez zmian; disallowedTools = kategoria zabroniona niezmiennie; testy niezmienników dla wszystkich trzech trybów. Ponowienie (retry) dziedziczy tryb źródła. Błędna wartość w payload startu → 400 przed skutkiem; brak pola → supervised. UI: selektor przy kompozytorze (Ręczny/Nadzorowany/Pełna automatyzacja, domyślnie nadzorowany, reset do supervised przy zmianie zakresu właściciela — nowy właściciel nie dziedziczy pełnej automatyzacji), tryb czytany ze stanu w chwili wysyłki i wysyłany w każdym poleceniu; centrum zadań pokazuje tryb per zadanie z rekordu (e2e/consent-modes.spec.ts: selektor z trzema opcjami; auto — zero platform.permission_request przy Bash i sukces; ręczny — narzędzie aplikacji pyta, zgoda wykonuje dokładnie raz; odmowa bez skutku; domyślnie nadzorowany pyta). Falsyfikacja: ignorowanie trybu w bramce → 5 asercji pada (docs/evidence/bl13-2026-10-07/proby-falsyfikacji.md, F1). Regresja: e2e/consent-runs.spec.ts, e2e/task-center.spec.ts, tests/consent.test.ts bez zmian zachowania w supervised.",
+      "gap": "—",
       "scenarios": [
         "T15"
       ],
@@ -2346,17 +2345,16 @@
       "class": "produktowe"
     },
     "L11.19": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "Status awaiting_consent jest zapisywany w agent_runs (RunRegistry.markAwaitingConsent / markConsentAnswered), więc /api/runs/active zgłasza go klientowi, który nie ogląda tej rozmowy; jest też anulowalny i nie może być nadpisany przez spóźnioną odpowiedź. e2e/consent-runs.spec.ts „zadanie z nieogladanej rozmowy sygnalizuje, ze czeka na decyzje”: po przejściu do innej rozmowy prośba znika z panelu, a lista zadań w tle pokazuje przy rozmowie fazę awaiting_consent (atrybut, nie brzmienie); po przeładowaniu ten sam status przychodzi z backendu; powrót do rozmowy pokazuje prośbę i pozwala ją rozstrzygnąć. „brak odpowiedzi przy zamknietym panelu konczy sie odmowa, nie zgoda” (instancja z APP_CONSENT_TIMEOUT_MS=4000): karta zamknięta w trakcie oczekiwania, po wygaśnięciu uruchomienie kończy się, a operacja NIE została wykonana. tests/consent.test.ts: te same właściwości w backendzie.",
-      "gap": "Obecny sygnał `awaiting_consent` przy rozmowie nie realizuje wymaganego formularza w centrum zadań, trwałej plakietki uwagi i jednorazowego nieinwazyjnego toastu z przejściem do zadania. Wymaga implementacji i testu między rozmowami.",
+      "proof": "Pytanie o decyzję jest obsługiwane tam, gdzie zadanie jest obsługiwane: TaskView niesie pendingPermission {requestId, toolName, input} (strict, znika kluczem po rozstrzygnięciu) wyłącznie dla awaiting_consent, a centrum zadań renderuje z niego formularz — narzędzie, polecenie, wejście (przycięte przy renderze) i przyciski Zgoda/Odmowa przez POST /api/runs/:id/permission; odpowiedź powtórzona (answered:false) nie jest sukcesem ani błędem, odświeża stan. Trwała plakietka liczby zadań wymagających uwagi przy wejściu „Centrum zadań” liczona z /api/runs/active (poll 3 s, z danych backendu — przetrwa reload; niewidoczna przy 0). Jednorazowy, nieinwazyjny toast tylko na OBSERWOWANYM przejściu do awaiting_consent (latch pendingAttention konsumowany przy ogłoszeniu), tylko dla runu innej rozmowy niż aktywna (tam swoje robi PermissionPrompt), raz na życie strony; akcja prowadzi do /tasks bez zmiany aktywnej rozmowy; toast znika natychmiast po rozstrzygnięciu zadania (dowolnym). Zapis zdarzenia w rozmowie źródłowej: platform.permission_request w run_events, asercja w e2e po powrocie do rozmowy. Dowody: e2e/attention-consent.spec.ts (3 testy między rozmowami: odejście → toast+plakietka=1, zamknięcie toastu → brak ponownego ogłoszenia — MutationObserver po stronie strony, drugie zadanie w tle → badge=2, przejście do centrum bez zmiany rozmowy, formularz z nazwą narzędzia i wejściem, odmowa bez skutku; reload w oczekiwaniu → plakietka trwa z backendu, toast się nie pojawia, zdarzenie prośby w rozmowie źródłowej; zgoda z centrum → artefakt dokładnie jeden, plakietka znika). tests/consent-modes.test.ts (kontrakt pendingPermission); tests/background-runs.test.ts. /api/runs/active dołącza addytywnie intent dla awaiting_consent (treść komunikatu). Falsyfikacja: brak pytania w centrum → asercja pada (F2); brak konsumpcji latchu → 10 ponownych pojawień toastu po zamknięciu wykrytych asercją obserwatora (F3); docs/evidence/bl13-2026-10-07/proby-falsyfikacji.md. Ograniczenie: toast jest sprzężony z interwałem pollingu 3 s — scenariusze, które mają pokazać przejście, dają pollingowi okno na zobaczenie stanu running.",
+      "gap": "—",
       "scenarios": [
         "T22",
         "T15"
       ],
-      "class": "produktowe",
-      "backlog": "BL-13"
+      "class": "produktowe"
     },
     "L11.20": {
       "status": "potwierdzone",
