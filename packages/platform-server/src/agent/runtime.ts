@@ -31,10 +31,8 @@ import { buildSystemPrompt } from './prompt.ts';
 import { createRunWorkspace, sandboxSettings, type RunWorkspace } from './sandbox.ts';
 import { analysisToolkit } from './toolkit.ts';
 import {
-  AUTO_APPROVED_FILE_TOOLS,
   FORBIDDEN_TOOLS,
   decideTool,
-  declaresPathArguments,
   directoryWalkRefusal,
   forbiddenToolMessage,
   protectedDirsFor,
@@ -939,32 +937,41 @@ export class AgentRuntime {
        *
        * Reguła allow w SDK jest starsza od bramki: nazwa na tej liście
        * autozatwierdza wywołanie, zanim `canUseTool` cokolwiek zobaczy
-       * (`CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`). Dlatego:
+       * (`CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`). Tury 17 i 18 pokazały cenę
+       * pre-zatwierdzenia narzędzia plikowego: `Read` oddał sekret spoza
+       * workspace, a `Write` utworzył plik na ścieżce, której powłoce odmówiono
+       * sekundę wcześniej — strażnicy bramki nigdy nie zobaczyli tych wywołań.
+       * Dlatego:
+       *  - narzędzia plikowe NIE trafiają na listę w ŻADNYM trybie. Każde ich
+       *    wywołanie dochodzi do bramki: najpierw strażnicy ścieżek (poza
+       *    workspace i w katalogach chronionych — odmowa niezależna od zgody
+       *    użytkownika), potem `decideTool`, który w workspace odpowiada
+       *    `auto` — bez pytania, bez zmiany UX w `supervised` i `auto`.
+       *    Bramka jest jedynym autorytetem dostępu plikowego, w każdym trybie;
        *  - `manual` — lista jest PUSTA. „Prosi o zgodę przed każdą akcją"
        *    (D-06) nie może zostawić pre-zatwierdzonej furtki: każde wywołanie
-       *    inicjowane przez agenta — także narzędzie aplikacji i odczyt pliku —
-       *    musi dotrzeć do bramki i zostać tam zadecydowane;
-       *  - `supervised` i `auto` — lista jak dotychczas: narzędzia aplikacji
-       *    plus narzędzia plikowe z deklaracją ścieżki. `Bash` jest świadomie
-       *    nieobecny w obu: w `supervised` to właśnie brak wpisu kieruje go do
-       *    pytania, a w `auto` bramka sam go zatwierdza — bramka pozostaje
-       *    jedynym mechanizmem zgody.
+       *    inicjowane przez agenta — także narzędzie aplikacji — musi dotrzeć
+       *    do bramki i zostać tam zadecydowane;
+       *  - `supervised` i `auto` — zostają wyłącznie narzędzia aplikacji:
+       *    auto-kategoria, ograniczona serwisami domenowymi. `Bash` jest
+       *    świadomie nieobecny: w `supervised` to właśnie brak wpisu kieruje
+       *    go do pytania, a w `auto` bramka sam go zatwierdza — bramka
+       *    pozostaje jedynym mechanizmem zgody.
        */
       /*
-       * Z8 — wyprowadzone z TEJ SAMEJ reguły, która decyduje o auto/zgoda.
-       *
-       * Poprzednio była to osobna, ręcznie trzymana lista: narzędzie dopisane do
-       * `AUTO_APPROVED_FILE_TOOLS` bez wpisu w `PATH_ARGUMENTS` dostawało
+       * Z8 — filtr `AUTO_APPROVED_FILE_TOOLS.filter(declaresPathArguments)`
+       * zniknął razem z tym, co chronił. Próba M4 recenzji: narzędzie dopisane
+       * do `AUTO_APPROVED_FILE_TOOLS` bez wpisu w `PATH_ARGUMENTS` dostawało
        * `decideTool → 'consent'`, a jednocześnie trafiało tutaj — czyli
        * auto-zatwierdzało się na starszeństwie listy dozwolonych i bramka
-       * nigdy go nie widziała (próba M4 recenzji). Filtr czyni rozjazd
-       * niemożliwym: strażnik ścieżek sprawdzi tylko narzędzia, które
-       * zadeklarowały, jak podają ścieżkę.
+       * nigdy go nie widziała. Dziś rozjazd jest niemożliwy z budowy: lista nie
+       * zawiera ŻADNEGO narzędzia plikowego, więc dopisanie do
+       * `AUTO_APPROVED_FILE_TOOLS` (z deklaracją ścieżki albo bez) nie otwiera
+       * drogi obok bramki — narzędzie bez deklaracji dostaje z bramki pytanie
+       * (`decideTool → 'consent'`), a z deklaracją auto tylko po przejściu
+       * strażników ścieżek.
        */
-      allowedTools:
-        consentMode === 'manual'
-          ? []
-          : [...this.#toolNames, ...AUTO_APPROVED_FILE_TOOLS.filter(declaresPathArguments)],
+      allowedTools: consentMode === 'manual' ? [] : [...this.#toolNames],
       /*
        * The forbidden category. These reach the network from inside the SDK
        * process, where the shell sandbox's empty domain allowlist does not
@@ -1286,13 +1293,16 @@ export class AgentRuntime {
       /*
        * Same rule as the `PreToolUse` deny, applied again at the gate.
        *
-       * Not redundant: the hook is the mechanism that works for pre-approved
-       * tools, and the gate is the mechanism that works if a future SDK version
-       * stopped calling hooks before a tool, or if `allowedTools` changes and
-       * `Read` starts arriving here. Either one alone leaves the credential
-       * directory reachable through the other path. Defence in depth, the way
-       * `FORBIDDEN_TOOLS` is refused here as well as removed from the model's
-       * context.
+       * Not redundant: the hook is the mechanism that works for a call the SDK
+       * would have run without consulting the gate, and the gate is the
+       * mechanism that works when no hook ran. Since the file tools left
+       * `allowedTools` entirely, `Read` arrives here in every run by design —
+       * these rules are what refuse it outside the workspace before `decideTool`
+       * answers `auto`; and if a future SDK version stopped calling hooks before
+       * a tool, the gate alone still holds. Either one alone leaves the
+       * credential directory reachable through the other path. Defence in depth,
+       * the way `FORBIDDEN_TOOLS` is refused here as well as removed from the
+       * model's context.
        */
       const guarded =
         workspaceConfinementRefusal(toolName, input, run.workspaceDir) ??
