@@ -159,6 +159,25 @@ function TaskRow({
         <span className="pf-badge" data-testid={`task-status-${run.id}`} data-status={run.status}>
           {statusLabel}
         </span>
+        {/*
+          The consent mode the run was started with, from its record — the
+          center states how a task ran (or will run) without trusting this
+          tab's memory of what was once selected at the composer.
+        */}
+        <span
+          className="pf-badge"
+          data-testid={`task-consent-mode-${run.id}`}
+          data-mode={task.consentMode}
+          title={
+            task.consentMode === 'manual'
+              ? 'Ręczny — wykonanie pyta o zgodę przed każdą akcją.'
+              : task.consentMode === 'auto'
+                ? 'Pełna automatyzacja — wykonanie nie pyta o pojedyncze akcje.'
+                : 'Nadzorowany — narzędzia aplikacji działają od razu, pozostałe wymagają zgody.'
+          }
+        >
+          {task.consentMode === 'manual' ? 'Ręczny' : task.consentMode === 'auto' ? 'Automatyczny' : 'Nadzorowany'}
+        </span>
       </div>
 
       {/* The conversation a task belongs to, by name — in a list spanning many

@@ -6,6 +6,7 @@ import { accessFetch, requestFailureMessage } from '../api/client.ts';
 import { qk, useFiles } from '../api/queries.ts';
 import { useAppState } from '../state/appState.ts';
 import { useChatSlots } from './chatSlots.ts';
+import { useComposerHost } from './composerHost.ts';
 
 /**
  * Attaching a file, from inside the ready-made composer.
@@ -66,44 +67,6 @@ function analysisNote(mediaType: string): string | null {
     return 'tresc obrazu czytana przez model';
   }
   return null;
-}
-
-/**
- * Keeps a host element of ours inside an element the library owns.
- *
- * The composer unmounts — switching to the artifacts tab removes it entirely —
- * so the node found on first render cannot be assumed to live for ever. A
- * `MutationObserver` puts the host back when the composer returns, carrying its
- * portal content with it.
- *
- * Safe against React because both hosts are static containers: `__action-bar`
- * holds one submit button and `__input-wrapper` a textarea and that bar, with no
- * lists and no reordering, so React never positions a child relative to ours.
- */
-function useComposerHost(selector: string, className: string): HTMLElement | null {
-  const [host, setHost] = useState<HTMLElement | null>(null);
-
-  useEffect(() => {
-    const node = document.createElement('div');
-    node.className = className;
-
-    const place = () => {
-      const parent = document.querySelector(selector);
-      if (!parent || node.parentElement === parent) return;
-      parent.prepend(node);
-      setHost(node);
-    };
-
-    place();
-    const observer = new MutationObserver(place);
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => {
-      observer.disconnect();
-      node.remove();
-    };
-  }, [selector, className]);
-
-  return host;
 }
 
 export function ComposerAttachments() {

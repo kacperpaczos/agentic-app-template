@@ -22,6 +22,7 @@ import { compositionScript, messageKindsScript } from './bl10-scenarios.ts';
 import { appContextScript } from './app-context-scenario.ts';
 import {
   childProcessScript,
+  consentModesScript,
   consentScript,
   continuityScript,
   filesScript,
@@ -732,6 +733,8 @@ const CONVERSATION_SCENARIOS: Record<string, (prompt: string) => Step[]> = {
   'bl09-timeout': neverEndingScript,
   'bl09-child': childProcessScript,
   'bl09-files': filesScript,
+  /* L11.12: trzy tryby zgody wybrane przy kompozytorze (dobór po treści polecenia). */
+  'bl13-modes': consentModesScript,
   /* BL-09, L9.7: repeats of the creating write tools produce one effect. */
   'bl09-l97': idempotencyScript,
   /* BL-04: a mutation, then the limit, then a retry the user asks for. */

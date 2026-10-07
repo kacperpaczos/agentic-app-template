@@ -12,6 +12,7 @@ import { ArtifactPane } from './ArtifactPane.tsx';
 import { makeAssistantMessage } from './AssistantMessage.tsx';
 import { ChatSlotsContext } from './chatSlots.ts';
 import { ComposerAttachments } from './ComposerAttachments.tsx';
+import { ConsentModeSelect } from './ConsentModeSelect.tsx';
 import { ConversationSync } from './ConversationSync.tsx';
 import { ConversationTitle } from './ConversationTitle.tsx';
 import {
@@ -472,6 +473,13 @@ export function ChatPanel() {
               becomes a panel of its own.
             */}
             <ComposerAttachments />
+            {/*
+              Renders nothing here either: it portals the consent-mode selector
+              into the composer's own action bar, beside the attachments slot —
+              see `ConsentModeSelect.tsx`. The choice rides with the next
+              command (`chatWiring.ts`); a run already going keeps its own.
+            */}
+            <ConsentModeSelect />
             <AgentInterface.Composer placeholder="Napisz polecenie dla agenta…" starters={starters} />
           </AgentInterface>
         </ChatSlotsContext.Provider>

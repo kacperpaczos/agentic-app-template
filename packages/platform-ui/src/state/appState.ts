@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type {
   AppContext,
+  ConsentMode,
   DataSort,
   RejectedSort,
   UiRevealAdjustment,
@@ -233,6 +234,21 @@ interface AppState {
   setNavOpen: (open: boolean) => void;
   setLastRunId: (id: string | null) => void;
   setAttachments: (ids: string[]) => void;
+  /**
+   * The consent mode of the command being composed (L11.12).
+   *
+   * Read at send time and carried by `POST /api/agui/run`; the run's record
+   * keeps it from then on, so this field says nothing about a run that already
+   * started — there is no switch for a live execution.
+   *
+   * Transient on purpose, like the attachments it sits beside: not written to
+   * `localStorage`, because the durable fact ("this run went out in mode X") is
+   * the database's, and a mode remembered across reloads would quietly sign the
+   * user up for unattended work they did not choose *now*. Defaults to
+   * `supervised` — the behaviour the platform always had.
+   */
+  consentMode: ConsentMode;
+  setConsentMode: (mode: ConsentMode) => void;
   setAgentFilterKey: (key: string | null) => void;
   reportFilterOutcome: (outcome: { targetId: string; matched: number; total: number }) => void;
   /** Records a view's state; a report equal to the stored one changes nothing. */
@@ -281,6 +297,7 @@ export const useAppState = create<AppState>((set, get) => ({
   navOpen: true,
   lastRunId: null,
   attachments: [],
+  consentMode: 'supervised',
   agentFilterKey: null,
   filterOutcome: null,
   viewStates: {},
@@ -326,6 +343,7 @@ export const useAppState = create<AppState>((set, get) => ({
   setNavOpen: (navOpen) => set({ navOpen }),
   setLastRunId: (lastRunId) => set({ lastRunId }),
   setAttachments: (attachments) => set({ attachments }),
+  setConsentMode: (consentMode) => set({ consentMode }),
   // The count goes with it: a stale "3 of 4" under a full view would be a lie
   // of exactly the kind this feature exists to stop.
   setAgentFilterKey: (agentFilterKey) => set({ agentFilterKey, filterOutcome: null }),
@@ -394,6 +412,15 @@ export const useAppState = create<AppState>((set, get) => ({
       cardState: {},
       lastRunId: null,
       attachments: [],
+      /*
+       * The consent mode goes back to the default on a switch, unlike
+       * `navOpen`: whoever acts next did not choose the previous owner's
+       * "Pełna automatyzacja", and an unattended execution is exactly the kind
+       * of decision nobody should inherit by opening the app after someone
+       * else. Resetting is the cautious direction — the selector shows
+       * Nadzorowany again, and any other choice is a deliberate click.
+       */
+      consentMode: 'supervised',
       agentFilterKey: null,
       filterOutcome: null,
       viewStates: {},

@@ -682,6 +682,24 @@ th[aria-sort='descending'] .pf-sort::after { content: '▼' / ''; opacity: 1; }
 .pf-attach__error button { border: 0; background: none; cursor: pointer; font-size: 13px; line-height: 1; color: inherit; }
 
 /*
+  Consent-mode selector, in the composer's own action bar (L11.12).
+
+  Portalled next to the paperclip (see `ConsentModeSelect.tsx`), so it inherits
+  the composer's row: `__action-bar` is flex with send on `margin-left:auto`,
+  and a native `select` needs no positioning of ours. Sized to the clip's 28px
+  row so the three controls read as one strip; the library's composer keeps its
+  own submit path untouched.
+*/
+.pf-consent { display: flex; align-items: center; }
+.pf-consent__select {
+  max-width: 168px; height: 28px; padding: 0 4px;
+  border: 1px solid var(--pf-border, #d9dee6); border-radius: 8px;
+  background: transparent; color: var(--openui-text-neutral-secondary, #5a6472);
+  font: inherit; font-size: 12px;
+}
+.pf-consent__select:focus-visible { outline: 2px solid; outline-offset: 1px; }
+
+/*
   „Ten widok nie pokazuje wszystkiego" — i jak to cofnac.
 
   Nad powierzchnia roboczą, wiec dotyczy kazdego ekranu. Wyglada jak komunikat,

@@ -138,6 +138,16 @@ szablonu i obejmuje także adaptery powstałe po tamtym zapisie.
 - **Ograniczenie:** przy szerokości panelu poniżej 768 px biblioteka przełącza się na układ mobilny z szufladą rozmów — to jej własna decyzja, podjęta z mierzonej szerokości.
 - **Ponowne użycie:** tak.
 
+## A-18 — Tryb zgody w gotowym kompozytorze
+
+- **Rodzaj:** adapter
+- **Czego brakowało:** gotowy kompozytor nie ma pola na wybór trybu zgody (L11.12), a kontrolka dołożona od zewnątrz staje się panelem obok rozmowy — jak każde nierozpoznane dziecko `AgentInterface`.
+- **Co dopisano:** wspólny host w pasku akcji kompozytora (wydzielony z załączników) i portal wstawiający w niego selektor trybów; wybrana wartość jedzie z każdym poleceniem w `POST /api/agui/run`.
+- **Pliki:** `packages/platform-ui/src/chat/ConsentModeSelect.tsx`, `packages/platform-ui/src/chat/composerHost.ts`
+- **Próba zgodności:** `e2e/consent-modes.spec.ts`
+- **Ograniczenie:** tryb dotyczy następnego polecenia — działające wykonanie trzyma tryb z własnego rekordu i selektor niczego w nim nie zmienia.
+- **Ponowne użycie:** tak.
+
 ## Adaptery backendu
 
 ## A-13 — Most hooków SDK: zdarzenia narzędzi i identyfikator sesji
