@@ -69,7 +69,21 @@ export class ScriptedInstance {
       env: {},
     });
     this.#entry = opts.entry ?? 'scripted';
-    this.#extraEnv = { ...scriptedGlmEnv(this.config.repoRoot), ...opts.env };
+    /*
+     * Atrapa GLM tylko dla przebiegow BEZ modelu (endpoint .invalid gwarantuje,
+     * ze zaden skrypt nie wyda tury). Przy `APP_E2E_MODEL=1` instancja
+     * scenariuszowa dostaje providera z env wywolania — fail-closed, gdyby
+     * go zabraklo — bo wlasnie po to ma wlasna instancje (restarty, sygnaly):
+     * tury modelowe na `glm-test-model` nie moga sie wydarzyc. To poprawia
+     * zmierzony blad fali 2026-10-07T23-39-59-924Z: instancja lifecycle wstala
+     * z atrapa mimo prawdziwego env w wywolaniu i kazda tura padala na
+     * polaczeniu.
+     */
+    const realModelRun = process.env.APP_E2E_MODEL === '1';
+    this.#extraEnv = {
+      ...(realModelRun ? {} : scriptedGlmEnv(this.config.repoRoot)),
+      ...opts.env,
+    };
     this.#logFile = opts.logFile ? resolve(this.config.repoRoot, opts.logFile) : null;
   }
 

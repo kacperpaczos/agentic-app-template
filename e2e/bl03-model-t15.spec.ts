@@ -145,7 +145,7 @@ test.describe('BL-03 przebieg T15: blad narzedzia, Stop, sygnal, wznowienie po u
         bad,
         `zadne wywolanie nie zostalo oznaczone jako blad: ${JSON.stringify(attempts.map((a) => a.rawResult))}`,
       ).toBeTruthy();
-      expect(String(bad!.args)).toContain('nie.istnieje');
+      expect(JSON.stringify(bad!.args)).toContain('nie.istnieje');
       record.wynik = 'zaliczona';
     } finally {
       run.save('t15-t1-blad-narzedzia.json', { ...record, wynik: record.wynik ?? 'niezaliczona' });

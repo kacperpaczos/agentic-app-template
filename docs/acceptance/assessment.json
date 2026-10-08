@@ -82,12 +82,11 @@
       "class": "jakosciowe"
     },
     "L1.6": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "Trwalosc: prawdziwy model, e2e/bl03-model-lifecycle.spec.ts „SIGTERM w trakcie wykonania\" (tura 20, dowod docs/evidence/z11-bl03/runs/2026-09-19T11-19-18-655Z/c-sygnal.json) — sygnal wyslany przy fazie running, serwer konczy sie sam w 5,0 s z kodem 0 (bez SIGKILL za nim), a po ponownym starcie na tym samym katalogu danych rozmowa i uruchomienie sa na miejscu, uruchomienie przerwane ma status przerwanego. Procesy robocze prawdziwej tury zaobserwowane: claude (CLI w SDK) i socat (proxy sieciowe sandboxu). Restart bez modelu: e2e/tool-activity.spec.ts, tests/contracts.test.ts, tests/run-lifecycle.test.ts.",
+      "proof": "Połowa procesowa potwierdzona na rzeczywistym modelu: c-sygnal (SIGTERM w trakcie długiej tury — serwer zakończył się sam po sygnale, zero osieroconych procesów roboczych liczonych po tożsamości zapamiętanej przed sygnałem, dane i rozmowa wracają po restarcie, uruchomienie oznaczone jako przerwane), c-stop oraz t15-t3 zaliczone. Trwałość: wcześniejszy dowód (tura 20 i regresja) bez zmian. Kontrola potrafi oblać: scenariusz z potomkiem ignorującym SIGTERM jest ZNAJDOWANY (e2e/bl03-rehearsal „kontrola wycieku procesów POTRAFI oblać”). Rodzaj wykonania: rzeczywisty model GLM/Z.AI przez harness Claude Agent SDK (przebiegi docs/evidence/z11-bl03/runs/, kod d8095c1…0be7c04, model glm-5.3-flash[1m]).",
       "gap": "Polowa o procesach NIE jest jeszcze dowiedziona. Kontrola uzyta w turze 20 szukala procesow jako POTOMKOW pid serwera juz po jego wyjsciu — osierocony proces jest wtedy przepiety do init i z definicji przestaje byc potomkiem, wiec lista wracala pusta niezaleznie od tego, czy wyciek nastapil; dowod zapisal same nazwy, wiec nie da sie tego zinterpretowac po fakcie. Kontrola zostala wymieniona na odpytywanie po tozsamosci (pid plus czas startu) zapamietanej PRZED sygnalem, z proba zdolnosci wykrycia na zastepniku: scenariusz z potomkiem ignorujacym SIGTERM jest przez nowa kontrole ZNAJDOWANY, a stara zwraca pusto (e2e/bl03-rehearsal.spec.ts „kontrola wycieku procesow POTRAFI oblac\"). Brakuje jednego przebiegu z prawdziwym modelem na poprawionej kontroli.",
-      "backlog": "BL-03",
       "scenarios": [
         "T01",
         "T18"
@@ -930,10 +929,10 @@
       "class": "produktowe"
     },
     "L5.8": {
-      "status": "czesciowe",
-      "evidence": "test",
+      "status": "potwierdzone",
+      "evidence": "model",
       "origin": "szablon",
-      "proof": "Rzeczywisty przebieg historyczny potwierdza mapowanie błędu narzędzia przez adapter do rozmowy. Regresja `tests/run-lifecycle.test.ts` sprawdza deterministycznie, że kontrolowany błąd strumienia kończy wykonanie pojedynczym `RUN_ERROR` i zapisuje przyczynę. Ten dowód nie potwierdza jeszcze zachowania rzeczywistego adaptera Claude Code / Claude Agent SDK z providerem GLM podczas awarii strumienia.",
+      "proof": "Awaria w strumieniu aktualnego providera prowadzona przez rzeczywisty adapter: c-blad-narzedzia (błąd narzędzia na prawdziwym modelu GLM dotarł przez adapter do rozmowy jako błąd, nie jako wynik; kryteria L5.8+L7.3, zaliczone) na kodzie po naprawie granicy. Uzupełniająco: regresja tests/run-lifecycle.test.ts (pojedynczy RUN_ERROR na kontrolowany błąd strumienia) bez zmian; pokrycie zdarzeń na adapterze @mastra/claude 0.3.1 + SDK 0.3.270/CLI 2.1.270 potwierdzone przebiegami fali (narzędzia, tekst, błędy, wznowienie sesji — L8.5 zaliczone w tym samym przebiegu). Rodzaj wykonania: rzeczywisty model GLM/Z.AI przez harness Claude Agent SDK (przebiegi docs/evidence/z11-bl03/runs/, kod d8095c1…0be7c04, model glm-5.3-flash[1m]).",
       "gap": "Awaria strumienia aktualnego providera GLM prowadząca przez rzeczywisty adapter do `RUN_ERROR` nie ma jeszcze izolowanego dowodu na kodzie szablonu. Symulacja chroni regresję, ale nie zastępuje obserwacji prawdziwego adaptera. To jest wymóg jakościowy i pozostaje w BL-03; nie jest kryterium informacyjnym.",
       "scenarios": [
         "T05",
@@ -943,8 +942,7 @@
         "status": "potwierdzone",
         "note": "kod: analiza processStreamedMessage 0.9.13; 9 zdarzeń obsługiwanych, CUSTOM i STEP_* ignorowane, udokumentowane"
       },
-      "class": "jakosciowe",
-      "backlog": "BL-03"
+      "class": "jakosciowe"
     },
     "L5.9": {
       "status": "potwierdzone",
@@ -1190,12 +1188,11 @@
       "class": "produktowe"
     },
     "L6.11": {
-      "status": "czesciowe",
-      "evidence": "test",
+      "status": "potwierdzone",
+      "evidence": "model",
       "origin": "szablon",
-      "proof": "describeResource rozroznia piec stanow zamiast jednego null: none (brak zasobu w kontekscie), described, not_found (rekordu nie ma), forbidden (cudzy), not_described (zadnego modulu nie opisuje tego rodzaju) — registry/modules.ts, kontrakt ResourceDescription w platform-contracts/src/module.ts; modul nie polyka juz bledow serwisu. get_context niesie resourceState i zdanie o tym, czego NIE wolno uzupelniac, a prompt pisze „opis zasobu: BRAK (not_found)” zamiast milczec po identyfikatorze. Dowod: tests/app-context.test.ts „opis zasobu rozroznia brak kontekstu, opisany rekord, usuniety, cudzy i nieopisany rodzaj”, „get_context i prompt mowia wprost, ze rekordu nie ma”, „pusty wynik odczytu to zero rekordow z totals, a brak rekordu to blad — nie to samo”; wczesniejsze dowody (access-context, live-artifacts, view-filter totals) bez zmian.",
+      "proof": "t16 zaliczone: pytanie o NIEISTNIEJĄCĄ sprawę — agent przekazał stan z narzędzia (not_found), bez zmyślania danych; odróżnienie braku od pustego wyniku i utraty dostępu potwierdzone zachowaniem modelu na stanach platformy (describeResource: none/not_found/forbidden/not_described). Rodzaj wykonania: rzeczywisty model GLM/Z.AI przez harness Claude Agent SDK (przebiegi docs/evidence/z11-bl03/runs/, kod d8095c1…0be7c04, model glm-5.3-flash[1m]).",
       "gap": "Zachowanie agenta — ze nie uzupelnia brakow wymyslonymi danymi — nadal nie ma proby z prawdziwym modelem w szablonie. Platforma podaje juz rozroznialne stany i wprost zakazuje zmyslania, ale czy model sie do tego stosuje, moze wykazac tylko przebieg modelowy (Z5 mial grant zero tur).",
-      "backlog": "BL-11",
       "scenarios": [
         "T09",
         "T12"
@@ -1427,8 +1424,8 @@
       "status": "czesciowe",
       "evidence": "symulacja",
       "origin": "szablon",
-      "proof": "tests/session-transcript.test.ts (18 testów, stand-in modelu na granicy adaptera): odmowa wznowienia rozpoznana jako brak transkryptu daje własny kod błędu `session_transcript_lost` i komunikat „pamięć NIE została odtworzona”, powiązanie z martwą sesją jest czyszczone, żadna odpowiedź z nowej sesji nie zostaje podstawiona (stand-in ma gotową odpowiedź i nie zostaje wywołany), zdarzenie CUSTOM platform.session_transcript_lost niesie lostSessionId i memoryRestored=false, dokładnie jedno RUN_ERROR. Druga ścieżka: wznowienie, które po cichu odpowiada z innej sesji, jest wykryte po niezgodności session_id, opisane tym samym zdarzeniem (detectedBy=session_id_mismatch) i przepina rozmowę na sesję, która istnieje. Kontrole: inny błąd wznowienia (reset połączenia) zostaje integration_failed i NIE kasuje powiązania; wznowienie tej samej sesji nie zgłasza niczego; 10 przypadków rozpoznawania komunikatu (5 rozpoznanych, 5 odrzuconych, w tym „Rekord nie zostal znaleziony” i „Tool result not found”). packages/platform-server/src/agent/runtime.ts #resumeOrReportLostTranscript, isMissingSessionTranscript, bindSession; forgetClaudeSession warunkowy na identyfikatorze (nie kasuje nowszego powiązania).",
-      "gap": "Nie sprawdzono na prawdziwym SDK, którą z dwóch reakcji daje faktycznie brak transkryptu (odmowa wznowienia czy cicha nowa sesja) — zadanie nie miało budżetu tur, a przypadku nie da się wywołać bez usunięcia transkryptu prawdziwej sesji; rozpoznanie opiera się na wzorcach komunikatów, więc nieznane brzmienie z nowszej wersji SDK wpadnie w integration_failed zamiast we własny kod. Dla ścieżki „cicha nowa sesja” jawny wynik to zdarzenie, wpis w run_events i ostrzeżenie serwera — uruchomienie celowo nie jest przerywane (przerwanie przy hipotetycznym rozwidlaniu sesji przez SDK zepsułoby każdą kontynuację), więc użytkownik nie widzi wtedy komunikatu w wątku.",
+      "proof": "tests/session-transcript.test.ts (18 testów, stand-in modelu na granicy adaptera): odmowa wznowienia rozpoznana jako brak transkryptu daje własny kod błędu `session_transcript_lost` i komunikat „pamięć NIE została odtworzona”, powiązanie z martwą sesją jest czyszczone, żadna odpowiedź z nowej sesji nie zostaje podstawiona (stand-in ma gotową odpowiedź i nie zostaje wywołany), zdarzenie CUSTOM platform.session_transcript_lost niesie lostSessionId i memoryRestored=false, dokładnie jedno RUN_ERROR. Druga ścieżka: wznowienie, które po cichu odpowiada z innej sesji, jest wykryte po niezgodności session_id, opisane tym samym zdarzeniem (detectedBy=session_id_mismatch) i przepina rozmowę na sesję, która istnieje. Kontrole: inny błąd wznowienia (reset połączenia) zostaje integration_failed i NIE kasuje powiązania; wznowienie tej samej sesji nie zgłasza niczego; 10 przypadków rozpoznawania komunikatu (5 rozpoznanych, 5 odrzuconych, w tym „Rekord nie zostal znaleziony” i „Tool result not found”). packages/platform-server/src/agent/runtime.ts #resumeOrReportLostTranscript, isMissingSessionTranscript, bindSession; forgetClaudeSession warunkowy na identyfikatorze (nie kasuje nowszego powiązania). Pierwsza tura modelowa pytania (t15-t4, 2026-10-08T00-18-35-144Z, rzeczywisty model): po usunięciu pliku transkryptu sesji SDK wznowił TEN SAM identyfikator sesji bez zdarzenia session_transcript_lost i bez session_bound; faza runu: failed. Nierozstrzygnięte: czy chirurgia trafiła w żywy transkrypt CLI 2.1.270 (układ katalogów mógł się zmienić), czy SDK po cichu kontynuuje.",
+      "gap": "Tura modelowa 2026-10-08 (t15-t4): brak zdarzeń utraty/wiązania i identyczny identyfikator sesji — nie rozstrzyga, czy usunięto ŻYWY transkrypt CLI 2.1.270 (zmiana układu katalogów), czy SDK po cichu kontynuuje bez transkryptu. Następny krok: weryfikacja układu transkryptów CLI 2.1.270 i jedna tura ponowna z chirurgią potwierdzoną (plik istniał przed i nie istnieje po, w katalogu faktycznie czytanym przez CLI przy wznowieniu).",
       "backlog": "BL-07",
       "scenarios": [
         "T16"
@@ -2148,12 +2145,11 @@
       "class": "jakosciowe"
     },
     "L11.4": {
-      "status": "niespelnione",
+      "status": "potwierdzone",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "Prawdziwy model, e2e/bl03-model-isolation.spec.ts (tury 17 i 18, dowody docs/evidence/z11-bl03/runs/2026-09-19T11-09-53-315Z/ i docs/evidence/z11-bl03/runs/2026-09-19T11-14-21*/): kontrprzyklad, nie brak dowodu. Powloka jest w sandboxie (odczyt katalogu danych, siec i zapis poza workspace odrzucone, patrz L11.3), ale narzedzia plikowe SDK nie sa: Write utworzyl plik /tmp/z11-zapis-*.txt, ktorego powloce odmowiono sekunde wczesniej („Read-only file system\"), a Read oddal tresc pliku spoza katalogu roboczego. Zakaz narzedzi sieciowych dziala (WebFetch nieobecny w sesji).",
+      "proof": "Naprawa granicy (c88f563): narzędzia plikowe (Read/Write/Edit/Glob/Grep) usunięte z allowedTools we wszystkich trybach — każde wywołanie dochodzi do strażników bramki (workspaceConfinementRefusal, protectedPathRefusal, directoryWalkRefusal), w workspace auto bez pytania. Rzeczywisty model: Write poza workspace odrzucony komunikatem strażnika („Narzędzie Write może sięgać wyłącznie katalogu roboczego tego uruchomienia… niezależnie od zgody użytkownika”), plik nie powstał (zapisPlikPowstal: false); b3 „sieć, zapis poza workspace i chroniona ścieżka — obiema drogami” zaliczone (powłoka i narzędzie plikowe); t14 zaliczone. Zero pytań o zgodę dla wywołań plikowych w workspace (auto na bramce; niezmiennik tests/consent-modes.test.ts). Falsyfikacja: powrót cieńowania allowedTools daje 2 padające asercje (docs/evidence/z11-bl03/czerwona-faza-granica-narzedzi-plikowych.md). Nie obejmuje: ramienia poświadczeń (niewywoływalne bez szkody — status informacyjny). Rodzaj wykonania: rzeczywisty model GLM/Z.AI przez harness Claude Agent SDK (przebiegi docs/evidence/z11-bl03/runs/, kod d8095c1…0be7c04, model glm-5.3-flash[1m]).",
       "gap": "Narzedzia plikowe (Read, Write, Edit, Glob, Grep) sa auto-zatwierdzone i ograniczone wylacznie lista trzech chronionych katalogow straznika (katalog danych, katalog konfiguracji Claude, ~/.claude.json). Wszystko poza ta lista jest dla agenta czytelne i zapisywalne wszedzie tam, gdzie siega proces serwera — czyli sandbox polecen NIE obejmuje wszystkich udostepnionych sposobow dostepu. Poszerzanie listy nie zamyka klasy, bo klasa jest komplementarna; zamyka ja regula pozytywna (blockReadsOutsideWorkingDirectories plus allowWrite ograniczony do workspace), czyli ten sam ksztalt, ktory ma juz sandbox powloki. Naprawa nalezy do pakietu bedacego wlascicielem straznika. Test odbiorczy naprawy jest gotowy i dzis OBLEWA: e2e/bl03-model-isolation.spec.ts „narzedzia plikowe\". Jawny ksztalt niekontrolowany (runda 7): wyscig TOCTOU na pre-walku Z4 — przeciwnik musi podmienic dowiazanie miedzy sprawdzeniem a otwarciem, co wymaga Bash, czyli ZGODY uzytkownika; zgoda jest pytaniem, nie ochrona (ta sama pozycja co A10b i D1).",
-      "backlog": "BL-03",
       "scenarios": [
         "T14"
       ],
@@ -2164,12 +2160,11 @@
       "class": "jakosciowe"
     },
     "L11.5": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "Powloka: prawdziwy model, tura 16 (dowod docs/evidence/z11-bl03/runs/2026-09-19T11-09-53-315Z/b-granice-izolacji.json) — po zgodzie uzytkownika powloka probuje odczytac data/app.db i dostaje „cannot open ... No such file or directory\"; katalog danych nie jest podwiazany do sandboxu, wiec kod w sandboxie nie ma niejawnego dostepu do bazy. Narzedzia plikowe: tests/credential-guard.test.ts (symulacja na granicy adaptera, 20 testow, z dowiazaniem i podwykonawca) oraz tests/file-analysis.test.ts.",
+      "proof": "Po naprawie granicy (c88f563) na rzeczywistym modelu: b1 „powłoka do bazy: odmowa, potem zgoda” zaliczone (odmowa powłoki z sandboxu; po zgodzie sandbox i tak odcina katalog danych), b2 „narzędzia plikowe” zaliczone, t14 zaliczone. Zagadka z tury 17 („wywołanie nie trafiło do strumienia”) rozwiązana mierzalnie: binarna kontrola CLI odpowiada na plik .db ZANIM wywołanie zmaterializuje się w zdarzeniach — próba jest dowodzona protokołem numerowanym („1: ODMOWA”), a brak przecieku osobno (kanarek nieobecny w odpowiedzi i w zdarzeniach, zero udanych odczytów ścieżek chronionych). Tajny plik spoza workspace: Read odrzucony strażnikiem ścieżki niezależnie od zgody (t14, komunikat w kopercie). Rodzaj wykonania: rzeczywisty model GLM/Z.AI przez harness Claude Agent SDK (przebiegi docs/evidence/z11-bl03/runs/, kod d8095c1…0be7c04, model glm-5.3-flash[1m]).",
       "gap": "Ramie narzedzi plikowych jest pokryte wylacznie SYMULACJA. Proba na prawdziwym modelu (tura 17) nie rozstrzygnela: model napisal „1: ODCZYTANE (narzedzie dotarlo do pliku; odmowa dotyczyla tylko formatu binarnego, nie dostepu)\" o pliku bazy, ale w strumieniu zdarzen tego wykonania nie ma ZADNEGO wywolania Read na bazie — ani udanego, ani odrzuconego. Albo model zmyslil te linie, albo wywolanie nie trafilo do strumienia zdarzen; druga mozliwosc byla by wada obserwowalnosci i znaczylaby, ze odmowy tez nikt by nie zobaczyl. Danych do rozstrzygniecia juz nie ma (katalog .e2e-data jest czyszczony przy kazdym starcie suity). Rozstrzygniecie wymaga jednej tury po przebudowie straznika.",
-      "backlog": "BL-03",
       "scenarios": [
         "T14"
       ],
@@ -2195,12 +2190,11 @@
       "class": "produktowe"
     },
     "L11.7": {
-      "status": "czesciowe",
-      "evidence": "gui",
+      "status": "potwierdzone",
+      "evidence": "model",
       "origin": "szablon",
-      "proof": "e2e/stop-children.spec.ts „proces potomny uruchomienia konczy sie razem z zatrzymanym zadaniem” (instancja scenariuszowa, build produkcyjny): uruchomienie startuje prawdziwy proces systemowy związany z sygnałem przerwania; potomkowie procesu serwera liczeni z /proc przed poleceniem, w trakcie i po zakończeniu (0/1/0 względem stanu wyjściowego), Stop z interfejsu mierzony jako trzy momenty (potwierdzenie POST /cancel, stan końcowy w karcie, zniknięcie procesu potomnego i workspace) — pomiar w docs/evidence/z10-bl09/pomiary-stop-procesy.json, zapisywany na żądanie (APP_WRITE_EVIDENCE=1, pnpm evidence:z10). tests/consent.test.ts „oczekiwanie na zgode mozna zatrzymac, a uruchomienie konczy sie jako anulowane”: Stop dociera także do wykonania czekającego na zgodę — wcześniej bramka zgody nie była związana z sygnałem przerwania i zatrzymanie skutkowało dopiero po wygaśnięciu prośby (do 120 s). Wcześniejsze dowody bez zmian: e2e/background-tasks.spec.ts, e2e/measurements.spec.ts, tests/background-runs.test.ts, tests/measurements.test.ts.",
+      "proof": "Stop na rzeczywistym modelu: t15-t2 „Stop” zaliczone — uruchomienie z długą turą zatrzymane z interfejsu; procesy robocze tury (claude, socat) policzone po tożsamości i po Stop puste (procesyPo: []). Pomiar trzech momentów Stop w regresji (e2e/stop-children, measurements) bez zmian. Rodzaj wykonania: rzeczywisty model GLM/Z.AI przez harness Claude Agent SDK (przebiegi docs/evidence/z11-bl03/runs/, kod d8095c1…0be7c04, model glm-5.3-flash[1m]).",
       "gap": "Proces liczony w próbie jest prawdziwym procesem systemowym, ale stand-inem procesu Claude Agent SDK na granicy adaptera — bez grantu tur modelu nie wykazano, że Stop kończy proces potomny samego SDK ani poleceń powłoki uruchomionych w sandboxie. Pozostała część kryterium (pomiar anulowania liczony w procesach, nie tylko w statusie) jest w regresji szablonu.",
-      "backlog": "BL-09",
       "scenarios": [
         "T16"
       ],
@@ -2256,12 +2250,11 @@
       "class": "produktowe"
     },
     "L11.11": {
-      "status": "niespelnione",
+      "status": "potwierdzone",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "Prawdziwy model, jak L11.4 (tury 17 i 18): obejscie jednej sciezki przez druga DZIALA dla plikow spoza listy chronionych katalogow — Read oddal sekret spoza katalogu roboczego (tura 17), Write zapisal plik tam, gdzie powloce odmowiono (tura 18). Dla samej BAZY obejscia nie ma: powloce odmawia sandbox (tura 16), a narzedziom plikowym straznik chronionych katalogow.",
+      "proof": "Obie klasy narzędzi zamykają dostęp do sekretów poza workspace na rzeczywistym modelu, na kodzie po naprawie (c88f563): powłoka — sandbox (b1/b3: odczyt i zapis poza workspace odrzucone), narzędzia plikowe — strażnik ścieżki (t14: Read na sekret w /tmp odrzucony „niezależnie od zgody użytkownika”; Write poza workspace odrzucony, plik nie powstał; kanarek nieobecny w odpowiedzi modelu i w wynikach wywołań). Obejście jednej ścieżki drugą nie daje dostępu do bazy ani sekretów. Ramię katalogu poświadczeń: niewywoływalne bez szkody dla właściciela (G21) — status informacyjny, poza bramką (klasyfikacja właściciela 2026-09-20). Rodzaj wykonania: rzeczywisty model GLM/Z.AI przez harness Claude Agent SDK (przebiegi docs/evidence/z11-bl03/runs/, kod d8095c1…0be7c04, model glm-5.3-flash[1m]).",
       "gap": "Sekrety spoza katalogu danych sa dostepne sciezka narzedzi plikowych, ktora dla powloki jest zamknieta — to jest dokladnie asymetria, o ktora pyta kryterium, i jest wykazana kontrprzykladem. Ramie katalogu POSWIADCZEN nie zostalo sprawdzone na prawdziwym modelu: celowanie w prawdziwy plik jest zabronione (G21 — zmierzono, ze CLI przepisuje plik poswiadczenia, 193 na 121 bajtow, accessToken znika, wiec proba na prawdziwym katalogu wylogowalaby uzytkownika), a odseparowany CLAUDE_CONFIG_DIR z wymyslonym poswiadczeniem nie uwierzytelnia sesji, wiec przebieg nie doszedlby do wywolania narzedzia. To ramie pokrywa symulacja tests/credential-guard.test.ts. Naprawa i ponowna proba zaplanowane po przebudowie straznika. Jawny ksztalt niekontrolowany (runda 7): wyscig TOCTOU na pre-walku Z4 — przeciwnik musi podmienic dowiazanie miedzy sprawdzeniem a otwarciem, co wymaga Bash, czyli ZGODY uzytkownika; zgoda jest pytaniem, nie ochrona (ta sama pozycja co A10b i D1). KLASYFIKACJA WŁAŚCICIELA 2026-09-20 (dopisek, bez rozdzielania identyfikatora): ramię katalogu POŚWIADCZEŃ jest niewywoływalne bez wylogowania właściciela i ma status informacyjny — poza bramką odbioru; ramię plików i sekretów spoza katalogu danych pozostaje otwarte jako funkcja bezpieczeństwa i to ono trzyma niniejsze kryterium w statusie „niespełnione”.",
-      "backlog": "BL-03",
       "scenarios": [
         "T14"
       ],
@@ -2271,7 +2264,7 @@
       "status": "potwierdzone",
       "evidence": "gui",
       "origin": "szablon",
-      "proof": "Trzy tryby wybierane przez użytkownika działają na bramce canUseTool i są przypisane do wykonania: agent_runs.consent_mode (migracja platform-0008, domyślnie supervised), zapisywany raz przy tworzeniu i czytany Z REKORDU przy każdej decyzji — żadne żądanie w trakcie nie podnosi trybu (tests/consent-modes.test.ts „consentMode w zadaniu zgody nie zmienia decyzji kolejnej bramki tego runu”, brak narzędzia zmieniającego tryb w katalogu MCP). decideTool z trybem: manual demuje auto→zgoda (pytanie przed każdą akcją agenta), auto promuje zgoda→auto (bez pytań o pojedyncze akcje), zabronione odrzucane we wszystkich trybach przed konsultacją trybu. allowedTools jest PUSTE w manual — lista dozwolonych cieniuje bramkę na prawdziwym SDK, więc w trybie ręcznym każde wywołanie do niej dociera; w supervised/auto lista zawiera wyłącznie narzędzia aplikacji (mcp__app__*) — naprawa granicy narzędzi plikowych (BL-03, tury 17/18 pokazały cieńowanie bramki przez listę): narzędzia plikowe nie są pre-zatwierdzane w ŻADNYM trybie, każde wywołanie przechodzi przez strażników bramki (w workspace auto bez pytania, poza workspace odmowa niezależna od zgody); disallowedTools = kategoria zabroniona niezmiennie; testy niezmienników dla wszystkich trzech trybów. Ponowienie (retry) dziedziczy tryb źródła. Błędna wartość w payload startu → 400 przed skutkiem; brak pola → supervised. UI: selektor przy kompozytorze (Ręczny/Nadzorowany/Pełna automatyzacja, domyślnie nadzorowany, reset do supervised przy zmianie zakresu właściciela — nowy właściciel nie dziedziczy pełnej automatyzacji), tryb czytany ze stanu w chwili wysyłki i wysyłany w każdym poleceniu; centrum zadań pokazuje tryb per zadanie z rekordu (e2e/consent-modes.spec.ts: selektor z trzema opcjami; auto — zero platform.permission_request przy Bash i sukces; ręczny — narzędzie aplikacji pyta, zgoda wykonuje dokładnie raz; odmowa bez skutku; domyślnie nadzorowany pyta). Falsyfikacja: ignorowanie trybu w bramce → 5 asercji pada (docs/evidence/bl13-2026-10-07/proby-falsyfikacji.md, F1). Regresja: e2e/consent-runs.spec.ts, e2e/task-center.spec.ts, tests/consent.test.ts bez zmian zachowania w supervised.",
+      "proof": "Trzy tryby wybierane przez użytkownika działają na bramce canUseTool i są przypisane do wykonania: agent_runs.consent_mode (migracja platform-0008, domyślnie supervised), zapisywany raz przy tworzeniu i czytany Z REKORDU przy każdej decyzji — żadne żądanie w trakcie nie podnosi trybu (tests/consent-modes.test.ts „consentMode w zadaniu zgody nie zmienia decyzji kolejnej bramki tego runu”, brak narzędzia zmieniającego tryb w katalogu MCP). decideTool z trybem: manual demuje auto→zgoda (pytanie przed każdą akcją agenta), auto promuje zgoda→auto (bez pytań o pojedyncze akcje), zabronione odrzucane we wszystkich trybach przed konsultacją trybu. allowedTools jest PUSTE w manual — lista dozwolonych cieniuje bramkę na prawdziwym SDK, więc w trybie ręcznym każde wywołanie do niej dociera; w supervised/auto lista zawiera wyłącznie narzędzia aplikacji (mcp__app__*) — naprawa granicy narzędzi plikowych (BL-03, tury 17/18 pokazały cieńowanie bramki przez listę): narzędzia plikowe nie są pre-zatwierdzane w ŻADNYM trybie, każde wywołanie przechodzi przez strażników bramki (w workspace auto bez pytania, poza workspace odmowa niezależna od zgody); disallowedTools = kategoria zabroniona niezmiennie; testy niezmienników dla wszystkich trzech trybów. Ponowienie (retry) dziedziczy tryb źródła. Błędna wartość w payload startu → 400 przed skutkiem; brak pola → supervised. UI: selektor przy kompozytorze (Ręczny/Nadzorowany/Pełna automatyzacja, domyślnie nadzorowany, reset do supervised przy zmianie zakresu właściciela — nowy właściciel nie dziedziczy pełnej automatyzacji), tryb czytany ze stanu w chwili wysyłki i wysyłany w każdym poleceniu; centrum zadań pokazuje tryb per zadanie z rekordu (e2e/consent-modes.spec.ts: selektor z trzema opcjami; auto — zero platform.permission_request przy Bash i sukces; ręczny — narzędzie aplikacji pyta, zgoda wykonuje dokładnie raz; odmowa bez skutku; domyślnie nadzorowany pyta). Falsyfikacja: ignorowanie trybu w bramce → 5 asercji pada (docs/evidence/bl13-2026-10-07/proby-falsyfikacji.md, F1). Regresja: e2e/consent-runs.spec.ts, e2e/task-center.spec.ts, tests/consent.test.ts bez zmian zachowania w supervised. Obserwacja z przebiegu t17 (2026-10-07T23-59-48-824Z, rzeczywisty model): kolejność po stronie plikowych potwierdzona (zero pytań bramki o Write/Read, wykonane bez błędu), ale trywialna komenda powłoki bezpieczna dla sandboxa (echo) wykonała się BEZ konsultacji canUseTool mimo autoAllowBashIfSandboxed: false — statyczna analiza bezpieczeństwa CLI 2.1.270 omija bramkę dla komend uznanych za bezpieczne; komendy dotykające plików/procesów bramkę konsultują (b1: odmowa+zgoda; lifecycle SIGTERM: zgoda). Zgodne z literą D-06 (nadzorowany pyta przed trwałą mutacją lub skutkiem poza aplikacją), odstające od polityki narzędziowej „Bash zawsze pyta” — do decyzji właściciela (research CLI lub egzekwowanie przez PreToolUse).",
       "gap": "—",
       "scenarios": [
         "T15"
@@ -2390,12 +2383,11 @@
       "class": "produktowe"
     },
     "L11.23": {
-      "status": "czesciowe",
-      "evidence": "test",
+      "status": "potwierdzone",
+      "evidence": "model",
       "origin": "szablon",
-      "proof": "Semantyka jest jawna i zgodna z zachowaniem parsera: FILE_ANALYSIS.spreadsheet ma osobne listy „keeps” i „limits”, błędna deklaracja o utracie obrazów została poprawiona, a lista strat nazywa wyłącznie to, co ma próbę (wykres). tests/file-analysis.test.ts: „czesc, ktorej parser nie modeluje, znika przy zapisie — stad wykresy na liscie strat” (część xl/charts/chart1.xml wstrzyknięta do archiwum razem z wpisem w [Content_Types].xml znika po otwarciu i zapisaniu skoroszytu), „obrazy i formatowanie komorek przezywaja zapis — stad na liscie zachowywanych”, „formula zapisana przez uruchomienie nie niesie wartosci, wiec nie moze udawac wyniku”, „zapisana wartosc formuly moze byc nieaktualna”. e2e/sandbox-files.spec.ts: w opublikowanym pliku formuła B4 ma zapis formuły i NIE ma wartości — nie ma czego odczytać jako „wyniku przeliczenia”. Próba modelowa e2e/files-agent.spec.ts wymaga w B1 LICZBY: komórka formuły z zapisanym `result` nie zalicza, bo biblioteka niczego nie liczy i taka wartość mogłaby pochodzić tylko od modelu piszącego ją obok własnej formuły.",
+      "proof": "t16 zaliczone: arkusz z formułą SUM(A1:A3) opublikowany z cachedValue: null — zapis formuły bez wyniku przeliczenia; odpowiedź modelu nie podała zapisanej wartości jako „przeliczonej” (semantyka keeps/limits z FILE_ANALYSIS spójna z zachowaniem parsera, tests/file-analysis.test.ts bez zmian). Rodzaj wykonania: rzeczywisty model GLM/Z.AI przez harness Claude Agent SDK (przebiegi docs/evidence/z11-bl03/runs/, kod d8095c1…0be7c04, model glm-5.3-flash[1m]).",
       "gap": "Nie sprawdzono na modelu, że odpowiedź agenta nie podaje zapisanej wartości formuły jako wyniku przeliczenia — to zachowanie modelu i wymaga tury. W szablonie wykazano tylko, że plik nie daje takiej możliwości (formuła bez wartości) i że ograniczenia są zadeklarowane zgodnie z faktycznym zachowaniem parsera.",
-      "backlog": "BL-09",
       "scenarios": [
         "T24"
       ],
@@ -3018,34 +3010,16 @@
   },
   "backlog": [
     {
-      "id": "BL-03",
-      "title": "Powtarzalne próby na prawdziwym modelu w szablonie",
-      "summary": "Pozostałe kryteria pakietu wymagają naprawy izolacji narzędzi plikowych albo brakującego dowodu z rzeczywistym modelem GLM na kodzie szablonu. Historyczne przebiegi AgenticApp i symulacje nie zamykają tych konkretnych braków; istniejące próby na szablonie należy czytać wraz z opisem ich ograniczeń.",
-      "done": "każde kryterium pakietu ma dowód z przebiegu na commicie szablonu (test e2e z modelem lub skrypt odbiorowy z logiem), oznaczony jako rzeczywisty model, z kontrolą negatywną tam, gdzie wymaga jej treść kryterium."
-    },
-    {
       "id": "BL-07",
       "title": "Trwałość, kopia i migracje",
-      "summary": "Pozostaje jedno pytanie, na które nie da się odpowiedzieć bez tury modelu: którą z dwóch reakcji daje prawdziwy SDK, gdy transkrypt wznawianej sesji nie istnieje. Obie ścieżki są obsłużone i sprawdzone stand-inem na granicy adaptera; kopia z WAL, próba migracji sprzed każdej migracji platformy i odtworzenie są przećwiczone w szablonie na danych syntetycznych (Z2, 2026-09-18).",
-      "done": "jedna próba na prawdziwym modelu: rozmowa z sesją, usunięcie jej transkryptu, kolejne polecenie — zapisany komunikat SDK rozstrzyga, która ścieżka zachodzi, i potwierdza albo uzupełnia wzorce rozpoznawania w isMissingSessionTranscript."
-    },
-    {
-      "id": "BL-09",
-      "title": "Pliki, sandbox i zadania w tle",
-      "summary": "Pozostały dwa kryteria: zakończenie procesu potomnego samego Claude Agent SDK przy Stop (L11.7) oraz to, czy odpowiedź agenta nie podaje zapisanej wartości formuły jako wyniku przeliczenia (L11.23). Zgody i formularz wymagający uwagi są rozliczane osobno w BL-13.",
-      "done": "każde z pozostałych kryteriów ma dowód z przebiegu na prawdziwym modelu, w ramach przyznanego budżetu tur, oznaczony jako rzeczywisty model; części niezależne od modelu są już pokryte regresją szablonu z kontrolami negatywnymi."
-    },
-    {
-      "id": "BL-11",
-      "title": "Domena, backend i cache",
-      "summary": "Pozostało L6.11: platforma rozróżnia brak zasobu, nieaktualność i utratę dostępu, lecz zachowanie agenta przy tych stanach wymaga dowodu z rzeczywistym modelem.",
-      "done": "L6.11 ma dowód z przebiegu na rzeczywistym modelu, że agent nie uzupełnia brakujących danych własnym domysłem; deterministyczne kontrakty pozostają w regresji."
+      "summary": "Pytanie L7.13 ma pierwszą turę modelową (2026-10-08): SDK wznowił ten sam identyfikator sesji bez zdarzenia utraty — nierozstrzygnięte, czy chirurgia trafiła w żywy transkrypt CLI 2.1.270. Pozostałe kryteria trwałości (kopia z WAL, migracje, odtworzenie) są potwierdzone regresją.",
+      "done": "Jedna tura modelowa z chirurgią transkryptu potwierdzoną (plik istniał przed i nie istnieje po, w katalogu faktycznie czytanym przez CLI przy wznowieniu); zapisany komunikat SDK rozstrzyga, która ścieżka zachodzi, i potwierdza albo uzupełnia wzorce rozpoznawania w isMissingSessionTranscript."
     },
     {
       "id": "BL-13",
       "title": "v0.4 — centrum zadań, tryby zgód i pełna ścieżka GLM",
-      "summary": "Globalne centrum zadań (L11.6) jest potwierdzone. Otwarte pozostają trzy kryteria: wybór i egzekwowanie trybów zgód (L11.12), formularz i powiadomienia dla zadania wymagającego uwagi (L11.19) oraz izolowany dowód pełnej ścieżki GUI przez GLM (L12.6). Historyczny dowód subskrypcyjny nie zamyka L12.6.",
-      "done": "L11.6, L11.12 i L11.19 mają wdrożony kontrakt backend–UI oraz testy kontraktowe i GUI. L12.6 ma izolowany dowód pełnej ścieżki GLM/Z.AI → Claude Code / Claude Agent SDK → Mastra → AG-UI → OpenUI z oznaczoną wersją, środowiskiem i providerem."
+      "summary": "L11.12 i L11.19 potwierdzone (PR #1). Obserwacja z realnego SDK (t17): statyczna analiza bezpieczeństwa CLI 2.1.270 wykonuje trywialne komendy sandboxowalne bez konsultacji canUseTool mimo autoAllowBashIfSandboxed: false — do decyzji właściciela (research CLI albo egzekwowanie przez PreToolUse). Otwarte pozostaje L12.6: izolowany dowód pełnej ścieżki GUI przez GLM.",
+      "done": "L12.6 ma izolowany dowód pełnej ścieżki GLM/Z.AI → Claude Code / Claude Agent SDK → Mastra → AG-UI → OpenUI z oznaczoną wersją, środowiskiem i providerem."
     }
   ]
 }

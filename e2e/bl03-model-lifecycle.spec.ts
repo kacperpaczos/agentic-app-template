@@ -117,6 +117,14 @@ test.describe('BL-03 przebiegi C i D: blad, Stop, sygnal, wznowienie sesji', () 
         'Zapamietaj liczbe 4721 jako kod operacji na te rozmowe. Odpowiedz tylko: OK.',
       );
       const conversationId = new URL(page.url()).searchParams.get('c')!;
+      /* Stan runu do koperty PRZED asercją — porażka nie może zabierać
+         obserwacji (ta sama lekcja co w tura 17: `finally` zapisuje stan
+         zastany, więc powód musi być w kopercie, zanim asercja obali). */
+      const firstRecord = (await backend.runs(conversationId)).find(
+        (r) => r.id === first.runId,
+      );
+      record.turaPierwszaStatus = firstRecord?.status ?? null;
+      record.turaPierwszaKodBledu = firstRecord?.errorCode ?? null;
       expect(await settled(page, first.runId)).toBe('succeeded');
 
       const runsBefore = await backend.runs(conversationId);
