@@ -340,7 +340,9 @@ test.describe('bramka przekrojowa: jeden powiazany dowod dzialania polaczen', ()
 
       /* (i) narzedzie MCP, nie inne drzwi: run wlasnie je wolal. */
       const events = await backend.runEvents(run.runId);
-      const updates = callsOf(events, 'update_offer_item');
+      /* Narzedzia modulu naleza do nazwy z prefiksem modulu (mcp__app__ zdjete,
+       * prefiks domenowy zostaje) — dopasowanie po pelnej nazwie. */
+      const updates = callsOf(events, 'procurement_update_offer_item');
       expect(
         updates.length,
         `run nie wolal update_offer_item; wolane narzedzia: ${toolNames(events).join(', ') || '(zadne)'}`,
