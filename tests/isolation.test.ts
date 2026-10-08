@@ -34,6 +34,7 @@ import {
   RUN_STAMP,
   Z11_MODEL_SPEC_FILES,
   GLM_TURN_BUDGET,
+  GLM_WORKING_LEDGER,
   glmMode,
   Z11_MODEL_SPEC_PATTERNS,
   Z11_OPT_IN_ENV,
@@ -341,7 +342,12 @@ describe('spece z prawdziwym modelem: opt-in i nienaruszalnosc dowodow', () => {
     expect(Z11_WORKING_LEDGER).not.toBe(WORKING_LEDGER);
     expect(Z11_WORKING_LEDGER.startsWith(EVIDENCE_ROOT)).toBe(false);
     // A fresh checkout starts this grant at zero, not at the other one's count.
-    if (!existsSync(Z11_WORKING_LEDGER)) expect(readZ11Ledger().wydane).toBe(0);
+    // In GLM mode `readZ11Ledger` reads the GLM register, whose working file may
+    // (and now does) carry spent turns — the zero expectation then applies to a
+    // ledger file that genuinely is absent, not to whichever ledger this mode
+    // happens to read.
+    const aktywyLedger = glmMode() ? GLM_WORKING_LEDGER : Z11_WORKING_LEDGER;
+    if (!existsSync(aktywyLedger)) expect(readZ11Ledger().wydane).toBe(0);
     // The ledger read here is the grant this mode charges (GLM by default,
     // the BL-03 subscription register only outside GLM) — passed blindly while
     // both ceilings read 25.
