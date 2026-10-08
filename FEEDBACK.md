@@ -1326,3 +1326,35 @@ aktywnym grancie.
 **Otwarte.** Dowód L11.4/L11.5/L11.11 = tury modelowe (isolation 3 + t14 1) na tej naprawie;
 L1.6/L5.8 = lifecycle 7; BL-09/BL-11/BL-07 = t15 4 + t16 1; L12.6 = agent-ui 2. Razem ~17 tur
 z sufitu 45.
+
+---
+
+## §A33 — BL-03: fala modelowa domyka osiem kryteriów realnym GLM (2026-10-08)
+
+**Wynik.** 22/45 tur z grantu GLM; osiem kryteriów ma dowód „rzeczywisty model" na kodzie po
+naprawie granicy: L11.4, L11.5, L11.11 (b1/b2/b3 + t14: Write poza workspace i Read na sekret
+odrzucone strażnikiem workspace „niezależnie od zgody użytkownika", plik nie powstał, kanarek
+nie wyciekł), L1.6 i L5.8 (lifecycle 6/6: SIGTERM bez osieroconych, błąd narzędzia przez
+rzeczywisty adapter), L11.7 (t15-t2: procesyPo puste po Stop), L6.11 i L11.23 (t16:
+not_found z narzędzia bez zmyślania; formuła z cachedValue null). Macierz: **2 otwarte
+kryteria z 200** (L7.13, L12.6); pakiety BL-03/BL-09/BL-11 zamknięte i usunięte z backlogu.
+
+**Znaleziska po drodze (wszystkie naprawione przed kolejnymi turami).**
+1. Instancja scenariuszowa zawsze wciskała atrapę GLM (`glm.endpoint.invalid`) ceniąc env
+   wywołania — lifecycle wydał tury na połączeniach z atrapą. Naprawa: atrapa tylko poza
+   `APP_E2E_MODEL=1` (a6e3b1d).
+2. Binarna kontrola CLI odpowiada na plik `.db` zanim wywołanie zmaterializuje się w
+   zdarzeniach — próba jest dowodzona protokołem numerowanym („1: ODMOWA"), brak przecieku
+   osobno (9da6491). To rozwiązuje zagadkę z tury 17 (L11.5).
+3. Model zgłosił brak Glob/Grep w zestawie narzędzi sesji (SDK 2.1.270) — kroki warunkowe,
+   znalezisko w kopercie (9da6491).
+4. t16 nigdy nie był wykonywany (grant zero tur) i nie otwierał aplikacji; t15 porównywał
+   obiekt przez String() (0be7c04).
+
+**Otwarte.** L7.13: tura t15-t4 — SDK wznowił ten sam identyfikator sesji bez zdarzenia
+utraty; nierozstrzygnięte, czy chirurgia trafiła w żywy transkrypt CLI 2.1.270. Następny
+krok w BACKLOG (weryfikacja układu transkryptów + jedna tura). **Do decyzji właściciela:**
+statyczna analiza bezpieczeństwa CLI 2.1.270 wykonuje trywialne komendy sandboxowalne
+(`echo`) bez konsultacji canUseTool mimo `autoAllowBashIfSandboxed: false` (obserwacja w
+t17 i już 2026-09-16 przy BL-04) — zgodne z literą D-06, odstaje od polityki „Bash zawsze
+pyta"; opcje: research CLI albo egzekwowanie zgody przez PreToolUse.
