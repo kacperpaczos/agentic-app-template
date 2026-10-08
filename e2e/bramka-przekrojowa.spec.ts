@@ -441,11 +441,28 @@ test.describe('bramka przekrojowa: jeden powiazany dowod dzialania polaczen', ()
       const views = await agentViewsOf(backend, conversationId!);
       const karta = views.cards.find((c) => c.id === cardId);
       expect(karta, 'karty o tym identyfikatorze nie ma w przestrzeni rozmowy').toBeTruthy();
-      expectCardPointsAtRecord(
-        (karta ?? null) as Parameters<typeof expectCardPointsAtRecord>[0],
-        (gate.identyfikatory['sprawa'] as any).caseId,
-        'caseId',
-      );
+      /*
+       * Powiazanie z danymi rodzajowo-swiadome: karta `component` wskazuje
+       * rekord propsami (checker wspolny z T27); karta `openui` jest
+       * kompozycja — wtedy powiazaniem jest odniesienie do sprawy w drzewie
+       * kompozycji (id sprawy lub zrodlo ofert). Bramka dowodzi „zmiany
+       * kompozycji" polaczonej z danymi, niezaleznie od rodzaju karty, jaki
+       * model wybierze z katalogu (oba sa legalne; L3.3/L3.12).
+       */
+      if (karta!.spec.kind === 'component') {
+        expectCardPointsAtRecord(
+          (karta ?? null) as Parameters<typeof expectCardPointsAtRecord>[0],
+          (gate.identyfikatory['sprawa'] as any).caseId,
+          'caseId',
+        );
+      } else {
+        const drzewo = JSON.stringify(karta!.spec);
+        const sprawa = String((gate.identyfikatory['sprawa'] as any).caseId ?? '');
+        expect(
+          drzewo.includes(sprawa) || /ofert|offer/i.test(drzewo),
+          `kompozycja ${karta!.spec.kind} nie odnosi sie do danych sprawy (${sprawa})`,
+        ).toBe(true);
+      }
       gate.identyfikatory['kompozycja'] = views.cards.map((c) => ({
         id: c.id,
         title: c.title,
