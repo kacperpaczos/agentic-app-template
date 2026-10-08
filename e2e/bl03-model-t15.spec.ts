@@ -242,6 +242,18 @@ test.describe('BL-03 przebieg T15: blad narzedzia, Stop, sygnal, wznowienie po u
       await instance.start('-');
       await openApp(page, BASE);
       await page.goto(`${BASE}/?c=${convId}`);
+      /*
+       * Rozstrzygnięcie drogi L7.13: CLI wznowienia czyta transkrypt z
+       * `projects/<id>.jsonl`. Jeśli po turze 4 plik ZOSTAŁ ODTWORZONY pod tym
+       * samym identyfikatorem, chirurgia trafiła w żywy plik, a SDK po cichu
+       * kontynuował (ścieżka „cicha nowa sesja" — historia wraca z projekcji
+       * aplikacji, więc model „pamięta" bez transkryptu). Jeśli pliku brak,
+       * wznowienie nie dotknęło tego pliku i chirurgia wymaga korekty układu.
+       */
+      const transkryptPo = znajdzTranskrypt(sesja!);
+      const stanPo = record.transkrypt as Record<string, unknown>;
+      stanPo['poTurzeOdtworzony'] = Boolean(transkryptPo);
+      stanPo['sciezkaPo'] = transkryptPo;
       const runs = await backend.runs(convId);
       const interrupted = runs.find((r) => r.id === long.runId)!;
       expect(interrupted, 'uruchomienie nie przezylo restartu').toBeTruthy();
