@@ -1,0 +1,74 @@
+{
+  "zapisano": "2026-10-08T14:21:53.556Z",
+  "rodzajWykonania": "rzeczywisty model",
+  "wersjaKodu": {
+    "commit": "b87ea1bff9048e800c59e0d6e84a7db3b8516fad",
+    "brudneDrzewo": false,
+    "node": "24.19.0",
+    "pakiety": {}
+  },
+  "srodowisko": {
+    "system": "linux 7.2.8-200.fc44.x86_64 x64",
+    "node": "24.19.0",
+    "pnpm": "9.15.9",
+    "cliZewnetrzne": "2.1.283 (Claude Code)",
+    "cliWSdk": {
+      "wersja": "2.1.270",
+      "commit": "97ecbf7abeb4170dcfd26c4d4b397afd9015030e",
+      "dataBudowy": "2026-09-12T18:17:55Z"
+    },
+    "model": "glm-5.3-flash[1m]",
+    "pakiety": {
+      "react": "19.3.0",
+      "react-dom": "19.3.0",
+      "typescript": "7.0.2",
+      "vite": "8.3.0",
+      "vitest": "5.0.0",
+      "@playwright/test": "1.63.0",
+      "@openuidev/react-ui": "0.13.10",
+      "@openuidev/react-headless": "0.9.13",
+      "hono": "4.13.7",
+      "drizzle-orm": "0.45.2",
+      "@mastra/core": "1.66.0",
+      "@mastra/claude": "0.3.1",
+      "@anthropic-ai/claude-agent-sdk": "0.3.270",
+      "zod": "4.6.5"
+    }
+  },
+  "zrodlo": "model GLM/Z.AI przez kompatybilny endpoint Anthropic (@mastra/claude i proces Claude Agent SDK jako harness); subskrypcja Claude nieuzywana",
+  "model": "glm-5.3-flash[1m]",
+  "pakiet": "BL-03 (Z11)",
+  "przebieg": "2026-10-08T14-20-28-908Z",
+  "kodCommit": "b87ea1bff9048e800c59e0d6e84a7db3b8516fad",
+  "spec": "e2e/bl03-model-t15.spec.ts",
+  "przebiegPlanu": "T15",
+  "turyWydaneWTymPliku": 1,
+  "turyWydaneLacznie": 24,
+  "budzet": 45,
+  "kroki": [],
+  "kryteria": [
+    "przygotowanie: blad narzedzia + kod do pamieci"
+  ],
+  "runId": "run_29dfb47fc50d41a8a2b1",
+  "faza": "succeeded",
+  "rozmowa": "cnv_9b59a926a84a4e45aba5",
+  "narzedzia": [
+    "canvas_add_card",
+    "Read"
+  ],
+  "probaBledu": [
+    {
+      "argumenty": {
+        "operationId": "t15-4721-proba-bledu-01",
+        "spaceId": "spc_1b1891d1e6a74cabb035",
+        "spec": {
+          "component": "nie.istnieje",
+          "kind": "component"
+        },
+        "title": "Karta z bledem"
+      },
+      "wynik": "{\"error\":\"validation_failed\",\"message\":\"Nieznany komponent: nie.istnieje\",\"details\":{\"allowed\":[\"platform.markdown\",\"platform.artifact\",\"platform.files\",\"procurement.caseSummary\",\"procurement.offerList\",\"procurement.comparisonTable\",\"procurement.costChart\",\"procurement.deliveryTerms\",\"procurement.of"
+    }
+  ],
+  "wynik": "zaliczona"
+}

@@ -1358,3 +1358,30 @@ statyczna analiza bezpieczeństwa CLI 2.1.270 wykonuje trywialne komendy sandbox
 (`echo`) bez konsultacji canUseTool mimo `autoAllowBashIfSandboxed: false` (obserwacja w
 t17 i już 2026-09-16 przy BL-04) — zgodne z literą D-06, odstaje od polityki „Bash zawsze
 pyta"; opcje: research CLI albo egzekwowanie zgody przez PreToolUse.
+
+---
+
+## §A34 — Bramka przekrojowa zaliczona; RAPORT-ODBIORU.md (2026-10-08)
+
+Nowy spec `e2e/bramka-przekrojowa.spec.ts` (projekt „model", do 5 tur):
+jedna rozmowa łączy odczyt i mutację przez MCP (`1240000→1239900` minor,
+`version` +1, `platform.data_changed`, odświeżenie UI), kartę kompozycji
+powiązaną z wykonaniem, plik CSV → artefakt powiązany z runem z obu stron oraz
+wznowienie tej samej sesji po SIGTERM; ogon deterministyczny na tych samych
+identyfikatorach: 403 forbidden (cudza tożsamość), 409 conflict (stale
+expectedVersion), anulowanie (Stop → cancelled), 404 not_found (jedna
+implementacja, dwa wejścia). **5/5 zaliczone** (38/45 tur grantu).
+Koperta: docs/evidence/bramka-przekrojowa/manifest.json.
+
+**L12.6 potwierdzone** (agent-ui.spec 2/2 pod GLM, koperta
+docs/evidence/bl13-l126/) — warstwa L12 zamknięta; **macierz: 11/12 warstw,
+196/200 kryteriów, 1 częściowe (L7.13), 3 informacyjne**. Pakiety backlogu:
+tylko BL-07 (L7.13).
+
+**L7.13 — granica mierzalności.** Chirurgia „usuń projects/<id>.jsonl" nie
+jest wykonywalna na CLI 2.1.270 (w próbie 14-40 plik pod konwencjonalną
+ścieżką nie istniał; wznowienie nieznanej sesji przeszło po cichu). Dwie tury
+bez postępu → wstrzymane wg dyscypliny. Do decyzji właściciela: przeklasyfiko
+wanie na informacyjne (D-02) albo research store CLI. **RAPORT-ODBIORU.md**
+napisany (architektura wdrożona, granica, adaptery, wersje, ograniczenia,
+nieudane przebiegi, trójpodział L12.17 — wdrożenie danych NIE wykonane).

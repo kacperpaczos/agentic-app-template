@@ -1,0 +1,133 @@
+{
+  "zapisano": "2026-10-08T15:36:14.406Z",
+  "rodzajWykonania": "rzeczywisty model",
+  "wersjaKodu": {
+    "commit": "9d18196029d6f3f5ad0cb61302b5cb8a67e9cbdb",
+    "brudneDrzewo": false,
+    "node": "24.19.0",
+    "pakiety": {}
+  },
+  "srodowisko": {
+    "system": "linux 7.2.8-200.fc44.x86_64 x64",
+    "node": "24.19.0",
+    "pnpm": "9.15.9",
+    "cliZewnetrzne": "2.1.283 (Claude Code)",
+    "cliWSdk": {
+      "wersja": "2.1.270",
+      "commit": "97ecbf7abeb4170dcfd26c4d4b397afd9015030e",
+      "dataBudowy": "2026-09-12T18:17:55Z"
+    },
+    "model": "glm-5.3-flash[1m]",
+    "pakiety": {
+      "react": "19.3.0",
+      "react-dom": "19.3.0",
+      "typescript": "7.0.2",
+      "vite": "8.3.0",
+      "vitest": "5.0.0",
+      "@playwright/test": "1.63.0",
+      "@openuidev/react-ui": "0.13.10",
+      "@openuidev/react-headless": "0.9.13",
+      "hono": "4.13.7",
+      "drizzle-orm": "0.45.2",
+      "@mastra/core": "1.66.0",
+      "@mastra/claude": "0.3.1",
+      "@anthropic-ai/claude-agent-sdk": "0.3.270",
+      "zod": "4.6.5"
+    }
+  },
+  "zrodlo": "model GLM/Z.AI przez kompatybilny endpoint Anthropic; Claude Agent SDK jako harness; subskrypcja Claude nieuzywana; instancja testowa suity przegladarkowej",
+  "model": "glm-5.3-flash[1m]",
+  "spec": "e2e/bramka-przekrojowa.spec.ts",
+  "przebieg": "2026-10-08T15-30-29-664Z",
+  "instancja": {
+    "entry": "production",
+    "port": 8792,
+    "dataDirName": ".e2e-real-gate",
+    "origin": "http://127.0.0.1:8792",
+    "log": "docs/evidence/bramka-przekrojowa/serwer.log"
+  },
+  "koszt": {
+    "deklarowaneTury": 5,
+    "budzet": 45,
+    "wydane": 38
+  },
+  "identyfikatory": {
+    "sprawa": {
+      "caseId": "pcs_2ab5b693c29e48aa8c49",
+      "itemId": "pci_6457781fed9648dc967b",
+      "itemVersion": 1,
+      "oldMinor": 1240000
+    },
+    "rozmowa": "cnv_2a29a139d65646d4a4c7",
+    "runTury1": "run_9050ab4d33a1408897fe",
+    "ceny": {
+      "staraMinor": 1240000,
+      "nowaMinor": 1239900
+    },
+    "runTury2": "run_80ccd6c802874f01abf4",
+    "karta": "crd_0aea07d4deec42d08fa1",
+    "kompozycja": [
+      {
+        "id": "crd_0aea07d4deec42d08fa1",
+        "title": "Zestawienie ofert — PC-2026-01",
+        "specVersion": 1
+      }
+    ],
+    "przestrzenRozmowy": "spc_02c95dbb5fe841269bf5",
+    "runTury3": "run_da9b684b32634725ae67",
+    "zgodyTury3": [],
+    "plik": {
+      "id": "fil_3e019a2abf5a4a14b9cc",
+      "ownerId": "local-user",
+      "filename": "oferty-bramka.csv",
+      "mediaType": "text/csv",
+      "byteSize": 61,
+      "sha256": "5520dbda5a5dc6d39e01d5303093e0fd47b9347124045af4f95e164f55b30512",
+      "scopeKind": null,
+      "scopeId": null,
+      "createdAt": "2026-10-08T15:34:56.191Z",
+      "derivedFromFileId": null,
+      "version": 1,
+      "attachedTo": [
+        {
+          "messageId": "def4187d-59cc-47dc-829a-f7649c2b00b1",
+          "conversationId": "cnv_2a29a139d65646d4a4c7",
+          "conversationTitle": "Znajdz w przykladowych danych sprawe zakupowa o kodzie PC-202…",
+          "runId": "run_da9b684b32634725ae67",
+          "at": "2026-10-08T15:34:56.355Z",
+          "prompt": "Przetworz dolaczony plik oferty-bramka.csv: policz liczbe WIERSZY DANYCH (pomijaj wiersz naglowka) i zapisz wynik jako trwaly artefakt narzedziem artifact_creat"
+        }
+      ]
+    },
+    "artefakt": {
+      "id": "art_4eed654f46714b3eae71",
+      "kind": "report",
+      "mode": "snapshot"
+    },
+    "runTury4": "run_08da1e4556784650aba1",
+    "claudeSessionId": "63f69eeb-4363-4fdb-a9f8-5399afc700f1"
+  },
+  "ogon": {
+    "odmowa": {
+      "status": 403,
+      "tresc": "{\"error\":{\"code\":\"forbidden\",\"message\":\"Sprawa nalezy do innego wlasciciela.\"}}",
+      "tozsamosc": "other-user"
+    },
+    "konflikt": {
+      "status": 409,
+      "tresc": "{\"error\":{\"code\":\"conflict\",\"message\":\"Pozycja zostala zmieniona przez kogos innego.\",\"details\":{\"expectedVersion\":7,\"currentVersion\":2}}}"
+    },
+    "anulowanie": {
+      "runId": "run_137916f35f8949afa6b3",
+      "status": "cancelled",
+      "errorCode": "cancelled",
+      "firstTokenMs": null
+    },
+    "blad": {
+      "status": 404,
+      "tresc": "{\"error\":{\"code\":\"not_found\",\"message\":\"Pozycja bramka-pozycja-nie-istnieje nie istnieje.\"}}",
+      "polowaWRozmowie": "e2e/bl03-model-t15.spec.ts (blad narzedzia przez adapter do rozmowy)"
+    }
+  },
+  "wynik": "zaliczona"
+}

@@ -1424,8 +1424,8 @@
       "status": "czesciowe",
       "evidence": "symulacja",
       "origin": "szablon",
-      "proof": "tests/session-transcript.test.ts (18 testów, stand-in modelu na granicy adaptera): odmowa wznowienia rozpoznana jako brak transkryptu daje własny kod błędu `session_transcript_lost` i komunikat „pamięć NIE została odtworzona”, powiązanie z martwą sesją jest czyszczone, żadna odpowiedź z nowej sesji nie zostaje podstawiona (stand-in ma gotową odpowiedź i nie zostaje wywołany), zdarzenie CUSTOM platform.session_transcript_lost niesie lostSessionId i memoryRestored=false, dokładnie jedno RUN_ERROR. Druga ścieżka: wznowienie, które po cichu odpowiada z innej sesji, jest wykryte po niezgodności session_id, opisane tym samym zdarzeniem (detectedBy=session_id_mismatch) i przepina rozmowę na sesję, która istnieje. Kontrole: inny błąd wznowienia (reset połączenia) zostaje integration_failed i NIE kasuje powiązania; wznowienie tej samej sesji nie zgłasza niczego; 10 przypadków rozpoznawania komunikatu (5 rozpoznanych, 5 odrzuconych, w tym „Rekord nie zostal znaleziony” i „Tool result not found”). packages/platform-server/src/agent/runtime.ts #resumeOrReportLostTranscript, isMissingSessionTranscript, bindSession; forgetClaudeSession warunkowy na identyfikatorze (nie kasuje nowszego powiązania). Pierwsza tura modelowa pytania (t15-t4, 2026-10-08T00-18-35-144Z, rzeczywisty model): po usunięciu pliku transkryptu sesji SDK wznowił TEN SAM identyfikator sesji bez zdarzenia session_transcript_lost i bez session_bound; faza runu: failed. Nierozstrzygnięte: czy chirurgia trafiła w żywy transkrypt CLI 2.1.270 (układ katalogów mógł się zmienić), czy SDK po cichu kontynuuje.",
-      "gap": "Tura modelowa 2026-10-08 (t15-t4): brak zdarzeń utraty/wiązania i identyczny identyfikator sesji — nie rozstrzyga, czy usunięto ŻYWY transkrypt CLI 2.1.270 (zmiana układu katalogów), czy SDK po cichu kontynuuje bez transkryptu. Następny krok: weryfikacja układu transkryptów CLI 2.1.270 i jedna tura ponowna z chirurgią potwierdzoną (plik istniał przed i nie istnieje po, w katalogu faktycznie czytanym przez CLI przy wznowieniu).",
+      "proof": "tests/session-transcript.test.ts (18 testów, stand-in modelu na granicy adaptera): odmowa wznowienia rozpoznana jako brak transkryptu daje własny kod błędu `session_transcript_lost` i komunikat „pamięć NIE została odtworzona”, powiązanie z martwą sesją jest czyszczone, żadna odpowiedź z nowej sesji nie zostaje podstawiona (stand-in ma gotową odpowiedź i nie zostaje wywołany), zdarzenie CUSTOM platform.session_transcript_lost niesie lostSessionId i memoryRestored=false, dokładnie jedno RUN_ERROR. Druga ścieżka: wznowienie, które po cichu odpowiada z innej sesji, jest wykryte po niezgodności session_id, opisane tym samym zdarzeniem (detectedBy=session_id_mismatch) i przepina rozmowę na sesję, która istnieje. Kontrole: inny błąd wznowienia (reset połączenia) zostaje integration_failed i NIE kasuje powiązania; wznowienie tej samej sesji nie zgłasza niczego; 10 przypadków rozpoznawania komunikatu (5 rozpoznanych, 5 odrzuconych, w tym „Rekord nie zostal znaleziony” i „Tool result not found”). packages/platform-server/src/agent/runtime.ts #resumeOrReportLostTranscript, isMissingSessionTranscript, bindSession; forgetClaudeSession warunkowy na identyfikatorze (nie kasuje nowszego powiązania). Pierwsza tura modelowa pytania (t15-t4, 2026-10-08T00-18-35-144Z, rzeczywisty model): po usunięciu pliku transkryptu sesji SDK wznowił TEN SAM identyfikator sesji bez zdarzenia session_transcript_lost i bez session_bound; faza runu: failed. Nierozstrzygnięte: czy chirurgia trafiła w żywy transkrypt CLI 2.1.270 (układ katalogów mógł się zmienić), czy SDK po cichu kontynuuje. Granica mierzalności (2026-10-08, próby 14-20/14-33/14-40): chirurgia „usuń plik projects/<id>.jsonl\" nie jest wykonywalna na CLI 2.1.270 — w przebiegu 14-40-39-051Z plik pod konwencjonalną ścieżką NIE istniał wcale (transkrypt: null), a wymuszone wznowienie nieznanej sesji przeszło po cichu z tym samym identyfikatorem, bez zdarzeń utraty/wiązania (historia wraca z projekcji aplikacji). Dwa podejścia zweryfikowane, dalsze tury wstrzymane wg dyscypliny. Wniosek do decyzji właściciela: na tym SDK utrata transkryptu nie jest sygnalizowana i nie da się jej wywołać dokumentowanym układem — kandydat do przeklasyfikowania na informacyjne/proceduralne (D-02) albo osobny research store CLI.",
+      "gap": "Niewykonywalne na CLI 2.1.270 dokumentowanym układem transkryptów (zob. proof — próba 14-40-39-051Z: pliku nie było; wznowienie ciche). Do decyzji właściciela: przeklasyfikowanie na informacyjne (granica zewnętrznego SDK, D-02) albo research faktycznego store CLI 2.1.270 i ponowna próba.",
       "backlog": "BL-07",
       "scenarios": [
         "T16"
@@ -2477,10 +2477,10 @@
       "class": "jakosciowe"
     },
     "L12.6": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "Historyczne przebiegi `e2e/agent-ui.spec.ts` i `e2e/files-agent.spec.ts` potwierdzają pełny tor UI → SDK → Mastra → AG-UI → OpenUI dla wcześniejszego providera subskrypcyjnego. Dla GLM istnieje rzeczywista izolowana sonda SDK oraz jedna tura dymna, opisane w `docs/RAPORT-DOMKNIECIA-PLATFORMY.md` i `docs/evidence/z12-bl04/sesja-sdk-glm.json`; sama sonda nie wysyła polecenia modelowi. Mocki/stand-iny są oznaczone w e2e/support i testach runtime.",
+      "proof": "Izolowany przebieg pełnej ścieżki na rzeczywistym modelu GLM: e2e/agent-ui.spec.ts (2/2, koperta docs/evidence/bl13-l126/manifest.json + przebieg-agent-ui.log) — GUI (OpenUI Agent Interface) → POST /api/agui/run → Hono → Mastra (@mastra/claude 0.3.1) → Claude Agent SDK 0.3.270 / CLI 2.1.270 z providerem GLM → strumień AG-UI → render OpenUI; odpowiedź modelu widoczna w GUI, karta kompozycji dodana przez model powiązana z wykonaniem, przetrwała reload. Mocki oznaczone osobno (specy skryptowane). Uzupełniająco ta sama ścieżka w przebiegach fali BL-03 (isolation/lifecycle/t14/t15/t16 — odczyty, mutacje, pliki, artefakty, sesje). Rodzaj wykonania: rzeczywisty model GLM/Z.AI przez harness Claude Agent SDK (kod b87ea1b…69ee6f6, model glm-5.3-flash[1m]).",
       "gap": "v0.4 wymaga rzeczywistej, izolowanej ścieżki GLM od GUI przez Claude Agent SDK, Mastrę, AG-UI i OpenUI z widocznym wynikiem oraz oznaczoną kopertą dowodu. Historyczny przebieg subskrypcyjny nie potwierdza nowego providera.",
       "scenarios": [
         "T05",
@@ -2490,8 +2490,7 @@
         "status": "potwierdzone",
         "note": "przebieg: przebiegi audytu na modelu; AG-UI jako własne kodowanie zdarzeń, bez @ag-ui/mastra"
       },
-      "class": "jakosciowe",
-      "backlog": "BL-13"
+      "class": "jakosciowe"
     },
     "L12.7": {
       "status": "potwierdzone",
@@ -3014,12 +3013,6 @@
       "title": "Trwałość, kopia i migracje",
       "summary": "Pytanie L7.13 ma pierwszą turę modelową (2026-10-08): SDK wznowił ten sam identyfikator sesji bez zdarzenia utraty — nierozstrzygnięte, czy chirurgia trafiła w żywy transkrypt CLI 2.1.270. Pozostałe kryteria trwałości (kopia z WAL, migracje, odtworzenie) są potwierdzone regresją.",
       "done": "Jedna tura modelowa z chirurgią transkryptu potwierdzoną (plik istniał przed i nie istnieje po, w katalogu faktycznie czytanym przez CLI przy wznowieniu); zapisany komunikat SDK rozstrzyga, która ścieżka zachodzi, i potwierdza albo uzupełnia wzorce rozpoznawania w isMissingSessionTranscript."
-    },
-    {
-      "id": "BL-13",
-      "title": "v0.4 — centrum zadań, tryby zgód i pełna ścieżka GLM",
-      "summary": "L11.12 i L11.19 potwierdzone (PR #1). Obserwacja z realnego SDK (t17): statyczna analiza bezpieczeństwa CLI 2.1.270 wykonuje trywialne komendy sandboxowalne bez konsultacji canUseTool mimo autoAllowBashIfSandboxed: false — do decyzji właściciela (research CLI albo egzekwowanie przez PreToolUse). Otwarte pozostaje L12.6: izolowany dowód pełnej ścieżki GUI przez GLM.",
-      "done": "L12.6 ma izolowany dowód pełnej ścieżki GLM/Z.AI → Claude Code / Claude Agent SDK → Mastra → AG-UI → OpenUI z oznaczoną wersją, środowiskiem i providerem."
     }
   ]
 }

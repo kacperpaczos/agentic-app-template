@@ -34,6 +34,7 @@ export const MODEL_SPEC_FILES = [
   'agent-ui.spec.ts',
   'files-agent.spec.ts',
   'model-artifacts.spec.ts',
+  'bramka-przekrojowa.spec.ts',
 ] as const;
 export type ModelSpecFile = (typeof MODEL_SPEC_FILES)[number];
 
@@ -59,6 +60,9 @@ export const MODEL_SPEC_TURNS: Record<ModelSpecFile, number> = {
   'agent-ui.spec.ts': 2,
   'files-agent.spec.ts': 2,
   'model-artifacts.spec.ts': 1,
+  /* Bramka przekrojowa: 4 tury modelowe + najwyzej 1 na sonde anulowania,
+     ktora zwykle anuluje run zanim model odpowie (patrz naglowek speca). */
+  'bramka-przekrojowa.spec.ts': 5,
 };
 
 export const MODEL_TURNS_PER_RUN = Object.values(MODEL_SPEC_TURNS).reduce((a, b) => a + b, 0);
@@ -302,7 +306,7 @@ export function writeEvidence(name: string, body: Record<string, unknown>): void
 /**
  * Why a second set of everything rather than four more entries above.
  *
- * **A separate switch.** `pnpm test:e2e:model` can cost 12 turns and is documented
+ * **A separate switch.** `pnpm test:e2e:model` can cost 17 turns and is documented
  * as such. Adding these files to the same project would silently change
  * that number for everyone who runs it, which is how the default run came to
  * spend turns in the first place. `APP_E2E_MODEL_Z11=1` is a second, deliberate
