@@ -1,0 +1,63 @@
+{
+  "zapisano": "2026-10-08T00:23:10.342Z",
+  "rodzajWykonania": "rzeczywisty model",
+  "wersjaKodu": {
+    "commit": "0be7c040dbaa0296ef3088630bee19f4f817a802",
+    "brudneDrzewo": false,
+    "node": "24.19.0",
+    "pakiety": {}
+  },
+  "srodowisko": {
+    "system": "linux 7.2.8-200.fc44.x86_64 x64",
+    "node": "24.19.0",
+    "pnpm": "9.15.9",
+    "cliZewnetrzne": "2.1.283 (Claude Code)",
+    "cliWSdk": {
+      "wersja": "2.1.270",
+      "commit": "97ecbf7abeb4170dcfd26c4d4b397afd9015030e",
+      "dataBudowy": "2026-09-12T18:17:55Z"
+    },
+    "model": "glm-5.3-flash[1m]",
+    "pakiety": {
+      "react": "19.3.0",
+      "react-dom": "19.3.0",
+      "typescript": "7.0.2",
+      "vite": "8.3.0",
+      "vitest": "5.0.0",
+      "@playwright/test": "1.63.0",
+      "@openuidev/react-ui": "0.13.10",
+      "@openuidev/react-headless": "0.9.13",
+      "hono": "4.13.7",
+      "drizzle-orm": "0.45.2",
+      "@mastra/core": "1.66.0",
+      "@mastra/claude": "0.3.1",
+      "@anthropic-ai/claude-agent-sdk": "0.3.270",
+      "zod": "4.6.5"
+    }
+  },
+  "zrodlo": "model GLM/Z.AI przez kompatybilny endpoint Anthropic (@mastra/claude i proces Claude Agent SDK jako harness); subskrypcja Claude nieuzywana",
+  "model": "glm-5.3-flash[1m]",
+  "pakiet": "BL-03 (Z11)",
+  "przebieg": "2026-10-08T00-18-35-144Z",
+  "kodCommit": "0be7c040dbaa0296ef3088630bee19f4f817a802",
+  "spec": "e2e/bl03-model-t15.spec.ts",
+  "przebiegPlanu": "T15",
+  "turyWydaneWTymPliku": 4,
+  "turyWydaneLacznie": 22,
+  "budzet": 45,
+  "kroki": [],
+  "kryteria": [
+    "L7.13"
+  ],
+  "reakcjaSdk": {
+    "sessionTranscriptLost": false,
+    "sessionBound": false,
+    "sesjaPrzed": "f4c7415c-a6d2-4088-af21-33056ca609da",
+    "sesjaPo": "f4c7415c-a6d2-4088-af21-33056ca609da",
+    "sesjaZmieniona": false,
+    "faza": "failed",
+    "odpowiedz": "y zapytasz, podam go stąd.\n\nPolecenie `sleep 120` zakończone — odczekałem pełne 120 sekund na jego zakończenie (bez wyjścia, kod 0).\n1 — nieparzysta i niepodzielna przez trzy.\n2 — parzysta, ale niepodzielna przez trzy.\n3 — nieparzysta, ale podzielna przez trzy.\n4 — parzysta, ale niepodzielna przez trzy.\n5 — nieparzysta i niepodzielna przez trzy.\n6 — parzysta i podzielna przez trzy.\n7 — nieparzysta i niepodzielna przez trzy.\n8 — parzysta, ale niepodzielna przez trzy.\n9 — nieparzysta, ale podzielna przez trzy.\n10 — parzysta, ale niepodzielna przez trzy.\n11 — nieparzysta i niepodzielna przez trzy",
+    "zawieraKod": true
+  },
+  "wynik": "niezaliczona"
+}
