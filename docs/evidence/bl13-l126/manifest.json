@@ -1,0 +1,15 @@
+{
+  "zapisano": "2026-10-08T14:33:55.133Z",
+  "rodzajWykonania": "rzeczywisty model",
+  "kryteria": [
+    "L12.6"
+  ],
+  "spec": "e2e/agent-ui.spec.ts",
+  "wynik": "zaliczona (2/2 testy)",
+  "przebiegLog": "docs/evidence/bl13-l126/przebieg-agent-ui.log",
+  "zrodlo": "model GLM/Z.AI przez kompatybilny endpoint Anthropic (@mastra/claude i proces Claude Agent SDK jako harness); subskrypcja Claude nieuzywana",
+  "endpointOrigin": "https://api.z.ai",
+  "kodCommit": "b87ea1bff9048e800c59e0d6e84a7db3b8516fad",
+  "sciezka": "GUI (OpenUI Agent Interface w przegladarce) -> POST /api/agui/run -> Hono -> Mastra (@mastra/claude 0.3.1) -> Claude Agent SDK 0.3.270 / CLI 2.1.270 (provider GLM) -> strumien AG-UI -> render OpenUI; karty kompozycji powiazane z wykonaniem, wynik widoczny w GUI",
+  "uwagi": "Spec nie jest rozliczany z ledgera (przelaczany przed rejestrem) — 2 tury z grantu GLM odnotowane recznie; e2e potwierdza: odpowiedz modelu na dowolne polecenie, karta dodana przez model powiazana z wykonaniem, przetrwanie reload."
+}
