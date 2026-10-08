@@ -60,8 +60,19 @@ test.describe('BL-03 przebieg T16: braki bez zmyslonych danych, formula bez wyni
     const record: Record<string, unknown> = { kryteria: ['L6.11', 'L11.23'] };
 
     try {
-      const baza = new URL(page.url()).origin;
-      await page.goto(`${baza}/cases`);
+      /* Sesja w KONTEKŚCIE STRONY (cookies), nie tylko w `request` — bez tego
+       * /cases renderuje ekran logowania i kafelków nie ma (pierwsze wykonanie
+       * tego specu, fala 2026-10-07T23-59-48-824Z). */
+      await page.goto('/');
+      await page.evaluate(() =>
+        fetch('/api/auth/session', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        }),
+      );
+      await page.goto('/cases');
       await page.locator('[data-testid^="case-tile-"]').first().click();
       await expect(page.getByTestId('case-detail-page')).toBeVisible();
       const realCaseId = new URL(page.url()).pathname.split('/').pop()!;
