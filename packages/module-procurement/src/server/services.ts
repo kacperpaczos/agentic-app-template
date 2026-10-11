@@ -293,7 +293,18 @@ export class ProcurementService {
     const counts = this.repo.counts(ownerId);
     const wanted = query.trim();
     if (!wanted) return { results: [], matched: 0, query: wanted, totals: counts };
-    const results = this.repo.search(ownerId, wanted, Math.min(limit, 50));
+    /*
+     * Podloga i sufit limitu liczone w usludze, nie tylko w schematach drzwi.
+     *
+     * `Math.min(limit, 50)` nie wystarcza: SQLite czyta ujemny LIMIT jako "bez
+     * limitu" (przeczytanie calej listy mimo zadania jednostronicowego okna),
+     * a `NaN` rozbija wiazanie parametrow. Oba musza byc niemozliwe takze dla
+     * wolacza, ktory przeszedl obok walidacji `searchInput` — testow,
+     * akcji rekordow albo przyszlego trzeciego drzwi.
+     */
+    const n = Number(limit);
+    const bounded = Number.isFinite(n) ? Math.max(1, Math.min(Math.trunc(n), 50)) : 20;
+    const results = this.repo.search(ownerId, wanted, bounded);
     return { results, matched: results.length, query: wanted, totals: counts };
   }
 

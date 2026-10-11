@@ -4,11 +4,18 @@ import type { PlatformServices } from '@platform/server';
 import { MODULE_ID } from '../shared/index.ts';
 import { PROCUREMENT_CARD_COMPONENTS } from '../shared/cards.ts';
 import { PROCUREMENT_OPENUI_COMPONENTS } from '../shared/openui-components.ts';
-import { criteriaWeightsInput, searchInput, updateOfferItemInput } from './inputs.ts';
+import {
+  criteriaWeightsInput,
+  itemIdInput,
+  listOffersInput,
+  saveComparisonInput,
+  searchInput,
+  updateOfferItemInput,
+} from './inputs.ts';
 import { PROCUREMENT_MIGRATIONS } from './schema.ts';
 import { seedProcurement } from './seed.ts';
 import { ProcurementService } from './services.ts';
-import { procurementTools } from './tools.ts';
+import { listOffersPayload, procurementTools } from './tools.ts';
 import {
   caseOfferItemRecords,
   caseRecords,
@@ -284,9 +291,76 @@ export function createProcurementModule(platform: PlatformServices): ServerModul
         body: service.getCaseDetail(req.params.caseId as string, req.ownerId),
       }));
 
+      /**
+       * The offer window of a case, through the same shared `listOffersInput`
+       * the MCP `list_offers` tool is held to (L9.2).
+       *
+       * `GET /cases/:caseId` deliberately keeps answering with *all* offers —
+       * existing clients read the whole detail from it — so a client that needs
+       * the same paged read the agent gets uses this route instead. The query
+       * string carries text, so the numeric fields are converted before the
+       * shared schema sees them; the conversion fails loudly (`NaN` is a
+       * validation failure, not a binding error).
+       */
+      register.get('/cases/:caseId/offers', async (req) => {
+        const q = req.query as Record<string, string | undefined>;
+        const num = (key: string): Record<string, number> =>
+          q[key] === undefined || q[key] === '' ? {} : { [key]: Number(q[key]) };
+        const input = parseOrThrow(
+          listOffersInput,
+          {
+            caseId: req.params.caseId,
+            ...num('limit'),
+            ...num('offset'),
+            ...num('itemsLimit'),
+            ...num('itemsOffset'),
+          },
+          'Nieprawidlowe okno odczytu ofert.',
+        );
+        // One payload builder for both doors: the MCP tool answers through the
+        // very same function, so the shapes cannot drift apart.
+        return { body: listOffersPayload(service, input, req.ownerId) };
+      });
+
       register.get('/cases/:caseId/comparison', async (req) => ({
         body: service.compare(req.params.caseId as string, req.ownerId),
       }));
+
+      /**
+       * The write the comparison read was missing a door for (L9.2).
+       *
+       * `save_comparison` used to exist only as an MCP tool: a client saving the
+       * frozen report over HTTP had no route, while the same operation over MCP
+       * enforced `saveComparisonInput` — `operationId` required, replay one
+       * artifact instead of two. Same service call, same schema, second door.
+       *
+       * There is no `emit` channel on plain HTTP; a client sees the new artifact
+       * through `/api/artifacts`. `operationId` stays required: an artifact
+       * without a replay key is exactly the duplicate the field exists to
+       * prevent, on either transport.
+       */
+      register.post('/cases/:caseId/comparison', async (req) => {
+        const input = parseOrThrow(saveComparisonInput, {
+          ...((req.body ?? {}) as Record<string, unknown>),
+          caseId: req.params.caseId,
+        }, 'Nieprawidlowe zadanie zapisu zestawienia.');
+        const saved = await service.saveComparisonArtifact({
+          caseId: input.caseId,
+          ownerId: req.ownerId,
+          conversationId: null,
+          runId: null,
+          title: input.title,
+          operationId: input.operationId,
+        });
+        return {
+          body: {
+            artifactId: saved.artifactId,
+            version: saved.version,
+            bestOfferId: saved.result.bestOfferId,
+            replayed: saved.replayed,
+          },
+        };
+      });
 
       /**
        * Same schema as `set_criteria_weights`, for the same reason the item
@@ -324,9 +398,15 @@ export function createProcurementModule(platform: PlatformServices): ServerModul
         return { body: await service.updateOfferItem(input, req.ownerId) };
       });
 
-      register.get('/items/:itemId/provenance', async (req) => ({
-        body: service.findProvenance(req.params.itemId as string, req.ownerId),
-      }));
+      /** Same shared `itemIdInput` the MCP `find_price_provenance` tool uses. */
+      register.get('/items/:itemId/provenance', async (req) => {
+        const input = parseOrThrow(
+          itemIdInput,
+          { itemId: req.params.itemId },
+          'Nieprawidlowy identyfikator pozycji.',
+        );
+        return { body: service.findProvenance(input.itemId, req.ownerId) };
+      });
 
       /**
        * The same read window the tool is held to.

@@ -33,6 +33,8 @@ export type UpdateOfferItemInput = z.infer<typeof updateOfferItemInput>;
 
 export const caseIdInput = z.object({ caseId: z.string().min(1) });
 
+export const itemIdInput = z.object({ itemId: z.string().min(1) });
+
 export const criteriaWeightsInput = z.object({
   caseId: z.string().min(1),
   weights: z
