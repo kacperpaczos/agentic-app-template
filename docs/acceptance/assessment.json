@@ -1645,7 +1645,7 @@
       "status": "potwierdzone",
       "evidence": "test",
       "origin": "szablon",
-      "proof": "tests/domain-guarantees.test.ts — tabela dziesieciu regul, kazda pytana przez narzedzie MCP i przez endpoint, z porownaniem kodow i sprawdzeniem, ze zadna z drog niczego nie zmienila po drodze: waga poza 0-100, waga nie-liczba, nieznany klucz kryterium, brak listy wag, ujemny limit wyszukiwania, limit ponad maksimum, puste zapytanie, ujemna cena, zapis pozycji bez wersji, zapis z nieaktualna wersja. Plus „obie drogi przyjmuja to samo poprawne wejscie i daja ten sam skutek” (wagi zapisane obiema drogami, to samo okno odczytu). Naprawa: POST /api/m/procurement/cases/:caseId/criteria i GET /api/m/procurement/search ida teraz przez te same schematy co narzedzia (criteriaWeightsInput, searchInput), a updateOfferItemInput wymaga expectedVersion po obu stronach. Proby zdolnosci wykrycia: docs/evidence/z6-bl11b/proby-wykrycia.txt (P5).",
+      "proof": "tests/domain-guarantees.test.ts — tabela dziesieciu regul, kazda pytana przez narzedzie MCP i przez endpoint, z porownaniem kodow i sprawdzeniem, ze zadna z drog niczego nie zmienila po drodze: waga poza 0-100, waga nie-liczba, nieznany klucz kryterium, brak listy wag, ujemny limit wyszukiwania, limit ponad maksimum, puste zapytanie, ujemna cena, zapis pozycji bez wersji, zapis z nieaktualna wersja. Plus „obie drogi przyjmuja to samo poprawne wejscie i daja ten sam skutek” (wagi zapisane obiema drogami, to samo okno odczytu). Naprawa: POST /api/m/procurement/cases/:caseId/criteria i GET /api/m/procurement/search ida teraz przez te same schematy co narzedzia (criteriaWeightsInput, searchInput), a updateOfferItemInput wymaga expectedVersion po obu stronach. Proby zdolnosci wykrycia: docs/evidence/z6-bl11b/proby-wykrycia.txt (P5). Dopelnienie braku z proby T09 (2026-10-11, feat/l92-parzystosc): macierz parzystosci tests/parity-http-mcp.test.ts — deklaratywne (operacja, przypadek) → oba drzwia (HTTP app.request i MCP registry.callTool), ten sam kod błędu / zgodne pola wyniku; 42 testy obejmują wszystkie 9 narzędzi (poprawny, naruszenie schematu, limity brzegowe, cudzy zasób forbidden, konflikt wersji, replay z operationId). Zamknięte rozjazdy: wagi kryteriów (safeParse przez HTTP), limit wyszukiwania (współdzielony schemat + clamp w serwisie — SQLite czyta LIMIT ujemny jako „bez limitu\"), save_comparison i list_offers z drzwiami HTTP, wspólne inputy get_case/find_price_provenance. Falsyfikacja: wycofanie walidacji wag powoduje 5 padających asercji (docs/evidence/l92-parzystosc/czerwona-faza.md).",
       "gap": "—",
       "scenarios": [
         "T09"
@@ -2671,7 +2671,8 @@
         "e2e/run-events.spec.ts",
         "e2e/chat-history.spec.ts",
         "e2e/agent-ui.spec.ts"
-      ]
+      ],
+      "braki": "Proza sprzed narzędzia nie trafia do banki odpowiedzi — ograniczenie @openuidev/react-ui 0.13.10 zmierzone i przypięte dwukierunkowo (L5.15). Rozpoznanie 2026-10-11: biblioteka nie ma publicznego API renderowania segmentów (tylko AssistantMessage/UserMessage, komponent dostaje wyłącznie ostatni segment); upgrade do 0.17.1 nie zmienia zachowania upstream; jedyny technicznie poprawny plan B to dwustronne scalenie segmentów (transform w platformAdapter.ts + projekcja /api/threads/get) — wycenione, wymaga otwarcia nowego pakietu (re-piny L4.9, regresja streamingu i tur bez tekstu). Pozostaje jawnym ograniczeniem do decyzji właściciela."
     },
     "T05": {
       "status": "potwierdzone",
@@ -2727,8 +2728,8 @@
       ]
     },
     "T09": {
-      "status": "czesciowe",
-      "proof": "e2e/app.spec.ts i e2e/measurements.spec.ts: odczyt i mutacja przez UI z widocznym wynikiem bez reload; pochodzenie ceny do pliku; tests/contracts.test.ts i tests/domain-comparison.test.ts: reguły, konflikt wersji, dostęp.",
+      "status": "potwierdzone",
+      "proof": "e2e/app.spec.ts i e2e/measurements.spec.ts: odczyt i mutacja przez UI z widocznym wynikiem bez reload; pochodzenie ceny do pliku; tests/contracts.test.ts i tests/domain-comparison.test.ts: reguły, konflikt wersji, dostęp. Dopełnienie 2026-10-11: macierz parzystości HTTP/MCP wszystkich operacji (tests/parity-http-mcp.test.ts, 42 testy) i przejścia po relacjach z realnym modelem (T25, zaliczona).",
       "gap": "Ta sama reguła HTTP/MCP nie jest egzekwowana dla wszystkich operacji (L9.2: wagi kryteriów i limit wyszukiwania); przejście po relacjach i selektywny odczyt przez agenta tylko historycznie.",
       "evidence": [
         "gui",
@@ -2739,7 +2740,8 @@
         "e2e/measurements.spec.ts",
         "tests/contracts.test.ts",
         "tests/domain-comparison.test.ts"
-      ]
+      ],
+      "braki": "—"
     },
     "T10": {
       "status": "potwierdzone",
