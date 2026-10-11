@@ -2714,7 +2714,8 @@
       "pliki": [
         "e2e/agent-ui.spec.ts",
         "tests/bl10-card-catalog.test.ts"
-      ]
+      ],
+      "braki": "Zmiana, przesunięcie i usunięcie karty przez model nie mają próby w szablonie (walidacja L3.3 dla kart openui potwierdzona asercjami regresyjnymi 2026-10-11 — nota audytu o przepuszczaniu nieznanych komponentów była nieaktualna)."
     },
     "T08": {
       "status": "niespelnione",
