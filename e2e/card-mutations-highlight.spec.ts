@@ -367,13 +367,19 @@ test.describe('T07 + T23: mutacje karty i pokazanie ustawienia na prawdziwym mod
       expect(phase).toBe('succeeded');
 
       const events = await backend.runEvents(run.runId);
-      const updates = callsOf(events, 'canvas_update_card');
+      /* Mutacja kompozycji ma dwa legalne narzedzia: karty (canvas_update_card)
+         albo calego widoku (agent_view_update) — asercja na REZULTAT (tytul w
+         kompozycji), nie na wybor narzedzia przez model. */
+      const updates = [
+        ...callsOf(events, 'canvas_update_card'),
+        ...callsOf(events, 'agent_view_update'),
+      ];
       expect(
         updates.length,
-        `run nie wolal canvas_update_card; wolane narzedzia: ${toolNames(events).join(', ') || '(zadne)'}`,
+        `run nie zmutowal kompozycji; wolane narzedzia: ${toolNames(events).join(', ') || '(zadne)'}`,
       ).toBeGreaterThan(0);
       const update = updates[updates.length - 1]!;
-      expect(update.isError, `canvas_update_card zakonczyl sie bledem: ${update.rawResult}`).toBe(false);
+      expect(update.isError, `mutacja kompozycji zakonczyla sie bledem: ${update.rawResult}`).toBe(false);
       /* Ten sam obiekt, nie nowa karta. */
       expect((update.result as { cardId?: string } | null)?.cardId, 'update dotknal innej karty').toBe(
         karta!.cardId,
@@ -436,13 +442,16 @@ test.describe('T07 + T23: mutacje karty i pokazanie ustawienia na prawdziwym mod
       expect(phase).toBe('succeeded');
 
       const events = await backend.runEvents(run.runId);
-      const moves = callsOf(events, 'canvas_move_card');
+      const moves = [
+        ...callsOf(events, 'canvas_move_card'),
+        ...callsOf(events, 'agent_view_update'),
+      ];
       expect(
         moves.length,
-        `run nie wolal canvas_move_card; wolane narzedzia: ${toolNames(events).join(', ') || '(zadne)'}`,
+        `run nie przesunal karty; wolane narzedzia: ${toolNames(events).join(', ') || '(zadne)'}`,
       ).toBeGreaterThan(0);
       const move = moves[moves.length - 1]!;
-      expect(move.isError, `canvas_move_card zakonczyl sie bledem: ${move.rawResult}`).toBe(false);
+      expect(move.isError, `przesuniecie zakonczylo sie bledem: ${move.rawResult}`).toBe(false);
       expect((move.result as { cardId?: string } | null)?.cardId, 'przesuniecie dotknelo innej karty').toBe(
         karta!.cardId,
       );
@@ -509,13 +518,16 @@ test.describe('T07 + T23: mutacje karty i pokazanie ustawienia na prawdziwym mod
       expect(phase).toBe('succeeded');
 
       const events = await backend.runEvents(run.runId);
-      const removals = callsOf(events, 'canvas_remove_card');
+      const removals = [
+        ...callsOf(events, 'canvas_remove_card'),
+        ...callsOf(events, 'agent_view_update'),
+      ];
       expect(
         removals.length,
-        `run nie wolal canvas_remove_card; wolane narzedzia: ${toolNames(events).join(', ') || '(zadne)'}`,
+        `run nie usunal karty; wolane narzedzia: ${toolNames(events).join(', ') || '(zadne)'}`,
       ).toBeGreaterThan(0);
       const removal = removals[removals.length - 1]!;
-      expect(removal.isError, `canvas_remove_card zakonczyl sie bledem: ${removal.rawResult}`).toBe(false);
+      expect(removal.isError, `usuniecie zakonczylo sie bledem: ${removal.rawResult}`).toBe(false);
       expect((removal.result as { removed?: string } | null)?.removed, 'usunieto inna karte').toBe(
         karta!.cardId,
       );
