@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import type { ToolCallContext } from '@platform/contracts';
 import { PROCUREMENT_CARD_COMPONENTS, PROCUREMENT_CARD_TO_OPENUI } from '@module/procurement/shared';
 import { createProcurementModule } from '@module/procurement/server';
-import { OpenUiServerCatalog } from '@platform/server';
+import { collectToolEntries, executeTool, OpenUiServerCatalog, platformTools } from '@platform/server';
 import { typedCard, type CardComponentProps } from '@platform/ui';
 import { caseSummaryPropsSchema } from '@module/procurement/shared';
 import { createHarness } from './helpers.ts';
@@ -173,6 +174,179 @@ describe('karty modulu w katalogu OpenUI', () => {
           { mode: 'agent-views' },
         ),
       ).not.toThrow();
+    } finally {
+      h.dispose();
+    }
+  });
+});
+
+/**
+ * The `openui` half of the card catalog (L3.3, the gap the T07 trial would have
+ * caught): a card whose composition names a component the catalog does not know
+ * must be refused, not stored for the browser to silently drop.
+ *
+ * `tests/agent-views.test.ts` covers the validator itself and the HTTP doors
+ * with an unknown component at the *statement* level (`x = Wykresik("a")`);
+ * what was never asserted anywhere is the unknown name sitting *inside the
+ * tree* — as an argument of a known component — and the MCP tool doors
+ * (`canvas_add_card`, `canvas_update_card`) that an agent actually writes
+ * through. These are those assertions.
+ */
+describe('karta openui jest sprawdzana przeciw katalogowi takze w głąb drzewa', () => {
+  /** Harness + the platform tools as the MCP server would list them. */
+  async function harnessWithTools() {
+    const h = await createHarness();
+    const entries = collectToolEntries({
+      registry: h.platform.registry,
+      platformTools: platformTools(h.platform.services),
+    });
+    const call = (name: string, input: unknown, ctx: Partial<ToolCallContext> = {}) => {
+      const entry = entries.find((t) => t.localName === name);
+      if (!entry) throw new Error(`nieznane narzedzie platformy ${name}`);
+      return executeTool(
+        { localName: name, def: entry.def as never },
+        input,
+        {
+          ownerId: h.ownerId,
+          appContext: {
+            conversationId: null,
+            spaceId: null,
+            resource: null,
+            selection: [],
+            filters: {},
+            viewport: null,
+            drafts: [],
+            ui: null,
+          },
+          conversationId: null,
+          runId: null,
+          workspaceDir: null,
+          emit: () => {},
+          ...ctx,
+        } as ToolCallContext,
+      );
+    };
+    return { h, call };
+  }
+
+  it('(a) nieznany komponent w drzewie odrzucony z nazwa, w obu trybach', async () => {
+    const h = await createHarness();
+    try {
+      const withUnknown = 'root = Stack([opis, zjawa])\nopis = TextContent("a")\nzjawa = NieznanyWidget("x")';
+      // The tree itself carries the unknown name — no statement of its own.
+      const nested = 'root = Stack([TextContent("a"), NieznanyWidget("x")])';
+      for (const mode of ['catalog', 'agent-views'] as const) {
+        for (const source of [withUnknown, nested]) {
+          try {
+            h.platform.services.catalog.validate({ kind: 'openui', source }, { mode });
+            throw new Error(`przelalo: mode=${mode}, source=${source}`);
+          } catch (err) {
+            expect((err as { code?: string }).code, `${mode}: ${source}`).toBe('validation_failed');
+            expect((err as Error).message).toMatch(/NieznanyWidget/);
+            expect(
+              (err as { details?: { reason?: string } }).details?.reason,
+              `${mode}: ${source}`,
+            ).toBe('unknown_component');
+          }
+        }
+      }
+    } finally {
+      h.dispose();
+    }
+  });
+
+  it('(b) nieznany komponent zagniezdzony glebiej (w dzieciach znanego) tez odrzucony', async () => {
+    const h = await createHarness();
+    try {
+      // Two levels deep: Tabs -> TabItem -> the unknown component.
+      const deep = 'root = Tabs([TabItem("a", "Dane", [GhostWidget("x")])])';
+      expect(() =>
+        h.platform.services.catalog.validate({ kind: 'openui', source: deep }, { mode: 'catalog' }),
+      ).toThrowError(/GhostWidget/);
+      const caught = (() => {
+        try {
+          h.platform.services.catalog.validate({ kind: 'openui', source: deep }, { mode: 'catalog' });
+          return null;
+        } catch (err) {
+          return err as { details?: { reason?: string } };
+        }
+      })();
+      expect(caught?.details?.reason).toBe('unknown_component');
+    } finally {
+      h.dispose();
+    }
+  });
+
+  it('(c) kontrola przeciwna: drzewo ze znanych komponentow jest przyjmowane i normalizowane', async () => {
+    const h = await createHarness();
+    try {
+      const fenced = [
+        '```openui',
+        'root = Stack([opis, sep])',
+        'opis = TextContent("Oferty w sprawie")',
+        'sep = Separator()',
+        '```',
+      ].join('\n');
+      const stored = h.platform.services.catalog.validate(
+        { kind: 'openui', source: fenced },
+        { mode: 'catalog' },
+      );
+      expect(stored).toEqual({
+        kind: 'openui',
+        source: 'root = Stack([opis, sep])\nopis = TextContent("Oferty w sprawie")\nsep = Separator()',
+      });
+    } finally {
+      h.dispose();
+    }
+  });
+
+  it('canvas_add_card odrzuca drzewo z nieznanym komponentem i nic nie zapisuje', async () => {
+    const { h, call } = await harnessWithTools();
+    try {
+      const space = h.platform.services.canvas.createSpace({ ownerId: h.ownerId, title: 'l33 add' });
+      await expect(
+        call('canvas_add_card', {
+          spaceId: space.id,
+          title: 'zla karta',
+          spec: { kind: 'openui', source: 'root = Stack([TextContent("a"), NieznanyWidget("x")])' },
+          operationId: 'op-l33-add-01',
+        }),
+      ).rejects.toMatchObject({
+        code: 'validation_failed',
+        message: expect.stringMatching(/NieznanyWidget/),
+      });
+      expect(h.platform.services.canvas.getState(space.id, h.ownerId).cards).toHaveLength(0);
+    } finally {
+      h.dispose();
+    }
+  });
+
+  it('canvas_update_card odrzuca drzewo z nieznanym komponentem i tresc karty zostaje', async () => {
+    const { h, call } = await harnessWithTools();
+    try {
+      const space = h.platform.services.canvas.createSpace({ ownerId: h.ownerId, title: 'l33 update' });
+      const added = (await call('canvas_add_card', {
+        spaceId: space.id,
+        title: 'dobra karta',
+        spec: { kind: 'openui', source: 'root = TextContent("pierwotna")' },
+        operationId: 'op-l33-upd-01',
+      })) as { cardId: string; specVersion: number };
+
+      await expect(
+        call('canvas_update_card', {
+          cardId: added.cardId,
+          spec: { kind: 'openui', source: 'root = Stack([TextContent("nowa"), GhostWidget("x")])' },
+          expectedSpecVersion: added.specVersion,
+          operationId: 'op-l33-upd-02',
+        }),
+      ).rejects.toMatchObject({
+        code: 'validation_failed',
+        message: expect.stringMatching(/GhostWidget/),
+      });
+
+      const card = h.platform.services.canvas.getCard(added.cardId, h.ownerId);
+      expect(card.spec).toEqual({ kind: 'openui', source: 'root = TextContent("pierwotna")' });
+      expect(card.specVersion).toBe(added.specVersion);
     } finally {
       h.dispose();
     }
