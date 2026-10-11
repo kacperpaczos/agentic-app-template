@@ -9,6 +9,7 @@ import {
 } from '@platform/contracts';
 import {
   caseIdInput,
+  itemIdInput,
   listOffersInput,
   criteriaWeightsInput,
   saveComparisonInput,
@@ -41,6 +42,58 @@ function decorate(result: ComparisonResult) {
 }
 
 /**
+ * Wynik `list_offers`, wspólny dla obu drzwi (L9.2): drzwi MCP (poniżej) i
+ * endpoint `GET /cases/:caseId/offers` wywołują tę samą funkcję, więc okno
+ * odczytu, struktura pozycji i `window` nie mogą się między transportami
+ * rozjechać. To odwzorowanie odpowiedzi, nie logika domenowa — granie danych
+ * pozostaje w `ProcurementService`.
+ */
+export function listOffersPayload(
+  service: ProcurementService,
+  i: { caseId: string; limit?: number; offset?: number; itemsLimit?: number; itemsOffset?: number },
+  ownerId: string,
+) {
+  const d = service.getCaseDetail(i.caseId, ownerId);
+  const { items: offers, window } = applyReadWindow(d.offers, i);
+  return {
+    offers: offers.map((o) => {
+      const items = applyReadWindow(o.items, {
+        ...(i.itemsLimit !== undefined ? { limit: i.itemsLimit } : {}),
+        ...(i.itemsOffset !== undefined ? { offset: i.itemsOffset } : {}),
+      });
+      return {
+        id: o.offer.id,
+        supplier: o.supplierName,
+        reference: o.offer.reference,
+        currency: o.offer.currency,
+        priceBasis: o.offer.priceBasis,
+        items: items.items.map((it) => ({
+          id: it.id,
+          requirementId: it.requirementId,
+          name: it.name,
+          unit: it.unit,
+          quantity: formatQuantity(it.quantityMilli),
+          unitPriceMinor: it.unitPriceMinor,
+          unitPrice:
+            it.unitPriceMinor === null ? null : formatMinor(it.unitPriceMinor, o.offer.currency),
+          version: it.version,
+        })),
+        /*
+         * Only when something was left out. A window that covers the
+         * whole list says nothing the list does not already say, and a
+         * tool answer is context the model pays for — the top-level
+         * `window` and `windowNote` carry the general statement.
+         */
+        ...(items.window.truncated ? { itemsWindow: items.window } : {}),
+      };
+    }),
+    window,
+    windowNote: readWindowNote(window, 'ofert'),
+    total: d.offers.length,
+  };
+}
+
+/**
  * The module's MCP tools. Every one is a two-line wrapper over a service method
  * — there is no business logic in this file by design.
  */
@@ -69,8 +122,13 @@ export function procurementTools(service: ProcurementService): ModuleToolDefinit
         'Osobno, bo sprawa z trzema wymaganiami i setka ofert nie ma powodu chowac wymagan razem z oferta nr 26. ' +
         'requirementsWindow.truncated / offersWindow.truncated=true znaczy, ze to nie jest cala lista.',
       effect: 'read',
-      inputSchema: z.object({
-        caseId: z.string(),
+      /*
+       * `caseIdInput` (min 1), nie gołe `z.string()`: identyfikator zaczynający
+       * się od odrzucenia schematu to `validation_failed` tak jak w każdym
+       * innym narzędziu tej moduły — a nie `not_found` z pustego zapytania
+       * do bazy. Reszta kształtu to okno odczytu ofert i osobne okno wymagań.
+       */
+      inputSchema: caseIdInput.extend({
         ...readWindowInput,
         requirementsLimit: readWindowInput.limit.describe('Ile wymaganych pozycji zwrocic'),
         requirementsOffset: readWindowInput.offset.describe('Od ktorej wymaganej pozycji zaczac'),
@@ -125,49 +183,11 @@ export function procurementTools(service: ProcurementService): ModuleToolDefinit
         'ktorej pozycje zostaly przyciete.',
       effect: 'read',
       inputSchema: listOffersInput,
+      /** Ciało odpowiedzi wspólne z `GET /cases/:caseId/offers` — patrz wyżej. */
       handler: async (
         i: { caseId: string; limit?: number; offset?: number; itemsLimit?: number; itemsOffset?: number },
         ctx: ToolCallContext,
-      ) => {
-        const d = service.getCaseDetail(i.caseId, ctx.ownerId);
-        const { items: offers, window } = applyReadWindow(d.offers, i);
-        return {
-          offers: offers.map((o) => {
-            const items = applyReadWindow(o.items, {
-              ...(i.itemsLimit !== undefined ? { limit: i.itemsLimit } : {}),
-              ...(i.itemsOffset !== undefined ? { offset: i.itemsOffset } : {}),
-            });
-            return {
-              id: o.offer.id,
-              supplier: o.supplierName,
-              reference: o.offer.reference,
-              currency: o.offer.currency,
-              priceBasis: o.offer.priceBasis,
-              items: items.items.map((it) => ({
-                id: it.id,
-                requirementId: it.requirementId,
-                name: it.name,
-                unit: it.unit,
-                quantity: formatQuantity(it.quantityMilli),
-                unitPriceMinor: it.unitPriceMinor,
-                unitPrice:
-                  it.unitPriceMinor === null ? null : formatMinor(it.unitPriceMinor, o.offer.currency),
-                version: it.version,
-              })),
-              /*
-               * Only when something was left out. A window that covers the
-               * whole list says nothing the list does not already say, and a
-               * tool answer is context the model pays for — the top-level
-               * `window` and `windowNote` carry the general statement.
-               */
-              ...(items.window.truncated ? { itemsWindow: items.window } : {}),
-            };
-          }),
-          window,
-          windowNote: readWindowNote(window, 'ofert'),
-          total: d.offers.length,
-        };
-      },
+      ) => listOffersPayload(service, i, ctx.ownerId),
     },
     {
       name: 'compare_offers',
@@ -228,7 +248,8 @@ export function procurementTools(service: ProcurementService): ModuleToolDefinit
       description:
         'Dla pozycji oferty przechodzi po relacjach do oferty, dostawcy i zalacznika zrodlowego, i zwraca miejsce w pliku, z ktorego pochodzi wartosc.',
       effect: 'read',
-      inputSchema: z.object({ itemId: z.string() }),
+      /** `itemIdInput` (min 1) — ta sama zasada co w `get_case` powyżej. */
+      inputSchema: itemIdInput,
       handler: async (i: { itemId: string }, ctx: ToolCallContext) =>
         service.findProvenance(i.itemId, ctx.ownerId),
     },
