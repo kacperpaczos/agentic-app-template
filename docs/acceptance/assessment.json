@@ -2704,8 +2704,8 @@
       ]
     },
     "T07": {
-      "status": "czesciowe",
-      "proof": "e2e/agent-ui.spec.ts na prawdziwym modelu: agent dodaje kartę powiązaną z wykonaniem, przeżywa reload; walidacja katalogu i rozdzielone wersje geometrii/treści w testach kontraktu.",
+      "status": "potwierdzone",
+      "proof": "e2e/agent-ui.spec.ts na prawdziwym modelu: agent dodaje kartę powiązaną z wykonaniem, przeżywa reload; walidacja katalogu i rozdzielone wersje geometrii/treści w testach kontraktu. Dopełnienie 2026-10-12: realny model wykonał pełny cykl mutacji w jednej rozmowie — dodanie karty (agent_view_create), zmianę tytułu (cardId i treść trwałe, specVersion +1), przesunięcie (dokładnie +160/+80, geometryVersion +1) i usunięcie (kartyPo puste; model wybrał agent_view_remove — dowód w diffie przestrzeni, nie w nazwie narzędzia). Walidacja L3.3 dla kart openui przypięta asercjami regresyjnymi (tests/bl10-card-catalog.test.ts). Rzeczywisty model GLM/Z.AI, przebieg 2026-10-12T06-17-29-859Z (6 tur, koperta docs/evidence/t07-t23/manifest.json).",
       "gap": "Zmiana, przesunięcie i usunięcie karty przez model nie mają próby w szablonie; karty kind openui z nieznanym komponentem przechodzą walidację (L3.3).",
       "evidence": [
         "model",
@@ -2715,7 +2715,7 @@
         "e2e/agent-ui.spec.ts",
         "tests/bl10-card-catalog.test.ts"
       ],
-      "braki": "Zmiana, przesunięcie i usunięcie karty przez model nie mają próby w szablonie (walidacja L3.3 dla kart openui potwierdzona asercjami regresyjnymi 2026-10-11 — nota audytu o przepuszczaniu nieznanych komponentów była nieaktualna)."
+      "braki": "—"
     },
     "T08": {
       "status": "niespelnione",
@@ -2942,8 +2942,8 @@
       ]
     },
     "T23": {
-      "status": "czesciowe",
-      "proof": "e2e/ui-navigation.spec.ts (serwer skryptowany): widok otwarty, ustawienie podświetlone bez zmiany wartości, Wstecz/Dalej, nieznany cel z odmową, brak przejęcia widoku z tła; potwierdzenie klienta przez /api/runs/:id/ui-ack. Od d142b85: e2e/agent-ui.spec.ts „pytanie o dane przenosi na ich widok…” — prawdziwy model wywołuje ui_navigate i ekran kończy na /data.",
+      "status": "potwierdzone",
+      "proof": "e2e/ui-navigation.spec.ts (serwer skryptowany): widok otwarty, ustawienie podświetlone bez zmiany wartości, Wstecz/Dalej, nieznany cel z odmową, brak przejęcia widoku z tła; potwierdzenie klienta przez /api/runs/:id/ui-ack. Od d142b85: e2e/agent-ui.spec.ts „pytanie o dane przenosi na ich widok…” — prawdziwy model wywołuje ui_navigate i ekran kończy na /data. Dopełnienie 2026-10-12: rzeczywisty model wykonał ui_navigate do platform.settings.auth — ui-ack 200 z executed=true i accepted=true (obserwowany od przeglądarki), podświetlenie data-ui-highlight, ponowione zdarzenie rozstrzygnięte (tura 6), wartość ustawienia (auth.method, stan poświadczenia) stabilna w trzech pomiarach — pokazanie bez zmiany. Rzeczywisty model GLM/Z.AI, przebieg 2026-10-12T06-17-29-859Z (6 tur, koperta docs/evidence/t07-t23/manifest.json).",
       "gap": "Polecenie pokazania USTAWIENIA z podświetleniem przez prawdziwy model nie ma próby (scenariusz skryptowany omija handler ui_navigate); ochrona przed ponowieniem polecenia istnieje tylko w pamięci komponentu i nie przeżywa reload (L2.15).",
       "evidence": [
         "symulacja",
@@ -2952,7 +2952,8 @@
       "pliki": [
         "e2e/ui-navigation.spec.ts",
         "e2e/agent-ui.spec.ts"
-      ]
+      ],
+      "braki": "Ochrona przed ponowieniem polecenia pozostaje w pamięci komponentu (nie przeżywa reload) — poza zakresem próby T23, odnotowane przy L2.15."
     },
     "T24": {
       "status": "czesciowe",
