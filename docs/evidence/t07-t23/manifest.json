@@ -1,8 +1,8 @@
 {
-  "zapisano": "2026-10-11T21:30:05.582Z",
+  "zapisano": "2026-10-12T06:25:48.792Z",
   "rodzajWykonania": "rzeczywisty model",
   "wersjaKodu": {
-    "commit": "a2d9602ca57049b71033ab7320d4ebdf885ccdf1",
+    "commit": "b513730b04c657b2ab39ea31a3930775c9633ef9",
     "brudneDrzewo": false,
     "node": "24.19.0",
     "pakiety": {}
@@ -38,7 +38,7 @@
   "zrodlo": "model GLM/Z.AI przez kompatybilny endpoint Anthropic; Claude Agent SDK jako harness; subskrypcja Claude nieuzywana; instancja testowa suity przegladarkowej",
   "model": "glm-5.3-flash[1m]",
   "spec": "e2e/card-mutations-highlight.spec.ts",
-  "przebieg": "2026-10-11T21-28-14-963Z",
+  "przebieg": "2026-10-12T06-17-29-859Z",
   "instancja": {
     "entry": "production",
     "port": 8792,
@@ -48,22 +48,22 @@
   },
   "koszt": {
     "deklarowaneTury": 6,
-    "budzet": 45,
-    "wydane": 40
+    "budzet": 60,
+    "wydane": 50
   },
   "identyfikatory": {
-    "rozmowa": "cnv_d3d95ac8e45c4548b4cd",
-    "runTury1": "run_70d7dbed517044ccb4c9",
+    "rozmowa": "cnv_e8b93d4f37e24d8e9807",
+    "runTury1": "run_acf9f1eb959c4156a334",
     "narzedzieZapisu": "mcp__app__agent_view_create",
-    "przestrzenRozmowy": "spc_411d278c0b704cc29076",
+    "przestrzenRozmowy": "spc_eae2faea39624c03afb6",
     "karta": {
-      "cardId": "crd_6353f4d8e895408a8943",
+      "cardId": "crd_6143b27ab2a4478cae4f",
       "narzedzie": "mcp__app__agent_view_create",
-      "tytul": "Pozycje ofert — PC-2026-01",
+      "tytul": "Zestawienie ofert — PC-2026-01",
       "komponent": null,
       "spec": {
         "kind": "openui",
-        "source": "root = Stack([tabela])\ntabela = DataTable({operation: \"procurement.case_offer_items\", input: {caseId: \"pcs_d22e267e025b4ca3bd89\"}}, [\"supplierName\", \"name\", \"unitPriceMinor\"], \"Pozycje ofert — PC-2026-01: dostawca, nazwa, cena jednostkowa\")"
+        "source": "root = Stack([tabela])\ntabela = DataTable({operation: \"procurement.case_offer_items\", input: {caseId: \"pcs_a6432988b7c541c9aee7\"}}, [\"supplierName\", \"name\", \"unitPriceMinor\"], \"Pozycje ofert — PC-2026-01\")"
       },
       "specVersion": 1,
       "geometryVersion": 1,
@@ -77,11 +77,75 @@
     },
     "kompozycjaTury1": [
       {
-        "id": "crd_6353f4d8e895408a8943",
-        "title": "Pozycje ofert — PC-2026-01"
+        "id": "crd_6143b27ab2a4478cae4f",
+        "title": "Zestawienie ofert — PC-2026-01"
       }
     ],
-    "runTury2": "run_e66b0f8837c343fc8e7b"
+    "runTury2": "run_056df16ddaa642dd87ab",
+    "zmianaTytulu": {
+      "przed": {
+        "tytul": "Zestawienie ofert — PC-2026-01",
+        "specVersion": 1
+      },
+      "po": {
+        "tytul": "Zmieniona — T07",
+        "specVersion": 2
+      }
+    },
+    "runTury3": "run_5c7162340eec4f2c9469",
+    "przesuniecie": {
+      "przed": {
+        "x": 0,
+        "y": 0,
+        "geometryVersion": 1
+      },
+      "po": {
+        "x": 160,
+        "y": 80,
+        "geometryVersion": 2
+      },
+      "dx": 160,
+      "dy": 80
+    },
+    "runTury4": "run_29fb5fae8ff04b32ac31",
+    "usuniecie": {
+      "cardId": "crd_6143b27ab2a4478cae4f",
+      "kartyPrzed": [
+        "crd_6143b27ab2a4478cae4f"
+      ],
+      "kartyPo": []
+    },
+    "runTury5": "run_d1db934a31414e3e9dbf",
+    "nawigacjaTury5": {
+      "potwierdzenieKlienta": {
+        "status": 200,
+        "executed": true,
+        "reason": null,
+        "accepted": true
+      }
+    },
+    "ustawienie": {
+      "cel": "platform.settings.auth",
+      "api": "/api/status: auth.method, auth.credential.state",
+      "przedTury5": {
+        "method": "glm",
+        "stanPoswiadczenia": "absent"
+      },
+      "poTury5": {
+        "method": "glm",
+        "stanPoswiadczenia": "absent"
+      },
+      "poTury6": {
+        "method": "glm",
+        "stanPoswiadczenia": "absent"
+      },
+      "ponownePotwierdzenie": {
+        "status": 200,
+        "executed": true,
+        "accepted": true
+      }
+    },
+    "runTury6": "run_224cae7922e54020aacc"
   },
-  "wynik": "tura-1-zaliczona"
+  "wynik": "zaliczona"
 }
