@@ -13,8 +13,11 @@ czego macierz sama nie powie.
 - **1 częściowe** (L7.13 — patrz §6: granica mierzalności zewnętrznego SDK);
 - **3 informacyjne / poza bramką** (L8.10, L8.11, L12.10 — jawnie nieblokujące, D-02);
 - **warstwy zamknięte: 11/12** (otwarta L7 wyłącznie przez L7.13);
-- próby odbiorowe: 10 potwierdzonych, 16 częściowych, 1 niespełniona (T08; jej
-  kryteria potwierdzone innymi dowodami) — rozliczenie w macierzy, §5 niżej.
+- próby odbiorowe: **23 potwierdzonych, 3 częściowe** (T04 — ograniczenie gotowego
+  czatu, §6.3; T15 — kolejność bramki z znaleziskiem sandbox-auto-allow, §6.2;
+  T17 — realne odświeżenie tokenu/limit/sieć, klasa informacyjna), **1
+  niespełniona** (T08; jej kryteria potwierdzone innymi dowodami) — rozliczenie
+  w macierzy, §5 niżej.
 
 **Trójpodział (L12.17).** (i) *Ukończenie implementacji*: kod i regresja na main,
 `pnpm verify` EXIT 0 (1225 testów). (ii) *Odbiór w izolacji*: dowody z
@@ -64,6 +67,15 @@ Odtworzenie danych: `docs/odzyskiwanie-stanu.md` + `pnpm backup/restore/migratio
 
 ## 5. Dowody kluczowe (wskaźniki)
 
+Pełna droga dowodowa (2026-10-08…12, po minimalnej drogi): L9.2 macierz
+parzystości HTTP/MCP (42 testy, wszystkie 9 narzędzi), T07/T23 (realny GLM 6/6:
+pełny cykl mutacji karty rezultatowo + pokazanie ustawienia z ui-ack i
+podświetleniem), L3.3 (walidacja openui przypięta asercjami — nota audytu
+nieaktualna), 5 luk dowodowych bez tur (T22 równoległość A/B, T02 klik na
+pełnej szerokości, T06 argumenty/sierota/reconnect, T01 boot-check, T12
+czyszczenie w tym samym kliencie), T24/JPEG (odczyt treści z pikseli). Próby:
+23/27 potwierdzonych.
+
 - Macierz: każde kryterium ma wpis z zakresem i odniesieniem — 200/200.
 - Fala modelowa GLM (38/45 tur grantu): izolacja narzędzi plikowych
   (L11.4/L11.5/L11.11), cykl życia (L1.6/L5.8), Stop (L11.7), braki bez
@@ -90,12 +102,13 @@ Odtworzenie danych: `docs/odzyskiwanie-stanu.md` + `pnpm backup/restore/migratio
    wykonuje trywialne komendy sandboxowalne (`echo`) bez konsultacji
    `canUseTool` mimo `autoAllowBashIfSandboxed: false` (t17 + obserwacja
    2026-09-16). Zgodne z literą D-06; odstaje od polityki „Bash zawsze pyta".
-3. **Luki dowodowe prób „częściowych"** (nie blokują warstw; pełna lista w
-   macierzy), najistotniejsze: T04 (proza przed narzędziem w gotowym czacie —
-   zmierzone ograniczenie @openuidev/react-ui 0.13.10), T09 (L9.2 egzekwowane
-   nie dla wszystkich operacji), T07 (zmiana/przesunięcie/usunięcie karty
-   przez model bez próby w szablonie), T23 (podświetlenie ustawienia realnym
-   modelem), T22 (równoległość A/B w przeglądarce), T24 (obrazy: PNG tylko).
+3. **Luki dowodowe prób „częściowych"** — po pełnej drodze pozostały trzy:
+   T04 (proza przed narzędziem — ograniczenie @openuidev/react-ui 0.13.10,
+   plan B dwustronny wyceniony w macierzy), T15 (kolejność bramki z
+   znaleziskiem sandbox-auto-allow — powiązane z decyzją §6.2), T17 (realne
+   odświeżenie tokenu/limit/sieć — klasa informacyjna). Zamknięte w pełnej
+   drodze: T02, T06, T07, T09, T12, T22, T23, T24 (JPEG), T01, T03, T14, T16,
+   T21.
 4. **Wariancja modelu GLM**: bywa, że nie wykonuje poleceń powłoki (tura 2 t15 —
    skip z uzasadnieniem); koszty tur nieprzewidywalne w 100%.
 5. Systemy poza Linux/Fedora 44 nieweryfikowane (README); Langfuse opcjonalny,

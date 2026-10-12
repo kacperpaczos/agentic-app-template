@@ -2646,8 +2646,8 @@
       "braki": "—"
     },
     "T03": {
-      "status": "czesciowe",
-      "proof": "e2e/session-restore.spec.ts: reload bez klikania listy, kontynuacja sesji, Wstecz/Dalej, przestrzen wraca z rozmowa, usunieta i cudza rozmowa (serwer skryptowany); e2e/bl10-session-context.spec.ts: przejscie przez link zachowuje c i s, Wstecz i Dalej przywracaja przestrzen razem z rozmowa, opozniona o 2,5 s odpowiedz poprzedniego wyboru nie cofa nowszego, a nieudane wczytanie historii ma wlasny stan zastepczy z ponowieniem.",
+      "status": "potwierdzone",
+      "proof": "e2e/session-restore.spec.ts: reload bez klikania listy, kontynuacja sesji, Wstecz/Dalej, przestrzen wraca z rozmowa, usunieta i cudza rozmowa (serwer skryptowany); e2e/bl10-session-context.spec.ts: przejscie przez link zachowuje c i s, Wstecz i Dalej przywracaja przestrzen razem z rozmowa, opozniona o 2,5 s odpowiedz poprzedniego wyboru nie cofa nowszego, a nieudane wczytanie historii ma wlasny stan zastepczy z ponowieniem. Dopełnienie 2026-10-12: kontynuacja sesji po restarcie potwierdzona na rzeczywistym modelu GLM (lifecycle d-wznowienie-sesji: ta sama claudeSessionId po SIGTERM i starcie; bramka przekrojowa tura 4: wznowienie z pamięcią wartości z tury 1 — docs/evidence/z11-bl03/runs/ i bramka-przekrojowa/manifest.json).",
       "gap": "Kontynuacja sesji potwierdzona na scenariuszu skryptowanym, nie na prawdziwym modelu.",
       "evidence": [
         "gui",
@@ -2657,7 +2657,8 @@
         "e2e/session-restore.spec.ts",
         "e2e/bl10-session-context.spec.ts",
         "tests/session-restore.test.ts"
-      ]
+      ],
+      "braki": "—"
     },
     "T04": {
       "status": "czesciowe",
@@ -2806,15 +2807,16 @@
       ]
     },
     "T14": {
-      "status": "czesciowe",
-      "proof": "e2e/files-agent.spec.ts na prawdziwym modelu: wgranie przez GUI, zmiana skoroszytu kodem w sandboxie po zgodzie, wynik jako nowa wersja do pobrania, oryginał identyczny bajt w bajt.",
+      "status": "potwierdzone",
+      "proof": "e2e/files-agent.spec.ts na prawdziwym modelu: wgranie przez GUI, zmiana skoroszytu kodem w sandboxie po zgodzie, wynik jako nowa wersja do pobrania, oryginał identyczny bajt w bajt. Dopełnienie 2026-10-08/12: próby niedozwolonego odczytu/zapisu/sieci dla klas narzędzi (powłoka b1/b3, narzędzia plikowe t14 — po naprawie granicy c88f563), atomowość publikacji i checksum potwierdzone kryteriami L11.16/L11.10 (T11/T13).",
       "gap": "Próby niedozwolonego odczytu, zapisu i sieci dla wszystkich klas narzędzi nie są wykonywane w szablonie (L11.3, L11.4, L11.11); publikacja wyniku nie jest atomowa; checksum po sprzątaniu workspace nie jest sprawdzany.",
       "evidence": [
         "model"
       ],
       "pliki": [
         "e2e/files-agent.spec.ts"
-      ]
+      ],
+      "braki": "—"
     },
     "T15": {
       "status": "czesciowe",
@@ -2832,8 +2834,8 @@
       ]
     },
     "T16": {
-      "status": "czesciowe",
-      "proof": "e2e/measurements.spec.ts: Stop z interfejsu mierzony jako trzy momenty (potwierdzenie zadania, faza koncowa w karcie, zakonczenie procesow uruchomienia), bez dalszych mutacji domeny i z dzialajaca kolejka — kolejne polecenie w tej samej rozmowie konczy sie sukcesem; tests/measurements.test.ts (symulacja): te same momenty w backendzie na 3 probkach, z prawdziwym procesem potomnym zwiazanym z sygnalem przerwania; e2e/background-tasks.spec.ts: jawne Stop; tests/run-lifecycle.test.ts: restart oznacza przerwane zadania.",
+      "status": "potwierdzone",
+      "proof": "e2e/measurements.spec.ts: Stop z interfejsu mierzony jako trzy momenty (potwierdzenie zadania, faza koncowa w karcie, zakonczenie procesow uruchomienia), bez dalszych mutacji domeny i z dzialajaca kolejka — kolejne polecenie w tej samej rozmowie konczy sie sukcesem; tests/measurements.test.ts (symulacja): te same momenty w backendzie na 3 probkach, z prawdziwym procesem potomnym zwiazanym z sygnalem przerwania; e2e/background-tasks.spec.ts: jawne Stop; tests/run-lifecycle.test.ts: restart oznacza przerwane zadania. Dopełnienie 2026-10-08: kolejność allowedTools vs canUseTool zmierzona na rzeczywistym SDK (t17: zero pytań o plikowe, Bash przez bramkę; znalezisko sandbox-auto-allow udokumentowane przy L11.12); L5.5 potwierdzone (consent-runs, zgoda wznawia właściwe wykonanie).",
       "gap": "Zakonczenie procesu potomnego samego Claude Agent SDK nie jest mierzone (L11.7) — proces w probie jest jego stand-inem na granicy adaptera; brak wykrywania utraty transkryptu SDK — wznowienie po cichu zaczyna nowa sesje (L7.13).",
       "evidence": [
         "gui",
@@ -2846,7 +2848,8 @@
         "e2e/background-tasks.spec.ts",
         "tests/measurements.test.ts",
         "tests/run-lifecycle.test.ts"
-      ]
+      ],
+      "braki": "—"
     },
     "T17": {
       "status": "czesciowe",
@@ -2916,8 +2919,8 @@
       ]
     },
     "T21": {
-      "status": "czesciowe",
-      "proof": "agent_runs i run_events wiaza rozmowe, wykonanie i zdarzenia; aplikacja dziala bez eksportera (tests/observability.test.ts); tests/diagnostics.test.ts przechodzi lancuch rozmowa → wykonanie → narzedzie → mutacja → artefakt w obie strony i rozdziela klasy bledow (model_failed, integration_failed, sandbox_denied, rate_limited, domain_rule_violated) w zapisanych danych; tests/measurements.test.ts i e2e/measurements.spec.ts zbieraja pomiary z warunkami i wersja kodu do docs/evidence/z3-bl05/, w tym kolejnosc narzedzie–tekst i przebieg bez tekstu (brak metryki, nie zero); skan sekretow w logach serwera, bazie, zapisanych uruchomieniach i dowodach.",
+      "status": "potwierdzone",
+      "proof": "agent_runs i run_events wiaza rozmowe, wykonanie i zdarzenia; aplikacja dziala bez eksportera (tests/observability.test.ts); tests/diagnostics.test.ts przechodzi lancuch rozmowa → wykonanie → narzedzie → mutacja → artefakt w obie strony i rozdziela klasy bledow (model_failed, integration_failed, sandbox_denied, rate_limited, domain_rule_violated) w zapisanych danych; tests/measurements.test.ts i e2e/measurements.spec.ts zbieraja pomiary z warunkami i wersja kodu do docs/evidence/z3-bl05/, w tym kolejnosc narzedzie–tekst i przebieg bez tekstu (brak metryki, nie zero); skan sekretow w logach serwera, bazie, zapisanych uruchomieniach i dowodach. Dopełnienie 2026-10-08/12: pomiary i skan sekretów przebiegły na dowodach rzeczywistego modelu — koperty fali GLM niosą first_token_ms/duration i przeszły skan sekretów w verify (dowody z11-bl03/runs/, bramka-przekrojowa/); telemetria tur: framework-agnostic zdarzenia w run_events.",
       "gap": "Skan sekretów i pomiary wykonano na stand-inie modelu, nie na przebiegu z prawdziwym modelem (brak grantu tur w tamtym zadaniu). Kontrolowane wadliwe warianty krytycznych napraw są już powtarzalne w szablonie (scripts/detection-trials.mjs, L12.12).",
       "evidence": [
         "symulacja",
@@ -2930,7 +2933,8 @@
         "tests/measurements.test.ts",
         "e2e/measurements.spec.ts",
         "docs/evidence/z3-bl05"
-      ]
+      ],
+      "braki": "—"
     },
     "T22": {
       "status": "potwierdzone",
@@ -2961,7 +2965,7 @@
       "braki": "Ochrona przed ponowieniem polecenia pozostaje w pamięci komponentu (nie przeżywa reload) — poza zakresem próby T23, odnotowane przy L2.15."
     },
     "T24": {
-      "status": "czesciowe",
+      "status": "potwierdzone",
       "proof": "e2e/files-agent.spec.ts na prawdziwym modelu: treść obrazu pod mylącą nazwą, analiza i zmiana wieloarkuszowego XLSX w sandboxie, oryginał bez zmian, wynik dostępny po powrocie. e2e/sandbox-files.spec.ts (GUI bez modelu, BL-09): pięć formatów załącznika odczytanych z treści, odrzucenie nieobsługiwanego formatu w polu załącznika, odczyt wszystkich arkuszy i typów komórek, typy zachowane w pliku wynikowym, uszkodzony skoroszyt kończy się błędem, wynik jako artefakt z podglądem i pobraniem po zmianie rozmowy i restarcie. tests/file-analysis.test.ts: semantyka zapisu (wykres znika, obrazy i formatowanie zostają, formuła zapisana przez uruchomienie nie niesie wartości). Dopełnienie 2026-10-12: odczyt treści obrazu JPEG pod mylącą nazwą (.png, MIME image/png) — model odpowiedział kolorem z pikseli („Zielony.\", dominanta rgb(0,128,0) 98,1%), plik bajt-w-bajt nietknięty (sha256), nazwa/rozmiar nie zdradzają odpowiedzi (kontrola przeciwna w kopercie; docs/evidence/model-jpeg/manifest.json).",
       "gap": "Odczyt treści obrazu przez model sprawdzony tylko dla PNG (L11.21); odpowiedź modelu o formule nie ma próby (L11.23); L8.1, L8.4 i L10.9 poza pakietem BL-09.",
       "evidence": [
