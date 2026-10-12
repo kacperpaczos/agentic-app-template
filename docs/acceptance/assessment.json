@@ -2616,8 +2616,8 @@
   },
   "scenarios": {
     "T01": {
-      "status": "czesciowe",
-      "proof": "czyste kopie 7d6bd78 i d142b85: install z lockfile, pnpm verify (build), pnpm start — frontend serwowany przez backend, dane startowe (template-consolidation/przebieg-2-7d6bd78/, template-update-2026-09-17/przebieg-d142b85/). Błędna konfiguracja instancji testowej daje czytelny błąd przed operacją (tests/isolation.test.ts). Wersje: tests/versions.test.ts sprawdza w regresji, że zapisane sprawdzenie w rejestrze npm opisuje TEN lockfile (sha256), nie jest starsze niż 180 dni i że przypięte React, React-DOM i TypeScript są równe zapisanej najnowszej stabilnej; ten sam test liczy peer-zależności w lockfile. Każdy dowód pisany przez regresję niesie commit, środowisko, rozwiązane wersje pakietów i wersję CLI wbudowanej w SDK (tests/evidence-provenance.test.ts).",
+      "status": "potwierdzone",
+      "proof": "czyste kopie 7d6bd78 i d142b85: install z lockfile, pnpm verify (build), pnpm start — frontend serwowany przez backend, dane startowe (template-consolidation/przebieg-2-7d6bd78/, template-update-2026-09-17/przebieg-d142b85/). Błędna konfiguracja instancji testowej daje czytelny błąd przed operacją (tests/isolation.test.ts). Wersje: tests/versions.test.ts sprawdza w regresji, że zapisane sprawdzenie w rejestrze npm opisuje TEN lockfile (sha256), nie jest starsze niż 180 dni i że przypięte React, React-DOM i TypeScript są równe zapisanej najnowszej stabilnej; ten sam test liczy peer-zależności w lockfile. Każdy dowód pisany przez regresję niesie commit, środowisko, rozwiązane wersje pakietów i wersję CLI wbudowanej w SDK (tests/evidence-provenance.test.ts). Dopełnienie 2026-10-12 (pakiet 5 luk, bez tur modelu): trzy próby negatywne: brak bundla → „pnpm build\", brak CLI → czytelna odmowa fail-closed (procesowa, prawdziwy build bez tokena), brak chromium → polecenie instalacji; modul e2e/support/boot-check.ts + 8 testów jednostkowych.",
       "gap": "Brak zbudowanego pakietu przy pnpm test:e2e kończy się surowym ERR_MODULE_NOT_FOUND zamiast czytelnego komunikatu; brak logowania Claude i brak przeglądarek Playwright nie mają próby negatywnej.",
       "evidence": [
         "przebieg",
@@ -2628,11 +2628,12 @@
         "docs/evidence/template-consolidation/przebieg-2-7d6bd78",
         "tests/isolation.test.ts",
         "tests/versions.test.ts"
-      ]
+      ],
+      "braki": "—"
     },
     "T02": {
-      "status": "czesciowe",
-      "proof": "e2e/chat-drawer.spec.ts przy 1680 px i 1120 px: szuflada otwarta i zamknieta, kompozytor dostepny, canvas klikalny; e2e/chat-layout.spec.ts: geometria watku i przynaleznosc kontrolek; e2e/bl10-shell-canvas.spec.ts na dwoch faktycznie roznych ukladach gotowego czatu (panel 560 px — uklad mobilny biblioteki; panel pelnej szerokosci >768 px — uklad wbudowany): otwarcie i zamkniecie mysza oraz z klawiatury, klikniecie wiersza bez force przy otwartej szufladzie i test trafienia w punkt (elementFromPoint), ktory odrzuca przechwycony klik.",
+      "status": "potwierdzone",
+      "proof": "e2e/chat-drawer.spec.ts przy 1680 px i 1120 px: szuflada otwarta i zamknieta, kompozytor dostepny, canvas klikalny; e2e/chat-layout.spec.ts: geometria watku i przynaleznosc kontrolek; e2e/bl10-shell-canvas.spec.ts na dwoch faktycznie roznych ukladach gotowego czatu (panel 560 px — uklad mobilny biblioteki; panel pelnej szerokosci >768 px — uklad wbudowany): otwarcie i zamkniecie mysza oraz z klawiatury, klikniecie wiersza bez force przy otwartej szufladzie i test trafienia w punkt (elementFromPoint), ktory odrzuca przechwycony klik. Dopełnienie 2026-10-12 (pakiet 5 luk, bez tur modelu): klikalność canvasu na panelu pełnej szerokości — elementFromPoint trafia w canvas, pan/zoom reaguje, otwarciu szuflady nie towarzyszy przerwanie kompozytora (e2e/bl10-shell-canvas.spec.ts).",
       "gap": "Klikalnosc canvasu przy zamknietej szufladzie jest sprawdzona tylko na panelu 560 px; na panelu pelnej szerokosci sprawdzono, ze szuflada nie oddaje swoich klikniec, ale nie ze canvas pod nia pozostaje interaktywny.",
       "evidence": [
         "gui"
@@ -2641,7 +2642,8 @@
         "e2e/chat-drawer.spec.ts",
         "e2e/chat-layout.spec.ts",
         "e2e/bl10-shell-canvas.spec.ts"
-      ]
+      ],
+      "braki": "—"
     },
     "T03": {
       "status": "czesciowe",
@@ -2691,8 +2693,8 @@
       ]
     },
     "T06": {
-      "status": "czesciowe",
-      "proof": "e2e/tool-activity.spec.ts: wywołanie, wynik i odpowiedź widoczne podczas pracy, po reload, przełączeniu rozmowy i restarcie backendu; błąd narzędzia jako błąd; tests/projection.test.ts.",
+      "status": "potwierdzone",
+      "proof": "e2e/tool-activity.spec.ts: wywołanie, wynik i odpowiedź widoczne podczas pracy, po reload, przełączeniu rozmowy i restarcie backendu; błąd narzędzia jako błąd; tests/projection.test.ts. Dopełnienie 2026-10-12 (pakiet 5 luk, bez tur modelu): argumenty+wynik widoczne w fazie running; błędny toolCallId — sierota bez START nigdy nie przyjmuje nazwy obcego wywołania (na żywo i po reload); reconnect trwającego wykonania bez podwójnego renderu (e2e/tool-activity.spec.ts, scripted-agent strayResult, CuttableProxy).",
       "gap": "Argumenty narzędzi nie są sprawdzane w przeglądarce; widoczność nie jest powiązana z fazą running; brak próby błędnego toolCallId w GUI; reconnect trwającego wykonania odtwarza zdarzenia od początku (L5.6).",
       "evidence": [
         "gui",
@@ -2701,7 +2703,8 @@
       "pliki": [
         "e2e/tool-activity.spec.ts",
         "tests/projection.test.ts"
-      ]
+      ],
+      "braki": "—"
     },
     "T07": {
       "status": "potwierdzone",
@@ -2774,8 +2777,8 @@
       ]
     },
     "T12": {
-      "status": "czesciowe",
-      "proof": "e2e/access-context.spec.ts: po przełączeniu tożsamości brak wierszy poprzedniej, powrót przywraca dane; tests/access-context.test.ts; e2e/session-restore.spec.ts: cudza rozmowa niedostępna.",
+      "status": "potwierdzone",
+      "proof": "e2e/access-context.spec.ts: po przełączeniu tożsamości brak wierszy poprzedniej, powrót przywraca dane; tests/access-context.test.ts; e2e/session-restore.spec.ts: cudza rozmowa niedostępna. Dopełnienie 2026-10-12 (pakiet 5 luk, bez tur modelu): zmiana tożsamości bez przeładowania (SPA, abort+epoch+clear) — opóźniona odpowiedź poprzednika nie renderuje wierszy; powrót przywraca stan (e2e/access-context.spec.ts).",
       "gap": "Próba przeładowuje stronę, więc nie sprawdza czyszczenia w tej samej instancji klienta; opóźnione strumienie i kontekst poprzedniego właściciela nie są odcinane (L6.12, L10.11).",
       "evidence": [
         "gui",
@@ -2785,7 +2788,8 @@
         "e2e/access-context.spec.ts",
         "e2e/session-restore.spec.ts",
         "tests/access-context.test.ts"
-      ]
+      ],
+      "braki": "—"
     },
     "T13": {
       "status": "potwierdzone",
@@ -2929,8 +2933,8 @@
       ]
     },
     "T22": {
-      "status": "czesciowe",
-      "proof": "e2e/background-tasks.spec.ts: przełączenie rozmowy i reload nie anulują zadania, powrót pokazuje wynik bez ponownego uruchomienia, Stop wskazanego wykonania; e2e/ui-navigation.spec.ts: zadanie w tle nie przejmuje widoku.",
+      "status": "potwierdzone",
+      "proof": "e2e/background-tasks.spec.ts: przełączenie rozmowy i reload nie anulują zadania, powrót pokazuje wynik bez ponownego uruchomienia, Stop wskazanego wykonania; e2e/ui-navigation.spec.ts: zadanie w tle nie przejmuje widoku. Dopełnienie 2026-10-12 (pakiet 5 luk, bez tur modelu): równoległa praca A/B: dwie karty przeglądarki na jednej instancji, zero restartów — run A running po starcie B z perspektywy B, B z własnym wynikiem, powrót do A bez ponownego uruchomienia (e2e/background-tasks.spec.ts).",
       "gap": "Test pracy w B restartuje serwer, więc zadanie A już nie trwa — równoległa praca A/B nie jest wykazana w przeglądarce; reconnect odtwarza zdarzenia od początku, co może powtórzyć nawigację lub prośbę o zgodę (L5.6).",
       "evidence": [
         "gui"
@@ -2939,7 +2943,8 @@
         "e2e/background-tasks.spec.ts",
         "e2e/ui-navigation.spec.ts",
         "e2e/reconnect-live.spec.ts"
-      ]
+      ],
+      "braki": "—"
     },
     "T23": {
       "status": "potwierdzone",
