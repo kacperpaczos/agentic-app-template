@@ -1,0 +1,151 @@
+{
+  "zapisano": "2026-10-12T06:25:48.792Z",
+  "rodzajWykonania": "rzeczywisty model",
+  "wersjaKodu": {
+    "commit": "b513730b04c657b2ab39ea31a3930775c9633ef9",
+    "brudneDrzewo": false,
+    "node": "24.19.0",
+    "pakiety": {}
+  },
+  "srodowisko": {
+    "system": "linux 7.2.9-200.fc44.x86_64 x64",
+    "node": "24.19.0",
+    "pnpm": "9.15.9",
+    "cliZewnetrzne": "2.1.283 (Claude Code)",
+    "cliWSdk": {
+      "wersja": "2.1.270",
+      "commit": "97ecbf7abeb4170dcfd26c4d4b397afd9015030e",
+      "dataBudowy": "2026-09-12T18:17:55Z"
+    },
+    "model": "glm-5.3-flash[1m]",
+    "pakiety": {
+      "react": "19.3.0",
+      "react-dom": "19.3.0",
+      "typescript": "7.0.2",
+      "vite": "8.3.0",
+      "vitest": "5.0.0",
+      "@playwright/test": "1.63.0",
+      "@openuidev/react-ui": "0.13.10",
+      "@openuidev/react-headless": "0.9.13",
+      "hono": "4.13.7",
+      "drizzle-orm": "0.45.2",
+      "@mastra/core": "1.66.0",
+      "@mastra/claude": "0.3.1",
+      "@anthropic-ai/claude-agent-sdk": "0.3.270",
+      "zod": "4.6.5"
+    }
+  },
+  "zrodlo": "model GLM/Z.AI przez kompatybilny endpoint Anthropic; Claude Agent SDK jako harness; subskrypcja Claude nieuzywana; instancja testowa suity przegladarkowej",
+  "model": "glm-5.3-flash[1m]",
+  "spec": "e2e/card-mutations-highlight.spec.ts",
+  "przebieg": "2026-10-12T06-17-29-859Z",
+  "instancja": {
+    "entry": "production",
+    "port": 8792,
+    "dataDirName": ".e2e-real-t07",
+    "origin": "http://127.0.0.1:8792",
+    "log": "docs/evidence/t07-t23/serwer.log"
+  },
+  "koszt": {
+    "deklarowaneTury": 6,
+    "budzet": 60,
+    "wydane": 50
+  },
+  "identyfikatory": {
+    "rozmowa": "cnv_e8b93d4f37e24d8e9807",
+    "runTury1": "run_acf9f1eb959c4156a334",
+    "narzedzieZapisu": "mcp__app__agent_view_create",
+    "przestrzenRozmowy": "spc_eae2faea39624c03afb6",
+    "karta": {
+      "cardId": "crd_6143b27ab2a4478cae4f",
+      "narzedzie": "mcp__app__agent_view_create",
+      "tytul": "Zestawienie ofert — PC-2026-01",
+      "komponent": null,
+      "spec": {
+        "kind": "openui",
+        "source": "root = Stack([tabela])\ntabela = DataTable({operation: \"procurement.case_offer_items\", input: {caseId: \"pcs_a6432988b7c541c9aee7\"}}, [\"supplierName\", \"name\", \"unitPriceMinor\"], \"Pozycje ofert — PC-2026-01\")"
+      },
+      "specVersion": 1,
+      "geometryVersion": 1,
+      "geometry": {
+        "x": 0,
+        "y": 0,
+        "width": 520,
+        "height": 360,
+        "z": 0
+      }
+    },
+    "kompozycjaTury1": [
+      {
+        "id": "crd_6143b27ab2a4478cae4f",
+        "title": "Zestawienie ofert — PC-2026-01"
+      }
+    ],
+    "runTury2": "run_056df16ddaa642dd87ab",
+    "zmianaTytulu": {
+      "przed": {
+        "tytul": "Zestawienie ofert — PC-2026-01",
+        "specVersion": 1
+      },
+      "po": {
+        "tytul": "Zmieniona — T07",
+        "specVersion": 2
+      }
+    },
+    "runTury3": "run_5c7162340eec4f2c9469",
+    "przesuniecie": {
+      "przed": {
+        "x": 0,
+        "y": 0,
+        "geometryVersion": 1
+      },
+      "po": {
+        "x": 160,
+        "y": 80,
+        "geometryVersion": 2
+      },
+      "dx": 160,
+      "dy": 80
+    },
+    "runTury4": "run_29fb5fae8ff04b32ac31",
+    "usuniecie": {
+      "cardId": "crd_6143b27ab2a4478cae4f",
+      "kartyPrzed": [
+        "crd_6143b27ab2a4478cae4f"
+      ],
+      "kartyPo": []
+    },
+    "runTury5": "run_d1db934a31414e3e9dbf",
+    "nawigacjaTury5": {
+      "potwierdzenieKlienta": {
+        "status": 200,
+        "executed": true,
+        "reason": null,
+        "accepted": true
+      }
+    },
+    "ustawienie": {
+      "cel": "platform.settings.auth",
+      "api": "/api/status: auth.method, auth.credential.state",
+      "przedTury5": {
+        "method": "glm",
+        "stanPoswiadczenia": "absent"
+      },
+      "poTury5": {
+        "method": "glm",
+        "stanPoswiadczenia": "absent"
+      },
+      "poTury6": {
+        "method": "glm",
+        "stanPoswiadczenia": "absent"
+      },
+      "ponownePotwierdzenie": {
+        "status": 200,
+        "executed": true,
+        "accepted": true
+      }
+    },
+    "runTury6": "run_224cae7922e54020aacc"
+  },
+  "wynik": "zaliczona"
+}

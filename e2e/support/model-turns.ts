@@ -35,6 +35,7 @@ export const MODEL_SPEC_FILES = [
   'files-agent.spec.ts',
   'model-artifacts.spec.ts',
   'bramka-przekrojowa.spec.ts',
+  'card-mutations-highlight.spec.ts',
 ] as const;
 export type ModelSpecFile = (typeof MODEL_SPEC_FILES)[number];
 
@@ -63,6 +64,10 @@ export const MODEL_SPEC_TURNS: Record<ModelSpecFile, number> = {
   /* Bramka przekrojowa: 4 tury modelowe + najwyzej 1 na sonde anulowania,
      ktora zwykle anuluje run zanim model odpowie (patrz naglowek speca). */
   'bramka-przekrojowa.spec.ts': 5,
+  /* T07+T23: 4 tury mutacji karty (dodanie, tytul, przesuniecie, usuniecie)
+     + 2 tury pokazania ustawienia (nawigacja z podswietleniem, kontrola
+     wartosci) — jedna rozmowa, patrz naglowek speca. */
+  'card-mutations-highlight.spec.ts': 6,
 };
 
 export const MODEL_TURNS_PER_RUN = Object.values(MODEL_SPEC_TURNS).reduce((a, b) => a + b, 0);
@@ -306,7 +311,7 @@ export function writeEvidence(name: string, body: Record<string, unknown>): void
 /**
  * Why a second set of everything rather than four more entries above.
  *
- * **A separate switch.** `pnpm test:e2e:model` can cost 17 turns and is documented
+ * **A separate switch.** `pnpm test:e2e:model` can cost 23 turns and is documented
  * as such. Adding these files to the same project would silently change
  * that number for everyone who runs it, which is how the default run came to
  * spend turns in the first place. `APP_E2E_MODEL_Z11=1` is a second, deliberate
@@ -388,11 +393,13 @@ export const Z11_WORKING_LEDGER = resolve(REPO_ROOT, '.e2e-model-turns/z11-bl03.
  * the owner granted the raise to 45 on 2026-10-07 for the wave that verifies
  * the BL-03 file-tool boundary repair on the real SDK plus L12.6 — in GLM mode
  * that wave charges THIS grant (`z11Preflight`, the BL-03 specs included), and
- * 24 remaining would not have covered it with retries. Same ceiling rule as
- * the subscription grants: the register on disk carries every turn with the
- * spec that spent it, so the raise extends the same ledger.
+ * 24 remaining would not have covered it with retries. Raised again to 60 on
+ * 2026-10-12 by the owner („mam dużo tokenów") for the full-path evidence wave
+ * (T07/T23 rerun, JPEG, retries). Same ceiling rule as the subscription
+ * grants: the register on disk carries every turn with the spec that spent
+ * it, so the raise extends the same ledger.
  */
-export const GLM_TURN_BUDGET = 45;
+export const GLM_TURN_BUDGET = 60;
 
 /** This grant's tally, in the working copy (gitignored), starting at zero. */
 export const GLM_WORKING_LEDGER = resolve(REPO_ROOT, '.e2e-model-turns/glm.json');
