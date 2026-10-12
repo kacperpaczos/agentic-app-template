@@ -1,6 +1,7 @@
 import { expect, test } from './support/fixtures.ts';
+import { CuttableProxy } from './support/cuttable-proxy.ts';
 import { ScriptedInstance } from './support/scripted.ts';
-import { type Page } from '@playwright/test';
+import { type BrowserContext, type Page } from '@playwright/test';
 
 /**
  * Tool activity in the chat — visible while it happens, and still there
@@ -69,8 +70,8 @@ async function openConversation(page: Page, title?: string) {
   });
 }
 
-async function openApp(page: Page) {
-  await page.goto(`${BASE}/`);
+async function openApp(page: Page, base: string = BASE) {
+  await page.goto(`${base}/`);
   await page.evaluate(() =>
     fetch('/api/auth/session', {
       method: 'POST',
@@ -79,9 +80,71 @@ async function openApp(page: Page) {
       body: '{}',
     }),
   );
-  await page.goto(`${BASE}/`);
+  await page.goto(`${base}/`);
   await expect(page.locator('.openui-agent-thread-composer__input')).toBeVisible();
 }
+
+const urlConversation = (page: Page) => new URL(page.url()).searchParams.get('c');
+
+const runsOf = (page: Page, conversationId: string) =>
+  page.evaluate(
+    async (id) =>
+      (await (await fetch(`/api/conversations/${id}/runs`, { credentials: 'include' })).json()) as {
+        runs: Array<{ id: string; status: string }>;
+      },
+    conversationId,
+  );
+
+/**
+ * Asks the backend from the test process.
+ *
+ * Needed while the browser has no network: anything the page could answer then
+ * is a statement about the page, not about the run.
+ */
+async function backendRuns(conversationId: string): Promise<Array<{ id: string; status: string }>> {
+  const login = await fetch(`${BASE}/api/auth/session`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  });
+  const cookie = (login.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
+  const res = await fetch(`${BASE}/api/conversations/${conversationId}/runs`, {
+    headers: { cookie },
+  });
+  return ((await res.json()) as { runs: Array<{ id: string; status: string }> }).runs;
+}
+
+/**
+ * Opens the ready-made timeline far enough to read a call's arguments and its
+ * result.
+ *
+ * Two controls, both the library's own: the tray ("Behind the scenes") and the
+ * row of each call inside it. Which of them is already open depends on whether
+ * the turn is still live, so this asks for the state it needs rather than
+ * assuming one. (Same helper `run-events.spec.ts` carries; kept here because
+ * this file is where the tool-activity evidence lives.)
+ */
+async function revealToolDetails(page: Page): Promise<void> {
+  const rows = page.locator('.openui-tool-call__title-row');
+  if ((await rows.count()) === 0) {
+    const toggle = page.locator('.openui-behind-the-scenes__toggle').first();
+    if ((await toggle.count()) > 0) await toggle.click();
+  }
+  const count = await rows.count();
+  for (let i = 0; i < count; i += 1) await rows.nth(i).click();
+}
+
+/** One atomic reading of the phase and of what the chat currently shows. */
+const sample = (page: Page, needles: string[]) =>
+  page.evaluate((words) => {
+    const text = (document.querySelector('.pf-chat') as HTMLElement | null)?.innerText ?? '';
+    return {
+      phase: document.querySelector('[data-testid="run-state"]')?.getAttribute('data-phase') ?? null,
+      seen: Object.fromEntries(words.map((w) => [w, text.split(w).length - 1])) as Record<string, number>,
+    };
+  }, needles);
+
+const occurrences = (haystack: string, needle: string) => haystack.split(needle).length - 1;
 
 test.describe('aktywnosc narzedzi w czacie (scenariusz zamiast modelu)', () => {
   test.describe.configure({ mode: 'serial', timeout: 180_000 });
@@ -249,5 +312,197 @@ test.describe('aktywnosc narzedzi w czacie (scenariusz zamiast modelu)', () => {
     await expect(page.locator('.openui-agent-thread-composer__input')).toBeEnabled();
     // Text produced before the failure is kept.
     await expect(page.locator('.pf-chat')).toContainText('Zaczynam');
+  });
+
+  /* ---------------------------------------------------------------- T06(a) -- */
+
+  test('argumenty narzedzia i jego wynik sa widoczne, dopoki wykonanie trwa', async ({ page }) => {
+    await scripted.start('tool-result-visible');
+    await openApp(page);
+    await sendCommand(page, 'Sprawdz karty i pracuj dalej.');
+
+    await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'running', {
+      timeout: 30_000,
+    });
+    await expect(timeline(page)).toBeVisible({ timeout: 30_000 });
+    await revealToolDetails(page);
+
+    /*
+     * The matrix gap this closes: arguments were never read *in the browser*,
+     * and never tied to the phase. Phase and contents are read in one evaluation
+     * (a single `sample`), and the requirement is a moment where the run had not
+     * finished and the call's input JSON — `sp_scripted`, the scenario's own
+     * argument — and its result were both on screen. The scenario holds the run
+     * open for four seconds after the call, so this can fail: a chat that only
+     * showed the arguments once the run had ended would find no running sample.
+     */
+    const ARGS = 'sp_scripted';
+    const RESULT = 'WYNIK-NARZEDZIA-A';
+    await expect
+      .poll(
+        async () => {
+          const s = await sample(page, [ARGS, RESULT]);
+          return (
+            (s.phase === 'running' || s.phase === 'queued') &&
+            s.seen[ARGS]! > 0 &&
+            s.seen[RESULT]! > 0
+          );
+        },
+        { timeout: 30_000, message: 'brak probki: running + argumenty + wynik jednoczesnie' },
+      )
+      .toBe(true);
+
+    await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'succeeded', {
+      timeout: 60_000,
+    });
+  });
+
+  /* ---------------------------------------------------------------- T06(b) -- */
+
+  test('wynik z cudzym toolCallId nie przykleja sie do cudzego wywolania', async ({ page }) => {
+    await scripted.start('wrong-tool-call-id');
+    await openApp(page);
+    await sendCommand(page, 'Wywolaj narzedzie z cudzym wynikiem.');
+    await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'succeeded', {
+      timeout: 60_000,
+    });
+    await expect(page.getByTestId('assistant-message')).toContainText('ODPOWIEDZ-PO-NARZEDZIU');
+
+    /*
+     * What the criterion forbids is *misattribution*: WYNIK-CUDZY arrived with a
+     * toolCallId no PreToolUse ever declared, and pinning it to the only
+     * announced call in sight would turn that call's answer into somebody
+     * else's. What the library in fact does (observed, and asserted below) is
+     * render the orphan as its own entry — one it cannot name — while the
+     * announced call keeps its own panel. Once the turn closes the tray
+     * collapses, so it is opened first and the rows are asked of the expanded
+     * tray.
+     */
+    await revealToolDetails(page);
+    const calls = page.locator('.openui-tool-call');
+    const announced = calls.filter({ hasText: 'canvas_list_cards' });
+    await expect(announced, 'wlasciwe wywolanie zniknelo z osi czasu').toHaveCount(1);
+    const announcedText = await announced.first().innerText();
+    expect(announcedText).toContain('WYNIK-DOBRZE');
+    expect(announcedText, 'cudzy wynik dotarl do obcego wywolania').not.toContain('WYNIK-CUDZY');
+
+    // Wherever the stray landed, it never took the announced call's name.
+    const stray = calls.filter({ hasText: 'WYNIK-CUDZY' });
+    if ((await stray.count()) > 0) {
+      expect(await stray.first().innerText(), 'osierocony wynik przejal nazwe obcego wywolania').not.toContain(
+        'canvas_list_cards',
+      );
+    }
+
+    // The stored history pairs the same way: the tool message bound to the
+    // assistant's call carries that call's own result.
+    const history = await page.evaluate(async (needle) => {
+      const { threads } = await (await fetch('/api/threads/get', { credentials: 'include' })).json();
+      const thread = threads.find((t: any) => String(t.title).includes(needle));
+      if (!thread) throw new Error(`nie znaleziono watku "${needle}"`);
+      return (await (
+        await fetch(`/api/threads/get/${thread.id}`, { credentials: 'include' })
+      ).json()) as Array<{
+        id: string;
+        role: string;
+        content?: string;
+        toolCallId?: string;
+        toolCalls?: Array<{ id: string }>;
+      }>;
+    }, 'Wywolaj narzedzie z cudzym wynikiem');
+    const assistant = history.find((m) => Array.isArray(m.toolCalls) && m.toolCalls.length > 0);
+    expect(assistant, 'historia nie niesie wywolania narzedzia').toBeTruthy();
+    const paired = history.find(
+      (m) => m.role === 'tool' && m.toolCallId === assistant!.toolCalls![0]!.id,
+    );
+    expect(String(paired?.content)).toContain('WYNIK-DOBRZE');
+
+    // After a reload the same pairing comes back from the projection: the
+    // announced call still owns its result, and the orphan — however the
+    // library chooses to show it — still owns nothing of that call.
+    await page.reload();
+    await expect(page.getByTestId('assistant-message')).toContainText('ODPOWIEDZ-PO-NARZEDZIU', {
+      timeout: 30_000,
+    });
+    await revealToolDetails(page);
+    const reloaded = page.locator('.openui-tool-call');
+    const announcedAfterReload = reloaded.filter({ hasText: 'canvas_list_cards' });
+    await expect(announcedAfterReload, 'wlasciwe wywolanie zniknelo po przeladowaniu').toHaveCount(1);
+    const reloadedText = await announcedAfterReload.first().innerText();
+    expect(reloadedText).toContain('WYNIK-DOBRZE');
+    expect(reloadedText, 'cudzy wynik dotarl do obcego wywolania po przeladowaniu').not.toContain(
+      'WYNIK-CUDZY',
+    );
+    const strayAfterReload = reloaded.filter({ hasText: 'WYNIK-CUDZY' });
+    if ((await strayAfterReload.count()) > 0) {
+      expect(
+        await strayAfterReload.first().innerText(),
+        'osierocony wynik przejal nazwe obcego wywolania po przeladowaniu',
+      ).not.toContain('canvas_list_cards');
+    }
+  });
+
+  /* ---------------------------------------------------------------- T06(c) -- */
+
+  test('reconnect trwajacego wykonania odtwarza zdarzenia bez podwojnego renderowania', async ({
+    page,
+    context,
+  }: {
+    page: Page;
+    context: BrowserContext;
+  }) => {
+    await scripted.start('tool-then-long-text');
+    const proxy = new CuttableProxy(8797, scripted.baseUrl);
+    await proxy.start();
+    try {
+      await openApp(page, proxy.baseUrl);
+      await sendCommand(page, 'Pracuj dlugo z narzedziem.');
+      await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'running', {
+        timeout: 30_000,
+      });
+
+      // The call and its result are on screen before the wire goes away.
+      await expect(page.locator('.openui-tool-call')).toBeVisible({ timeout: 30_000 });
+      await revealToolDetails(page);
+      await expect(page.locator('.pf-chat')).toContainText('WYNIK-NARZEDZIA-RECONNECT', {
+        timeout: 30_000,
+      });
+      const conversation = urlConversation(page)!;
+
+      /* --------------------------- the wire is cut ------------------------- */
+
+      proxy.cut();
+      await context.setOffline(true);
+      await page.waitForTimeout(2500);
+      // The run is still going, from the backend's own mouth.
+      expect(
+        (await backendRuns(conversation))[0]!.status,
+        'wykonanie zakonczylo sie, zanim klient wrocil',
+      ).toMatch(/queued|running/);
+
+      /* ------------------------- and comes back, mid-run ------------------- */
+
+      proxy.restore();
+      await context.setOffline(false);
+
+      // No reload: the client recovers on its own, and the log replay — which
+      // starts from the beginning — must not double what was already shown.
+      await expect(page.getByTestId('run-state')).toHaveAttribute('data-phase', 'succeeded', {
+        timeout: 60_000,
+      });
+      await revealToolDetails(page);
+      const text = await page.locator('.pf-chat').innerText();
+      expect(
+        occurrences(text, 'WYNIK-NARZEDZIA-RECONNECT'),
+        'wynik narzedzia pokazany dwa razy po reconnect',
+      ).toBe(1);
+      expect(occurrences(text, 'KONIEC-PO-POWROCIE'), 'koniec odpowiedzi pokazany dwa razy').toBe(1);
+      await expect(page.locator('.openui-tool-call')).toHaveCount(1);
+      expect((await runsOf(page, conversation)).runs, 'zadanie uruchomilo sie drugi raz').toHaveLength(
+        1,
+      );
+    } finally {
+      await proxy.stop();
+    }
   });
 });

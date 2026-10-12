@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { assertServerBundle, assertWebBundle, SERVER_BUNDLE_RELATIVE, WEB_BUNDLE_RELATIVE } from './boot-check.ts';
 import { resolveTestInstance } from './isolation.ts';
 import { assertDirectoryFree, assertPortFree } from './port-probe.ts';
 
@@ -37,6 +38,17 @@ const instance = resolveTestInstance({
 assertPortFree(instance.port, 'przygotowanie instancji testowej');
 assertDirectoryFree(instance.dataDir, 'przygotowanie instancji testowej');
 
+/*
+ * Before the wipe, not after: a missing build used to surface as a raw
+ * `ERR_MODULE_NOT_FOUND` from the import at the bottom — *after* the test
+ * database had been deleted and reseeded. The refusal names the one command
+ * that fixes it and leaves the tree untouched. The paths are the same constants
+ * the checks resolve and the import below uses, so the refusal can never check
+ * one file and run another (tests/boot-check.test.ts pins this).
+ */
+assertServerBundle(instance.repoRoot);
+assertWebBundle(instance.repoRoot);
+
 if (existsSync(instance.dataDir)) rmSync(instance.dataDir, { recursive: true, force: true });
 
 for (const script of ['migrate', 'seed']) {
@@ -55,4 +67,4 @@ console.log(
   `[e2e] instancja testowa: port=${instance.port} data=${instance.dataDir} etykieta=${instance.env.APP_INSTANCE_LABEL}`,
 );
 
-await import(resolve(instance.repoRoot, 'apps/server/dist/server.js'));
+await import(resolve(instance.repoRoot, SERVER_BUNDLE_RELATIVE));

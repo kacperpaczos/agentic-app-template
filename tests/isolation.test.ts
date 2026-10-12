@@ -305,6 +305,7 @@ describe('spece z prawdziwym modelem: opt-in i nienaruszalnosc dowodow', () => {
       '**/model-artifacts.spec.ts',
       '**/bramka-przekrojowa.spec.ts',
       '**/card-mutations-highlight.spec.ts',
+      '**/model-jpeg.spec.ts',
     ]);
     expect(Z11_MODEL_SPEC_PATTERNS).toEqual([
       '**/bl03-model-canvas.spec.ts',

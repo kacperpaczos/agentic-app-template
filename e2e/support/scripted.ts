@@ -1,6 +1,7 @@
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, type WriteStream } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { assertServerBundle } from './boot-check.ts';
 import { TEST_RUN_ID, resolveTestInstance, scriptedGlmEnv, type TestInstanceConfig } from './isolation.ts';
 import { assertDirectoryFree, assertPortFree } from './port-probe.ts';
 import { verifyIsolatedInstance } from './fixtures.ts';
@@ -141,6 +142,12 @@ export class ScriptedInstance {
    */
   async start(scenario: string, extraEnv: Record<string, string> = {}): Promise<void> {
     if (this.#process) throw new Error('instancja scenariuszowa juz dziala');
+    /*
+     * A production entry spawns the built bundle; refusing here keeps the same
+     * readable message as the shared instance's boot-server, instead of a raw
+     * module-not-found from the spawned child (T01).
+     */
+    if (this.#entry === 'production') assertServerBundle(this.config.repoRoot);
     if (this.#logFile) {
       mkdirSync(dirname(this.#logFile), { recursive: true });
       this.#log = createWriteStream(this.#logFile, { flags: 'a' });

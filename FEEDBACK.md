@@ -1385,3 +1385,33 @@ bez postępu → wstrzymane wg dyscypliny. Do decyzji właściciela: przeklasyfi
 wanie na informacyjne (D-02) albo research store CLI. **RAPORT-ODBIORU.md**
 napisany (architektura wdrożona, granica, adaptery, wersje, ograniczenia,
 nieudane przebiegi, trójpodział L12.17 — wdrożenie danych NIE wykonane).
+
+---
+
+## §A35 — Pełna droga: dziewięć luk dowodowych zamkniętych (2026-10-11/12)
+
+Po minimalnej drogi (§A34) właściciel zatwierdził pełną drogę. Zamknięte:
+**L9.2/T09** (PR #5: macierz parzystości HTTP/MCP, 42 testy wszystkie 9
+narzędzi; czerwona 13; falsyfikacja wag), **L3.3** (nota audytu nieaktualna —
+walidacja openui działała; 5 asercji regresyjnych + falsyfikacja), **T07/T23**
+(PR #6/#7: realny GLM 6/6 — pełny cykl mutacji karty rezultatowo i pokazanie
+ustawienia z ui-ack/podświetleniem/ponowieniem/wartością stabilną), **T02, T06,
+T01, T12, T22** (pakiet 5 luk bez tur: klik canvasu na pełnej szerokości,
+argumenty w running + sierota toolCallId + reconnect bez podwójnego renderu,
+trzy próby negatywne startu z modułem boot-check, zmiana tożsamości bez
+przeładowania, równoległość A/B dwóch kart przeglądarki), **T24/JPEG**
+(odczyt treści JPEG pod mylącą nazwą — odpowiedź z pikseli, plik nietknięty).
+
+**T04 — rozpoznanie i decyzja dokumentacyjna.** Biblioteka nie ma publicznego
+API renderowania segmentów; upgrade 0.17.1 nie naprawia; jedyny plan B
+(dwustronne scalenie segmentów) wyceniony i zapisany w macierzy — pozostaje
+jawnym ograniczeniem (do ewentualnej decyzji właściciela).
+
+**Grant.** Sufit GLM podniesiony do 60 (decyzja 2026-10-12); ledger **51/60**
+(+2 tury agent-ui poza ledgerem).
+
+**Stan.** Macierz: 196/200 potwierdzonych, 1 częściowe (L7.13), 3
+informacyjne; warstwy 11/12; próby: 19 potwierdzonych, 8 częściowych
+(pozostałe luki to decyzje/prace over-kryterialne), 1 niespełniona (T08).
+Wszystkie bramki (verify + pełna e2e) zielone na każdym PR (#5–#7 i
+bieżącej gałęzi).

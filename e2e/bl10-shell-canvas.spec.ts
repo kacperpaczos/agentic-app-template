@@ -108,6 +108,42 @@ const centreOf = async (locator: Locator) => {
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 };
 
+/**
+ * A point over the canvas that belongs to no card and no drawer.
+ *
+ * Pan is what an empty canvas does; a drag that starts on a card moves the
+ * card instead, which is a different feature with a different assertion. The
+ * candidates run down the pane's lower edge because "Fit View" clusters the
+ * cards in the middle of the view.
+ */
+const emptyCanvasSpot = (page: Page) =>
+  page.evaluate(() => {
+    const pane = document.querySelector('.react-flow__pane')?.getBoundingClientRect();
+    if (!pane) return null;
+    for (const [fx, fy] of [
+      [0.92, 0.3],
+      [0.94, 0.5],
+      [0.5, 0.94],
+      [0.35, 0.94],
+      [0.8, 0.85],
+      [0.7, 0.85],
+      [0.85, 0.7],
+    ] as const) {
+      const x = pane.left + pane.width * fx;
+      const y = pane.top + pane.height * fy;
+      const el = document.elementFromPoint(x, y);
+      if (
+        el &&
+        el.closest('.react-flow__pane') &&
+        !el.closest('.react-flow__node') &&
+        !el.closest('.openui-agent-sidebar-container')
+      ) {
+        return { x, y };
+      }
+    }
+    return null;
+  });
+
 test.beforeAll(async () => {
   scripted.prepareDatabase();
   await scripted.start('text-only');
@@ -248,6 +284,78 @@ for (const panel of [
       await expect(closer(page)).toBeFocused();
       await page.keyboard.press('Enter');
       await settled(page, 'collapsed');
+    });
+
+    /*
+     * T02 — the other half of the closed-drawer picture.
+     *
+     * The row-click test below proves the drawer takes its own clicks; this one
+     * proves the canvas *under* the closed drawer is still alive. The acceptance
+     * matrix names the wide panel (>768 px, the built-in layout) as the side that
+     * was never shown, so the narrow panel — already covered for pan and zoom by
+     * the L2.12 block at 1680 px — is skipped rather than measured twice.
+     *
+     * The counter-check that keeps this honest is `ownerAt` itself: the same
+     * discriminator is required to name the drawer at the conversation list's
+     * centre in the row-click test, so a `canvas` verdict here is a verdict from
+     * a probe that can fail.
+     */
+    test('zamknieta szuflada: canvas pod nia pozostaje interaktywny', async ({ page }) => {
+      test.skip(!panel.expectWide, 'panel 560 px pokrywa blok L2.12 (pan i zoom przy 1680 px)');
+      await start(page);
+      await openCaseWorkspace(page);
+      await expect(page.locator('.react-flow__pane')).toBeVisible();
+      await fitView(page);
+      if ((await container(page).getAttribute('data-sidebar-visual-state')) === 'expanded') {
+        await closer(page).click();
+        await settled(page, 'collapsed');
+      }
+
+      /* ------------ closed drawer: the canvas takes the interaction --------- */
+
+      // A point over the pane belongs to the canvas, not to a drawer that is
+      // closed — `elementFromPoint`, not a guess from boxes. The point is an
+      // *empty* one, so the pan below exercises the canvas rather than a card.
+      const spot = await emptyCanvasSpot(page);
+      expect(spot, 'brak pustego punktu na canvasie').toBeTruthy();
+      expect(await ownerAt(page, spot!.x, spot!.y), 'canvas nie przyjmuje trafienia w punkt').toBe(
+        'canvas',
+      );
+
+      // And it answers: zoom through the library's own control…
+      const before = await viewportTransform(page);
+      await page.getByRole('button', { name: 'Zoom In' }).click();
+      await expect.poll(() => viewportTransform(page), { timeout: 10_000 }).not.toBe(before);
+      const zoomed = await viewportTransform(page);
+
+      // …and pan by dragging its empty area — the transform moves again.
+      const panSpot = (await emptyCanvasSpot(page)) ?? spot!;
+      await dragBy(page, panSpot, -120, -90);
+      await expect.poll(() => viewportTransform(page), { timeout: 10_000 }).not.toBe(zoomed);
+      await expect(page.getByTestId('card-case-summary').first()).toBeVisible();
+
+      /* ------------- drawer open: the canvas survives the drawer ------------ */
+
+      await opener(page).click();
+      await settledOpen(page);
+      await expect(list(page)).toBeVisible();
+
+      // Both owners keep their own hits at the same time: the list belongs to
+      // the drawer (the probe's counter-check) and the pane still belongs to
+      // the canvas.
+      const drawerAt = await centreOf(list(page));
+      expect(await ownerAt(page, drawerAt.x, drawerAt.y)).toBe('szuflada');
+      const canvasSpot = await emptyCanvasSpot(page);
+      expect(canvasSpot, 'brak pustego punktu na canvasie przy otwartej szufladzie').toBeTruthy();
+      expect(await ownerAt(page, canvasSpot!.x, canvasSpot!.y)).toBe('canvas');
+
+      // A canvas drag next to an open drawer must not interrupt the chat: half
+      // a sentence survives the interaction, as in the L2.12 block.
+      const composer = page.locator('.openui-agent-thread-composer__input');
+      await composer.fill('polecenie przy otwartej szufladzie');
+      await dragBy(page, canvasSpot!, -80, -60);
+      await expect(composer).toHaveValue('polecenie przy otwartej szufladzie');
+      await settled(page, 'expanded');
     });
 
     test('otwarta szuflada przyjmuje klikniecie wiersza, canvas go nie przechwytuje', async ({

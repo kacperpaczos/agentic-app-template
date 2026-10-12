@@ -124,4 +124,93 @@ test.describe('kontekst dostepu', () => {
     await page.goto('/cases');
     await expect(page.locator('[data-testid^="case-tile-"]').first()).toBeVisible();
   });
+
+  test('zmiana tozsamosci bez przeladowania: opozniona odpowiedz poprzedniej nie renderuje wierszy', async ({
+    page,
+  }) => {
+    /*
+     * T12 — the other half of the first test above. `page.goto` between the
+     * identities is a **full page load**: it throws the client away, so it can
+     * never show a leak that lives *in the client* — a request issued for the
+     * previous owner, still in flight across the switch, writing its rows into
+     * the new owner's screen. Only one running client instance can show that,
+     * so every move after the first load is a client-side navigation and the
+     * switch happens under it.
+     *
+     * The late answer is manufactured, not assumed: the data read is held at
+     * the network for identity A, the switch happens while it is still in
+     * flight, and the assertion is what the screen shows *after* the held
+     * response has long since landed.
+     */
+    await openApp(page);
+    await page.goto('/data');
+    const rows = page.locator('[data-testid="data-page"] tbody tr');
+    await expect(rows.first()).toBeVisible();
+    const firstName = (await rows.first().textContent())?.trim() ?? '';
+    expect(firstName.length).toBeGreaterThan(0);
+
+    // A client-liveness mark: any full page load would wipe it, so its
+    // presence at the end is the proof the whole trial ran in one instance.
+    await page.evaluate(() => {
+      (window as unknown as Record<string, unknown>).__t12bezPrzeladowania = Date.now();
+    });
+
+    /* --------- identity A issues a read that will be held in flight -------- */
+
+    let held = true;
+    await page.route('**/api/read', async (route) => {
+      if (held) await new Promise((r) => setTimeout(r, 2500));
+      await route.continue();
+    });
+
+    // Out and back through the platform's own navigation: the view remounts and
+    // re-reads, and *that* read — A's — is the one being held.
+    await page.getByRole('link', { name: 'Ustawienia' }).click();
+    await expect(page.getByTestId('settings-page')).toBeVisible();
+    await page.getByRole('link', { name: 'Dostawcy' }).click();
+    await expect(page.getByTestId('data-page')).toBeVisible();
+    // A's cached rows are still on screen while the fresh read is in flight —
+    // the positive control for the assertions below: this locator does see rows.
+    await expect(rows.first()).toBeVisible();
+
+    /* ------------------- the switch, in the same client -------------------- */
+
+    await page.getByRole('link', { name: 'Ustawienia' }).click();
+    await expect(page.getByTestId('settings-page')).toBeVisible();
+    const before = (await owner(page).textContent())?.trim();
+    await page.getByTestId('switch-access-context').click();
+    await expect(owner(page)).not.toHaveText(before ?? '');
+    // B's own requests must not be held.
+    held = false;
+
+    /* -------------- the late answer lands and must show nothing ------------ */
+
+    await page.getByRole('link', { name: 'Dostawcy' }).click();
+    await expect(page.getByTestId('data-page')).toBeVisible();
+    // The second identity owns no suppliers; once its own (unheld) read
+    // resolves, any row would already be a leak.
+    await expect(rows).toHaveCount(0, { timeout: 15_000 });
+
+    // Now past the hold: A's response reached the network long ago. It was
+    // aborted and epoch-discarded, so the screen must not change.
+    await page.waitForTimeout(3500);
+    await expect(rows, 'opozniona odpowiedz poprzedniej tozsamosci dorzucila wiersze').toHaveCount(
+      0,
+    );
+    if (firstName) {
+      await expect(page.locator('body')).not.toContainText(firstName);
+    }
+    expect(
+      await page.evaluate(() => (window as unknown as Record<string, unknown>).__t12bezPrzeladowania),
+      'strona przeladowala sie w trakcie proby — proba niczego nie dowodzi',
+    ).toBeTruthy();
+
+    /* ------------------- put the identity back, as found ------------------- */
+
+    await page.getByRole('link', { name: 'Ustawienia' }).click();
+    await expect(page.getByTestId('settings-page')).toBeVisible();
+    await page.getByTestId('switch-access-context').click();
+    await expect(owner(page)).toHaveText(before ?? '');
+    await page.unroute('**/api/read');
+  });
 });

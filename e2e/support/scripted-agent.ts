@@ -44,6 +44,21 @@ export type Step =
    */
   | { kind: 'tool'; name: string; input: unknown; result?: string; error?: string; inline?: boolean }
   /**
+   * A result that names a call this run never made.
+   *
+   * Fires `PostToolUse` (or `PostToolUseFailure`) with a `tool_use_id` of the
+   * test's choosing — one no `PreToolUse` announced. The runtime scopes whatever
+   * id arrives and emits a `TOOL_CALL_RESULT` whose `toolCallId` has no matching
+   * `TOOL_CALL_START`, which is exactly what a malformed or cross-wired provider
+   * answer looks like at this boundary. What the interface then does with an
+   * orphan result — and above all, whether it pins it to somebody else's call —
+   * is the thing a browser test can finally read.
+   *
+   * Plays at its position in the stream, like an `inline` tool: the misattributed
+   * answer arrives *between* the events around it, not before the stream opens.
+   */
+  | { kind: 'strayResult'; toolUseId: string; content: string; error?: boolean }
+  /**
    * A tool call that is *performed*: the real handler of a platform or module
    * tool runs with the run's context, through the same validation and error
    * mapping as the MCP server (`invokeTool`). PreToolUse / PostToolUse (or
@@ -284,6 +299,8 @@ export function scriptedAgent(
           }
         } else if (step.kind === 'text') {
           out.push({ type: 'text-delta', payload: { text: step.text }, delayMs: step.delayMs ?? 0 });
+        } else if (step.kind === 'strayResult') {
+          out.push({ type: 'strayResult', step });
         } else if (step.kind === 'wait') {
           out.push({ type: 'wait', delayMs: step.delayMs });
         } else if (step.kind === 'ui') {
@@ -323,6 +340,15 @@ export function scriptedAgent(
           if (signal?.aborted) throw signal.reason ?? new Error('run cancelled');
           // A `wait` is elapsed time and nothing else — never an event.
           if (e.type === 'wait') continue;
+          if (e.type === 'strayResult') {
+            const step = e.step as Extract<Step, { kind: 'strayResult' }>;
+            if (step.error !== undefined) {
+              await fire('PostToolUseFailure', { tool_use_id: step.toolUseId, error: step.content });
+            } else {
+              await fire('PostToolUse', { tool_use_id: step.toolUseId, tool_response: step.content });
+            }
+            continue;
+          }
           if (e.type === 'tool') {
             const step = e.step as Extract<Step, { kind: 'tool' }>;
             inlineSeq += 1;

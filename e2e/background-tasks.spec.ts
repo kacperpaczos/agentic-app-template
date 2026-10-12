@@ -216,4 +216,100 @@ test.describe('zadania w tle', () => {
       .poll(async () => (await runsOf(page, conversation)).runs[0]?.status, { timeout: 30_000 })
       .toBe('cancelled');
   });
+
+  test('rownolegla praca w A i B — dwie karty przegladarki na jednej instancji', async ({
+    browser,
+  }) => {
+    /*
+     * T22 — the parallel case the earlier trials could not show. Every previous
+     * attempt in this file `restart`ed the server between A and B, which by
+     * definition ended A's run before B began: `reconcileOnBoot` closes what the
+     * restart cannot continue. Here **one** server, one `scripted.start`, no
+     * restart for the whole trial — and two browser contexts, because two tabs
+     * of one context share nothing that matters here, while two contexts are
+     * what "two cards of the browser" actually are.
+     *
+     * The runtime queues runs per conversation (`AgentRuntime`'s
+     * conversation queue), so A's long run and B's independent command execute
+     * at the same time — which is precisely what the assertions below read.
+     */
+    await scripted.start('slow');
+    const contextA = await browser.newContext();
+    const contextB = await browser.newContext();
+    try {
+      const pageA = await contextA.newPage();
+      await openApp(pageA);
+      await send(pageA, 'Dlugie zadanie w karcie A.');
+      await expect(pageA.getByTestId('run-state')).toHaveAttribute('data-phase', 'running', {
+        timeout: 30_000,
+      });
+      const conversationA = urlConversation(pageA)!;
+      expect(conversationA).toBeTruthy();
+
+      // The user in A walks away from the running task; it must survive it.
+      await startNewConversation(pageA);
+      await expect
+        .poll(async () => (await runsOf(pageA, conversationA)).runs[0]?.status, { timeout: 10_000 })
+        .toMatch(/queued|running/);
+
+      /* --------------------- the second card, same instance ---------------- */
+
+      const pageB = await contextB.newPage();
+      await openApp(pageB);
+      await send(pageB, 'Niezalezne polecenie w karcie B.');
+      let conversationB: string | null = null;
+      await expect
+        .poll(async () => (conversationB = urlConversation(pageB)), { timeout: 15_000 })
+        .not.toBeNull();
+      expect(conversationB).not.toBe(conversationA);
+
+      // B is producing its own work, from its own command.
+      await expect(pageB.getByTestId('streaming-answer')).toBeVisible({ timeout: 30_000 });
+      await expect(pageB.locator('.openui-agent-thread-messages')).toContainText(
+        'Niezalezne polecenie w karcie B',
+        { timeout: 30_000 },
+      );
+
+      /* -------- A is still running, seen from B, while B is working -------- */
+
+      const seenFromB = await activeRuns(pageB);
+      const runA = seenFromB.runs.find((r) => r.conversationId === conversationA);
+      expect(runA, 'zadanie A nie jest widoczne w /api/runs/active z perspektywy B').toBeTruthy();
+      expect(runA!.status, 'zadanie A zakonczylo sie przed startem B — brak równoleglosci').toMatch(
+        /queued|running/,
+      );
+
+      /* --------------------- B receives its own result ---------------------- */
+
+      await expect(pageB.getByTestId('run-state')).toHaveAttribute('data-phase', 'succeeded', {
+        timeout: 90_000,
+      });
+      const threadB = pageB.locator('.openui-agent-thread-messages');
+      await expect(threadB).toContainText('Zaczynam dluga odpowiedz.', { timeout: 30_000 });
+      // Nothing of A leaked into B's card.
+      await expect(threadB).not.toContainText('Dlugie zadanie w karcie A');
+      expect((await runsOf(pageB, conversationB!)).runs).toHaveLength(1);
+
+      /* ------------- back in A: its own result, no re-running --------------- */
+
+      await pageA.goto(`${BASE}/?c=${conversationA}`);
+      await expect(pageA.getByTestId('assistant-message')).toContainText(
+        'Zaczynam dluga odpowiedz.',
+        { timeout: 60_000 },
+      );
+      const runsA = (await runsOf(pageA, conversationA)).runs;
+      expect(runsA, 'zadanie A uruchomiono ponownie przy powrocie').toHaveLength(1);
+      expect(runsA[0]!.status).toBe('succeeded');
+      await pageA.reload();
+      await expect(pageA.getByTestId('assistant-message')).toContainText('Zaczynam dluga odpowiedz.', {
+        timeout: 30_000,
+      });
+      expect((await runsOf(pageA, conversationA)).runs, 'przeladowanie uruchomilo A ponownie').toHaveLength(
+        1,
+      );
+    } finally {
+      await contextA.close();
+      await contextB.close();
+    }
+  });
 });
