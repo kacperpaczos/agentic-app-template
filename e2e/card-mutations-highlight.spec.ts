@@ -518,9 +518,13 @@ test.describe('T07 + T23: mutacje karty i pokazanie ustawienia na prawdziwym mod
       expect(phase).toBe('succeeded');
 
       const events = await backend.runEvents(run.runId);
+      /* Trzy legalne drogi usuniecia karty: narzedzie karty, aktualizacja widoku
+         albo usuniecie calego widoku agenta, ktory karte zawieral — sednem jest
+         WYNIK (roznica przestrzeni, asercja nizej), nie wybor narzedzia. */
       const removals = [
         ...callsOf(events, 'canvas_remove_card'),
         ...callsOf(events, 'agent_view_update'),
+        ...callsOf(events, 'agent_view_remove'),
       ];
       expect(
         removals.length,
@@ -528,8 +532,9 @@ test.describe('T07 + T23: mutacje karty i pokazanie ustawienia na prawdziwym mod
       ).toBeGreaterThan(0);
       const removal = removals[removals.length - 1]!;
       expect(removal.isError, `usuniecie zakonczylo sie bledem: ${removal.rawResult}`).toBe(false);
-      expect((removal.result as { removed?: string } | null)?.removed, 'usunieto inna karte').toBe(
-        karta!.cardId,
+      if (removal.name === 'canvas_remove_card')
+        expect((removal.result as { removed?: string } | null)?.removed, 'usunieto inna karte').toBe(
+          karta!.cardId,
       );
 
       /* Karty brak w przestrzeni rozmowy; inne karty nietknięte. */
