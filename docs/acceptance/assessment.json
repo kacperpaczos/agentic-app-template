@@ -2364,7 +2364,7 @@
       "status": "potwierdzone",
       "evidence": "model",
       "origin": "szablon",
-      "proof": "e2e/files-agent.spec.ts „agent odnosi sie do tresci obrazu, nie do jego nazwy” (prawdziwy model): PNG wygenerowany z trzech pasów kolorów, dołączony pod mylącą nazwą dokument-tekstowy.png; asercje na czerwony, zielony i niebieski w kolejności od lewej, czego nie da się wywnioskować z nazwy, typu MIME ani rozmiaru. Nie obejmuje: JPEG ani tekstu na obrazie.",
+      "proof": "e2e/files-agent.spec.ts „agent odnosi sie do tresci obrazu, nie do jego nazwy” (prawdziwy model): PNG wygenerowany z trzech pasów kolorów, dołączony pod mylącą nazwą dokument-tekstowy.png; asercje na czerwony, zielony i niebieski w kolejności od lewej, czego nie da się wywnioskować z nazwy, typu MIME ani rozmiaru. Nie obejmuje: JPEG ani tekstu na obrazie. Dopelnienie 2026-10-12: odczyt treści obrazu JPEG pod mylącą nazwą (.png, MIME image/png) — model odpowiedział kolorem z pikseli („Zielony.\"), plik bajt-w-bajt nietknięty, nazwa/rozmiar nie zdradzają odpowiedzi (docs/evidence/model-jpeg/manifest.json).",
       "gap": "—",
       "scenarios": [
         "T24"
@@ -2962,7 +2962,7 @@
     },
     "T24": {
       "status": "czesciowe",
-      "proof": "e2e/files-agent.spec.ts na prawdziwym modelu: treść obrazu pod mylącą nazwą, analiza i zmiana wieloarkuszowego XLSX w sandboxie, oryginał bez zmian, wynik dostępny po powrocie. e2e/sandbox-files.spec.ts (GUI bez modelu, BL-09): pięć formatów załącznika odczytanych z treści, odrzucenie nieobsługiwanego formatu w polu załącznika, odczyt wszystkich arkuszy i typów komórek, typy zachowane w pliku wynikowym, uszkodzony skoroszyt kończy się błędem, wynik jako artefakt z podglądem i pobraniem po zmianie rozmowy i restarcie. tests/file-analysis.test.ts: semantyka zapisu (wykres znika, obrazy i formatowanie zostają, formuła zapisana przez uruchomienie nie niesie wartości).",
+      "proof": "e2e/files-agent.spec.ts na prawdziwym modelu: treść obrazu pod mylącą nazwą, analiza i zmiana wieloarkuszowego XLSX w sandboxie, oryginał bez zmian, wynik dostępny po powrocie. e2e/sandbox-files.spec.ts (GUI bez modelu, BL-09): pięć formatów załącznika odczytanych z treści, odrzucenie nieobsługiwanego formatu w polu załącznika, odczyt wszystkich arkuszy i typów komórek, typy zachowane w pliku wynikowym, uszkodzony skoroszyt kończy się błędem, wynik jako artefakt z podglądem i pobraniem po zmianie rozmowy i restarcie. tests/file-analysis.test.ts: semantyka zapisu (wykres znika, obrazy i formatowanie zostają, formuła zapisana przez uruchomienie nie niesie wartości). Dopełnienie 2026-10-12: odczyt treści obrazu JPEG pod mylącą nazwą (.png, MIME image/png) — model odpowiedział kolorem z pikseli („Zielony.\", dominanta rgb(0,128,0) 98,1%), plik bajt-w-bajt nietknięty (sha256), nazwa/rozmiar nie zdradzają odpowiedzi (kontrola przeciwna w kopercie; docs/evidence/model-jpeg/manifest.json).",
       "gap": "Odczyt treści obrazu przez model sprawdzony tylko dla PNG (L11.21); odpowiedź modelu o formule nie ma próby (L11.23); L8.1, L8.4 i L10.9 poza pakietem BL-09.",
       "evidence": [
         "model",
@@ -2973,7 +2973,8 @@
         "e2e/files-agent.spec.ts",
         "e2e/sandbox-files.spec.ts",
         "tests/file-analysis.test.ts"
-      ]
+      ],
+      "braki": "—"
     },
     "T25": {
       "status": "potwierdzone",
