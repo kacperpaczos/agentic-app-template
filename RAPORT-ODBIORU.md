@@ -1,7 +1,8 @@
 # Raport odbioru — szablon agentic-app-template v0.4.1
 
-Data: 2026-10-08. Stan kodu: `04a9a8c` + commity fali dowodowej na gałęzi
-`feat/l126-bl07-macierz` (ostatni: bramka przekrojowa). Macierz odbioru:
+Data: 2026-10-12 (aktualizacja po pełnej drodze dowodowej). Stan kodu: `main`
+= `238d111` (PR #1–#8 scalone; ostatni dowód: bramka przekrojowa i fala
+modelowa — docs/evidence/). Macierz odbioru:
 `docs/versions/v0.4.1/ACCEPTANCE.md` (generowana z `docs/acceptance/assessment.json`
 — `pnpm acceptance:render`; `pnpm check:acceptance`/`check:matrix`/`check:closure`
 pilnują spójności). Ten raport NIE zastępuje macierzy — wskazuje ją i opisuje to,
