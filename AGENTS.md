@@ -106,7 +106,7 @@ pnpm install --frozen-lockfile
 pnpm verify          # granica, macierz 200 (check:acceptance + check:matrix), archiwum 95 (check:closure), typy (pakiety + e2e), build, testy
 pnpm test:e2e        # przeglądarka na istniejącym buildzie produkcyjnym (po verify/build — inaczej testuje stary bundle);
                      # BEZ testów z prawdziwym modelem — nie zużywa ani jednej tury GLM
-pnpm test:e2e:model  # tylko testy z prawdziwym modelem; do ~23 tur GLM na przebieg (w tym bramka przekrojowa)
+pnpm test:e2e:model  # tylko testy z prawdziwym modelem; do ~24 tur GLM na przebieg (w tym bramka przekrojowa)
 pnpm test:e2e:z11    # tylko proby modelowe pakietu BL-03; koszt: do 22 tur z aktywnego grantu GLM (sufit 60 — decyzje wlasciciela 2026-10-07 i 2026-10-12); rejestr subskrypcyjny z11 to historia
 pnpm diag            # prawdziwa sesja SDK, wylacznie zadania sterujace — 0 tur; porownuje narzedzia
 pnpm check:module-swap   # przy zmianach kontraktu modułu lub warstwy składania
@@ -138,10 +138,11 @@ modelowych kosztuje turę.
 (7 tur), `e2e/agent-ui.spec.ts` (2), `e2e/files-agent.spec.ts` (2),
 `e2e/model-artifacts.spec.ts` (1), `e2e/bramka-przekrojowa.spec.ts`
 (5 tur — bramka przekrojowa: jeden powiązany dowód działania połączeń wg „Odbioru całego
-systemu”) i `e2e/card-mutations-highlight.spec.ts`
+systemu”), `e2e/card-mutations-highlight.spec.ts`
 (6 tur — T07 i T23 na prawdziwym modelu: mutacje karty oraz pokazanie ustawienia z
-podświetleniem, potwierdzeniem klienta i wartością bez zmiany) nie należą do żadnego projektu
-domyślnego przebiegu — żaden argument ani filtr do nich nie sięgnie. Uruchamia je wyłącznie
+podświetleniem, potwierdzeniem klienta i wartością bez zmiany) i `e2e/model-jpeg.spec.ts`
+(1 tura — T24/L11.21: odczyt treści obrazu JPEG pod mylącą nazwą `.png`) nie należą do żadnego
+projektu domyślnego przebiegu — żaden argument ani filtr do nich nie sięgnie. Uruchamia je wyłącznie
 `pnpm test:e2e:model` (czyli `APP_E2E_MODEL=1`). Domyślny przebieg wypisuje, co pominął i ile by to
 kosztowało.
 
@@ -152,7 +153,7 @@ na tury Z.AI oraz sprawdzenia, czy SDK w aktualnej wersji potrafi je wykonać. S
 
 Osiem specek pakietu BL-03 (`e2e/bl03-model-*.spec.ts`, razem 22 tury) wydaje **inny grant** i ma
 **drugi przełącznik**: `pnpm test:e2e:z11` (`APP_E2E_MODEL=1 APP_E2E_MODEL_Z11=1`). Nie należą do
-projektu `model`, więc `pnpm test:e2e:model` kosztuje do 23 tur — dołożenie ich
+projektu `model`, więc `pnpm test:e2e:model` kosztuje do 24 tur — dołożenie ich
 tam zmieniłoby cenę polecenia, którego cena jest udokumentowana. Ich licznik to osobny plik
 (`.e2e-model-turns/z11-bl03.json`, sufit 25), bo rejestr BL-01/BL-02 opisuje **zamknięty** grant i nikt
 go nie dopisuje. Próbę generalną tych scenariuszy — te same asercje, model zastąpiony scenariuszem —
@@ -175,10 +176,12 @@ podniesienie sufitu wymaga grantu koordynatora. Nic nie idzie wtedy do modelu i 
 jest ruszany: pominięcie jest uczciwą odpowiedzią na brak budżetu, w przeciwieństwie do przebiegu, który
 wydaje turę i pada na następnej.
 
-Bramka i licznik obejmują **wyłącznie** spec odbiorowy. `e2e/agent-ui.spec.ts`,
-`e2e/files-agent.spec.ts` i `e2e/model-artifacts.spec.ts`
-wydają swoje 5 tur bez liczenia i bez sprawdzenia budżetu, więc `pnpm test:e2e:model` kosztuje do 23 tur
-także wtedy, gdy spec odbiorowy sam się pominie. Zanim uruchomisz przebieg modelowy, policz to sam.
+Bramka i licznik obejmują spec odbiorowy, a ten sam wzorzec (preflight + księgowanie
+wspólnym licznikiem) powtarzają `e2e/bramka-przekrojowa.spec.ts`,
+`e2e/card-mutations-highlight.spec.ts` i `e2e/model-jpeg.spec.ts`. Za to
+`e2e/agent-ui.spec.ts`, `e2e/files-agent.spec.ts` i `e2e/model-artifacts.spec.ts`
+wydają swoje 5 tur bez liczenia i bez sprawdzenia budżetu, więc `pnpm test:e2e:model` kosztuje do 24 tur
+także wtedy, gdy specy z bramką same się pomijają. Zanim uruchomisz przebieg modelowy, policz to sam.
 
 Podaj faktyczne polecenia, kody wyjścia i liczby testów. Dowody zapisuj w `docs/evidence/<zadanie>/`
 bez sekretów i danych prywatnych.
