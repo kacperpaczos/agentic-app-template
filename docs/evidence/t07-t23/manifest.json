@@ -1,0 +1,87 @@
+{
+  "zapisano": "2026-10-11T21:30:05.582Z",
+  "rodzajWykonania": "rzeczywisty model",
+  "wersjaKodu": {
+    "commit": "a2d9602ca57049b71033ab7320d4ebdf885ccdf1",
+    "brudneDrzewo": false,
+    "node": "24.19.0",
+    "pakiety": {}
+  },
+  "srodowisko": {
+    "system": "linux 7.2.9-200.fc44.x86_64 x64",
+    "node": "24.19.0",
+    "pnpm": "9.15.9",
+    "cliZewnetrzne": "2.1.283 (Claude Code)",
+    "cliWSdk": {
+      "wersja": "2.1.270",
+      "commit": "97ecbf7abeb4170dcfd26c4d4b397afd9015030e",
+      "dataBudowy": "2026-09-12T18:17:55Z"
+    },
+    "model": "glm-5.3-flash[1m]",
+    "pakiety": {
+      "react": "19.3.0",
+      "react-dom": "19.3.0",
+      "typescript": "7.0.2",
+      "vite": "8.3.0",
+      "vitest": "5.0.0",
+      "@playwright/test": "1.63.0",
+      "@openuidev/react-ui": "0.13.10",
+      "@openuidev/react-headless": "0.9.13",
+      "hono": "4.13.7",
+      "drizzle-orm": "0.45.2",
+      "@mastra/core": "1.66.0",
+      "@mastra/claude": "0.3.1",
+      "@anthropic-ai/claude-agent-sdk": "0.3.270",
+      "zod": "4.6.5"
+    }
+  },
+  "zrodlo": "model GLM/Z.AI przez kompatybilny endpoint Anthropic; Claude Agent SDK jako harness; subskrypcja Claude nieuzywana; instancja testowa suity przegladarkowej",
+  "model": "glm-5.3-flash[1m]",
+  "spec": "e2e/card-mutations-highlight.spec.ts",
+  "przebieg": "2026-10-11T21-28-14-963Z",
+  "instancja": {
+    "entry": "production",
+    "port": 8792,
+    "dataDirName": ".e2e-real-t07",
+    "origin": "http://127.0.0.1:8792",
+    "log": "docs/evidence/t07-t23/serwer.log"
+  },
+  "koszt": {
+    "deklarowaneTury": 6,
+    "budzet": 45,
+    "wydane": 40
+  },
+  "identyfikatory": {
+    "rozmowa": "cnv_d3d95ac8e45c4548b4cd",
+    "runTury1": "run_70d7dbed517044ccb4c9",
+    "narzedzieZapisu": "mcp__app__agent_view_create",
+    "przestrzenRozmowy": "spc_411d278c0b704cc29076",
+    "karta": {
+      "cardId": "crd_6353f4d8e895408a8943",
+      "narzedzie": "mcp__app__agent_view_create",
+      "tytul": "Pozycje ofert — PC-2026-01",
+      "komponent": null,
+      "spec": {
+        "kind": "openui",
+        "source": "root = Stack([tabela])\ntabela = DataTable({operation: \"procurement.case_offer_items\", input: {caseId: \"pcs_d22e267e025b4ca3bd89\"}}, [\"supplierName\", \"name\", \"unitPriceMinor\"], \"Pozycje ofert — PC-2026-01: dostawca, nazwa, cena jednostkowa\")"
+      },
+      "specVersion": 1,
+      "geometryVersion": 1,
+      "geometry": {
+        "x": 0,
+        "y": 0,
+        "width": 520,
+        "height": 360,
+        "z": 0
+      }
+    },
+    "kompozycjaTury1": [
+      {
+        "id": "crd_6353f4d8e895408a8943",
+        "title": "Pozycje ofert — PC-2026-01"
+      }
+    ],
+    "runTury2": "run_e66b0f8837c343fc8e7b"
+  },
+  "wynik": "tura-1-zaliczona"
+}

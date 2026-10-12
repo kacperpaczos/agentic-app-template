@@ -393,11 +393,13 @@ export const Z11_WORKING_LEDGER = resolve(REPO_ROOT, '.e2e-model-turns/z11-bl03.
  * the owner granted the raise to 45 on 2026-10-07 for the wave that verifies
  * the BL-03 file-tool boundary repair on the real SDK plus L12.6 — in GLM mode
  * that wave charges THIS grant (`z11Preflight`, the BL-03 specs included), and
- * 24 remaining would not have covered it with retries. Same ceiling rule as
- * the subscription grants: the register on disk carries every turn with the
- * spec that spent it, so the raise extends the same ledger.
+ * 24 remaining would not have covered it with retries. Raised again to 60 on
+ * 2026-10-12 by the owner („mam dużo tokenów") for the full-path evidence wave
+ * (T07/T23 rerun, JPEG, retries). Same ceiling rule as the subscription
+ * grants: the register on disk carries every turn with the spec that spent
+ * it, so the raise extends the same ledger.
  */
-export const GLM_TURN_BUDGET = 45;
+export const GLM_TURN_BUDGET = 60;
 
 /** This grant's tally, in the working copy (gitignored), starting at zero. */
 export const GLM_WORKING_LEDGER = resolve(REPO_ROOT, '.e2e-model-turns/glm.json');
