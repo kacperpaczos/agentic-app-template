@@ -1,4 +1,6 @@
+import { chromium } from '@playwright/test';
 import { saveCredentialFingerprint } from './credential-guard.ts';
+import { assertBrowserExecutable, BootRefusal } from './support/boot-check.ts';
 import { assertIsolatedInstance, resolveTestInstance } from './support/isolation.ts';
 import { modelSpecsNotice } from './support/model-turns.ts';
 
@@ -22,6 +24,22 @@ export default async function globalSetup(): Promise<void> {
     dataDirName: '.e2e-data',
     defaultPort: 8799,
   });
+  /*
+   * The browser is the one dependency the configuration cannot see: a missing
+   * build is refused by the web server command before this hook runs, but a
+   * missing browser used to surface as the launcher's complaint inside the
+   * first test that asked for a page. Asked for here, by the path the launcher
+   * will demand, and refused by name with the install command (T01).
+   */
+  try {
+    assertBrowserExecutable(chromium.executablePath(), 'chromium');
+  } catch (err) {
+    if (err instanceof BootRefusal) throw err;
+    throw new BootRefusal(
+      `Brak przegladarki chromium: nie da sie ustalic sciezki pliku wykonywalnego (${(err as Error).message}). ` +
+        'Uruchom "pnpm exec playwright install chromium" i sprobuj ponownie.',
+    );
+  }
   await assertIsolatedInstance(instance.baseUrl);
   console.log(`[e2e] potwierdzono instancje testowa pod ${instance.baseUrl}`);
   /*

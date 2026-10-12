@@ -147,6 +147,42 @@ const SCENARIOS: Record<string, Step[]> = {
     { kind: 'text', text: 'Odczytalem karty. ', delayMs: 300 },
     { kind: 'text', text: 'ODPOWIEDZ-PO-NARZEDZIU', delayMs: 300 },
   ],
+  /*
+   * A result that arrives for a call this run never announced. The legitimate
+   * call carries WYNIK-DOBRZE; the stray answer WYNIK-CUDZY names a toolCallId
+   * no PreToolUse ever declared — the shape of a cross-wired provider answer.
+   * What the chat must not do is pin the stray to the one call it can see.
+   */
+  'wrong-tool-call-id': [
+    {
+      kind: 'tool',
+      inline: true,
+      name: 'mcp__app__canvas_list_cards',
+      input: { spaceId: 'sp_scripted' },
+      result: '{"cards":[],"marker":"WYNIK-DOBRZE"}',
+    },
+    { kind: 'strayResult', toolUseId: 'tu_cudze_wywolanie', content: '{"marker":"WYNIK-CUDZY"}' },
+    { kind: 'wait', delayMs: 400 },
+    { kind: 'text', text: 'ODPOWIEDZ-PO-NARZEDZIU' },
+  ],
+  /*
+   * A tool result on screen early, then work that outlives a cut wire — the
+   * reconnect case for tool activity: the client comes back to a run that is
+   * still going, the log is replayed from the beginning, and the call and its
+   * result must still be on screen exactly once.
+   */
+  'tool-then-long-text': [
+    {
+      kind: 'tool',
+      inline: true,
+      name: 'mcp__app__canvas_list_cards',
+      input: { spaceId: 'sp_scripted' },
+      result: '{"cards":[],"marker":"WYNIK-NARZEDZIA-RECONNECT"}',
+    },
+    { kind: 'text', text: 'Zaczynam dluga prace. ', delayMs: 150 },
+    { kind: 'wait', delayMs: 12_000 },
+    { kind: 'text', text: 'KONIEC-PO-POWROCIE' },
+  ],
   'text-only': [
     { kind: 'text', text: 'Pierwsze zdanie odpowiedzi. ', delayMs: 300 },
     { kind: 'text', text: 'Drugie zdanie odpowiedzi. ', delayMs: 300 },
